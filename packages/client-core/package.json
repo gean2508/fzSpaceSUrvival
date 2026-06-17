@@ -1,0 +1,26 @@
+{
+  "name": "@hunger-arena/client-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "^0.17.43",
+    "@hunger-arena/shared": "*",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

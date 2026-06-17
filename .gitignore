@@ -1,0 +1,13 @@
+node_modules/
+dist/
+packages/*/dist/
+client/dist/
+server/dist/
+apps/desktop/dist/
+.env
+.env.local
+*.log
+.DS_Store
+apps/mobile/android/
+apps/mobile/ios/
+apps/desktop/src-tauri/target/

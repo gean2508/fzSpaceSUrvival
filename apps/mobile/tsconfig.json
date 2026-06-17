@@ -1,0 +1,11 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@hunger-arena/shared": ["../../packages/shared/dist/index.d.ts"],
+      "@hunger-arena/shared/*": ["../../packages/shared/dist/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}

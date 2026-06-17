@@ -1,0 +1,32 @@
+{
+  "name": "hunger-arena",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Survival multiplayer 3D — Colyseus + R3F monorepo",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w @hunger-arena/server",
+    "dev:client": "npm run dev -w @hunger-arena/client",
+    "dev:mobile": "npm run build -w @hunger-arena/shared && npm run build -w @hunger-arena/client-core && npm run start -w @hunger-arena/mobile",
+    "dev:desktop": "npm run build -w @hunger-arena/shared && npm run build -w @hunger-arena/client-core && npm run dev:tauri -w @hunger-arena/desktop",
+    "dev": "concurrently -n server,web -c cyan,green \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "npm run build -w @hunger-arena/shared && npm run build -w @hunger-arena/client-core && turbo run build --filter=@hunger-arena/client",
+    "build:shared": "npm run build -w @hunger-arena/shared",
+    "build:engine": "npm run build -w @hunger-arena/client-core",
+    "build:mobile": "npm run build -w @hunger-arena/shared && npm run build -w @hunger-arena/client-core && npm run prebuild -w @hunger-arena/mobile",
+    "build:desktop": "npm run build -w @hunger-arena/shared && npm run build -w @hunger-arena/client-core && npm run build:appimage -w @hunger-arena/desktop",
+    "build:server": "npm run build -w @hunger-arena/server",
+    "start:server": "npm run start -w @hunger-arena/server",
+    "test": "npm test -w @hunger-arena/shared"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "turbo": "^2.5.4"
+  },
+  "packageManager": "npm@10.8.2"
+}
