@@ -7,16 +7,21 @@ contrato que **no se puede romper** al seguir implementando features.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  apps/mobile · apps/desktop · server                    │
-│  Render (R3F), UI, input adapters por plataforma        │
+│  apps/mobile · apps/desktop · client/ (landing)         │
+│  Render (R3F), UI, input adapters · landing = showcase  │
 ├─────────────────────────────────────────────────────────┤
-│  packages/client-core  ← MOTOR DE CLIENTE               │
+│  packages/client-gfx  ← ARTE PROCEDURAL (Three.js)    │
+│  AssetRegistry · PALETTE · builders 360° / 2.5D         │
+├─────────────────────────────────────────────────────────┤
+│  packages/client-core  ← MOTOR DE CLIENTE             │
 │  Transport · SessionManager · ArenaController · Input   │
 ├─────────────────────────────────────────────────────────┤
 │  packages/shared  ← VERDAD DEL JUEGO                    │
 │  GameSimulation · InputState · schema · zod · AI        │
 └─────────────────────────────────────────────────────────┘
 ```
+
+Constitución completa: `.cursor/skills/monorepo-architecture/SKILL.md`.
 
 ## API del motor (`@hunger-arena/client-core`)
 
@@ -66,10 +71,13 @@ sequenceDiagram
 
 | Sí (por app) | No (prohibido en apps) |
 |--------------|------------------------|
-| `gfx/`, `ui/`, shaders | `ArenaController` duplicado |
+| `gfx/WorldRenderer`, `ui/`, shaders locales | `ArenaController` duplicado |
 | `TouchControls` / `usePcControls` | `GameSimulation` local |
 | `config.ts` (host env) | Tipos `EntitySnapshot` propios |
-| Persistencia (IDB / AsyncStorage) | Lógica de reconciliación custom |
+| Persistencia (IDB / AsyncStorage) | `Transport` / `SessionManager` copiados |
+| Import `@hunger-arena/client-gfx` | Builders de meshes duplicados por app |
+
+`client/` (landing): solo `landing/*` + showcase; **prohibido** `src/net/` o motor duplicado.
 
 ## Añadir una feature nueva (checklist)
 

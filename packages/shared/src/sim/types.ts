@@ -8,6 +8,17 @@ export type EntityKind = "player" | "npc" | "projectile";
 
 /** Ability slots map to bits in InputState.abilities. */
 export const ABILITY_SLOTS = 4;
+export const ABILITY_MASK = (1 << ABILITY_SLOTS) - 1;
+export const CRAFT_INTENT_SHIFT = 8;
+export const CRAFT_INTENT_MASK = 0xff << CRAFT_INTENT_SHIFT;
+
+export type RegionId =
+  | { kind: "overworld"; gx: -1 | 0 | 1; gz: -1 | 0 | 1 }
+  | { kind: "cave"; caveId: number };
+
+export const DEFAULT_REGION: RegionId = { kind: "overworld", gx: 0, gz: 0 };
+
+export type WorldContext = "overworld" | "mission" | "space" | "luna";
 
 /**
  * Deterministic movement state machine. Shared by server + client so animation
@@ -52,6 +63,20 @@ export interface InputState {
   action: number; // 0 | 1 — parkour/interact action (climb, mantle, gather)
 }
 
+export function abilityBitsFromInput(abilities: number): number {
+  return abilities & ABILITY_MASK;
+}
+
+export function encodeCraftIntent(abilityBits: number, recipeId: number): number {
+  const craftBits = (recipeId & 0xff) << CRAFT_INTENT_SHIFT;
+  return (abilityBits & ABILITY_MASK) | craftBits;
+}
+
+export function decodeCraftIntent(abilities: number): number | null {
+  const recipeId = (abilities & CRAFT_INTENT_MASK) >>> CRAFT_INTENT_SHIFT;
+  return recipeId > 0 ? recipeId : null;
+}
+
 export function emptyInput(seq = 0): InputState {
   return {
     seq,
@@ -86,6 +111,9 @@ export interface EntitySnapshot {
   maxStamina: number;
   hunger: number; // 0..100 (100 = full)
   thirst: number; // 0..100 (100 = hydrated)
+  worldContext: WorldContext;
+  missionId: number; // 0 = overworld
+  wallet: number; // persisted by server profile pipeline later
 }
 
 /** Static climbable/blocking box in the world (AABB footprint + height). */
@@ -110,6 +138,17 @@ export interface InteractableSnapshot {
   looted: boolean;
 }
 
+export type WorldPropKind = "house" | "bridge";
+
+/** Static decorative prop along paths (render-only). */
+export interface WorldPropSnapshot {
+  id: string;
+  kind: WorldPropKind;
+  x: number;
+  z: number;
+  rot: number;
+}
+
 /** Inventory primitive — base for the survival crafting loop (later phases). */
 export interface InventoryItem {
   itemId: string;
@@ -128,6 +167,9 @@ export interface WorldSnapshot {
   /** Static world geometry (sent so remote clients can render + predict). */
   obstacles: Obstacle[];
   interactables: InteractableSnapshot[];
+  /** Deterministic decor seed + props (paths derived client-side from seed). */
+  worldSeed: number;
+  worldProps: WorldPropSnapshot[];
   /** Last input seq the sim processed per player id (for reconciliation). */
   lastProcessedInput: Record<string, number>;
 }

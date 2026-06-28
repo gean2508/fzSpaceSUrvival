@@ -1,5 +1,6 @@
 import { Client } from "@colyseus/sdk";
 import { ROOM_NAME } from "@hunger-arena/shared";
+import { makeInput } from "./e2e-input.mjs";
 
 const url = process.env.SERVER_URL || "ws://localhost:2567";
 
@@ -21,7 +22,7 @@ try {
 
   // Send authoritative input (move +X) for ~1s.
   for (let seq = 1; seq <= 25; seq++) {
-    room.send("input", { seq, moveX: 1, moveZ: 0, aimX: 0, aimZ: 0, abilities: 0 });
+    room.send("input", makeInput(seq, { moveX: 1, aimX: 0, aimZ: 0 }));
     await wait(40);
   }
   await wait(150);

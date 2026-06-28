@@ -12,23 +12,36 @@ import {
 import { Rng } from "./rng.js";
 import { clampBody } from "./movement.js";
 import { stepMovement } from "./parkour.js";
+import type { BlockWorld } from "./blockWorld.js";
+import { groundHeightForLocomotion } from "./world.js";
 import { generateWorld } from "./world.js";
+import { generatePathGrid, type PathGrid } from "./paths.js";
+import { placeWorldProps } from "./worldProps.js";
 import { getClass } from "./content/classes.js";
 import { getAbility } from "./content/abilities.js";
 import { getArchetype } from "./content/npcs.js";
+import { itemForGather } from "../content/items/registry.js";
+import { canCraft, getCraftRecipe } from "../content/items/recipes.js";
 import { decideState, desiredDir } from "./ai/brain.js";
 import type { NpcAi } from "./ai/types.js";
 import type { AbilityDef } from "./abilities/types.js";
 import {
   ABILITY_SLOTS,
+  type RegionId,
+  DEFAULT_REGION,
+  abilityBitsFromInput,
+  decodeCraftIntent,
   type EntityKind,
   type EntitySnapshot,
   type InputState,
+  type InteractableKind,
   type InteractableSnapshot,
   type InventoryItem,
   type MatchStatus,
   type MovementState,
   type Obstacle,
+  type WorldContext,
+  type WorldPropSnapshot,
   type WorldSnapshot,
   emptyInput,
 } from "./types.js";
@@ -58,6 +71,9 @@ export interface SimEntity {
   maxStamina: number;
   hunger: number;
   thirst: number;
+  worldContext: WorldContext;
+  missionId: number;
+  wallet: number;
   inventory: InventoryItem[];
   // combat
   cooldowns: number[]; // timeMs when each ability slot becomes ready
@@ -75,6 +91,10 @@ export interface SimOptions {
   seed?: number;
   /** Enable wave-based survival director (NPC waves of increasing difficulty). */
   survival?: boolean;
+  /** Logical region/chunk id (overworld/cave); keeps world deterministic per region. */
+  regionId?: RegionId;
+  /** OASIS mode: overworld pacifico + portales a misiones de combate. */
+  peacefulOverworld?: boolean;
 }
 
 /**
@@ -98,19 +118,34 @@ export class GameSimulation {
   private npcCounter = 0;
 
   private survival: boolean;
+  private peacefulOverworld: boolean;
   private nextWaveAtMs = 0;
+  private readonly missionPortal = { x: 10, z: -10, radius: 2.4, missionId: 1 };
+  private readonly returnPortal = { x: 0, z: 0, radius: 3.0 };
 
   /** Static world geometry (deterministic from seed). */
+  readonly blocks: BlockWorld;
   readonly obstacles: Obstacle[];
+  readonly worldSeed: number;
+  readonly regionId: RegionId;
+  readonly pathGrid: PathGrid;
+  readonly worldProps: WorldPropSnapshot[];
   protected interactables: InteractableSnapshot[];
 
   constructor(opts: SimOptions = {}) {
     const seed = opts.seed ?? 1;
-    this.rng = new Rng(seed);
+    this.regionId = opts.regionId ?? DEFAULT_REGION;
+    const regionSeed = seedForRegion(seed, this.regionId);
+    this.worldSeed = regionSeed;
+    this.rng = new Rng(regionSeed);
     this.survival = opts.survival ?? false;
-    const world = generateWorld(seed);
+    this.peacefulOverworld = opts.peacefulOverworld ?? false;
+    const world = generateWorld(regionSeed);
+    this.blocks = world.blocks;
     this.obstacles = world.obstacles;
     this.interactables = world.interactables;
+    this.pathGrid = generatePathGrid(seed, this.obstacles);
+    this.worldProps = placeWorldProps(seed, this.pathGrid, this.obstacles);
   }
 
   // ---- entity lifecycle -------------------------------------------------
@@ -139,6 +174,9 @@ export class GameSimulation {
       maxStamina: STAMINA_MAX,
       hunger: HUNGER_MAX,
       thirst: THIRST_MAX,
+      worldContext: "overworld",
+      missionId: 0,
+      wallet: 0,
       inventory: [],
       cooldowns: new Array(ABILITY_SLOTS).fill(0),
       damage: 0,
@@ -164,6 +202,10 @@ export class GameSimulation {
     e.team = team;
     e.radius = def.radius;
     e.speed = def.moveSpeed;
+    if (!this.peacefulOverworld) {
+      e.worldContext = "mission";
+      e.missionId = 1;
+    }
     this.entities.set(id, e);
     this.inputs.set(id, emptyInput());
     this.lastProcessed.set(id, 0);
@@ -258,6 +300,7 @@ export class GameSimulation {
     this.updateNpcs(dt);
     this.processAbilities();
     this.processInteractions();
+    this.processCrafting();
     this.updateProjectiles(dt);
     this.resolveCollisions();
     if (this.survival) this.updateWaves();
@@ -276,8 +319,13 @@ export class GameSimulation {
         e.x += e.dashVx * dt;
         e.z += e.dashVz * dt;
         clampBody(e);
+        const floor = groundHeightForLocomotion(e.x, e.z, this.obstacles, e.radius, this.blocks);
+        if (e.y < floor) {
+          e.y = floor;
+          e.vy = 0;
+        }
       } else {
-        stepMovement(e, input, this.obstacles, dt);
+        stepMovement(e, input, this.blocks, this.obstacles, dt);
       }
     }
   }
@@ -300,6 +348,10 @@ export class GameSimulation {
       if (e.kind !== "player" || e.dead) continue;
       const input = this.inputs.get(e.id);
       if (!input || !input.action) continue;
+      if (this.peacefulOverworld) {
+        if (this.tryToggleMissionContext(e)) continue;
+        if (e.worldContext === "mission") continue;
+      }
       for (const node of this.interactables) {
         if (node.looted) continue;
         const dist = Math.hypot(node.x - e.x, node.z - e.z);
@@ -312,9 +364,37 @@ export class GameSimulation {
     }
   }
 
+  private tryToggleMissionContext(e: SimEntity): boolean {
+    if (e.worldContext === "overworld") {
+      const d = Math.hypot(e.x - this.missionPortal.x, e.z - this.missionPortal.z);
+      if (d <= this.missionPortal.radius + e.radius) {
+        e.worldContext = "mission";
+        e.missionId = this.missionPortal.missionId;
+        e.x = 0;
+        e.z = 0;
+        e.vx = 0;
+        e.vz = 0;
+        return true;
+      }
+      return false;
+    }
+    const d = Math.hypot(e.x - this.returnPortal.x, e.z - this.returnPortal.z);
+    if (d <= this.returnPortal.radius + e.radius) {
+      e.worldContext = "overworld";
+      e.missionId = 0;
+      e.x = this.missionPortal.x - 2.5;
+      e.z = this.missionPortal.z + 1.8;
+      e.vx = 0;
+      e.vz = 0;
+      return true;
+    }
+    return false;
+  }
+
   private grantLoot(e: SimEntity, kind: string): void {
     const itemId =
-      kind === "tree" ? "wood" : kind === "rock" ? "stone" : "supply";
+      itemForGather(kind as InteractableKind)?.id ??
+      (kind === "tree" ? "wood" : kind === "rock" ? "stone" : "supply");
     const existing = e.inventory.find((i) => i.itemId === itemId);
     if (existing) existing.qty += 1;
     else e.inventory.push({ itemId, qty: 1 });
@@ -334,12 +414,14 @@ export class GameSimulation {
   protected processAbilities(): void {
     for (const e of this.entities.values()) {
       if (e.kind !== "player" || e.dead) continue;
+      if (this.peacefulOverworld && e.worldContext !== "mission") continue;
       const input = this.inputs.get(e.id);
       if (!input || input.abilities === 0) continue;
       const def = getClass(e.classId);
+      const abilityBits = abilityBitsFromInput(input.abilities);
 
       for (let slot = 0; slot < ABILITY_SLOTS; slot++) {
-        if ((input.abilities & (1 << slot)) === 0) continue;
+        if ((abilityBits & (1 << slot)) === 0) continue;
         const abilityId = def.abilities[slot];
         if (!abilityId) continue;
         const ability = getAbility(abilityId);
@@ -350,6 +432,31 @@ export class GameSimulation {
         e.cooldowns[slot] = this.timeMs + ability.cooldownMs;
       }
     }
+  }
+
+  protected processCrafting(): void {
+    for (const e of this.entities.values()) {
+      if (e.kind !== "player" || e.dead) continue;
+      const input = this.inputs.get(e.id);
+      if (!input) continue;
+      const recipeId = decodeCraftIntent(input.abilities);
+      if (recipeId == null) continue;
+      this.tryCraft(e, recipeId);
+    }
+  }
+
+  private tryCraft(e: SimEntity, recipeId: number): void {
+    const recipe = getCraftRecipe(recipeId);
+    if (!recipe || !canCraft(e.inventory, recipe)) return;
+    for (const req of recipe.ingredients) {
+      const slot = e.inventory.find((i) => i.itemId === req.itemId);
+      if (!slot) return;
+      slot.qty -= req.qty;
+    }
+    e.inventory = e.inventory.filter((i) => i.qty > 0);
+    const out = e.inventory.find((i) => i.itemId === recipe.output.itemId);
+    if (out) out.qty += recipe.output.qty;
+    else e.inventory.push({ ...recipe.output });
   }
 
   /** Cast direction: aim if provided, else current facing. */
@@ -497,6 +604,7 @@ export class GameSimulation {
   }
 
   protected damage(t: SimEntity, amount: number): void {
+    if (this.peacefulOverworld && t.kind === "player" && t.worldContext !== "mission") return;
     if (t.dead || amount <= 0) return;
     t.hp -= amount;
     if (t.hp <= 0) {
@@ -556,7 +664,10 @@ export class GameSimulation {
     // Remove dead NPCs so the wave director can detect a cleared wave.
     for (const id of [...this.ai.keys()]) {
       const e = this.entities.get(id);
-      if (e?.dead) this.npcKills++;
+      if (e?.dead) {
+        this.npcKills++;
+        this.awardMissionKill(e.missionId || 1, 12);
+      }
       if (!e || e.dead) this.removeEntity(id);
     }
 
@@ -658,6 +769,16 @@ export class GameSimulation {
   // ---- survival waves ---------------------------------------------------
 
   private updateWaves(): void {
+    if (this.peacefulOverworld) {
+      const missionPlayers = [...this.entities.values()].filter(
+        (e) => e.kind === "player" && !e.dead && e.worldContext === "mission"
+      );
+      if (missionPlayers.length === 0) {
+        for (const id of [...this.ai.keys()]) this.removeEntity(id);
+        this.nextWaveAtMs = 0;
+        return;
+      }
+    }
     const playersTotal = this.playerCount();
     if (playersTotal > 0 && this.aliveCount("player") === 0) {
       this.status = "ended";
@@ -680,7 +801,18 @@ export class GameSimulation {
   spawnWave(wave: number): void {
     const count = Math.min(3 + wave * 2, 24);
     for (let i = 0; i < count; i++) {
-      this.spawnNpc(this.pickArchetype(wave));
+      const npc = this.spawnNpc(this.pickArchetype(wave));
+      npc.worldContext = "mission";
+      npc.missionId = 1;
+    }
+  }
+
+  private awardMissionKill(missionId: number, amount: number): void {
+    for (const e of this.entities.values()) {
+      if (e.kind !== "player" || e.dead) continue;
+      if (e.worldContext === "mission" && e.missionId === missionId) {
+        e.wallet += amount;
+      }
     }
   }
 
@@ -716,6 +848,9 @@ export class GameSimulation {
         maxStamina: e.maxStamina,
         hunger: e.hunger,
         thirst: e.thirst,
+        worldContext: e.worldContext,
+        missionId: e.missionId,
+        wallet: e.wallet,
       });
     }
     const lastProcessedInput: Record<string, number> = {};
@@ -729,12 +864,22 @@ export class GameSimulation {
       entities,
       obstacles: this.obstacles,
       interactables: this.interactables,
+      worldSeed: this.worldSeed,
+      worldProps: this.worldProps,
       lastProcessedInput,
     };
   }
 
   getInteractables(): InteractableSnapshot[] {
     return this.interactables;
+  }
+
+  getWorldProps(): WorldPropSnapshot[] {
+    return this.worldProps;
+  }
+
+  getPathGrid(): PathGrid {
+    return this.pathGrid;
   }
 
   playerCount(): number {
@@ -750,6 +895,15 @@ export class GameSimulation {
     }
     return n;
   }
+}
+
+function seedForRegion(seed: number, regionId: RegionId): number {
+  if (regionId.kind === "cave") {
+    return seed * 977 + 10_000 + (regionId.caveId & 0xfff);
+  }
+  const gx = regionId.gx + 2;
+  const gz = regionId.gz + 2;
+  return seed * 977 + gx * 101 + gz * 313;
 }
 
 function angleDiff(a: number, b: number): number {

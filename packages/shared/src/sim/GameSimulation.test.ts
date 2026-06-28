@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GameSimulation } from "./GameSimulation.js";
 import { WORLD_HALF } from "./constants.js";
-import { emptyInput } from "./types.js";
+import { emptyInput, encodeCraftIntent } from "./types.js";
 
 function run(sim: GameSimulation, ticks: number) {
   for (let i = 0; i < ticks; i++) sim.step();
@@ -62,5 +62,30 @@ describe("GameSimulation", () => {
     run(sim, 5);
     const dist = Math.hypot(b.x - a.x, b.z - a.z);
     expect(dist).toBeGreaterThan(0.1);
+  });
+
+  it("crafts authoritatively from encoded craft intent", () => {
+    const sim = new GameSimulation({ seed: 99 });
+    sim.addPlayer("p1", "scout", 0, { x: 0, z: 0 });
+    const p = sim.getEntity("p1")!;
+    p.inventory.push(
+      { itemId: "wood", qty: 3 },
+      { itemId: "stone", qty: 2 },
+      { itemId: "sticks", qty: 1 }
+    );
+    sim.queueInput("p1", {
+      ...emptyInput(1),
+      abilities: encodeCraftIntent(0, 1),
+    });
+    sim.step();
+    expect(p.inventory.find((i) => i.itemId === "pickaxe")?.qty).toBe(1);
+    expect(p.inventory.find((i) => i.itemId === "wood")).toBeUndefined();
+  });
+
+  it("keeps region deterministic by region id", () => {
+    const a = new GameSimulation({ seed: 7, regionId: { kind: "overworld", gx: 0, gz: 0 } });
+    const b = new GameSimulation({ seed: 7, regionId: { kind: "overworld", gx: 1, gz: 0 } });
+    expect(a.worldSeed).not.toBe(b.worldSeed);
+    expect(a.interactables).not.toEqual(b.interactables);
   });
 });

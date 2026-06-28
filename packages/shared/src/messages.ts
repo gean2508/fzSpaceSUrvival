@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ABILITY_SLOTS } from "./sim/types.js";
+import { ABILITY_MASK, CRAFT_INTENT_MASK } from "./sim/types.js";
 
 export const ROOM_NAME = "survival" as const;
 
@@ -17,7 +17,7 @@ export const InputMessageSchema = z.object({
     .number()
     .int()
     .min(0)
-    .max((1 << ABILITY_SLOTS) - 1),
+    .max(ABILITY_MASK | CRAFT_INTENT_MASK),
   sprint: z.number().int().min(0).max(1),
   action: z.number().int().min(0).max(1),
 });

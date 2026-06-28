@@ -11,12 +11,14 @@ import {
   ProgressDeltaSchema,
   SYNC_MESSAGE,
   TICK_MS,
+  WorldPropState,
   getClass,
   type InputState,
 } from "@hunger-arena/shared";
 import { getStore } from "../db/store.js";
 import { verifyToken } from "../auth/jwt.js";
 import { slog } from "../logger.js";
+import { formatZodFailure } from "../validation.js";
 
 interface ClientSession {
   deviceId: string;
@@ -44,6 +46,7 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
   private sim = new GameSimulation({
     seed: (Date.now() & 0xffffffff) >>> 0,
     survival: true,
+    peacefulOverworld: true,
   });
   private store = getStore();
   private sessions = new Map<string, ClientSession>();
@@ -69,6 +72,8 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
       if (!parsed.success) {
         slog("security", "rejected invalid input", {
           sessionId: client.sessionId,
+          messageType: MESSAGE.input,
+          validation: formatZodFailure(parsed.error),
         });
         return;
       }
@@ -93,6 +98,8 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
       if (!parsed.success || !session) {
         slog("security", "rejected invalid progress sync", {
           sessionId: client.sessionId,
+          messageType: SYNC_MESSAGE.syncProgress,
+          validation: parsed.success ? undefined : formatZodFailure(parsed.error),
         });
         return;
       }
@@ -118,6 +125,13 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
 
   async onJoin(client: Client, options?: unknown) {
     const parsed = JoinOptionsSchema.safeParse(options ?? {});
+    if (!parsed.success) {
+      slog("security", "rejected invalid join options", {
+        sessionId: client.sessionId,
+        messageType: "join",
+        validation: formatZodFailure(parsed.error),
+      });
+    }
     const classId = parsed.success ? parsed.data.classId : getClass("").id;
     const deviceId =
       (parsed.success && parsed.data.deviceId) || client.sessionId;
@@ -188,6 +202,7 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
 
   /** Push the static world geometry into state once at room creation. */
   private publishWorld() {
+    this.state.worldSeed = this.sim.worldSeed;
     for (const o of this.sim.obstacles) {
       const os = new ObstacleState();
       os.id = o.id;
@@ -207,6 +222,15 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
       ns.radius = n.radius;
       ns.looted = n.looted;
       this.state.interactables.push(ns);
+    }
+    for (const p of this.sim.getWorldProps()) {
+      const ps = new WorldPropState();
+      ps.id = p.id;
+      ps.kind = p.kind;
+      ps.x = p.x;
+      ps.z = p.z;
+      ps.rot = p.rot;
+      this.state.worldProps.push(ps);
     }
   }
 
@@ -249,6 +273,9 @@ export class SurvivalRoom extends Room<{ state: GameRoomState }> {
       s.maxStamina = e.maxStamina;
       s.hunger = e.hunger;
       s.thirst = e.thirst;
+      s.worldContext = e.worldContext;
+      s.missionId = e.missionId;
+      s.wallet = e.wallet;
       s.lastSeq = snap.lastProcessedInput[e.id] ?? 0;
     }
 

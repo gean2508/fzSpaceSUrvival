@@ -1,0 +1,30 @@
+import type { ItemDef } from "../assets/types.js";
+
+/** Item registry — links inventory/crafting IDs to procedural `assetKind` visuals. */
+export const ITEM_CATALOG: ItemDef[] = [
+  { id: "wood", assetKind: "item_mat_log", displayName: "Wood", category: "material", maxStack: 99, craftTags: ["wood", "craft"], gatherFrom: "tree" },
+  { id: "stone", assetKind: "item_mat_stone", displayName: "Stone", category: "material", maxStack: 99, craftTags: ["stone", "craft"], gatherFrom: "rock" },
+  { id: "supply", assetKind: "item_potion_red", displayName: "Supply pack", category: "consumable", maxStack: 20, craftTags: ["potion"], gatherFrom: "container" },
+  { id: "sticks", assetKind: "item_mat_sticks", displayName: "Sticks", category: "material", maxStack: 99, craftTags: ["wood", "craft"] },
+  { id: "iron_ingot", assetKind: "item_mat_ingot_iron", displayName: "Iron ingot", category: "material", maxStack: 50, craftTags: ["metal", "craft"] },
+  { id: "gold_ingot", assetKind: "item_mat_ingot_gold", displayName: "Gold ingot", category: "material", maxStack: 50, craftTags: ["metal", "craft"] },
+  { id: "leather", assetKind: "item_mat_leather", displayName: "Leather", category: "material", maxStack: 50, craftTags: ["leather", "craft"] },
+  { id: "gem_red", assetKind: "item_mat_gem_red", displayName: "Red gem", category: "material", maxStack: 20, craftTags: ["gem", "craft"] },
+  { id: "gem_blue", assetKind: "item_mat_gem_blue", displayName: "Blue gem", category: "material", maxStack: 20, craftTags: ["gem", "craft"] },
+  { id: "potion_red", assetKind: "item_potion_red", displayName: "Health potion", category: "consumable", maxStack: 20, craftTags: ["potion", "heal"] },
+  { id: "potion_blue", assetKind: "item_potion_blue", displayName: "Mana potion", category: "consumable", maxStack: 20, craftTags: ["potion", "mana"] },
+  { id: "potion_green", assetKind: "item_potion_green", displayName: "Stamina potion", category: "consumable", maxStack: 20, craftTags: ["potion", "stamina"] },
+  { id: "apple", assetKind: "item_food_apple", displayName: "Apple", category: "consumable", maxStack: 30, craftTags: ["food"] },
+  { id: "bread", assetKind: "item_food_bread", displayName: "Bread", category: "consumable", maxStack: 20, craftTags: ["food", "cooking"] },
+  { id: "sword_iron", assetKind: "equip_sword_iron", displayName: "Iron sword", category: "weapon", maxStack: 1, craftTags: ["weapon", "melee"] },
+  { id: "sword_steel", assetKind: "equip_sword_steel", displayName: "Steel sword", category: "weapon", maxStack: 1, craftTags: ["weapon", "melee"] },
+  { id: "bow", assetKind: "equip_bow", displayName: "Bow", category: "weapon", maxStack: 1, craftTags: ["weapon", "ranged"] },
+  { id: "pickaxe", assetKind: "equip_pickaxe", displayName: "Pickaxe", category: "tool", maxStack: 1, craftTags: ["tool", "mining"] },
+  { id: "axe", assetKind: "equip_axe", displayName: "Axe", category: "tool", maxStack: 1, craftTags: ["tool", "woodcut"] },
+  { id: "hammer", assetKind: "equip_hammer", displayName: "Hammer", category: "tool", maxStack: 1, craftTags: ["tool", "build"] },
+  { id: "hoe", assetKind: "equip_hoe", displayName: "Hoe", category: "tool", maxStack: 1, craftTags: ["tool", "farm"] },
+  { id: "watering_can", assetKind: "equip_watering_can", displayName: "Watering can", category: "tool", maxStack: 1, craftTags: ["tool", "farm"] },
+  { id: "shield_wood", assetKind: "equip_shield_wood", displayName: "Wood shield", category: "equipment", maxStack: 1, craftTags: ["armor", "shield"] },
+  { id: "key", assetKind: "item_key", displayName: "Key", category: "key", maxStack: 10, craftTags: ["key"] },
+  { id: "coin", assetKind: "item_coin", displayName: "Coin", category: "misc", maxStack: 999, craftTags: ["currency"] },
+];

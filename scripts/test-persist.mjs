@@ -1,5 +1,6 @@
 import { Client } from "@colyseus/sdk";
 import { ROOM_NAME, SYNC_MESSAGE } from "@hunger-arena/shared";
+import { makeInput } from "./e2e-input.mjs";
 
 const url = process.env.SERVER_URL || "ws://localhost:2567";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -30,7 +31,7 @@ try {
   const s1 = await session(async (room) => {
     let seq = 1;
     for (let i = 0; i < 100; i++) {
-      room.send("input", { seq: seq++, moveX: 0, moveZ: 0, aimX: 1, aimZ: 0, abilities: 1 });
+      room.send("input", makeInput(seq++, { aimX: 1, abilities: 1 }));
       await wait(50);
     }
   });

@@ -1,0 +1,20 @@
+{
+  "publishedAt": "2026-06-28T14:14:44.977Z",
+  "android": {
+    "version": "1.0.116",
+    "url": "http://192.168.1.5:2567/updates/artifacts/hunger-arena.apk",
+    "sha256": "b9f1945ab4db620db1982a520315b2f3915ffcbf0044d84878c8689382c6ac0e",
+    "sizeBytes": 74887360,
+    "mandatory": true,
+    "notes": "Publicado desde app-debug.apk",
+    "versionCode": 116
+  },
+  "desktop": {
+    "version": "1.0.100",
+    "url": "http://192.168.1.5:2567/updates/artifacts/hunger-arena.AppImage",
+    "sha256": "2ca7d9c2c227c8d832964906f08903b41bacca62a06db8a516fa17e62be04925",
+    "sizeBytes": 16749760,
+    "mandatory": true,
+    "notes": "Bloques MC + pad grande + break/place v1.0.100"
+  }
+}

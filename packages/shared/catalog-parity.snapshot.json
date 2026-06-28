@@ -1,0 +1,1191 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-22T23:17:32.818Z",
+  "modules": [
+    {
+      "id": "assets",
+      "entries": [
+        {
+          "id": "building_barn",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "building_cottage",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "character_adventurer",
+          "fields": {
+            "class": "character",
+            "category": "character",
+            "palette": "hero"
+          }
+        },
+        {
+          "id": "character_elder",
+          "fields": {
+            "class": "character",
+            "category": "character",
+            "palette": "fog"
+          }
+        },
+        {
+          "id": "character_farmer",
+          "fields": {
+            "class": "character",
+            "category": "character",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "character_guard",
+          "fields": {
+            "class": "character",
+            "category": "character",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "creature_golem",
+          "fields": {
+            "class": "creature",
+            "category": "creature",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "creature_plant",
+          "fields": {
+            "class": "creature",
+            "category": "creature",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "creature_slime",
+          "fields": {
+            "class": "creature",
+            "category": "creature",
+            "palette": "potionGreen"
+          }
+        },
+        {
+          "id": "creature_spirit",
+          "fields": {
+            "class": "creature",
+            "category": "creature",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "creature_wolf",
+          "fields": {
+            "class": "creature",
+            "category": "creature",
+            "palette": "night"
+          }
+        },
+        {
+          "id": "crystal_blue",
+          "fields": {
+            "class": "item",
+            "category": "rock",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "crystal_purple",
+          "fields": {
+            "class": "item",
+            "category": "rock",
+            "palette": "neonPink"
+          }
+        },
+        {
+          "id": "crystal_yellow",
+          "fields": {
+            "class": "item",
+            "category": "rock",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "equip_axe",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "equip_bow",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "equip_dagger",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "equip_hammer",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "equip_hoe",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "equip_pickaxe",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "equip_shield_metal",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "equip_shield_wood",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "equip_spear",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "equip_staff",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "crystal"
+          }
+        },
+        {
+          "id": "equip_sword_gold",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "equip_sword_iron",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "equip_sword_steel",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "equip_watering_can",
+          "fields": {
+            "class": "item",
+            "category": "equipment",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "flora_bush",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "flora_flower_blue",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "flora_flower_red",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "flora_flower_white",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "fog"
+          }
+        },
+        {
+          "id": "flora_flower_yellow",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "flora_grass_tuft",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "flora_mushroom_brown",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "flora_mushroom_red",
+          "fields": {
+            "class": "floraFlat",
+            "category": "flora",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "flora_shrub",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "flora_tree_cherry",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "neonPink"
+          }
+        },
+        {
+          "id": "flora_tree_oak",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "flora_tree_oak_autumn",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "flora_tree_pine",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "bark"
+          }
+        },
+        {
+          "id": "flora_tree_red",
+          "fields": {
+            "class": "flora360",
+            "category": "flora",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "interior_bed",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "interior_book",
+          "fields": {
+            "class": "item",
+            "category": "construction",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "interior_chair",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "interior_scroll",
+          "fields": {
+            "class": "item",
+            "category": "construction",
+            "palette": "fog"
+          }
+        },
+        {
+          "id": "interior_table",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "item_coin",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "item_food_apple",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "item_food_bread",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "item_food_grape",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "neonPink"
+          }
+        },
+        {
+          "id": "item_food_meat",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "item_food_orange",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "item_food_pie",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "item_food_soup",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "potionGreen"
+          }
+        },
+        {
+          "id": "item_key",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "item_mat_gem_blue",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "item_mat_gem_red",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "item_mat_ingot_gold",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "item_mat_ingot_iron",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "item_mat_leather",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "leather"
+          }
+        },
+        {
+          "id": "item_mat_log",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "item_mat_sticks",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "item_mat_stone",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "item_potion_blue",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "potionBlue"
+          }
+        },
+        {
+          "id": "item_potion_green",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "potionGreen"
+          }
+        },
+        {
+          "id": "item_potion_purple",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "neonPink"
+          }
+        },
+        {
+          "id": "item_potion_red",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "potionRed"
+          }
+        },
+        {
+          "id": "item_potion_yellow",
+          "fields": {
+            "class": "item",
+            "category": "consumable",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "item_scroll_map",
+          "fields": {
+            "class": "item",
+            "category": "material",
+            "palette": "fog"
+          }
+        },
+        {
+          "id": "machine_launch_pad",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "machine_stone_extractor",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "machine_wood_extractor",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_archway",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "prop_barrel",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_bridge",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_crate",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_crate_large",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_fence_stone",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "prop_fence_wood",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_lantern",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "prop_pillar",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "prop_pot_cooking",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "iron"
+          }
+        },
+        {
+          "id": "prop_sign",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_stall",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "prop_well",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "rock_boulder",
+          "fields": {
+            "class": "terrain",
+            "category": "rock",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "rock_cave_entrance",
+          "fields": {
+            "class": "prop",
+            "category": "rock",
+            "palette": "night"
+          }
+        },
+        {
+          "id": "rock_medium",
+          "fields": {
+            "class": "terrain",
+            "category": "rock",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "rock_small",
+          "fields": {
+            "class": "terrain",
+            "category": "rock",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "terrain_cliff",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "terrain_dirt",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "terrain_grass",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "terrain_path_dirt",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "terrain_path_grass",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "terrain_path_stone",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "terrain_slope",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "meadow"
+          }
+        },
+        {
+          "id": "terrain_stone",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "terrain_water",
+          "fields": {
+            "class": "terrain",
+            "category": "terrain",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "ui_heart",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "ui_icon_chat",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "ui_icon_inventory",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "ui_icon_map",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "earth"
+          }
+        },
+        {
+          "id": "ui_icon_quest",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "gold"
+          }
+        },
+        {
+          "id": "ui_icon_settings",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "ui_mana",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "neonCyan"
+          }
+        },
+        {
+          "id": "ui_slot_fire",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "foe"
+          }
+        },
+        {
+          "id": "ui_slot_shield",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "ui_slot_sword",
+          "fields": {
+            "class": "ui",
+            "category": "ui",
+            "palette": "iron"
+          }
+        }
+      ]
+    },
+    {
+      "id": "items",
+      "entries": [
+        {
+          "id": "apple",
+          "fields": {
+            "assetKind": "item_food_apple",
+            "category": "consumable",
+            "maxStack": 30
+          }
+        },
+        {
+          "id": "axe",
+          "fields": {
+            "assetKind": "equip_axe",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "bow",
+          "fields": {
+            "assetKind": "equip_bow",
+            "category": "weapon",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "bread",
+          "fields": {
+            "assetKind": "item_food_bread",
+            "category": "consumable",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "coin",
+          "fields": {
+            "assetKind": "item_coin",
+            "category": "misc",
+            "maxStack": 999
+          }
+        },
+        {
+          "id": "gem_blue",
+          "fields": {
+            "assetKind": "item_mat_gem_blue",
+            "category": "material",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "gem_red",
+          "fields": {
+            "assetKind": "item_mat_gem_red",
+            "category": "material",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "gold_ingot",
+          "fields": {
+            "assetKind": "item_mat_ingot_gold",
+            "category": "material",
+            "maxStack": 50
+          }
+        },
+        {
+          "id": "hammer",
+          "fields": {
+            "assetKind": "equip_hammer",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "hoe",
+          "fields": {
+            "assetKind": "equip_hoe",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "iron_ingot",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "material",
+            "maxStack": 50
+          }
+        },
+        {
+          "id": "key",
+          "fields": {
+            "assetKind": "item_key",
+            "category": "key",
+            "maxStack": 10
+          }
+        },
+        {
+          "id": "leather",
+          "fields": {
+            "assetKind": "item_mat_leather",
+            "category": "material",
+            "maxStack": 50
+          }
+        },
+        {
+          "id": "pickaxe",
+          "fields": {
+            "assetKind": "equip_pickaxe",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "potion_blue",
+          "fields": {
+            "assetKind": "item_potion_blue",
+            "category": "consumable",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "potion_green",
+          "fields": {
+            "assetKind": "item_potion_green",
+            "category": "consumable",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "potion_red",
+          "fields": {
+            "assetKind": "item_potion_red",
+            "category": "consumable",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "shield_wood",
+          "fields": {
+            "assetKind": "equip_shield_wood",
+            "category": "equipment",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "sticks",
+          "fields": {
+            "assetKind": "item_mat_sticks",
+            "category": "material",
+            "maxStack": 99
+          }
+        },
+        {
+          "id": "stone",
+          "fields": {
+            "assetKind": "item_mat_stone",
+            "category": "material",
+            "maxStack": 99
+          }
+        },
+        {
+          "id": "supply",
+          "fields": {
+            "assetKind": "item_potion_red",
+            "category": "consumable",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "sword_iron",
+          "fields": {
+            "assetKind": "equip_sword_iron",
+            "category": "weapon",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "sword_steel",
+          "fields": {
+            "assetKind": "equip_sword_steel",
+            "category": "weapon",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "watering_can",
+          "fields": {
+            "assetKind": "equip_watering_can",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "wood",
+          "fields": {
+            "assetKind": "item_mat_log",
+            "category": "material",
+            "maxStack": 99
+          }
+        }
+      ]
+    },
+    {
+      "id": "machines",
+      "entries": [
+        {
+          "id": "launch_pad",
+          "fields": {
+            "passive": false,
+            "outputPerSecond": 0,
+            "placeDurationMs": 4500,
+            "assetKind": "machine_launch_pad"
+          }
+        },
+        {
+          "id": "stone_extractor",
+          "fields": {
+            "passive": true,
+            "outputPerSecond": 0.35,
+            "placeDurationMs": 2500,
+            "assetKind": "machine_stone_extractor"
+          }
+        },
+        {
+          "id": "wood_extractor",
+          "fields": {
+            "passive": true,
+            "outputPerSecond": 0.5,
+            "placeDurationMs": 2000,
+            "assetKind": "machine_wood_extractor"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui_icons",
+      "entries": [
+        {
+          "id": "drumstick_empty",
+          "fields": {
+            "shape": "drumstick",
+            "variant": "empty",
+            "fillPalette": "earth",
+            "bgPalette": "earth",
+            "grid": 5,
+            "cellCount": 12
+          }
+        },
+        {
+          "id": "drumstick_full",
+          "fields": {
+            "shape": "drumstick",
+            "variant": "full",
+            "fillPalette": "gold",
+            "bgPalette": "earth",
+            "grid": 5,
+            "cellCount": 12
+          }
+        },
+        {
+          "id": "drumstick_half",
+          "fields": {
+            "shape": "drumstick",
+            "variant": "half",
+            "fillPalette": "potionGreen",
+            "bgPalette": "earth",
+            "grid": 5,
+            "cellCount": 12
+          }
+        },
+        {
+          "id": "heart_empty",
+          "fields": {
+            "shape": "heart",
+            "variant": "empty",
+            "fillPalette": "night",
+            "bgPalette": "night",
+            "grid": 5,
+            "cellCount": 16
+          }
+        },
+        {
+          "id": "heart_full",
+          "fields": {
+            "shape": "heart",
+            "variant": "full",
+            "fillPalette": "foe",
+            "bgPalette": "night",
+            "grid": 5,
+            "cellCount": 16
+          }
+        },
+        {
+          "id": "heart_half",
+          "fields": {
+            "shape": "heart",
+            "variant": "half",
+            "fillPalette": "potionRed",
+            "bgPalette": "night",
+            "grid": 5,
+            "cellCount": 16
+          }
+        }
+      ]
+    }
+  ]
+}

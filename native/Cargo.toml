@@ -1,0 +1,46 @@
+[workspace]
+resolver = "2"
+members = ["crates/ha-shared", "crates/ha-game"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/hunger-arena/hunger-arena"
+
+[workspace.dependencies]
+bevy = { version = "0.15", default-features = false, features = [
+  "bevy_asset",
+  "bevy_color",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_render",
+  "bevy_scene",
+  "bevy_gltf",
+  "bevy_sprite",
+  "bevy_text",
+  "bevy_ui",
+  "bevy_window",
+  "bevy_winit",
+  "default_font",
+  "multi_threaded",
+  "png",
+  "tonemapping_luts",
+  "x11",
+  "wayland",
+  "android-game-activity",
+  "android_shared_stdcxx",
+] }
+serde = { version = "1", features = ["derive"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.release-native]
+inherits = "release"
+opt-level = 3
+strip = true

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "seed": 42,
+  "tickHz": 20,
+  "ticks": 80,
+  "input": {
+    "moveX": 0,
+    "moveZ": 1,
+    "aimX": 0,
+    "aimZ": 1,
+    "abilities": 0,
+    "sprint": 0,
+    "action": 0
+  },
+  "result": {
+    "x": 0,
+    "z": 23.80000000000003,
+    "vx": 0,
+    "vz": 6,
+    "grounded": true
+  }
+}

@@ -25,6 +25,9 @@ export class EntityState extends Schema {
   @type("number") maxStamina = 100;
   @type("number") hunger = 100;
   @type("number") thirst = 100;
+  @type("string") worldContext = "overworld";
+  @type("number") missionId = 0;
+  @type("number") wallet = 0;
   /** Last input seq the server processed for this player (reconciliation). */
   @type("number") lastSeq = 0;
 }

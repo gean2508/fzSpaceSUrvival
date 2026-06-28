@@ -1,0 +1,37 @@
+//! SI scale — 1 world unit = 1 metre on planetary surfaces.
+
+/// Average adult height (m).
+pub const HUMAN_HEIGHT_M: f32 = 1.75;
+pub const HUMAN_EYE_HEIGHT_M: f32 = 1.63;
+pub const PLAYER_COLLISION_RADIUS_M: f32 = 0.35;
+
+pub const EARTH_RADIUS_M: f32 = 6_371_000.0;
+pub const MOON_RADIUS_M: f32 = 1_737_400.0;
+pub const EARTH_MOON_DISTANCE_M: f32 = 384_400_000.0;
+pub const LEO_ALTITUDE_M: f32 = 408_000.0;
+
+pub const MOON_TO_EARTH_RADIUS_RATIO: f32 = MOON_RADIUS_M / EARTH_RADIUS_M;
+
+/// Hub orbital view — compressed visual metres (ratios stay astronomical).
+pub const HUB_EARTH_VISUAL_RADIUS_M: f32 = 22.0;
+pub const HUB_EARTH_VISUAL_DISTANCE_M: f32 = 55.0;
+pub const HUB_MOON_VISUAL_RADIUS_M: f32 = HUB_EARTH_VISUAL_RADIUS_M * MOON_TO_EARTH_RADIUS_RATIO;
+
+/// From Luna surface — Earth in the sky (arcade readable size, not angular-accurate).
+pub const LUNA_SKY_EARTH_DISTANCE_M: f32 = 180.0;
+pub const LUNA_SKY_EARTH_RADIUS_M: f32 = 14.0;
+/// Walkable Earth shell at origin — arcade metres (SFS-style home body).
+pub const EARTH_GAMEPLAY_RADIUS_M: f32 = 480.0;
+/// Walkable moon shell — arcade metres.
+pub const MOON_GAMEPLAY_RADIUS_M: f32 = 420.0;
+
+/// Visual-only radius for orbital / hub spheres (unchanged ratios).
+pub const MOON_SURFACE_RADIUS_M: f32 = MOON_GAMEPLAY_RADIUS_M;
+
+/// Star dome radius in orbital void (metres).
+pub const SPACE_STARFIELD_RADIUS_M: f32 = 128.0;
+
+/// Moon visible in LEO sky — compressed layout, ratios astronomical.
+pub const SPACE_MOON_SKY_X_M: f32 = 42.0;
+pub const SPACE_MOON_SKY_Y_M: f32 = 14.0;
+pub const SPACE_MOON_SKY_Z_M: f32 = -36.0;

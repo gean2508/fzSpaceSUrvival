@@ -1,92 +1,55 @@
-import { MAX_CLIMB_HEIGHT, WORLD_HALF } from "./constants.js";
+import { BLOCK_STEP_HEIGHT, LAUNCH_PAD_ZONE, WORLD_HALF } from "./constants.js";
+import type { MovementBody } from "./movement.js";
 import { Rng } from "./rng.js";
-import type {
-  InteractableKind,
-  InteractableSnapshot,
-  Obstacle,
-} from "./types.js";
+import {
+  BLOCK_TERRAIN,
+  blockGroundForLocomotion,
+  blockSurfaceHeightAt,
+  generateBlockWorld,
+  type BlockWorld,
+} from "./blockWorld.js";
+import type { InteractableKind, InteractableSnapshot, Obstacle } from "./types.js";
+import { wrapWorldBody } from "./worldWrap.js";
 
 export interface GeneratedWorld {
+  blocks: BlockWorld;
+  /** Legacy — always empty; terrain is voxels. */
   obstacles: Obstacle[];
   interactables: InteractableSnapshot[];
 }
 
-/** Keep the spawn area in the middle clear of geometry. */
-const CENTER_CLEAR = 4.5;
+const CENTER_CLEAR = 8;
+const NODE_TARGET = 72;
 
 function farFromCenter(x: number, z: number, pad: number): boolean {
   return Math.hypot(x, z) > CENTER_CLEAR + pad;
 }
 
-function overlapsAny(
-  x: number,
-  z: number,
-  pad: number,
-  boxes: Obstacle[]
-): boolean {
-  for (const b of boxes) {
-    if (
-      Math.abs(x - b.x) < b.halfW + pad &&
-      Math.abs(z - b.z) < b.halfD + pad
-    ) {
-      return true;
-    }
-  }
-  return false;
+function farFromLaunchPad(x: number, z: number, pad: number): boolean {
+  return (
+    Math.hypot(x - LAUNCH_PAD_ZONE.x, z - LAUNCH_PAD_ZONE.z) >
+    LAUNCH_PAD_ZONE.radius + pad
+  );
 }
 
-/**
- * Deterministic world layout. Uses an INDEPENDENT rng derived from the sim seed
- * so it never disturbs the main simulation rng stream (spawns, AI, waves).
- * Same seed → identical obstacles/interactables on server and offline client.
- */
 export function generateWorld(seed: number): GeneratedWorld {
+  const blocks = generateBlockWorld(seed);
   const rng = new Rng((seed ^ 0x9e3779b9) >>> 0);
-  const obstacles: Obstacle[] = [];
-
-  // Scatter climbable boxes / walls around the arena.
-  const target = 10;
-  let attempts = 0;
-  while (obstacles.length < target && attempts < 200) {
-    attempts++;
-    const x = rng.range(-WORLD_HALF + 3, WORLD_HALF - 3);
-    const z = rng.range(-WORLD_HALF + 3, WORLD_HALF - 3);
-    const halfW = rng.range(0.8, 2.2);
-    const halfD = rng.range(0.8, 2.2);
-    if (!farFromCenter(x, z, Math.max(halfW, halfD))) continue;
-    if (overlapsAny(x, z, 1.5, obstacles)) continue;
-    // Most are climbable; a few are tall blockers.
-    const tall = rng.next() < 0.25;
-    const height = tall
-      ? rng.range(MAX_CLIMB_HEIGHT + 1, MAX_CLIMB_HEIGHT + 2.5)
-      : rng.range(1.0, MAX_CLIMB_HEIGHT);
-    obstacles.push({
-      id: `obs-${obstacles.length}`,
-      x,
-      z,
-      halfW,
-      halfD,
-      height: Math.round(height * 100) / 100,
-    });
-  }
-
-  // Scatter gatherable nodes, avoiding obstacle footprints.
   const interactables: InteractableSnapshot[] = [];
-  const kinds: InteractableKind[] = ["tree", "rock", "container"];
-  const nodeTarget = 14;
-  attempts = 0;
-  while (interactables.length < nodeTarget && attempts < 300) {
+  let attempts = 0;
+  while (interactables.length < NODE_TARGET && attempts < 1200) {
     attempts++;
-    const x = rng.range(-WORLD_HALF + 2, WORLD_HALF - 2);
-    const z = rng.range(-WORLD_HALF + 2, WORLD_HALF - 2);
+    const bx = Math.floor(rng.range(-WORLD_HALF + 4, WORLD_HALF - 4));
+    const bz = Math.floor(rng.range(-WORLD_HALF + 4, WORLD_HALF - 4));
+    const x = bx + 0.5;
+    const z = bz + 0.5;
     if (!farFromCenter(x, z, 1)) continue;
-    if (overlapsAny(x, z, 1.0, obstacles)) continue;
-    if (
-      interactables.some((n) => Math.hypot(n.x - x, n.z - z) < 2.2)
-    ) {
-      continue;
-    }
-    const kind = kinds[Math.floor(rng.next() * kinds.length) % kinds.length];
+    if (!farFromLaunchPad(x, z, 1)) continue;
+    if (blockSurfaceHeightAt(blocks, x, z) < 1.5) continue;
+    if (interactables.some((n) => Math.hypot(n.x - x, n.z - z) < 3)) continue;
+    const roll = rng.next();
+    const kind: InteractableKind =
+      roll < 0.45 ? "tree" : roll < 0.8 ? "rock" : "container";
     interactables.push({
       id: `node-${interactables.length}`,
       kind,
@@ -96,21 +59,101 @@ export function generateWorld(seed: number): GeneratedWorld {
       looted: false,
     });
   }
-
-  return { obstacles, interactables };
+  return { blocks, obstacles: [], interactables };
 }
 
-/** Top surface height of any obstacle whose footprint contains (x,z), else 0. */
-export function groundHeightAt(
+export type GroundHeightMode = "terrain" | "flat";
+
+let groundHeightMode: GroundHeightMode = "terrain";
+
+export function setGroundHeightMode(mode: GroundHeightMode): void {
+  groundHeightMode = mode;
+}
+
+export function obstacleSurfaceY(b: Obstacle, blocks: BlockWorld): number {
+  if (groundHeightMode === "flat") return b.height;
+  return blockSurfaceHeightAt(blocks, b.x, b.z) + b.height;
+}
+
+function groundHeightAtPoint(
   x: number,
   z: number,
+  blocks: BlockWorld,
   obstacles: Obstacle[]
 ): number {
-  let h = 0;
+  let h = groundHeightMode === "flat" ? 0 : blockSurfaceHeightAt(blocks, x, z);
   for (const b of obstacles) {
     if (Math.abs(x - b.x) <= b.halfW && Math.abs(z - b.z) <= b.halfD) {
-      if (b.height > h) h = b.height;
+      const top = obstacleSurfaceY(b, blocks);
+      if (top > h) h = top;
     }
   }
   return h;
+}
+
+export function groundHeightForLocomotion(
+  x: number,
+  z: number,
+  obstacles: Obstacle[],
+  footprintRadius: number,
+  blocks: BlockWorld
+): number {
+  if (groundHeightMode === "flat") {
+    return groundHeightAtPoint(x, z, blocks, obstacles);
+  }
+  if (BLOCK_TERRAIN) {
+    return blockGroundForLocomotion(blocks, x, z, footprintRadius);
+  }
+  return groundHeightAtPoint(x, z, blocks, obstacles);
+}
+
+export function blockSteepTerrainStep(
+  body: { x: number; z: number; vx: number; vz: number },
+  blocks: BlockWorld,
+  obstacles: Obstacle[],
+  fromX: number,
+  fromZ: number
+): void {
+  if (groundHeightMode === "flat") return;
+  if (!BLOCK_TERRAIN) return;
+  const h0 = groundHeightAtPoint(fromX, fromZ, blocks, obstacles);
+  const h1 = groundHeightAtPoint(body.x, body.z, blocks, obstacles);
+  if (h1 - h0 > BLOCK_STEP_HEIGHT + 0.001) {
+    body.x = fromX;
+    body.z = fromZ;
+    body.vx = 0;
+    body.vz = 0;
+    return;
+  }
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 4;
+    const sx = fromX + (body.x - fromX) * t;
+    const sz = fromZ + (body.z - fromZ) * t;
+    if (groundHeightAtPoint(sx, sz, blocks, obstacles) - h0 > BLOCK_STEP_HEIGHT + 0.001) {
+      body.x = fromX;
+      body.z = fromZ;
+      body.vx = 0;
+      body.vz = 0;
+      return;
+    }
+  }
+}
+
+export function blockUnwalkableTerrainAscent(
+  _body: { x: number; z: number; vx: number; vz: number },
+  _fromX: number,
+  _fromZ: number
+): void {
+  /* block terrain — no slope guard */
+}
+
+export function wrapAndResnapBody(
+  body: MovementBody,
+  blocks: BlockWorld,
+  obstacles: Obstacle[]
+): void {
+  if (wrapWorldBody(body)) {
+    body.y = groundHeightForLocomotion(body.x, body.z, obstacles, body.radius, blocks);
+    body.vy = 0;
+  }
 }

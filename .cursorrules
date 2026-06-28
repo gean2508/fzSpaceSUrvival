@@ -2,21 +2,25 @@
   "project": "Hunger Arena — Survival Multiplayer",
   "stack": {
     "shared": "packages/shared — deterministic GameSimulation + schema + zod",
-    "client_core": "packages/client-core — Transport, ArenaController, InputPayload (motor de cliente)",
+    "client_core": "packages/client-core — Transport, ArenaController, InputPayload",
+    "client_gfx": "packages/client-gfx — AssetRegistry, PALETTE, procedural builders",
     "mobile": "apps/mobile — Expo + R3F native + RNGH multi-touch",
     "desktop": "apps/desktop — Tauri + R3F WebGL + Pointer Lock/WASD",
-    "server": "server — Colyseus authoritative + Express + Postgres",
-    "web": "client — landing descarga APK"
+    "server": "server — Colyseus authoritative + Express + Postgres + /updates",
+    "web": "client — landing ONLY (downloads + bot showcase)"
   },
   "architecture_rules": [
-    "Read ENGINE.md and .cursor/rules/engine-api.mdc before any gameplay/net/input change",
+    "Read .cursor/skills/monorepo-architecture/SKILL.md before structural changes",
+    "Read ENGINE.md and .cursor/rules/engine-api.mdc before gameplay/net/input changes",
     "All simulation logic in packages/shared — never duplicate in apps or server",
-    "All netcode/prediction in packages/client-core — never duplicate ArenaController in apps",
+    "All netcode/prediction in packages/client-core — never duplicate ArenaController",
+    "All procedural mesh builders in packages/client-gfx — apps only host WorldRenderer glue",
+    "client/ is landing only — no full game, no duplicated Transport/net/",
     "InputPayload MUST match InputState (minus seq) on mobile AND desktop",
     "Hot objects use useRef + useFrame — never useState for positions",
     "Server is input-only — never accept client positions",
-    "Validate every inbound message with zod; keep sim deterministic (vitest)",
-    "Platform adapters only: TouchControls (mobile), usePcControls+useDesktopAim (desktop)"
+    "Validate boundaries: node .cursor/skills/monorepo-architecture/scripts/check-boundaries.mjs",
+    "After native/Android changes: read .cursor/skills/android-ship-smoke/SKILL.md — npm run smoke:android must pass before telling user install is done"
   ],
   "debugging_and_observability": {
     "rule_9_observability": "Log connect/disconnect/sync/security events. Debug overlay: FPS, RTT, tick, reconcile error."

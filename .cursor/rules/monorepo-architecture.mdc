@@ -1,0 +1,41 @@
+---
+description: Monorepo constitution — package boundaries, dependency direction, forbidden duplicates
+alwaysApply: true
+---
+
+# Monorepo architecture (constitution)
+
+Before moving files, adding packages, or copying code between folders, read
+`.cursor/skills/monorepo-architecture/SKILL.md`.
+
+## Layers (do not blur)
+
+| Package | Role |
+|---------|------|
+| `packages/shared` | Game truth: sim, schema, zod, AI — TS pure |
+| `packages/client-core` | Client engine: Transport, ArenaController, input, updates API |
+| `packages/client-gfx` | Procedural art: PALETTE, AssetRegistry, builders (no R3F) |
+| `apps/mobile` · `apps/desktop` | Platform shell: UI, input adapters, WorldRenderer glue |
+| `server/` | Authoritative Colyseus + REST + `/updates` |
+| `client/` | **Landing only** — downloads + non-interactive showcase |
+
+## Dependency rule
+
+`apps` → `client-core` → `shared`. Never `shared` → apps. Never duplicate engine
+files inside apps or `client/`.
+
+## Quick rejects
+
+- New `ArenaController.ts` / `LocalTransport.ts` outside `client-core`
+- `GameSimulation` outside `shared`
+- `@colyseus/sdk` import in `apps/*` or `client/`
+- Game menus or user input in `client/` (showcase bots only)
+- Geometry builders duplicated in apps — use `client-gfx`
+
+## Validate
+
+```bash
+node .cursor/skills/monorepo-architecture/scripts/check-boundaries.mjs
+```
+
+Netcode/input details: `.cursor/rules/engine-api.mdc` + `ENGINE.md`.

@@ -5,18 +5,18 @@ import { emptyInput } from "./types.js";
 describe("survival interactions", () => {
   it("grants inventory when player holds action near a gather node", () => {
     const sim = new GameSimulation({ seed: 4242, survival: false });
-    sim.addPlayer("p1", "scout", 0, { x: 0, z: 0 });
     const nodes = sim.getInteractables();
     expect(nodes.length).toBeGreaterThan(0);
     const node = nodes.find((n) => !n.looted)!;
     expect(node).toBeDefined();
+    sim.addPlayer("p1", "scout", 0, { x: node.x, z: node.z });
 
-    // Walk inputs won't move us exactly — directly nudge via repeated ticks at node.
-    for (let i = 0; i < 40; i++) {
+    // Start at the node so this stays stable across region/world seed variants.
+    for (let i = 0; i < 3; i++) {
       sim.queueInput("p1", {
         ...emptyInput(i + 1),
-        moveX: node.x > 0 ? 1 : -1,
-        moveZ: node.z > 0 ? 1 : -1,
+        moveX: 0,
+        moveZ: 0,
         action: 1,
       });
       sim.step();

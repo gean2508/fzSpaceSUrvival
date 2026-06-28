@@ -15,7 +15,11 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "experimentalDecorators": true
+    "baseUrl": ".",
+    "paths": {
+      "@hunger-arena/shared": ["../packages/shared/dist/index.d.ts"],
+      "@hunger-arena/shared/*": ["../packages/shared/dist/*"]
+    }
   },
   "include": ["src"]
 }

@@ -1,0 +1,138 @@
+//! Hunger Arena shared logic — Rust port of `packages/shared` (constants, palette, movement).
+//! The TypeScript sim remains authoritative for netcode until full parity tests land.
+
+pub mod assets;
+pub mod catalog_parity;
+pub mod celestial_bodies;
+pub mod classes;
+pub mod constants;
+pub mod golden_movement;
+pub mod hold;
+pub mod input;
+pub mod inventory;
+pub mod interactions;
+pub mod items;
+pub mod recipes;
+pub mod launch_pad;
+pub mod parkour;
+pub mod planet_surface;
+pub mod machines;
+pub mod movement;
+pub mod palette;
+pub mod ps1_palette;
+pub mod rng;
+pub mod types;
+pub mod ui;
+pub mod cosmic_scale;
+pub mod flight_physics;
+pub mod luna_locomotion;
+pub mod luna_terrain;
+pub mod surface_locomotion;
+pub mod surface_deposits;
+pub mod world;
+pub mod world_context;
+pub mod solar_light;
+pub mod solar_ephemeris;
+pub mod space_base;
+pub mod vessel;
+pub mod power;
+pub mod connectivity;
+
+pub use assets::{
+    asset_kind_for_interactable, asset_kind_for_obstacle, asset_kind_for_world_prop,
+    get_asset, palette_rgb, require_asset, AssetCategory, AssetClass, AssetDef, AssetRenderHints,
+    PaletteKey, ASSET_CATALOG,
+};
+pub use classes::{
+    capsule_center_above_feet, capsule_half_length, eye_height_above_feet, get_class, ClassDef,
+    DEFAULT_CLASS_ID,
+};
+pub use interactions::{
+    interaction_duration_ms, interact_radius_for, interact_reach_for, interact_target_for_kind,
+    is_flight_hold_target, resolve_interaction, InteractActionKind, InteractTargetKind,
+    InteractionRule, GESTURE_FLIGHT_MOVE_CANCEL_PX, GESTURE_HOLD_START_MS,
+    GESTURE_MACHINE_HOLD_DELAY_MS, GESTURE_MOVE_CANCEL_PX, GESTURE_TAP_MAX_MS, INTERACT_REACH,
+    INTERACTION_RULES,
+};
+pub use constants::*;
+pub use hold::{advance_hold_progress, tick_ability_cooldown, HoldProgress};
+pub use input::{empty_input, InputState};
+pub use inventory::PlayerInventory;
+pub use items::{item_display_name, item_hotbar_label};
+pub use machines::{get_machine, require_machine, MachineDef, MACHINE_CATALOG, LAUNCH_PAD, STONE_EXTRACTOR, WOOD_EXTRACTOR};
+pub use launch_pad::{
+    assemble_module, can_assemble_module, create_launch_pad_state, LaunchPadState,
+    LAUNCH_MODULE_COSTS, LAUNCH_PAD_MODULE_COUNT,
+};
+pub use solar_light::{
+    gameplay_world_to_flight, orbital_dock_flight_pos, sample_solar, spin_sun_for_earth_day,
+    sun_center_world, sun_direction_to, sun_light_direction, SolarSample,
+};
+pub use space_base::{
+    assemble_space_module, can_assemble_space_module, create_space_station_state,
+    SpaceStationState, SPACE_MODULE_COSTS, SPACE_STATION_MODULE_COUNT,
+};
+pub use vessel::{
+    tick_off_screen_vessels, vessel_flight_pos, ConnectivitySnapshot, PowerSnapshot,
+    VesselId, VesselRegistry, VesselSimMode, VesselState, VESSEL_TICK_HZ,
+};
+pub use power::{ModuleAssembly, ModuleKind, BATTERY_CAPACITY_WH, SOLAR_PANEL_PEAK_W};
+pub use connectivity::{earth_uplink_pos, has_line_of_sight, orbital_repeater_pos, sample_connectivity_at};
+pub use world_context::{gravity_for_context, gravity_scale_for_context, WorldContext};
+pub use recipes::{can_craft, craft, get_craft_recipe, CraftRecipe, CRAFT_RECIPES};
+pub use movement::{clamp_body, step_movement, MovementBody};
+pub use parkour::{parkour_button_hint, ParkourButtonHint};
+pub use palette::{hybrid_lights, palette, Palette, HybridLights};
+pub use ps1_palette::Ps1Retro;
+pub use rng::Rng;
+pub use types::{EntityKind, MovementState, Obstacle};
+pub use ui::{get_ui_icon, require_ui_icon, UiIconDef, UiIconVariant, UI_ICON_CATALOG};
+pub use cosmic_scale::{
+    EARTH_GAMEPLAY_RADIUS_M, EARTH_MOON_DISTANCE_M, EARTH_RADIUS_M, HUB_EARTH_VISUAL_DISTANCE_M,
+    HUB_EARTH_VISUAL_RADIUS_M, HUB_MOON_VISUAL_RADIUS_M, HUMAN_EYE_HEIGHT_M, HUMAN_HEIGHT_M,
+    LEO_ALTITUDE_M, LUNA_SKY_EARTH_DISTANCE_M, LUNA_SKY_EARTH_RADIUS_M, MOON_GAMEPLAY_RADIUS_M,
+    MOON_RADIUS_M, MOON_SURFACE_RADIUS_M, MOON_TO_EARTH_RADIUS_RATIO, PLAYER_COLLISION_RADIUS_M,
+    SPACE_MOON_SKY_X_M, SPACE_MOON_SKY_Y_M, SPACE_MOON_SKY_Z_M, SPACE_STARFIELD_RADIUS_M,
+};
+pub use celestial_bodies::{
+    body_atmo_top, body_center, body_def, body_gravity_surface, body_landable, body_radius, body_soi,
+    body_transit_burn, body_terrain_seed, body_walk_radius, CelestialBody, EARTH_CENTER_Y,
+    EARTH_SOI_M, MOON_SOI_M, EARTH_ATMO_TOP_M, EARTH_FLIGHT_RADIUS_M, MOON_FLIGHT_RADIUS_M,
+    MOON_ORBIT_X_M,
+};
+pub use flight_physics::{
+    altitude_above_body, altitude_above_body_at, atmosphere_drag, dominant_body, dominant_body_at,
+    earth_center, gravity_accel_at, gravity_accel_at_time, gravity_accel_luna_gameplay,
+    gravity_accel_planet_gameplay, in_vacuum, moon_center, parachute_drag,
+    remap_luna_gameplay_to_orbital, should_auto_deploy_parachute, sun_proximity_damage,
+    surface_normal, surface_normal_at, surface_world_pos, surface_world_pos_at,
+    effective_safe_landing_v, FlightPhase, ROCKET_FUEL_BURN_PER_S, ROCKET_FUEL_MAX, ROCKET_MAX_V,
+    ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2, ROCKET_ROT_SPEED, ROCKET_THRUST_M_S2,
+    SAFE_LANDING_V, PARACHUTE_DEPLOY_ALT_M,
+};
+pub use planet_surface::{
+    altitude_above_planet_gameplay, block_surface_steep_step, block_surface_unwalkable_ascent,
+    follow_surface_ground, planet_dir_from_tangent, planet_displacement_at_dir,
+    planet_gameplay_center, planet_gameplay_world_pos, planet_ground_y_at, planet_tangent_from_dir,
+    planet_tangent_half, remap_planet_gameplay_to_orbital, surface_relief_at, surface_slope_at,
+};
+pub use luna_locomotion::step_luna_movement;
+pub use luna_terrain::{
+    altitude_above_luna_gameplay, block_luna_steep_step, block_luna_unwalkable_ascent,
+    luna_albedo_at_dir, luna_dir_from_tangent, luna_displacement_at, luna_displacement_at_dir,
+    luna_gameplay_center, luna_gameplay_world_pos, luna_ground_y_at, luna_slope_at,
+    luna_tangent_from_dir, luna_wrap_tangent, luna_clamp_tangent, luna_crater_rim_markers,
+    LUNA_TANGENT_HALF,
+};
+pub use surface_locomotion::step_surface_movement;
+pub use surface_deposits::{
+    generate_earth_deposits, generate_luna_deposits, generate_planet_deposits, SurfaceDeposit,
+};
+pub use solar_ephemeris::{
+    body_center_at, direction_to, earth_center_at, gameplay_shell_center_at, moon_center_at,
+    sun_position,
+};
+pub use world::{
+    collision_obstacles, generate_world, ground_height_at, ground_height_at_footprint,
+    ground_height_for_locomotion, GeneratedWorld, InteractableKind, InteractableNode,
+};

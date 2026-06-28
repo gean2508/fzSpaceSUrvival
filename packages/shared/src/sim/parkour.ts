@@ -2,6 +2,9 @@ import {
   CLIMB_SPEED,
   FRICTION,
   GRAVITY,
+  JUMP_STAMINA_COST,
+  JUMP_VELOCITY,
+  COYOTE_TIME_SECS,
   MANTLE_FORWARD,
   MAX_CLIMB_HEIGHT,
   SPRINT_MULT,
@@ -14,7 +17,9 @@ import {
   WORLD_HALF,
 } from "./constants.js";
 import type { InputState, MovementState, Obstacle } from "./types.js";
-import { groundHeightAt } from "./world.js";
+import type { BlockWorld } from "./blockWorld.js";
+import { groundHeightForLocomotion, blockSteepTerrainStep, blockUnwalkableTerrainAscent, wrapAndResnapBody, obstacleSurfaceY } from "./world.js";
+import { terrainSlopeAt } from "./terrain.js";
 
 /**
  * Mutable body the parkour state machine operates on. Superset of the old
@@ -33,6 +38,7 @@ export interface MovementBody {
   radius: number;
   stamina: number;
   maxStamina: number;
+  coyoteSec?: number;
   state: MovementState;
 }
 
@@ -44,25 +50,8 @@ export function ensureParkourFields(b: Partial<MovementBody> & { speed: number; 
   if (body.stamina === undefined) body.stamina = STAMINA_MAX;
   if (body.maxStamina === undefined) body.maxStamina = STAMINA_MAX;
   if (body.state === undefined) body.state = "idle";
+  if (body.coyoteSec === undefined) body.coyoteSec = 0;
   return body;
-}
-
-function clampWorld(b: MovementBody): void {
-  const lim = WORLD_HALF - b.radius;
-  if (b.x < -lim) {
-    b.x = -lim;
-    b.vx = 0;
-  } else if (b.x > lim) {
-    b.x = lim;
-    b.vx = 0;
-  }
-  if (b.z < -lim) {
-    b.z = -lim;
-    b.vz = 0;
-  } else if (b.z > lim) {
-    b.z = lim;
-    b.vz = 0;
-  }
 }
 
 /**
@@ -71,11 +60,10 @@ function clampWorld(b: MovementBody): void {
  * block. Returns the blocking obstacle we're pressing into (for climbing), or
  * null. Deterministic: obstacles are iterated in array order.
  */
-function resolveBlocking(b: MovementBody, obstacles: Obstacle[]): Obstacle | null {
+function resolveBlocking(b: MovementBody, blocks: BlockWorld, obstacles: Obstacle[]): Obstacle | null {
   let pressing: Obstacle | null = null;
   for (const o of obstacles) {
-    // Standing on / above this box → not a wall.
-    if (b.y + STEP_HEIGHT >= o.height) continue;
+    if (b.y + STEP_HEIGHT >= obstacleSurfaceY(o, blocks)) continue;
     const r = b.radius;
     const dx = b.x - o.x;
     const dz = b.z - o.z;
@@ -116,12 +104,12 @@ function findTouchingWall(b: MovementBody, obstacles: Obstacle[]): Obstacle | nu
 }
 
 /** Wall the body is climbing or hanging on (horizontal grip + grace while ascending). */
-function findClimbWall(b: MovementBody, obstacles: Obstacle[]): Obstacle | null {
+function findClimbWall(b: MovementBody, blocks: BlockWorld, obstacles: Obstacle[]): Obstacle | null {
   const touch = findTouchingWall(b, obstacles);
   if (touch) return touch;
   for (const o of obstacles) {
     if (o.height > MAX_CLIMB_HEIGHT) continue;
-    if (b.y >= o.height) continue;
+    if (b.y >= obstacleSurfaceY(o, blocks)) continue;
     const dx = b.x - o.x;
     const dz = b.z - o.z;
     const grace = 0.4;
@@ -151,8 +139,11 @@ function pushingInto(b: MovementBody, o: Obstacle, mx: number, mz: number): bool
 export function stepMovement(
   raw: Partial<MovementBody> & { speed: number; radius: number },
   input: InputState,
+  blocks: BlockWorld,
   obstacles: Obstacle[],
-  dt: number
+  dt: number,
+  jumpPressed = false,
+  gravityScale = 1
 ): void {
   const b = ensureParkourFields(raw);
 
@@ -174,10 +165,14 @@ export function stepMovement(
   // ---- EXHAUSTED: forced down, slow, no climbing until recovered ----
   if (b.state === "exhausted") {
     b.stamina = Math.min(b.maxStamina, b.stamina + STAMINA_REGEN * dt);
+    const prevX = b.x;
+    const prevZ = b.z;
     groundLocomotion(b, mx, mz, 0.5, dt);
-    resolveBlocking(b, obstacles);
-    applyGravity(b, obstacles, dt);
-    clampWorld(b);
+    blockSteepTerrainStep(b, blocks, obstacles, prevX, prevZ);
+    blockUnwalkableTerrainAscent(b, prevX, prevZ);
+    resolveBlocking(b, blocks, obstacles);
+    wrapAndResnapBody(b, blocks, obstacles);
+    applyGravity(b, blocks, obstacles, dt, gravityScale);
     if (b.stamina >= STAMINA_EXHAUSTED_RECOVER) b.state = "idle";
     return;
   }
@@ -200,7 +195,7 @@ export function stepMovement(
       b.z += Math.cos(b.rot) * MANTLE_FORWARD;
       b.state = "running";
     }
-    clampWorld(b);
+    wrapAndResnapBody(b, blocks, obstacles);
     return;
   }
 
@@ -213,7 +208,7 @@ export function stepMovement(
       b.vy = 0;
       return;
     }
-    const wall = findClimbWall(b, obstacles);
+    const wall = findClimbWall(b, blocks, obstacles);
     if (!wall || !input.action) {
       // Let go: drop back to ground locomotion.
       b.state = "idle";
@@ -222,18 +217,22 @@ export function stepMovement(
     b.y += CLIMB_SPEED * dt;
     b.vx = 0;
     b.vz = 0;
-    if (b.y >= wall.height - 0.05) {
-      b.y = wall.height;
+    if (b.y >= obstacleSurfaceY(wall, blocks) - 0.05) {
+      b.y = obstacleSurfaceY(wall, blocks);
       b.state = "hanging";
     }
-    clampWorld(b);
+    wrapAndResnapBody(b, blocks, obstacles);
     return;
   }
 
   // ---- GROUND: idle / running / sprinting / wall_trek ----
   const wantsSprint = input.sprint === 1 && moveLen > 0.1 && b.stamina > 0;
   const speedMult = wantsSprint ? SPRINT_MULT : 1;
+  const prevX = b.x;
+  const prevZ = b.z;
   groundLocomotion(b, mx, mz, speedMult, dt);
+  blockSteepTerrainStep(b, blocks, obstacles, prevX, prevZ);
+  blockUnwalkableTerrainAscent(b, prevX, prevZ);
 
   // Stamina: sprint drains, otherwise regen.
   if (wantsSprint) {
@@ -242,16 +241,39 @@ export function stepMovement(
     b.stamina = Math.min(b.maxStamina, b.stamina + STAMINA_REGEN * dt);
   }
 
-  const wall = resolveBlocking(b, obstacles);
-  applyGravity(b, obstacles, dt);
-  clampWorld(b);
+  if (jumpPressed && (b.coyoteSec ?? 0) > 0 && b.stamina >= JUMP_STAMINA_COST) {
+    const ground = groundHeightForLocomotion(b.x, b.z, obstacles, b.radius, blocks);
+    const touch = findTouchingWall(b, obstacles);
+    const blockJump =
+      touch &&
+      touch.height <= MAX_CLIMB_HEIGHT &&
+      b.y < obstacleSurfaceY(touch, blocks) - STEP_HEIGHT;
+    if (!blockJump && b.y <= ground + 0.12) {
+      b.vy = JUMP_VELOCITY;
+      b.stamina = Math.max(0, b.stamina - JUMP_STAMINA_COST);
+      b.coyoteSec = 0;
+    }
+  }
+
+  const wall = resolveBlocking(b, blocks, obstacles);
+  wrapAndResnapBody(b, blocks, obstacles);
+  applyGravity(b, blocks, obstacles, dt, gravityScale);
+
+  if (b.vy <= 0.05) {
+    const floor = groundHeightForLocomotion(b.x, b.z, obstacles, b.radius, blocks);
+    if (b.y < floor) {
+      b.y = floor;
+      b.vy = 0;
+    }
+  }
 
   // Decide ground state / initiate climb.
   if (wall && pushingInto(b, wall, mx, mz)) {
+    const top = obstacleSurfaceY(wall, blocks);
     const canClimb =
       wall.height <= MAX_CLIMB_HEIGHT &&
       b.stamina > 0 &&
-      b.y < wall.height - STEP_HEIGHT;
+      b.y < top - STEP_HEIGHT;
     if (canClimb && input.action) {
       b.state = "climbing";
     } else {
@@ -281,10 +303,25 @@ function groundLocomotion(
 }
 
 /** Snap to / fall toward the surface under the body. */
-function applyGravity(b: MovementBody, obstacles: Obstacle[], dt: number): void {
-  const ground = groundHeightAt(b.x, b.z, obstacles);
-  if (b.y > ground + 0.001) {
-    b.vy -= GRAVITY * dt;
+function applyGravity(
+  b: MovementBody,
+  blocks: BlockWorld,
+  obstacles: Obstacle[],
+  dt: number,
+  gravityScale = 1
+): void {
+  const ground = groundHeightForLocomotion(b.x, b.z, obstacles, b.radius, blocks);
+  const slope = terrainSlopeAt(b.x, b.z, 0.75);
+  const snapEps = 0.08 + slope * 0.15;
+  const grounded = b.y <= ground + snapEps && b.vy <= 0.05;
+  if (grounded) {
+    b.coyoteSec = COYOTE_TIME_SECS;
+  } else {
+    b.coyoteSec = Math.max(0, (b.coyoteSec ?? 0) - dt);
+  }
+
+  if (b.y > ground + 0.001 || b.vy > 0.001) {
+    b.vy -= GRAVITY * gravityScale * dt;
     b.y += b.vy * dt;
     if (b.y <= ground) {
       b.y = ground;

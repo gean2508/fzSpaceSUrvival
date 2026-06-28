@@ -1,5 +1,6 @@
 export { EntityState } from "./schema/EntityState.js";
 export { GameRoomState } from "./schema/GameRoomState.js";
+export { WorldPropState } from "./schema/WorldPropState.js";
 export { ObstacleState, InteractableState } from "./schema/WorldSchema.js";
 export {
   ROOM_NAME,
@@ -28,3 +29,15 @@ export {
   type AuthTokens,
   type AuthResponse,
 } from "./auth.js";
+export {
+  UpdateManifestSchema,
+  PlatformReleaseSchema,
+  parseUpdateManifest,
+  compareSemver,
+  isUpdateAvailable,
+  type UpdateManifest,
+  type PlatformRelease,
+  type UpdatePlatform,
+  type UpdateCheckResult,
+} from "./updates.js";
+export * from "./content/index.js";

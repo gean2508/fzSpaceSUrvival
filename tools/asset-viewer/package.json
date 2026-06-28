@@ -1,0 +1,19 @@
+{
+  "name": "ha-asset-viewer",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lightweight 3D browser for Blender pipeline GLBs (dev tool, not game runtime)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.175.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

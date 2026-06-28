@@ -2,11 +2,13 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { resolve } from "node:path";
 import { defineServer, defineRoom } from "colyseus";
 import { ROOM_NAME } from "@hunger-arena/shared";
 import { SurvivalRoom } from "./rooms/SurvivalRoom.js";
 import { runMigrations } from "./db/migrate.js";
 import { authRouter } from "./auth/routes.js";
+import { updatesRouter, updatesDir } from "./updates/routes.js";
 import { slog } from "./logger.js";
 
 const PORT = Number(process.env.PORT) || 2567;
@@ -54,6 +56,24 @@ const server = defineServer({
       res.json({ ok: true, room: ROOM_NAME, port: PORT });
     });
     app.use("/auth", authLimiter, authRouter());
+    app.use("/updates", updatesRouter());
+    app.use(
+      "/updates/artifacts",
+      express.static(resolve(updatesDir, "artifacts"), {
+        maxAge: IS_DEV ? 0 : "1h",
+        setHeaders(res, filePath) {
+          const name = filePath.split("/").pop() ?? "download";
+          res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+          if (filePath.endsWith(".apk")) {
+            res.setHeader("content-type", "application/vnd.android.package-archive");
+          } else if (filePath.endsWith(".AppImage")) {
+            res.setHeader("content-type", "application/x-executable");
+          } else if (filePath.endsWith(".ipa")) {
+            res.setHeader("content-type", "application/octet-stream");
+          }
+        },
+      })
+    );
 
     // Dev-only introspection tools. Imported dynamically so they can live in
     // devDependencies and never ship in a production install.

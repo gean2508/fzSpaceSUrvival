@@ -10,4 +10,15 @@ apps/desktop/dist/
 .DS_Store
 apps/mobile/android/
 apps/mobile/ios/
+apps/mobile/credentials/hunger-arena-release.keystore
+apps/mobile/credentials/keystore.properties
 apps/desktop/src-tauri/target/
+native/target/
+native/android/.gradle/
+native/android/app/build/
+native/android/app/src/main/jniLibs/
+native/crates/ha-game/assets/models/*.glb
+models/*.glb
+.turbo/
+hunger-arena.apk
+tools/asset-viewer/node_modules/

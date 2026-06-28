@@ -11,6 +11,8 @@ export interface ClassDef {
   radius: number; // collision radius
   /** Ability ids per slot (filled in Phase 3). */
   abilities: string[];
+  /** Slot fired by quick tap on look zone (dash / cleave / fireball). */
+  tapAbilitySlot: number;
 }
 
 export const CLASSES: Record<string, ClassDef> = {
@@ -18,25 +20,28 @@ export const CLASSES: Record<string, ClassDef> = {
     id: "scout",
     name: "Explorador",
     maxHp: 90,
-    moveSpeed: 6.5,
-    radius: 0.45,
+    moveSpeed: 4.0,
+    radius: 0.35,
     abilities: ["dagger", "dash"],
+    tapAbilitySlot: 1,
   },
   warrior: {
     id: "warrior",
     name: "Guerrero",
     maxHp: 140,
-    moveSpeed: 5,
-    radius: 0.5,
+    moveSpeed: 3.8,
+    radius: 0.38,
     abilities: ["cleave", "charge"],
+    tapAbilitySlot: 0,
   },
   mage: {
     id: "mage",
     name: "Mago",
     maxHp: 80,
-    moveSpeed: 5.5,
-    radius: 0.45,
+    moveSpeed: 4.0,
+    radius: 0.35,
     abilities: ["fireball", "frost_nova"],
+    tapAbilitySlot: 0,
   },
 };
 
