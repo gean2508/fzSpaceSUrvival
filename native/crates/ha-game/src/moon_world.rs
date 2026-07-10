@@ -37,7 +37,10 @@ pub struct MoonWorldPlugin;
 impl Plugin for MoonWorldPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MoonWorldState>()
-            .add_systems(Update, (sync_moon_world, billboard_luna_earth).chain());
+            .add_systems(
+                Update,
+                (sync_moon_world, billboard_luna_earth, follow_luna_sky_shell).chain(),
+            );
     }
 }
 
@@ -116,15 +119,17 @@ fn spawn_luna_star_points(
         .normalize_or_zero();
         let brightness = 0.5 + (h3 & 0xff) as f32 / 255.0 * 0.5;
         let s = 0.05 + brightness * 0.07;
-        transforms.push(
-            Transform::from_translation(moon_center + dir * r)
-                .with_scale(Vec3::splat(s)),
-        );
+        // Baked RELATIVE to the entity origin — `follow_luna_sky_shell`
+        // recenters the whole shell on the player each frame so the starfield
+        // is a skybox you can never cross (§1: airless bodies have no finite
+        // crossable sky geometry), not a fixed sphere anchored at moon_center.
+        transforms.push(Transform::from_translation(dir * r).with_scale(Vec3::splat(s)));
     }
     let mesh = meshes.add(build_merged_cuboids(&transforms, 1.0, 1.0, 1.0));
     commands.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(std_mats.add(luna_star_point_std())),
+        Transform::from_translation(moon_center),
         MoonDecor,
         LunaSkyShell,
         Name::new("LunaStarPoints"),
@@ -241,6 +246,7 @@ pub fn sync_moon_world(
         CelestialBody::Moon,
         &luna_deposits,
         MoonDecor,
+        None,
     );
 
     let moon_center = Vec3::from_array(luna_gameplay_center());
@@ -341,5 +347,26 @@ fn billboard_luna_earth(
     let eye = player_tf.translation + Vec3::Y * 1.6;
     for mut tf in &mut earth {
         tf.look_at(eye, Vec3::Y);
+    }
+}
+
+/// Recenter the star shell + star points on the player every frame so the Luna
+/// "sky" is an uncrossable skybox, not a finite sphere anchored at moon_center.
+/// Before this, climbing >460 m let you exit the shell and see it from outside
+/// as a black marble with the clear color behind — the §1 "techo de cielo" bug.
+/// Only translation is touched (the shell keeps its inverted scale).
+fn follow_luna_sky_shell(
+    region: Res<RegionRuntime>,
+    player: Query<&Transform, (With<Player>, Without<LunaSkyShell>)>,
+    mut shells: Query<&mut Transform, (With<LunaSkyShell>, Without<Player>)>,
+) {
+    if !matches!(region.active, RegionId::Luna) {
+        return;
+    }
+    let Ok(player_tf) = player.get_single() else {
+        return;
+    };
+    for mut tf in &mut shells {
+        tf.translation = player_tf.translation;
     }
 }

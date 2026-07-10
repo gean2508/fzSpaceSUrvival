@@ -85,6 +85,8 @@ fn tick_sim(
     flight: Res<RocketFlight>,
     world_ctx: Res<WorldContextRuntime>,
     planet_ctx: Res<ActivePlanet>,
+    placed_blocks: Res<crate::block_world::PlacedBlocks>,
+    editor: Res<crate::ui_editor::UiEditorState>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     if transit.active || flight.blocks_walking() {
@@ -138,25 +140,47 @@ fn tick_sim(
                 }
             }
             WorldContext::Space => {
-                sim.body.x = sim.body.x.clamp(-6.0, 6.0);
-                sim.body.z = sim.body.z.clamp(-6.0, 6.0);
-                if sim.body.y < 0.0 {
-                    sim.body.y = 0.0;
+                // Walk zone centred on the dock — the old ±6 around the world
+                // origin was ~130 m away from the SpaceDecor spawned at
+                // `space_dock_origin()` (28, 128, -28).
+                let dock = crate::space_travel::space_dock_origin();
+                sim.body.x = sim.body.x.clamp(dock.x - 6.0, dock.x + 6.0);
+                sim.body.z = sim.body.z.clamp(dock.z - 6.0, dock.z + 6.0);
+                let floor = dock.y + 0.12;
+                if sim.body.y < floor {
+                    sim.body.y = floor;
                     sim.body.vy = 0.0;
                 }
             }
+            WorldContext::Luna | WorldContext::Planet | WorldContext::Overworld
+                if editor.creative =>
+            {
+                // Creative fly: JUMP ascends, sprint descends, no gravity —
+                // fly straight up to reach space without building a rocket.
+                ha_shared::step_surface_creative_fly(
+                    body_surface,
+                    &mut sim.body,
+                    &input,
+                    dt,
+                    actions.jump,
+                    intent.sprint,
+                );
+            }
             WorldContext::Luna | WorldContext::Planet | WorldContext::Overworld => {
-                step_surface_movement(
+                ha_shared::step_surface_movement_with_blocks(
                     body_surface,
                     &mut sim.body,
                     &input,
                     dt,
                     jump_pressed,
                     gravity_scale,
+                    placed_blocks.for_body(body_surface),
                 );
-                if world_ctx.active == WorldContext::Overworld
-                    && equipped.item_id == JETPACK_ITEM
-                {
+                // Jetpack is a universal movement tool — usable on ANY walkable
+                // body (Tierra, Luna, planetas), not just the overworld. Same
+                // hop-and-sustain feel everywhere; the lower gravity on airless
+                // bodies just makes each burn carry farther.
+                if equipped.item_id == JETPACK_ITEM {
                     if jump_pressed && sim.body.coyote_sec > 0.0 {
                         sim.body.vy = sim.body.vy.max(9.5);
                     }

@@ -30,7 +30,10 @@ impl Plugin for LaunchPadPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LaunchPadWorld>()
             .add_systems(PostStartup, spawn_demo_launch_pad)
-            .add_systems(Update, (try_assemble_on_hold, try_ignite_on_hold));
+            .add_systems(
+                Update,
+                (try_assemble_on_hold, try_ignite_on_hold, sync_ship_loadout),
+            );
     }
 }
 
@@ -233,6 +236,27 @@ pub fn spawn_launch_pad(
         2.6,
         (),
     );
+
+    // PROBE CONSOLE — ground-side twin of the dock console (same agency
+    // network): send nav probes without leaving Earth.
+    let probe_pos = sphere_world_pos(CelestialBody::Earth, x + 4.5, z - 4.5, PAD_SURFACE_LIFT + 0.4);
+    commands.spawn((
+        Transform::from_translation(probe_pos),
+        InteractTarget {
+            kind: InteractTargetKind::ProbeConsole,
+            id: uid,
+        },
+        Name::new(format!("ProbeConsolePad_{uid}")),
+    ));
+    spawn_interact_beacon(
+        commands,
+        meshes,
+        std_mats,
+        probe_pos + Vec3::Y * 0.2,
+        LinearRgba::new(1.0, 0.62, 0.18, 1.0),
+        1.8,
+        (),
+    );
 }
 
 /// Starship prefab module mesh — hull / fuel tank / engine (visible after assembly).
@@ -399,27 +423,56 @@ pub(crate) fn try_ignite_on_hold(
     let Ok(sim) = player.get_single() else {
         return;
     };
-    flight.surface_flight = None;
+    let _ = (clock, &mut world_ctx, &mut moon);
     let tx = sim.body.x;
     let tz = sim.body.z;
     let pos = world_pos_from_tangent(CelestialBody::Earth, tx, tz, 1.8);
     let up = surface_normal_at_tangent(CelestialBody::Earth, tx, tz);
 
-    // Dev: sprint + ignite = direct transit burn toward Moon (no station grind).
-    if intent.sprint {
-        let moon_c = ha_shared::body_center_at(CelestialBody::Moon, clock.t);
-        let vel = (Vec3::from_array(moon_c) - pos).normalize_or_zero()
-            * ha_shared::body_transit_burn(CelestialBody::Moon);
-        flight.begin_coast_toward(pos, vel, CelestialBody::Moon);
-        world_ctx.active = WorldContext::Space;
-        moon.needs_spawn = true;
-        moon.spawn_after_frames = 0;
-        eprintln!("ha-launch: dev sprint ignition → Moon transit");
-        return;
-    }
-
+    // SFS ascent: launch as flight on Earth's gameplay shell (same coherent
+    // path Luna/planets use). `tick_rocket_flight` remaps gameplay→orbital
+    // once you clear the atmosphere, so you fly UP and out into continuous
+    // orbital space — no scripted transit, no walk hub. Point at the Moon and
+    // keep burning to get there.
+    flight.surface_flight = Some(CelestialBody::Earth);
     flight.begin_at(pos);
+    // The Earth pad is the ONLY refuel point — the agency tops the tank here.
+    flight.fuel = flight.capacity();
     flight.vel = up * 18.0;
     flight.pitch = 0.22;
-    eprintln!("ha-launch: rocket ignition from pad");
+    eprintln!("ha-launch: rocket ignition from pad — tank full");
+}
+
+/// Creative fly-to-space: when creative flight carries the player above the
+/// Derive mass/fuel stats from the assembled pad modules. Pad slots today:
+/// 0 = hull, 1 = fuel tank, 2 = engine (`spawn_starship_module_visual`).
+/// Mirrors onto `RocketFlight` (fuel_max/burn_factor) — the flight tick sits
+/// at Bevy's system-param limit and can't take the loadout as a Res.
+pub(crate) fn sync_ship_loadout(
+    pads: Res<LaunchPadWorld>,
+    mut loadout: ResMut<crate::rocket_flight::ShipLoadout>,
+    mut flight: ResMut<RocketFlight>,
+) {
+    if !pads.is_changed() {
+        return;
+    }
+    const PAD_MODULE_IDS: [&str; 3] = ["hull", "fuel_tank", "engine"];
+    let assembled = pads
+        .pads
+        .iter()
+        .map(|p| p.assembled_modules as usize)
+        .max()
+        .unwrap_or(0)
+        .min(PAD_MODULE_IDS.len());
+    if assembled == 0 {
+        return;
+    }
+    let modules = &PAD_MODULE_IDS[..assembled];
+    let mass = ha_shared::ship_mass_t(modules);
+    let tanks = modules.iter().filter(|m| **m == "fuel_tank").count() as u32;
+    loadout.mass_t = mass;
+    loadout.burn_factor = ha_shared::burn_factor(mass);
+    loadout.fuel_max = ha_shared::fuel_max_for_tanks(tanks);
+    flight.fuel_max = loadout.fuel_max;
+    flight.burn_factor = loadout.burn_factor;
 }
