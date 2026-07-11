@@ -73,7 +73,7 @@ pub use survival::{
 pub use input::{empty_input, InputState};
 pub use inventory::PlayerInventory;
 pub use items::{item_display_name, item_hotbar_label};
-pub use machines::{get_machine, require_machine, MachineDef, MACHINE_CATALOG, LAUNCH_PAD, STONE_EXTRACTOR, WOOD_EXTRACTOR};
+pub use machines::{get_machine, require_machine, MachineDef, ANTENNA, MACHINE_CATALOG, LAUNCH_PAD, REGOLITH_DRILL, STONE_EXTRACTOR, WOOD_EXTRACTOR};
 pub use launch_pad::{
     assemble_module, can_assemble_module, create_launch_pad_state, LaunchPadState,
     LAUNCH_MODULE_COSTS, LAUNCH_PAD_MODULE_COUNT,

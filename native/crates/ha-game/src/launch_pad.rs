@@ -99,6 +99,7 @@ fn spawn_demo_launch_pad(
     world.placed.push(LocalMachine {
         uid,
         machine_id: LAUNCH_PAD.id,
+        body: CelestialBody::Earth,
         x,
         y,
         z,

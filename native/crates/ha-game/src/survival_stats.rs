@@ -46,6 +46,16 @@ impl Plugin for SurvivalStatsPlugin {
     }
 }
 
+/// Walkable body for the active context (None while in space dock/mission).
+fn current_body(ctx: WorldContext, planet: &ActivePlanet) -> Option<ha_shared::CelestialBody> {
+    match ctx {
+        WorldContext::Overworld => Some(ha_shared::CelestialBody::Earth),
+        WorldContext::Luna => Some(ha_shared::CelestialBody::Moon),
+        WorldContext::Planet => planet.body,
+        WorldContext::Space | WorldContext::Mission => None,
+    }
+}
+
 /// True when this world context exposes the suit to vacuum.
 fn context_vacuum(ctx: WorldContext, planet: &ActivePlanet) -> bool {
     match ctx {
@@ -79,6 +89,7 @@ fn tick_survival(
     world_ctx: Res<WorldContextRuntime>,
     planet_ctx: Res<ActivePlanet>,
     flight: Res<RocketFlight>,
+    machines: Res<crate::machines::MachineWorld>,
     beacons: Query<(&GlobalTransform, &InteractTarget)>,
     mut player: Query<(&mut SimState, &Transform), With<Player>>,
     mut persist: ResMut<SurvivalPersist>,
@@ -98,9 +109,20 @@ fn tick_survival(
             is_supply_beacon(t.kind)
                 && gtf.translation().distance(tf.translation) < SUPPLY_RADIUS
         });
+    // The camp keeps you breathing: any machine on this body within the
+    // tether counts as base life support (tangent-space distance).
+    let near_camp = exposed_vacuum
+        && !near_beacon
+        && current_body(world_ctx.active, &planet_ctx).is_some_and(|body| {
+            machines.on_body(body).any(|m| {
+                let dx = m.x - sim.body.x;
+                let dz = m.z - sim.body.z;
+                (dx * dx + dz * dz).sqrt() < SUPPLY_RADIUS
+            })
+        });
     let env = SurvivalEnv {
         vacuum: exposed_vacuum,
-        oxygen_supply: !exposed_vacuum || near_beacon,
+        oxygen_supply: !exposed_vacuum || near_beacon || near_camp,
     };
 
     let damage = step_survival_stats(&mut sim.survival, dt, env);

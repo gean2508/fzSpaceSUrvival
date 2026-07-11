@@ -45,4 +45,32 @@ export const MACHINE_CATALOG: MachineDef[] = [
     passive: false,
     placeDurationMs: 4500,
   },
+  {
+    // Act II — lunar camp: slow passive iron from regolith (airless bodies only).
+    id: "regolith_drill",
+    displayName: "Regolith drill",
+    assetKind: "machine_stone_extractor",
+    buildCost: [
+      { itemId: "stone", qty: 8 },
+      { itemId: "iron_ingot", qty: 4 },
+    ],
+    outputItemId: "iron_ingot",
+    outputPerSecond: 0.08,
+    passive: true,
+    placeDurationMs: 3000,
+  },
+  {
+    // Act II — uplink: enables remote base monitoring from Earth (no output).
+    id: "antenna",
+    displayName: "Antenna",
+    assetKind: "machine_wood_extractor",
+    buildCost: [
+      { itemId: "iron_ingot", qty: 8 },
+      { itemId: "stone", qty: 4 },
+    ],
+    outputItemId: "wood",
+    outputPerSecond: 0,
+    passive: false,
+    placeDurationMs: 3500,
+  },
 ];

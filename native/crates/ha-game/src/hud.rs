@@ -1582,27 +1582,35 @@ fn spawn_bag_panel(
                                     section,
                                     "Wood Extractor",
                                     10,
-                                    WOOD_EXTRACTOR.cost_wood,
-                                    WOOD_EXTRACTOR.cost_stone,
-                                    WOOD_EXTRACTOR.cost_sticks,
+                                    machine_cost_label(&WOOD_EXTRACTOR),
                                     heart,
                                 );
                                 spawn_machine_select_button(
                                     section,
                                     "Stone Extractor",
                                     11,
-                                    STONE_EXTRACTOR.cost_wood,
-                                    STONE_EXTRACTOR.cost_stone,
-                                    STONE_EXTRACTOR.cost_sticks,
+                                    machine_cost_label(&STONE_EXTRACTOR),
                                     heart,
                                 );
                                 spawn_machine_select_button(
                                     section,
                                     "Launch Pad",
                                     12,
-                                    LAUNCH_PAD.cost_wood,
-                                    LAUNCH_PAD.cost_stone,
-                                    LAUNCH_PAD.cost_sticks,
+                                    machine_cost_label(&LAUNCH_PAD),
+                                    heart,
+                                );
+                                spawn_machine_select_button(
+                                    section,
+                                    "Regolith Drill (Luna)",
+                                    13,
+                                    machine_cost_label(&ha_shared::REGOLITH_DRILL),
+                                    heart,
+                                );
+                                spawn_machine_select_button(
+                                    section,
+                                    "Antenna (Luna)",
+                                    14,
+                                    machine_cost_label(&ha_shared::ANTENNA),
                                     heart,
                                 );
                             });
@@ -1756,13 +1764,27 @@ fn spawn_recipe_button(panel: &mut ChildBuilder, recipe: &CraftRecipe, heart: f3
     });
 }
 
+/// "W5 S2 T1 I4" — only nonzero costs, so lunar kit shows its iron.
+fn machine_cost_label(def: &ha_shared::MachineDef) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for (tag, qty) in [
+        ("W", def.cost_wood),
+        ("S", def.cost_stone),
+        ("T", def.cost_sticks),
+        ("I", def.cost_iron),
+    ] {
+        if qty > 0 {
+            parts.push(format!("{tag}{qty}"));
+        }
+    }
+    parts.join(" ")
+}
+
 fn spawn_machine_select_button(
     panel: &mut ChildBuilder,
     label: &str,
     recipe_id: u32,
-    wood: u32,
-    stone: u32,
-    sticks: u32,
+    cost_label: String,
     heart: f32,
 ) {
     panel.spawn((
@@ -1793,7 +1815,7 @@ fn spawn_machine_select_button(
             TextColor(ui_theme::text_primary()),
         ));
         btn.spawn((
-            Text::new(format!("W{wood} S{stone} T{sticks}")),
+            Text::new(cost_label),
             TextFont {
                 font_size: (heart * 0.52).clamp(10.0, 15.0),
                 ..default()
@@ -2029,6 +2051,10 @@ fn bag_panel_system(
                     pending.machine_id = STONE_EXTRACTOR.id;
                 } else if recipe_btn.recipe_id == 12 {
                     pending.machine_id = LAUNCH_PAD.id;
+                } else if recipe_btn.recipe_id == 13 {
+                    pending.machine_id = ha_shared::REGOLITH_DRILL.id;
+                } else if recipe_btn.recipe_id == 14 {
+                    pending.machine_id = ha_shared::ANTENNA.id;
                 }
                 bag_state.open = false;
             } else if let Some(recipe) = get_craft_recipe(recipe_btn.recipe_id) {

@@ -34,7 +34,10 @@ pub struct GameMenuPlugin;
 impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameMenuState>()
-            .add_systems(Update, (sync_game_menu, update_map_markers).chain());
+            .add_systems(
+                Update,
+                (sync_game_menu, update_map_markers, update_luna_base_monitor).chain(),
+            );
     }
 }
 
@@ -53,6 +56,9 @@ struct MapViewport;
 struct MapBody(CelestialBody);
 #[derive(Component)]
 struct MapShipMarker;
+/// Remote camp monitor line — fed from `MachineWorld` while the menu is open.
+#[derive(Component)]
+struct LunaBaseMonitor;
 
 fn sync_game_menu(
     editor: Res<UiEditorState>,
@@ -200,6 +206,19 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 TextColor(Color::srgb(0.7, 0.75, 0.85)),
             ));
 
+            // Remote base monitor — the antenna's uplink (Act II "agencia").
+            // Text stays empty until an antenna exists on the Moon.
+            root.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(NEON_CYAN),
+                LunaBaseMonitor,
+                Name::new("LunaBaseMonitor"),
+            ));
+
             // Big-button bar (reuses the dev UiEditorCommands via editor_button_system).
             root.spawn((
                 Node {
@@ -320,5 +339,36 @@ fn update_map_markers(
         let (px, pz) = map_percent(ship_world, sun);
         node.left = Val::Percent(px);
         node.top = Val::Percent(pz);
+    }
+}
+
+/// Antenna uplink — while the menu is open, show the lunar camp status line:
+/// drills placed, iron banked while you were away, and the O₂ tether.
+fn update_luna_base_monitor(
+    menu: Res<GameMenuState>,
+    machines: Res<crate::machines::MachineWorld>,
+    mut monitor: Query<&mut Text, With<LunaBaseMonitor>>,
+) {
+    if !menu.spawned {
+        return;
+    }
+    let Ok(mut text) = monitor.get_single_mut() else {
+        return;
+    };
+    let line = if machines.has_antenna_on(CelestialBody::Moon) {
+        let drills = machines
+            .on_body(CelestialBody::Moon)
+            .filter(|m| m.machine_id == ha_shared::REGOLITH_DRILL.id)
+            .count();
+        let banked: u32 = machines
+            .on_body(CelestialBody::Moon)
+            .map(|m| m.stored_output)
+            .sum();
+        format!("BASE LUNA — antena OK · taladros {drills} · hierro almacenado {banked} · O₂ tether activo")
+    } else {
+        String::new()
+    };
+    if text.0 != line {
+        text.0 = line;
     }
 }

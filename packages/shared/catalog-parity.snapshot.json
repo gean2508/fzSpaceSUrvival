@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-11T19:07:27.642Z",
+  "generatedAt": "2026-07-11T19:19:06.696Z",
   "modules": [
     {
       "id": "assets",
@@ -1256,12 +1256,30 @@
       "id": "machines",
       "entries": [
         {
+          "id": "antenna",
+          "fields": {
+            "passive": false,
+            "outputPerSecond": 0,
+            "placeDurationMs": 3500,
+            "assetKind": "machine_wood_extractor"
+          }
+        },
+        {
           "id": "launch_pad",
           "fields": {
             "passive": false,
             "outputPerSecond": 0,
             "placeDurationMs": 4500,
             "assetKind": "machine_launch_pad"
+          }
+        },
+        {
+          "id": "regolith_drill",
+          "fields": {
+            "passive": true,
+            "outputPerSecond": 0.08,
+            "placeDurationMs": 3000,
+            "assetKind": "machine_stone_extractor"
           }
         },
         {

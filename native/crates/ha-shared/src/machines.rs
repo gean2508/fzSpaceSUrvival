@@ -57,8 +57,38 @@ pub const LAUNCH_PAD: MachineDef = MachineDef {
     cost_iron: 15,
 };
 
+/// Act II — lunar camp: slow passive iron from regolith (airless bodies only).
+pub const REGOLITH_DRILL: MachineDef = MachineDef {
+    id: "regolith_drill",
+    display_name: "Regolith drill",
+    asset_kind: "machine_stone_extractor",
+    output_item_id: "iron_ingot",
+    output_per_second: 0.08,
+    passive: true,
+    place_duration_ms: 3000,
+    cost_wood: 0,
+    cost_stone: 8,
+    cost_sticks: 0,
+    cost_iron: 4,
+};
+
+/// Act II — uplink: enables remote base monitoring from Earth (no output).
+pub const ANTENNA: MachineDef = MachineDef {
+    id: "antenna",
+    display_name: "Antenna",
+    asset_kind: "machine_wood_extractor",
+    output_item_id: "wood",
+    output_per_second: 0.0,
+    passive: false,
+    place_duration_ms: 3500,
+    cost_wood: 0,
+    cost_stone: 4,
+    cost_sticks: 0,
+    cost_iron: 8,
+};
+
 pub const MACHINE_CATALOG: &[MachineDef] =
-    &[WOOD_EXTRACTOR, STONE_EXTRACTOR, LAUNCH_PAD];
+    &[WOOD_EXTRACTOR, STONE_EXTRACTOR, LAUNCH_PAD, REGOLITH_DRILL, ANTENNA];
 
 pub fn get_machine(id: &str) -> Option<&'static MachineDef> {
     MACHINE_CATALOG.iter().find(|m| m.id == id)

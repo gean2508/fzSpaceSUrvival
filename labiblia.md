@@ -111,6 +111,7 @@ Validar: `npm run validate:arch`.
 | **Máquinas + inventario** | `ha-game/machines.rs`, `inventory_persist.rs`; sim `packages/shared/src/sim/machines.ts` |
 | **Survival stats** (hambre/sed/O₂, comer, respawn amable) | sim `packages/shared/src/sim/survivalStats.ts` → espejo `ha-shared/survival.rs`; cliente `ha-game/survival_stats.rs`, barras `hud/survival_bars.rs` (ver §12) |
 | **Ship builder** (piezas crafteables → contadores → stats emergen) | sim `shipMass.ts` (`ShipConfig`, `shipConfigStats`) → espejo `ha-shared/ship_mass.rs`; cliente `ha-game/ship_builder.rs` (tab BAG→SHIP, `ship.json`), extras aplican vía `launch_pad.rs::sync_ship_loadout`; motores extra multiplican thrust en `rocket_flight.rs` |
+| **Base lunar** (Acto II: taladro regolito, antena, monitoreo) | máquinas por CUERPO (`ha-game/machines.rs`: gates `machine_allowed_on`, `machines.json`, respawn `sync_machine_visuals` B6); off-body banquean `stored_output` (se cobra al volver); campamento = O₂ tether en `survival_stats.rs`; antena → línea "BASE LUNA" en mapa orbital (`game_menu.rs::update_luna_base_monitor`) |
 | **Cámara FP + targeting** (alineada a normal de superficie) | `ha-game/camera.rs`, `targeting.rs`, `input/look_interact.rs` |
 | **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `ui_theme.rs` |
 | **Calidad por plataforma** (patch step, radios, sombras, sky lite, suelo unlit Android) | `ha-game/quality.rs`, `render/render_scale.rs` |
