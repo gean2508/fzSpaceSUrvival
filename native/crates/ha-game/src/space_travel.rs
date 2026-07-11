@@ -1,27 +1,26 @@
-//! Orbital travel — dock assembly, re-entry, and transit to any solar body.
+//! Orbital travel helpers — escape burns from a surface back to continuous flight.
+//!
+//! El espacio es VUELO CONTINUO (§1). Se llega a los cuerpos VOLANDO; el viejo
+//! walk-hub orbital (dock, ensamblar estación, tránsito por beacon) fue purgado.
+//! Quedan: los puntos de referencia orbitales (usados por nav/sim) y el escape
+//! desde Luna/planeta al espacio (mismo `begin_surface_gameplay` que el thrust).
 
 use bevy::prelude::*;
 use ha_shared::{
-    assemble_space_module, body_center, body_def, body_landable, body_transit_burn,
-    planet_gameplay_world_pos, earth_center, luna_gameplay_world_pos, moon_center,
-    CelestialBody, InteractActionKind, InteractTargetKind, EARTH_ATMO_TOP_M, FlightPhase,
-    LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z, WorldContext,
+    body_def, planet_gameplay_world_pos, luna_gameplay_world_pos, CelestialBody,
+    InteractTargetKind, EARTH_ATMO_TOP_M, LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z, WorldContext,
 };
 
-use crate::input::{EquippedItem, HoldInteractState};
-use crate::moon_world::MoonWorldState;
-use crate::planet_world::PlanetWorldState;
+use crate::input::HoldInteractState;
 use crate::rocket_flight::RocketFlight;
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
-use crate::space_world::{
-    spawn_station_module_visual, SpaceStationModuleSlot, SpaceStationRes,
-};
 use crate::sim::{Player, SimState};
 use crate::targeting::LookTarget;
 
-/// Orbital start point above the launch pad — flight-scale metres (not dock walk mesh).
+/// Orbital start point above the launch pad — flight-scale metres. Lo usan las
+/// sondas de `nav_computer` y referencias de HUD.
 pub fn orbital_start_above_pad() -> Vec3 {
-    let ec = Vec3::from_array(earth_center());
+    let ec = Vec3::from_array(ha_shared::earth_center());
     ec + Vec3::new(
         LAUNCH_PAD_ZONE_X,
         EARTH_ATMO_TOP_M + 420.0,
@@ -29,7 +28,7 @@ pub fn orbital_start_above_pad() -> Vec3 {
     )
 }
 
-/// Orbital dock — directly above launch pad at atmosphere edge (walk hub uses compressed coords).
+/// Punto de referencia sobre el pad al borde de atmósfera (lo usa `sim.rs`).
 pub fn space_dock_origin() -> Vec3 {
     Vec3::new(
         LAUNCH_PAD_ZONE_X,
@@ -38,7 +37,6 @@ pub fn space_dock_origin() -> Vec3 {
     )
 }
 
-const REENTRY_BURN_SPEED: f32 = 55.0;
 const LUNA_ESCAPE_BURN_SPEED: f32 = 48.0;
 
 pub struct SpaceTravelPlugin;
@@ -47,206 +45,9 @@ impl Plugin for SpaceTravelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                try_assemble_station_module,
-                try_space_reentry,
-                try_space_transit_luna,
-                try_space_transit_body,
-                try_lunar_return_to_space,
-                try_planet_return_to_space,
-            ),
+            (try_lunar_return_to_space, try_planet_return_to_space),
         );
     }
-}
-
-pub(crate) fn try_assemble_station_module(
-    mut commands: Commands,
-    mut hold: ResMut<HoldInteractState>,
-    target: Res<LookTarget>,
-    equipped: Res<EquippedItem>,
-    region: Res<RegionRuntime>,
-    flight: Res<RocketFlight>,
-    player: Query<&Transform, With<Player>>,
-    mut station: ResMut<SpaceStationRes>,
-    mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
-    mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
-    slots: Query<(&SpaceStationModuleSlot, &GlobalTransform)>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut std_mats: ResMut<Assets<StandardMaterial>>,
-) {
-    if !hold.completed || hold.placing_machine {
-        if hold.completed {
-            hold.completed = false;
-        }
-        return;
-    }
-    if region.active != RegionId::Space {
-        if hold.completed {
-            hold.completed = false;
-        }
-        return;
-    }
-    if flight.active && flight.speed() > 2.5 {
-        hold.completed = false;
-        return;
-    }
-    let pilot_pos = if flight.active {
-        flight.pos
-    } else if let Ok(tf) = player.get_single() {
-        tf.translation
-    } else {
-        hold.completed = false;
-        return;
-    };
-    let Some(kind) = target.kind else {
-        return;
-    };
-    if kind != InteractTargetKind::SpaceStationModule {
-        return;
-    }
-    let Some(entity) = target.entity else {
-        return;
-    };
-    let Ok((marker, gtf)) = slots.get(entity) else {
-        return;
-    };
-    let Some(rule) = ha_shared::resolve_interaction(Some(equipped.item_id.as_str()), kind) else {
-        return;
-    };
-    if rule.kind != InteractActionKind::Assemble {
-        return;
-    }
-    hold.completed = false;
-    let idx = marker.module_index;
-    let pos = gtf.translation();
-    if pilot_pos.distance(pos) > 9.0 {
-        return;
-    }
-    if assemble_space_module(&mut station.0, idx, &mut inv) {
-        persist.mark_immediate();
-        spawn_station_module_visual(&mut commands, &mut meshes, &mut std_mats, idx, pos);
-        eprintln!(
-            "ha-space: station module {idx} ({}/3)",
-            station.assembled_modules
-        );
-    }
-}
-
-fn begin_transit_burn(flight: &mut RocketFlight, target: CelestialBody, from: Vec3) {
-    let to = Vec3::from_array(body_center(target));
-    let vel = (to - from).normalize_or_zero() * body_transit_burn(target);
-    flight.begin_coast_toward(from, vel, target);
-}
-
-pub(crate) fn try_space_reentry(
-    mut hold: ResMut<HoldInteractState>,
-    target: Res<LookTarget>,
-    region: Res<RegionRuntime>,
-    mut flight: ResMut<RocketFlight>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
-) {
-    if !hold.completed || region.active != RegionId::Space {
-        return;
-    }
-    let Some(kind) = target.kind else {
-        return;
-    };
-    if kind != InteractTargetKind::SpaceReentry {
-        return;
-    }
-    hold.completed = false;
-
-    let start = orbital_start_above_pad();
-    let to_earth = (Vec3::from_array(earth_center()) - start).normalize_or_zero();
-    let vel = to_earth * REENTRY_BURN_SPEED;
-
-    if flight.active {
-        flight.pos = start;
-        flight.vel = vel;
-        flight.phase = FlightPhase::Coast;
-        flight.body = CelestialBody::Earth;
-        flight.surface_flight = None;
-    } else {
-        flight.begin_coast_toward(start, vel, CelestialBody::Earth);
-    }
-    world_ctx.active = WorldContext::Overworld;
-    eprintln!("ha-flight: reentry burn toward Earth");
-}
-
-pub(crate) fn try_space_transit_luna(
-    mut hold: ResMut<HoldInteractState>,
-    target: Res<LookTarget>,
-    region: Res<RegionRuntime>,
-    mut flight: ResMut<RocketFlight>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
-    mut moon: ResMut<MoonWorldState>,
-) {
-    if !hold.completed || region.active != RegionId::Space {
-        return;
-    }
-    let Some(kind) = target.kind else {
-        return;
-    };
-    if kind != InteractTargetKind::SpaceTransitLuna {
-        return;
-    }
-    hold.completed = false;
-
-    let start = orbital_start_above_pad();
-    begin_transit_burn(&mut flight, CelestialBody::Moon, start);
-    world_ctx.active = WorldContext::Space;
-    moon.needs_spawn = true;
-    moon.spawn_after_frames = 0;
-    eprintln!("ha-flight: transit burn toward Moon");
-}
-
-pub(crate) fn try_space_transit_body(
-    mut hold: ResMut<HoldInteractState>,
-    target: Res<LookTarget>,
-    region: Res<RegionRuntime>,
-    mut flight: ResMut<RocketFlight>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
-    mut moon: ResMut<MoonWorldState>,
-    mut planet: ResMut<PlanetWorldState>,
-    interacts: Query<&crate::targeting::InteractTarget>,
-) {
-    if !hold.completed || region.active != RegionId::Space {
-        return;
-    }
-    let Some(kind) = target.kind else {
-        return;
-    };
-    if kind != InteractTargetKind::SpaceTransitBody {
-        return;
-    }
-    let Some(entity) = target.entity else {
-        hold.completed = false;
-        return;
-    };
-    let Ok(marker) = interacts.get(entity) else {
-        hold.completed = false;
-        return;
-    };
-    let Some(body) = CelestialBody::from_u8(marker.id as u8) else {
-        hold.completed = false;
-        return;
-    };
-    if body == CelestialBody::Earth || body == CelestialBody::Sun || !body_landable(body) {
-        hold.completed = false;
-        return;
-    }
-    hold.completed = false;
-
-    let start = orbital_start_above_pad();
-    begin_transit_burn(&mut flight, body, start);
-    world_ctx.active = WorldContext::Space;
-    if body == CelestialBody::Moon {
-        moon.needs_spawn = true;
-        moon.spawn_after_frames = 0;
-    } else {
-        crate::planet_world::request_planet_spawn(&mut planet, body);
-    }
-    eprintln!("ha-flight: transit burn toward {}", body_def(body).label);
 }
 
 pub(crate) fn try_lunar_return_to_space(
@@ -255,7 +56,6 @@ pub(crate) fn try_lunar_return_to_space(
     mut region: ResMut<RegionRuntime>,
     mut flight: ResMut<RocketFlight>,
     mut world_ctx: ResMut<WorldContextRuntime>,
-    mut space: ResMut<crate::space_world::SpaceWorldState>,
     player: Query<&SimState, With<Player>>,
 ) {
     if !hold.completed || region.active != RegionId::Luna {
@@ -278,8 +78,7 @@ pub(crate) fn try_lunar_return_to_space(
     flight.begin_surface_gameplay(CelestialBody::Moon, start, vel);
     region.active = RegionId::Space;
     world_ctx.active = WorldContext::Space;
-    space.needs_spawn = true;
-    eprintln!("ha-flight: lunar escape burn toward orbital dock");
+    eprintln!("ha-flight: lunar escape burn toward space");
 }
 
 pub(crate) fn try_planet_return_to_space(
@@ -288,7 +87,6 @@ pub(crate) fn try_planet_return_to_space(
     region: Res<RegionRuntime>,
     mut flight: ResMut<RocketFlight>,
     mut world_ctx: ResMut<WorldContextRuntime>,
-    mut space: ResMut<crate::space_world::SpaceWorldState>,
     player: Query<&SimState, With<Player>>,
 ) {
     if !hold.completed {
@@ -313,6 +111,5 @@ pub(crate) fn try_planet_return_to_space(
     let vel = Vec3::from_array(dir) * LUNA_ESCAPE_BURN_SPEED;
     flight.begin_surface_gameplay(body, start, vel);
     world_ctx.active = WorldContext::Space;
-    space.needs_spawn = true;
-    eprintln!("ha-flight: {} escape burn toward dock", body_def(body).label);
+    eprintln!("ha-flight: {} escape burn toward space", body_def(body).label);
 }

@@ -1,9 +1,22 @@
 {
   "items": {
-    "gold_ingot": 5,
-    "iron_ingot": 30,
-    "sticks": 18,
-    "stone": 40,
-    "wood": 48
+    "wood_pickaxe": 1,
+    "lantern": 1,
+    "sticks": 128,
+    "jetpack": 4,
+    "shield_wood": 1,
+    "stone": 64,
+    "gold_ingot": 32,
+    "gem_blue": 16,
+    "stone_pickaxe": 2,
+    "iron_ingot": 64,
+    "wood": 128,
+    "dirt": 64,
+    "wood_axe": 1,
+    "stone_axe": 1,
+    "pickaxe": 1,
+    "probe": 1,
+    "gem_red": 16,
+    "hammer": 1
   }
 }

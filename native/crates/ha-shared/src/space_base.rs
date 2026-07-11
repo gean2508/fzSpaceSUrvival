@@ -102,6 +102,8 @@ mod tests {
     fn station_modules_in_order() {
         let mut station = create_space_station_state();
         let mut inv = PlayerInventory::starter();
+        inv.add("wood", 12);
+        inv.add("sticks", 6);
         inv.add("stone", 20);
         inv.add("iron_ingot", 20);
         inv.add("gold_ingot", 5);

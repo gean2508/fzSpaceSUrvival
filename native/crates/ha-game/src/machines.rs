@@ -84,7 +84,8 @@ pub(crate) fn try_place_on_hold(
     mut launch_pads: ResMut<LaunchPadWorld>,
     layout: Res<crate::sim::WorldLayout>,
 ) {
-    if !hold.completed || hold.placing_machine || hold.flight_hold {
+    // Consume only holds started as machine placement (cf. building_world.rs guard).
+    if !hold.completed || !hold.placing_machine || hold.flight_hold {
         return;
     }
     hold.completed = false;

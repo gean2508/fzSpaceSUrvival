@@ -2,8 +2,12 @@
 
 use crate::constants::{GRAVITY, GRAVITY_LUNA_SCALE};
 
-/// Shared Y for all body centres (Earth flight shell).
-pub const FLIGHT_PLANE_Y: f32 = -8_000.0;
+/// Shared Y for all body centres — chosen so Earth's surface top sits at y≈0
+/// (centre = −radius). CONTINUIDAD (fase 1): antes −8000 (viejo radio orbital);
+/// ahora ligado al radio único de la Tierra → TODOS los cuerpos coplanares en un
+/// solo marco, y la Tierra fija en [0, FLIGHT_PLANE_Y, 0] coincide con su marco
+/// caminable (remap identidad).
+pub const FLIGHT_PLANE_Y: f32 = -crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
@@ -109,8 +113,12 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Earth,
             label: "EARTH",
+            // CONTINUIDAD (fase 1): la Tierra es el ORIGEN FIJO del marco. Su
+            // centro [0, FLIGHT_PLANE_Y, 0] coincide con el caminable (mismo radio
+            // y centro) → el remap gameplay→orbital es identidad: despegar ya no
+            // da el "corte". FLIGHT_PLANE_Y = −radio → superficie superior en y≈0.
             center: [0.0, FLIGHT_PLANE_Y, 0.0],
-            radius_m: 8_000.0,
+            radius_m: crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M,
             walk_radius_m: crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M,
             soi_m: 22_000.0,
             gravity_surface: GRAVITY,
@@ -343,7 +351,7 @@ pub fn moon_center() -> [f32; 3] {
     body_center(CelestialBody::Moon)
 }
 
-pub const EARTH_FLIGHT_RADIUS_M: f32 = 8_000.0;
+pub const EARTH_FLIGHT_RADIUS_M: f32 = crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M;
 pub const MOON_ORBIT_X_M: f32 = 52_000.0;
 pub const MOON_FLIGHT_RADIUS_M: f32 = 420.0;
 pub const EARTH_SOI_M: f32 = 22_000.0;

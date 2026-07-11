@@ -30,6 +30,7 @@
     "validate:arch": "node .cursor/skills/monorepo-architecture/scripts/check-boundaries.mjs",
     "generate:icons": "python3 scripts/generate-space-icons.py",
     "generate:assets": "bash tools/blender/run_generate.sh",
+    "generate:assets:force": "bash tools/blender/run_generate.sh -- --force",
     "view:assets": "bash tools/asset-viewer/run.sh",
     "dev:native": "make -C native run",
     "dev:pc": "node scripts/dev-pc.mjs",

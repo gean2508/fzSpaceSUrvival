@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use ha_shared::Ps1Retro;
 use crate::camera::GameCamera;
 
-use crate::materials::{GhibliSkyMaterial, ToonMaterial, ps1_fog_for_zone};
+use crate::materials::{ToonMaterial, ps1_fog_for_zone};
 use crate::sky_clock::{GameSkyClock, sample_sky};
 use crate::debug::{span_guard, CpuSpanSlot, CpuSpanStats};
 use crate::rocket_flight::RocketFlight;
@@ -23,7 +23,9 @@ pub struct GhibliAtmospherePlugin;
 
 impl Plugin for GhibliAtmospherePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PaintState>().add_systems(
+        app.init_resource::<PaintState>()
+            .init_resource::<PlayerLanternControl>()
+            .add_systems(
             Update,
             (
                 tick_paint_state.after(crate::solar_lighting::sync_solar_lighting),
@@ -54,19 +56,25 @@ pub struct PaintState {
     pub local_intensity: f32,
 }
 
-const LANTERN_DAY_RADIUS: f32 = 0.0;
-const LANTERN_NIGHT_RADIUS: f32 = 16.0;
-const LANTERN_CAVE_RADIUS: f32 = 11.0;
-
-pub fn spawn_ghibli_sky(commands: &mut Commands, meshes: &mut Assets<Mesh>, mat: Handle<GhibliSkyMaterial>) {
-    commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(420.0))),
-        MeshMaterial3d(mat),
-        Transform::from_scale(Vec3::new(-1.0, 1.0, -1.0)),
-        GhibliSkyDome,
-        Name::new("GhibliSky"),
-    ));
+/// Player-held lantern — only active when `equipped` + `lit`.
+#[derive(Resource, Clone, Debug)]
+pub struct PlayerLanternControl {
+    pub equipped: bool,
+    pub lit: bool,
 }
+
+impl Default for PlayerLanternControl {
+    fn default() -> Self {
+        Self {
+            equipped: false,
+            lit: true,
+        }
+    }
+}
+
+const LANTERN_DAY_RADIUS: f32 = 9.0;
+const LANTERN_NIGHT_RADIUS: f32 = 18.0;
+const LANTERN_CAVE_RADIUS: f32 = 13.0;
 
 fn tick_paint_state(
     region: Res<RegionRuntime>,
@@ -76,6 +84,7 @@ fn tick_paint_state(
     solar: Option<Res<crate::solar_lighting::SolarLightingState>>,
     player: Query<&Transform, With<Player>>,
     cave_torch: Query<&GlobalTransform, With<CaveTorch>>,
+    lantern_ctrl: Res<PlayerLanternControl>,
     mut paint: ResMut<PaintState>,
 ) {
     let sky = sample_sky(clock.day_fraction);
@@ -123,22 +132,25 @@ fn tick_paint_state(
         return;
     };
     let mut light_pos = player_tf.translation + Vec3::new(0.0, 1.6, 0.0);
-    let mut radius = if in_cave {
-        LANTERN_CAVE_RADIUS
-    } else if night > 0.45 {
-        LANTERN_NIGHT_RADIUS
-    } else {
-        LANTERN_DAY_RADIUS
-    };
-    let mut intensity = if in_cave {
-        1.35
-    } else if night > 0.45 {
-        1.1
-    } else {
-        0.0
-    };
+    let mut radius = 0.0_f32;
+    let mut intensity = 0.0_f32;
 
-    if in_cave {
+    if lantern_ctrl.equipped && lantern_ctrl.lit {
+        radius = if in_cave {
+            LANTERN_CAVE_RADIUS
+        } else if night > 0.35 {
+            LANTERN_NIGHT_RADIUS
+        } else {
+            LANTERN_DAY_RADIUS
+        };
+        intensity = if in_cave {
+            1.55
+        } else if night > 0.35 {
+            1.25
+        } else {
+            0.85
+        };
+    } else if in_cave {
         if let Ok(torch_tf) = cave_torch.get_single() {
             light_pos = torch_tf.translation();
             radius = LANTERN_CAVE_RADIUS;
@@ -148,7 +160,7 @@ fn tick_paint_state(
 
     paint.local_pos = light_pos;
     paint.local_radius = radius;
-    paint.local_color = Vec3::new(1.0, 0.76, 0.42);
+    paint.local_color = Vec3::new(1.0, 0.82, 0.38);
     paint.local_intensity = intensity;
 }
 
@@ -166,13 +178,13 @@ fn distance_fog_for_zone(zone: &str, region: &RegionId) -> DistanceFog {
     }
     match zone {
         "cave" => DistanceFog {
-            color: Color::srgba(0.05, 0.04, 0.06, 1.0),
-            falloff: FogFalloff::Exponential { density: 0.18 },
+            color: Color::srgba(0.03, 0.06, 0.12, 1.0),
+            falloff: FogFalloff::Exponential { density: 0.16 },
             ..default()
         },
         "mystic" => DistanceFog {
-            color: Color::srgba(0.55, 0.35, 0.75, 1.0),
-            falloff: FogFalloff::ExponentialSquared { density: 0.025 },
+            color: Color::srgba(0.04, 0.10, 0.22, 1.0),
+            falloff: FogFalloff::ExponentialSquared { density: 0.022 },
             ..default()
         },
         "launch" | "meadow" => DistanceFog {
@@ -268,6 +280,9 @@ fn sync_player_lantern(
     light.color = Color::srgb(paint.local_color.x, paint.local_color.y, paint.local_color.z);
 }
 
+#[cfg(target_os = "android")]
+const PAINT_PROP_RESCAN_FRAMES: u32 = 96;
+#[cfg(not(target_os = "android"))]
 const PAINT_PROP_RESCAN_FRAMES: u32 = 48;
 
 #[derive(Default)]

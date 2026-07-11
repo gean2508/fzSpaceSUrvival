@@ -21,7 +21,11 @@ pub const HUB_MOON_VISUAL_RADIUS_M: f32 = HUB_EARTH_VISUAL_RADIUS_M * MOON_TO_EA
 pub const LUNA_SKY_EARTH_DISTANCE_M: f32 = 180.0;
 pub const LUNA_SKY_EARTH_RADIUS_M: f32 = 14.0;
 /// Walkable Earth shell at origin — arcade metres (SFS-style home body).
-pub const EARTH_GAMEPLAY_RADIUS_M: f32 = 480.0;
+// CONTINUIDAD (fase 1): un SOLO radio para la Tierra — caminable == orbital.
+// Antes 480 (caminable) vs 8000 (orbital) → despegar teletransportaba entre dos
+// marcos/escala. Ahora la Tierra es un cuerpo normal de radio 1500: mismo radio
+// caminable y orbital, centro único, remap identidad (ver `planet_surface.rs`).
+pub const EARTH_GAMEPLAY_RADIUS_M: f32 = 1_500.0;
 /// Walkable moon shell — arcade metres.
 pub const MOON_GAMEPLAY_RADIUS_M: f32 = 420.0;
 

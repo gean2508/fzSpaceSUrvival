@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use crate::materials::{GhibliSkyMaterial, StarfieldMaterial, StarfieldSettings};
+use crate::quality::{sky_shader_quality, star_shell_layers};
 use crate::scene::{GhibliSkyDome, RegionId, RegionRuntime};
 use crate::sim::Player;
 
@@ -200,37 +201,81 @@ fn sync_parallax_sky(
     }
 }
 
+/// Creative-ascent sky fade band (metres above Earth's surface): below START
+/// the sky is normal; by END it reads as full space. Tune on device.
+const CREATIVE_SKY_FADE_START_M: f32 = 150.0;
+const CREATIVE_SKY_FADE_END_M: f32 = 1200.0;
+
 fn sync_sky_projection(
     time: Res<Time>,
     clock: Res<GameSkyClock>,
     region: Res<RegionRuntime>,
-    weather: Res<WeatherState>,
+    launch_atmo: Res<crate::scene::LaunchAtmosphere>,
+    editor: Res<crate::ui_editor::UiEditorState>,
+    weather: Option<Res<WeatherState>>,
     solar: Option<Res<crate::solar_lighting::SolarLightingState>>,
     mut clear: ResMut<ClearColor>,
     mut ghibli_mats: ResMut<Assets<GhibliSkyMaterial>>,
     mut star_mats: ResMut<Assets<StarfieldMaterial>>,
     sky_mats: Query<&MeshMaterial3d<GhibliSkyMaterial>, With<GhibliSkyDome>>,
     star_handles: Query<&MeshMaterial3d<StarfieldMaterial>, With<OverworldStarLayer>>,
+    player: Query<&crate::sim::SimState, With<Player>>,
 ) {
-    let on_luna = matches!(region.active, RegionId::Luna);
+    // Airless/thin-atmosphere bodies keep a dark starry dome regardless of day clock.
+    let dark_sky_body = matches!(region.active, RegionId::Luna | RegionId::Planet(_));
     let mut sample = sample_sky(clock.day_fraction);
-    if on_luna {
+    if dark_sky_body {
         sample.night = 0.96;
         sample.neon_band = 0.08;
         sample.sun_visibility = 0.12;
         sample.zenith = Vec3::new(0.04, 0.05, 0.09);
         sample.horizon = Vec3::new(0.08, 0.09, 0.14);
     }
-    let w = if on_luna {
+
+    // Creative straight-up flight is the only way to fly today (no buildable
+    // rocket yet), and it must reach space CONTINUOUSLY — no region flip, no
+    // teleport, no forced transition. Reuse the day/night machinery: gaining
+    // altitude on Earth ramps an extra "night" toward 1 and pulls the painted
+    // gradient toward the airless dark-sky values, so the dome (which fully
+    // encloses the camera → the clear colour is never seen, so no guard fight)
+    // darkens and the stars fade in. Airless bodies already force dark, and the
+    // rocket launch owns its own atmosphere (`launch_atmo`), so exclude both.
+    if editor.creative
+        && !dark_sky_body
+        && matches!(region.active, RegionId::Overworld { .. })
+        && !launch_atmo.active
+    {
+        if let Ok(sim) = player.get_single() {
+            let ground = ha_shared::planet_ground_y_at(
+                ha_shared::CelestialBody::Earth,
+                sim.body.x,
+                sim.body.z,
+            );
+            let alt = sim.body.y - ground;
+            let f = ((alt - CREATIVE_SKY_FADE_START_M)
+                / (CREATIVE_SKY_FADE_END_M - CREATIVE_SKY_FADE_START_M))
+                .clamp(0.0, 1.0);
+            if f > 0.0 {
+                sample.night = sample.night.max(f);
+                sample.zenith = sample.zenith.lerp(Vec3::new(0.04, 0.05, 0.09), f);
+                sample.horizon = sample.horizon.lerp(Vec3::new(0.08, 0.09, 0.14), f);
+            }
+        }
+    }
+    let w = if dark_sky_body {
         WeatherSample::default()
     } else {
-        weather.sample
+        weather.map(|w| w.sample).unwrap_or_default()
     };
     let mut zenith = sample.zenith;
     let mut horizon = sample.horizon;
     zenith *= 1.0 - w.sun_dim * 0.35;
     horizon *= 1.0 - w.sun_dim * 0.25;
-    clear.0 = Color::srgb(zenith.x, zenith.y, zenith.z);
+    // ClearColor ownership: overworld surface belongs to the day/night clock;
+    // launch/space/luna/planet/cave belong to `transition_zone_atmosphere`.
+    if matches!(region.active, RegionId::Overworld { .. }) && !launch_atmo.active {
+        clear.0 = Color::srgb(zenith.x, zenith.y, zenith.z);
+    }
 
     let paint = Vec4::new(
         sample.night,
@@ -243,7 +288,12 @@ fn sync_sky_projection(
         .as_ref()
         .map(|s| Vec3::from_array(s.sample.lit_to_sun))
         .unwrap_or(sample.sun_dir);
-    let sun_v4 = Vec4::new(sun_dir.x, sun_dir.y, sun_dir.z, 0.0);
+    let sun_v4 = Vec4::new(
+        sun_dir.x,
+        sun_dir.y,
+        sun_dir.z,
+        sky_shader_quality(),
+    );
     let zenith_v4 = Vec4::new(zenith.x, zenith.y, zenith.z, 0.0);
     let horizon_v4 = Vec4::new(horizon.x, horizon.y, horizon.z, 0.0);
     let warm_v4 = Vec4::new(sample.warm.x, sample.warm.y, sample.warm.z, 0.0);
@@ -328,10 +378,7 @@ pub fn spawn_sky_stack(
 ) {
     let invert = Vec3::new(-1.0, 1.0, -1.0);
 
-    for (radius, factor, density) in [
-        (SKY_DOME_RADIUS * 0.86, 0.014, 1.15),
-        (SKY_DOME_RADIUS * 1.06, 0.038, 0.72),
-    ] {
+    for &(radius, factor, density) in star_shell_layers() {
         let mut star = crate::materials::starfield_material();
         star.settings.density = density;
         star.settings.night = 0.0;

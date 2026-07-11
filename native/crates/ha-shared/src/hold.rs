@@ -8,6 +8,7 @@ pub struct HoldProgress {
     pub cancelled: bool,
     pub completed: bool,
     pub placing_machine: bool,
+    pub placing_build: bool,
 }
 
 pub fn advance_hold_progress(hold: HoldProgress, delta_ms: u32, target_valid: bool) -> HoldProgress {
@@ -20,7 +21,7 @@ pub fn advance_hold_progress(hold: HoldProgress, delta_ms: u32, target_valid: bo
     if !hold.active {
         return hold;
     }
-    if !target_valid && !hold.placing_machine {
+    if !target_valid && !hold.placing_machine && !hold.placing_build {
         return HoldProgress {
             active: false,
             progress_ms: 0,
@@ -62,6 +63,7 @@ mod tests {
             cancelled: false,
             completed: false,
             placing_machine,
+            placing_build: false,
         }
     }
 

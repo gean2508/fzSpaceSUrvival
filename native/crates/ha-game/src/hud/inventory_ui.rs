@@ -8,7 +8,9 @@ use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 use super::BagPanelState;
 
 pub const GRID_COLS: usize = 4;
-pub const GRID_ROWS: usize = 4;
+/// 8 rows (32 slots) so the creative kit + a full survival haul fit; the grid
+/// section scrolls (`BagInventorySection` overflow) past the visible rows.
+pub const GRID_ROWS: usize = 8;
 pub const GRID_LEN: usize = GRID_COLS * GRID_ROWS;
 /// Item slots between hammer (0) and BAG (last) in the 10-slot hotbar.
 pub const HOTBAR_ITEM_SLOTS: usize = 8;
@@ -109,6 +111,9 @@ pub fn load_grid_from_inventory(state: &mut InventoryUiState, inv: &PlayerInvent
     }
     let mut i = 0usize;
     for (id, qty) in inv.sorted_entries() {
+        if id == "lantern" {
+            continue;
+        }
         if i < HOTBAR_ITEM_SLOTS {
             state.hotbar[i] = Stack {
                 item_id: Some(id.to_string()),
@@ -124,6 +129,12 @@ pub fn load_grid_from_inventory(state: &mut InventoryUiState, inv: &PlayerInvent
         } else {
             break;
         }
+    }
+    if inv.qty("lantern") > 0 {
+        state.hotbar[0] = Stack {
+            item_id: Some("lantern".to_string()),
+            qty: inv.qty("lantern"),
+        };
     }
 }
 
@@ -245,7 +256,9 @@ pub fn split_stack(state: &mut InventoryUiState, slot: SlotId) -> bool {
     };
     let half = stack.qty / 2;
     let remain = stack.qty - half;
-    let item_id = stack.item_id.clone().unwrap();
+    let Some(item_id) = stack.item_id.clone() else {
+        return false;
+    };
     *stack_mut(state, slot) = Stack {
         item_id: Some(item_id.clone()),
         qty: remain,

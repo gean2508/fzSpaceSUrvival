@@ -7,8 +7,6 @@ use crate::assets::AssetFactory;
 use crate::debug::{span_guard, CpuSpanSlot, CpuSpanStats};
 use crate::earth_world::{EarthDecor, EarthSurface};
 use crate::moon_world::MoonDecor;
-use crate::space_world::SpaceDecor;
-use crate::celestial_sphere::{spawn_transit_planets, TransitPlanet};
 use crate::ghibli_atmosphere::PlayerLantern;
 use crate::materials::{
     outline_material, OutlineShell, PlanetSurfaceMaterial, ToonMaterial,
@@ -166,7 +164,7 @@ pub(crate) fn spawn_world(
     mut std_mats: ResMut<Assets<StandardMaterial>>,
     mut planet_mats: ResMut<Assets<PlanetSurfaceMaterial>>,
 ) {
-    let _ = (&mut factory, &mut toon_mats, &world_layout);
+    let _ = (&mut factory, &mut toon_mats, &world_layout, &mut planet_mats);
     let sun_color = Ps1Retro::SUN;
     let sun_shadows = false;
     commands.spawn((
@@ -191,7 +189,6 @@ pub(crate) fn spawn_world(
     });
 
     // Earth sphere + deposits: `EarthWorldPlugin`. Sky: `sky_clock`.
-    spawn_transit_planets(&mut commands, &mut meshes, &mut planet_mats, &mut std_mats);
 
     let class = get_class(DEFAULT_CLASS_ID);
     let spawn_x = LAUNCH_PAD_ZONE_X;
@@ -368,7 +365,13 @@ fn transition_zone_atmosphere(
     let in_cave = matches!(region.active, RegionId::Cave(_));
     let on_space = matches!(region.active, RegionId::Space);
     let on_luna = matches!(region.active, RegionId::Luna);
-    let night_biome = !in_cave
+    // FLAG: legacy island-era "mystic" night biome triggered by RAW COORDS —
+    // on the sphere world it painted a hard diagonal night line at tx+tz=20 and
+    // forced permanent night at the launch pad (tx=28). Night is owned by the
+    // day/night clock now. Re-enable only as a real biome via `surface_biome`.
+    const LEGACY_MYSTIC_POSITION_BIOME: bool = false;
+    let night_biome = LEGACY_MYSTIC_POSITION_BIOME
+        && !in_cave
         && !on_space
         && !on_luna
         && matches!(region.active, RegionId::Overworld { .. })
@@ -399,6 +402,12 @@ fn transition_zone_atmosphere(
         zone.target_sky_color = Color::srgb(0.02, 0.02, 0.05);
         zone.target_light_intensity = 5_800.0;
         zone.target_firefly_density = 0.0;
+    } else if matches!(region.active, RegionId::Planet(_)) {
+        // Thin/no atmosphere bodies — dark starry sky like Luna, never meadow.
+        zone.current_zone = "planet";
+        zone.target_sky_color = Color::srgb(0.02, 0.02, 0.04);
+        zone.target_light_intensity = 70_000.0;
+        zone.target_firefly_density = 0.0;
     } else if in_cave {
         zone.current_zone = "cave";
         zone.target_sky_color = Color::srgb(0.04, 0.05, 0.08);
@@ -406,9 +415,9 @@ fn transition_zone_atmosphere(
         zone.target_firefly_density = 0.45;
     } else if night_biome {
         zone.current_zone = "mystic";
-        zone.target_sky_color = Color::srgb(0.12, 0.14, 0.22);
-        zone.target_light_intensity = 15_000.0;
-        zone.target_firefly_density = 0.55;
+        zone.target_sky_color = Color::srgb(0.03, 0.07, 0.16);
+        zone.target_light_intensity = 12_000.0;
+        zone.target_firefly_density = 0.42;
     } else {
         zone.current_zone = "meadow";
         zone.target_sky_color = Color::srgb(
@@ -435,12 +444,17 @@ fn transition_zone_atmosphere(
     };
     #[cfg(target_os = "android")]
     let alpha = (time.delta_secs() * zone.transition_speed).clamp(0.0, 1.0);
-    clear_color.0 = Color::srgba(
-        cur.red + (tgt.red - cur.red) * alpha,
-        cur.green + (tgt.green - cur.green) * alpha,
-        cur.blue + (tgt.blue - cur.blue) * alpha,
-        1.0,
-    );
+    // Day/night sky clock owns ClearColor on the overworld surface
+    // (`sync_sky_projection`) — writing it here too would fight it every frame.
+    let sky_clock_owns_clear = matches!(zone.current_zone, "meadow" | "mystic");
+    if !sky_clock_owns_clear {
+        clear_color.0 = Color::srgba(
+            cur.red + (tgt.red - cur.red) * alpha,
+            cur.green + (tgt.green - cur.green) * alpha,
+            cur.blue + (tgt.blue - cur.blue) * alpha,
+            1.0,
+        );
+    }
     zone.firefly_density += (zone.target_firefly_density - zone.firefly_density) * alpha;
 }
 
@@ -512,9 +526,9 @@ fn update_cave_visual_overrides(
     mut crystals: Query<&mut Visibility, With<CaveCrystal>>,
 ) {
     let in_cave = matches!(region.active, RegionId::Cave(_));
-    if let Ok(mut sun_light) = sun.get_single_mut() {
-        sun_light.shadows_enabled = false;
-    }
+    // Sun shadows are owned by `sync_solar_lighting` (enable_sun_shadows already
+    // accounts for caves) — forcing them off here every frame fought that system.
+    let _ = &mut sun;
     let player_pos = player_torch
         .p0()
         .get_single()
@@ -613,14 +627,11 @@ fn sync_biome_visibility(
                 With<EarthDecor>,
                 Without<EarthSurface>,
                 Without<MoonDecor>,
-                Without<SpaceDecor>,
                 Without<crate::flight_celestials::SkyMoon>,
             ),
         >,
         Query<&mut Visibility, With<MoonDecor>>,
-        Query<&mut Visibility, With<SpaceDecor>>,
         Query<&mut Visibility, With<CaveInterior>>,
-        Query<&mut Visibility, With<TransitPlanet>>,
         Query<&mut Visibility, Or<(With<GhibliSkyDome>, With<OverworldStarLayer>)>>,
         Query<&mut Visibility, With<EarthSurface>>,
     )>,
@@ -649,47 +660,35 @@ fn sync_biome_visibility(
         } else {
             Visibility::Hidden
         };
-        let space_vis = if on_space {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
 
         for mut v in sets.p0().iter_mut() {
             *v = earth_vis;
         }
-        for mut v in sets.p6().iter_mut() {
+        for mut v in sets.p4().iter_mut() {
             *v = earth_vis;
         }
         for mut v in sets.p1().iter_mut() {
             *v = moon_vis;
-        }
-        for mut v in sets.p2().iter_mut() {
-            *v = space_vis;
         }
         let cave_vis = if in_cave {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
-        for mut v in sets.p3().iter_mut() {
+        for mut v in sets.p2().iter_mut() {
             *v = cave_vis;
         }
-        let transit_vis = if on_transit {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-        for mut v in sets.p4().iter_mut() {
-            *v = transit_vis;
-        }
 
-        let sky_vis = if on_space || on_transit || in_cave {
+        // La ATMÓSFERA (domo azul + estrellas overworld) es SOLO de la Tierra.
+        // En la Luna/planetas (airless) y en el espacio se ve el universo
+        // directo → ocultar el domo terrestre. Antes se mostraba en la Luna =
+        // "la Luna con el cielo de la Tierra".
+        let sky_vis = if on_space || on_transit || in_cave || on_surface {
             Visibility::Hidden
         } else {
             Visibility::Visible
         };
-        for mut v in sets.p5().iter_mut() {
+        for mut v in sets.p3().iter_mut() {
             *v = sky_vis;
         }
     }
@@ -700,10 +699,10 @@ fn sync_biome_visibility(
         for mut vis in sets.p0().iter_mut() {
             *vis = Visibility::Visible;
         }
-        for mut vis in sets.p6().iter_mut() {
+        for mut vis in sets.p4().iter_mut() {
             *vis = Visibility::Visible;
         }
-        for mut vis in sets.p5().iter_mut() {
+        for mut vis in sets.p3().iter_mut() {
             *vis = Visibility::Visible;
         }
         if let Ok(mut cam) = game_cam.get_single_mut() {
@@ -714,22 +713,19 @@ fn sync_biome_visibility(
     // Rocket cruise — per-frame overrides (avoid duplicate Visibility queries elsewhere).
     if flight.active {
         let vacuum = flight.in_vacuum();
-        for mut vis in sets.p6().iter_mut() {
+        for mut vis in sets.p4().iter_mut() {
             *vis = if vacuum {
                 Visibility::Hidden
             } else {
                 Visibility::Visible
             };
         }
-        for mut vis in sets.p5().iter_mut() {
+        for mut vis in sets.p3().iter_mut() {
             *vis = if vacuum {
                 Visibility::Hidden
             } else {
                 Visibility::Visible
             };
-        }
-        for mut vis in sets.p2().iter_mut() {
-            *vis = Visibility::Hidden;
         }
     }
 }

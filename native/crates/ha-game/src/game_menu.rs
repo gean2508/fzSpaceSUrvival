@@ -106,10 +106,17 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             // Square map viewport (keeps the top-down projection undistorted).
             root.spawn((
                 Node {
-                    width: Val::Px(440.0),
-                    height: Val::Px(440.0),
-                    max_width: Val::Percent(92.0),
-                    max_height: Val::Percent(66.0),
+                    // Square sized to the SMALLER screen dimension (VMin) so it
+                    // always fits both orientations and stays square → orbit
+                    // circles never distort. This also sidesteps the bug that
+                    // pushed the map off-panel: `ComputedNode.size()` is in
+                    // PHYSICAL px, but `Node` offsets are LOGICAL px, so on a
+                    // high-DPI phone (UI scale ~2.8) the old pixel-measured
+                    // layout multiplied every marker position and threw the
+                    // whole system to the right. Markers are now positioned in
+                    // PERCENT (see `update_map_markers`), no measurement needed.
+                    width: Val::VMin(70.0),
+                    height: Val::VMin(70.0),
                     border: UiRect::all(Val::Px(2.0)),
                     // Clip orbit rings / body dots to the panel — nothing the
                     // marker system positions can bleed outside the map window.
@@ -139,12 +146,14 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                         BorderRadius::all(Val::Percent(50.0)),
                         MapOrbitRing(body),
                     ));
-                    // Body dot.
+                    // Body dot. Negative margin = half its size so the percent
+                    // position (its top-left) lands the dot's CENTRE on the point.
                     map.spawn((
                         Node {
                             position_type: PositionType::Absolute,
                             width: Val::Px(9.0),
                             height: Val::Px(9.0),
+                            margin: UiRect::all(Val::Px(-4.5)),
                             ..default()
                         },
                         BackgroundColor(color),
@@ -158,6 +167,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                         position_type: PositionType::Absolute,
                         width: Val::Px(16.0),
                         height: Val::Px(16.0),
+                        margin: UiRect::all(Val::Px(-8.0)),
                         ..default()
                     },
                     BackgroundColor(Color::srgb(1.0, 0.86, 0.35)),
@@ -171,6 +181,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                         width: Val::Px(10.0),
                         height: Val::Px(10.0),
                         border: UiRect::all(Val::Px(2.0)),
+                        margin: UiRect::all(Val::Px(-5.0)),
                         ..default()
                     },
                     BorderColor(Color::WHITE),
@@ -247,15 +258,16 @@ fn menu_button(parent: &mut ChildBuilder, label: &str, cmd: impl Bundle) {
 #[derive(Component)]
 struct MapOrbitRing(CelestialBody);
 
-/// Proyecta una posición del sistema solar en el viewport del mapa (Sol al
-/// centro). Escala por `min(w,h)` → sin distorsión aunque el panel no sea
-/// cuadrado; centra cada eje por su propia mitad → no se descentra.
-fn project(pos: [f32; 3], w: f32, h: f32) -> (f32, f32) {
-    let sun = ha_shared::sun_position();
-    let scale = w.min(h);
-    let rel_x = (pos[0] - sun[0]) / MAP_SPAN_M; // -0.5..0.5-ish
-    let rel_z = (pos[2] - sun[2]) / MAP_SPAN_M;
-    (w * 0.5 + rel_x * scale, h * 0.5 + rel_z * scale)
+/// Solar position → percent of the (square) viewport, Sun at centre. All map
+/// layout is in PERCENT so it is resolution- and UI-scale-independent: no
+/// `ComputedNode` pixel measurement (which returns PHYSICAL px while `Node`
+/// offsets are LOGICAL px — the mismatch that threw the whole map off-panel to
+/// the right on a high-DPI phone). Markers carry a negative margin of half
+/// their size, so the percent (their top-left) lands their centre on the point.
+fn map_percent(pos: [f32; 3], sun: [f32; 3]) -> (f32, f32) {
+    let nx = (0.5 + (pos[0] - sun[0]) / MAP_SPAN_M).clamp(0.0, 1.0);
+    let nz = (0.5 + (pos[2] - sun[2]) / MAP_SPAN_M).clamp(0.0, 1.0);
+    (nx * 100.0, nz * 100.0)
 }
 
 #[allow(clippy::type_complexity)]
@@ -264,7 +276,6 @@ fn update_map_markers(
     clock: Res<SolarSystemClock>,
     flight: Res<RocketFlight>,
     region: Res<crate::scene::RegionRuntime>,
-    viewport: Query<&ComputedNode, With<MapViewport>>,
     mut sets: ParamSet<(
         Query<(&MapBody, &mut Node)>,
         Query<(&MapOrbitRing, &mut Node)>,
@@ -274,44 +285,25 @@ fn update_map_markers(
     if !menu.spawned {
         return;
     }
-    let Ok(vp) = viewport.get_single() else {
-        return;
-    };
-    // Wait for the real computed size. On the first frame(s) the UI layout has
-    // not run yet and `size()` is ~0 — positioning against an 80 px fallback is
-    // exactly what made the map render tiny in the corner and then "jump" to
-    // full size. Skip until Taffy has a real box; then it draws once, correctly.
-    let raw = vp.size();
-    if raw.x < 1.0 || raw.y < 1.0 {
-        return;
-    }
-    let w = raw.x;
-    let h = raw.y;
-    let scale = w.min(h);
     let t = clock.t;
+    let sun = ha_shared::sun_position();
 
     for (body, mut node) in &mut sets.p0() {
-        let (x, y) = project(body_center_at(body.0, t), w, h);
-        let half = 6.0;
-        // Clamp dentro del panel (nunca salir de la ventana del mapa).
-        let x = x.clamp(half, w - half);
-        let y = y.clamp(half, h - half);
-        node.left = Val::Px(x - half);
-        node.top = Val::Px(y - half);
+        let (px, pz) = map_percent(body_center_at(body.0, t), sun);
+        node.left = Val::Percent(px);
+        node.top = Val::Percent(pz);
     }
-    // Orbit rings: radius = body's heliocentric distance projected. Clamp the
-    // radius ONCE and derive both size and position from it — the old code
-    // sized with a clamped diameter but positioned with the RAW radius, so a
-    // far body's ring flew off to a negative offset and escaped the panel.
+    // Orbit rings: diameter = 2·(heliocentric distance / span), centred on the
+    // panel. The viewport is square, so a percent width == percent height →
+    // circles stay circular. Radius capped to half so the ring can't exceed it.
     for (ring, mut node) in &mut sets.p1() {
         let bc = body_center_at(ring.0, t);
-        let sun = ha_shared::sun_position();
-        let r_world = ((bc[0] - sun[0]).powi(2) + (bc[2] - sun[2]).powi(2)).sqrt();
-        let rr = ((r_world / MAP_SPAN_M) * scale).clamp(1.0, scale * 0.5);
-        node.width = Val::Px(rr * 2.0);
-        node.height = Val::Px(rr * 2.0);
-        node.left = Val::Px(w * 0.5 - rr);
-        node.top = Val::Px(h * 0.5 - rr);
+        let r_frac = (((bc[0] - sun[0]).powi(2) + (bc[2] - sun[2]).powi(2)).sqrt() / MAP_SPAN_M)
+            .clamp(0.004, 0.5);
+        node.width = Val::Percent(r_frac * 200.0);
+        node.height = Val::Percent(r_frac * 200.0);
+        node.left = Val::Percent(50.0 - r_frac * 100.0);
+        node.top = Val::Percent(50.0 - r_frac * 100.0);
     }
     // Ship marker: use the flight position, else the body you stand on.
     if let Ok(mut node) = sets.p2().get_single_mut() {
@@ -325,8 +317,8 @@ fn update_map_markers(
             };
             body_center_at(body, t)
         };
-        let (x, y) = project(ship_world, w, h);
-        node.left = Val::Px((x - 5.0).clamp(0.0, w - 10.0));
-        node.top = Val::Px((y - 5.0).clamp(0.0, h - 10.0));
+        let (px, pz) = map_percent(ship_world, sun);
+        node.left = Val::Percent(px);
+        node.top = Val::Percent(pz);
     }
 }

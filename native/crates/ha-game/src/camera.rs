@@ -20,6 +20,7 @@ impl Plugin for FollowCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraTrauma>()
             .init_resource::<CameraViewMode>()
+            .init_resource::<CameraCycleRequest>()
             .add_event::<CameraShakeEvent>()
             .add_systems(Update, absorb_shake_events)
             .add_systems(Update, decay_camera_trauma)
@@ -96,9 +97,11 @@ pub fn camera_far_for_region(region: &RegionId) -> f32 {
         RegionId::Luna | RegionId::Planet(_) => 900.0,
         RegionId::Cave(_) => 200.0,
         RegionId::Overworld { .. } => {
+            // Must exceed the sky stack: SkySun 380 m, Ghibli dome 420 m —
+            // 360 m clipped the sun disc and the dome on device.
             #[cfg(target_os = "android")]
             {
-                360.0
+                470.0
             }
             #[cfg(not(target_os = "android"))]
             {
@@ -138,6 +141,20 @@ impl Default for CameraTrauma {
 pub fn look_forward(look: &CameraLookIntent) -> Vec3 {
     let rot = Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch);
     rot * Vec3::NEG_Z
+}
+
+/// Look rotation aligned to the local surface normal — on sphere worlds yaw spins
+/// around `up` and pitch tilts against it, so the horizon stays level anywhere
+/// on the planet. With `up == Vec3::Y` this reduces to the flat-world rotation.
+pub fn surface_look_rotation(up: Vec3, look: &CameraLookIntent) -> Quat {
+    Quat::from_rotation_arc(Vec3::Y, up.normalize_or_zero())
+        * Quat::from_rotation_y(look.yaw)
+        * Quat::from_rotation_x(look.pitch)
+}
+
+/// View direction for targeting rays — must match `follow_player_camera`.
+pub fn surface_look_forward(up: Vec3, look: &CameraLookIntent) -> Vec3 {
+    surface_look_rotation(up, look) * Vec3::NEG_Z
 }
 
 /// Horizontal forward for movement / body facing (ignores pitch).
@@ -192,12 +209,19 @@ fn lock_game_camera_post(mut cam: Query<(&mut Tonemapping, &mut DebandDither), W
     }
 }
 
+/// Mobile CAM button raises this; desktop uses F5. Consumed each frame.
+#[derive(Resource, Default)]
+pub struct CameraCycleRequest(pub bool);
+
 fn cycle_camera_view_mode(
     keys: Res<ButtonInput<KeyCode>>,
+    mut request: ResMut<CameraCycleRequest>,
     mut mode: ResMut<CameraViewMode>,
     clear: Res<ClearColor>,
 ) {
-    if keys.just_pressed(KeyCode::F5) {
+    let pressed = keys.just_pressed(KeyCode::F5) || request.0;
+    request.0 = false;
+    if pressed {
         *mode = mode.cycle();
         let c = clear.0.to_srgba();
         eprintln!(
@@ -210,13 +234,25 @@ fn cycle_camera_view_mode(
     }
 }
 
-/// Hide local player mesh in 1st person — inverted-hull outline was filling the viewport.
+/// Single owner of the local player mesh visibility: hidden in 1st person
+/// (inverted-hull outline filled the viewport) and in remote view; always
+/// visible while flying — the capsule doubles as the rocket avatar the
+/// chase camera looks at.
 fn sync_player_mesh_for_view(
     view: Res<CameraViewMode>,
+    flight: Res<RocketFlight>,
+    view_target: Res<ViewTarget>,
     mut body: Query<&mut Visibility, (With<Player>, With<Mesh3d>, Without<OutlineShell>)>,
     mut outline: Query<&mut Visibility, With<OutlineShell>>,
 ) {
-    let show_body = !matches!(view.0, CameraPerspective::FirstPerson);
+    let in_flight = flight.active && flight.phase != FlightPhase::Surface;
+    let show_body = if view_target.is_remote() {
+        false
+    } else if in_flight {
+        true
+    } else {
+        !matches!(view.0, CameraPerspective::FirstPerson)
+    };
     let vis = if show_body {
         Visibility::Visible
     } else {
@@ -255,7 +291,14 @@ fn follow_player_camera(
 
     if view_target.is_remote() {
         let eye = origin.to_render(view_target.observer_world);
-        let rot = Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch);
+        let up = if let crate::view_target::ViewMode::RemoteCamera { body, tx, tz, .. } =
+            &view_target.mode
+        {
+            crate::surface_placement::surface_normal_at_tangent(*body, *tx, *tz)
+        } else {
+            Vec3::Y
+        };
+        let rot = surface_look_rotation(up, &look);
         transform.translation = eye;
         transform.rotation = rot;
         if let Projection::Perspective(ref mut persp) = *projection {
@@ -272,6 +315,9 @@ fn follow_player_camera(
         transform.rotation = rot;
         if let Projection::Perspective(ref mut persp) = *projection {
             persp.far = 180_000.0;
+            // near 0.05 over a 180 km far plane starves GLES3 depth precision
+            // → distant bodies z-fight. Chase cam sits 2.2 m out; 0.5 is safe.
+            persp.near = 0.5;
         }
         span_record(&mut span, CpuSpanSlot::Camera, t0);
         return;
@@ -301,7 +347,7 @@ fn follow_player_camera(
     };
     let look_at = player_eye + surface_up * TP_EYE_LIFT;
 
-    let mut rot = Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch);
+    let mut rot = surface_look_rotation(surface_up, &look);
     let forward = rot * Vec3::NEG_Z;
 
     match view_mode.0 {

@@ -8,12 +8,15 @@
 
 ## Reglas de oro
 
-1. **Verdad del mundo en `ha-shared`** — generación de bloques, catálogo celeste, gravedad, SOI, superficies Luna/planeta. El cliente solo **renderiza y transiciona regiones**.
-2. **`BLOCK_TERRAIN = true`** — la Tierra overworld es una **isla voxel 192×192 m**, no un heightmap (`terrain.rs` es legacy/paridad TS).
-3. **Seed fija `42`** en `SimPlugin` → misma isla + 72 interactables que `generateWorld(42)` en TypeScript.
-4. **Dos sistemas de vuelo coexisten:** cinemático SFS (`FlightState` + `LaunchSequence`) y vuelo arcade continuo (`RocketFlight`).
+1. **Verdad del mundo en `ha-shared`** — catálogo celeste, gravedad/SOI, superficies esféricas, `VesselRegistry`, power/connectivity. El cliente **renderiza, transiciona regiones y persiste**.
+2. **Tierra overworld = superficie esférica arcade** (`planet_surface.rs`, `surface_patch.rs`) — parche tangente 150 m, **no** isla voxel (legacy TS en `blockWorld.ts` solo paridad).
+3. **Seed fija `42`** en `SimPlugin` → mismos depósitos que `generateWorld(42)` (`surface_deposits.rs`).
+4. **Un solo vuelo continuo:** `RocketFlight` (arcade thrust/gravity/SOI). No `FlightState` cinemático.
 5. **No confundir** `RegionId` (visibilidad/render) con `WorldContext` (gravedad/locomoción sim).
-,
+6. **Observador activo:** `ViewTarget` + `FloatingOrigin` — render coords = world − shift (observador, no solo Tierra).
+7. **Naves off-screen:** `VesselRegistry` en `ha-shared/vessel.rs` — tick 1 Hz (órbita abstracta + power/LoS), persistido en `vessels.json`.
+8. **Memoria móvil:** `CelestialCleanup` + `RegionCleanupScheduler` — despawn real tras 2 s fuera de región (no solo `Visibility::Hidden`).
+
 ---
 
 ## Arquitectura en capas
@@ -21,27 +24,49 @@
 ```
 packages/shared (TS)          ha-shared (Rust)              ha-game (Bevy)
 ─────────────────────         ───────────────────           ─────────────────────────
-blockWorld.ts          ←→     block_world.rs                terrain_streaming.rs
-world.ts               ←→     world.rs                      world_spawn.rs
+world.ts               ←→     world.rs                      earth_world.rs, deposit_spawn.rs
 world_context.ts       ←→     world_context.rs              scene.rs (RegionId)
-terrain.ts (legacy)    ←→     terrain.rs                    chunk_manager.rs
                                celestial_bodies.rs           space_world.rs, moon_world.rs
                                flight_physics.rs             rocket_flight.rs, space_travel.rs
-                               luna_terrain.rs               lunar_surface.rs, planet_world.rs
-                               planet_surface.rs             sky_clock.rs, cloud_layer.rs
+                               vessel.rs, power.rs           world_persist.rs, telemetry.rs
+                               connectivity.rs               floating_origin.rs, view_target.rs
+                               planet_surface.rs             surface_patch.rs, lunar_surface.rs
+                               solar_light.rs                solar_lighting.rs, flight_celestials.rs
 ```
 
 | Capa | Rol |
 |------|-----|
-| **`ha-shared`** | Generación determinista, física de vuelo, catálogo de cuerpos, queries de colisión voxel |
-| **`ha-game`** | Plugins ECS: spawn meshes, streaming 16×16, visibilidad por región, atmósfera, docks |
-| **`packages/shared`** | Espejo para servidor/Colyseus; cambios de reglas → Rust **y** TS |
+| **`ha-shared`** | Sim determinista: cuerpos, SOI, vessels off-screen, solar/LoS, depósitos |
+| **`ha-game`** | Bevy: parches tangentes, regiones, cleanup OOM, cámara remota, HUD telemetría |
+| **`packages/shared`** | Espejo TS para netcode; cambios de reglas → Rust **y** TS |
 
 ---
 
-## Tierra overworld — isla voxel
+## Sistemas espaciales (Jun 2026)
 
-### Constantes clave (`ha-shared/src/constants.rs`)
+| Sistema | Archivo | Notas |
+|---------|---------|-------|
+| Floating origin | `floating_origin.rs` | Shift relativo al observador (`ViewTarget`) >22 km |
+| View target | `view_target.rs` | Player / Rocket / RemoteCamera (Luna module) |
+| Vessel registry | `ha-shared/vessel.rs` + `world_persist.rs` | PlayerShip, OrbitalStation, LunaOutpost |
+| Power grid | `ha-shared/power.rs` | Solar panel, batería, carga 1 Hz off-screen |
+| Connectivity | `ha-shared/connectivity.rs` | LoS Tierra + repetidor orbital |
+| Telemetría UI | `telemetry.rs` | Botón **TX** (top-right) o tecla **T** |
+| Region cleanup | `celestial_cleanup.rs` | Despawn espacio/Luna/planeta tras histéresis 2 s |
+
+### UI telemetría
+
+- Panel **AGENCY TELEMETRY**: estado PWR/SIG por nave.
+- **REMOTE CAM — LUNA MODULE**: cambia `ViewTarget` → Luna (spawnea región, oculta jugador).
+- **RETURN TO PLAYER**: restaura cámara y `RegionId` según `WorldContext`.
+
+---
+
+## Tierra overworld — superficie esférica (actual)
+
+> **Legacy voxel** (isla 192×192, `chunk_manager.rs`) — **eliminado del cliente nativo**. Referencia histórica abajo.
+
+### Constantes clave (`ha-shared/src/constants.rs` + `cosmic_scale.rs`)
 
 | Constante | Valor | Uso |
 |-----------|-------|-----|

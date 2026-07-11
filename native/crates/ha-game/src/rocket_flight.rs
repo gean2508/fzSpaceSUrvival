@@ -8,10 +8,10 @@ use ha_shared::{
     gravity_accel_at_time, gravity_accel_luna_gameplay, gravity_accel_planet_gameplay, in_vacuum,
     parachute_drag, planet_dir_from_tangent, planet_displacement_at_dir, planet_gameplay_center,
     planet_gameplay_world_pos, planet_ground_y_at, planet_tangent_from_dir,
-    remap_luna_gameplay_to_orbital, remap_planet_gameplay_to_orbital, should_auto_deploy_parachute,
+    remap_luna_gameplay_to_orbital, remap_planet_gameplay_to_orbital_at, should_auto_deploy_parachute,
     sun_proximity_damage, surface_normal, surface_normal_at, surface_world_pos_at, CelestialBody,
     FlightPhase, EARTH_ATMO_TOP_M, LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z, ROCKET_FUEL_BURN_PER_S,
-    ROCKET_FUEL_MAX, ROCKET_MAX_V, ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2,
+    ROCKET_CRUISE_MAX_V, ROCKET_FUEL_MAX, ROCKET_MAX_V, ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2,
     ROCKET_ROT_SPEED, ROCKET_THRUST_M_S2, WorldContext,
 };
 
@@ -26,15 +26,38 @@ use crate::planet_world::{request_planet_spawn, PlanetWorldState};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState, WorldCollision, WorldLayout, earth_surface_y};
 use crate::surface_placement::tangent_at_world;
-use crate::space_world::SpaceWorldState;
 
 pub struct RocketFlightPlugin;
 
 impl Plugin for RocketFlightPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RocketFlight>()
+            .init_resource::<ShipLoadout>()
             .add_systems(FixedUpdate, tick_rocket_flight)
-            .add_systems(Update, (sync_flight_world_state, try_surface_launch));
+            .add_systems(
+                Update,
+                (sync_flight_world_state, try_surface_launch, steer_flight_from_look),
+            );
+    }
+}
+
+/// Mass/fuel stats derived from the assembled pad modules — a LAYER over the
+/// existing fuel system: mass taxes burn rate, never acceleration.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct ShipLoadout {
+    pub mass_t: f32,
+    pub fuel_max: f32,
+    pub burn_factor: f32,
+}
+
+impl Default for ShipLoadout {
+    fn default() -> Self {
+        let mass = ha_shared::ship_mass_t(&["hull", "fuel_tank", "engine"]);
+        Self {
+            mass_t: mass,
+            fuel_max: ha_shared::fuel_max_for_tanks(1),
+            burn_factor: ha_shared::burn_factor(mass),
+        }
     }
 }
 
@@ -51,6 +74,15 @@ pub struct RocketFlight {
     /// Flying on a walkable displaced shell (Luna, Mars, …).
     pub surface_flight: Option<CelestialBody>,
     pub parachute_open: bool,
+    /// Nav-computer cruise: re-aims the velocity at the led intercept each
+    /// second; any stick input disengages back to manual.
+    pub autopilot: bool,
+    /// Tank capacity from the loadout (0.0 default → treated as one tank).
+    pub fuel_max: f32,
+    /// Mass-derived burn multiplier from the loadout (0.0 default → 1.0).
+    /// Mirrored here (not read as a Res) — `tick_rocket_flight` is at Bevy's
+    /// 16-system-param limit.
+    pub burn_factor: f32,
 }
 
 impl RocketFlight {
@@ -61,8 +93,12 @@ impl RocketFlight {
         self.vel = Vec3::ZERO;
         self.pitch = 0.0;
         self.yaw = 0.0;
-        self.fuel = ROCKET_FUEL_MAX;
+        // Fuel is a REAL resource now: ignition no longer refuels — only the
+        // Earth pad does (see `try_ignite_on_hold`). Relaunching from Luna or
+        // a planet spends whatever is left in the tank.
+        self.fuel = self.fuel.clamp(0.0, self.capacity());
         self.parachute_open = false;
+        self.autopilot = false;
         self.body = self
             .surface_flight
             .unwrap_or_else(|| dominant_body(pos.to_array()));
@@ -79,10 +115,6 @@ impl RocketFlight {
         self.vel = vel;
     }
 
-    pub fn begin_luna_gameplay(&mut self, pos: Vec3, vel: Vec3) {
-        self.begin_surface_gameplay(CelestialBody::Moon, pos, vel);
-    }
-
     pub fn begin_coast_toward(&mut self, pos: Vec3, vel: Vec3, target: CelestialBody) {
         self.surface_flight = None;
         self.active = true;
@@ -91,9 +123,28 @@ impl RocketFlight {
         self.vel = vel;
         self.pitch = 0.0;
         self.yaw = 0.0;
-        self.fuel = ROCKET_FUEL_MAX;
+        // No free refuel on transit burns — the caller charges the burn cost.
+        self.fuel = self.fuel.clamp(0.0, self.capacity());
         self.parachute_open = false;
+        self.autopilot = false;
         self.body = target;
+    }
+
+    /// Tank capacity — `fuel_max` when a loadout synced it, legacy max before.
+    pub fn capacity(&self) -> f32 {
+        if self.fuel_max > 0.0 {
+            self.fuel_max
+        } else {
+            ROCKET_FUEL_MAX
+        }
+    }
+
+    pub fn burn_rate_factor(&self) -> f32 {
+        if self.burn_factor > 0.0 {
+            self.burn_factor
+        } else {
+            1.0
+        }
     }
 
     pub fn end_surface(&mut self) {
@@ -102,6 +153,7 @@ impl RocketFlight {
         self.vel = Vec3::ZERO;
         self.surface_flight = None;
         self.parachute_open = false;
+        self.autopilot = false;
     }
 
     pub fn blocks_walking(&self) -> bool {
@@ -121,7 +173,7 @@ impl RocketFlight {
     }
 
     pub fn fuel_pct(&self) -> f32 {
-        (self.fuel / ROCKET_FUEL_MAX * 100.0).clamp(0.0, 100.0)
+        (self.fuel / self.capacity() * 100.0).clamp(0.0, 100.0)
     }
 
     pub fn in_vacuum(&self) -> bool {
@@ -133,10 +185,25 @@ impl RocketFlight {
     }
 }
 
+/// Point the ship where the pilot looks (mouse / drag) — the chase camera
+/// follows, so flying feels like aiming on foot. Autopilot keeps its heading.
+fn steer_flight_from_look(
+    look: Res<crate::input::CameraLookIntent>,
+    mut flight: ResMut<RocketFlight>,
+) {
+    if !flight.active || flight.phase == FlightPhase::Surface || flight.autopilot {
+        return;
+    }
+    flight.yaw = look.yaw;
+    flight.pitch = look.pitch.clamp(-1.45, 1.45);
+}
+
 fn try_surface_launch(
     actions: Res<TouchActions>,
     region: Res<RegionRuntime>,
     world_ctx: Res<WorldContextRuntime>,
+    target: Res<crate::targeting::LookTarget>,
+    hold: Res<crate::input::HoldInteractState>,
     mut flight: ResMut<RocketFlight>,
     player: Query<&SimState, With<Player>>,
 ) {
@@ -144,6 +211,11 @@ fn try_surface_launch(
         return;
     }
     if !actions.action {
+        return;
+    }
+    // USE while aiming at an interactable (deposit, beacon, machine) or mid-hold
+    // must interact, not ignite — otherwise mining on Luna/planets is impossible.
+    if target.kind.is_some() || hold.active {
         return;
     }
     let Ok(sim) = player.get_single() else {
@@ -182,13 +254,13 @@ pub fn tick_rocket_flight(
     mut region: ResMut<RegionRuntime>,
     mut world_ctx: ResMut<WorldContextRuntime>,
     mut launch_atmo: ResMut<crate::scene::LaunchAtmosphere>,
-    mut space: ResMut<SpaceWorldState>,
     mut moon: ResMut<MoonWorldState>,
     mut planet: ResMut<PlanetWorldState>,
     mut cleanup: ResMut<CelestialCleanup>,
     layout: Res<WorldLayout>,
     collision: Res<WorldCollision>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
+    mut ap_retarget: Local<f32>,
 ) {
     if !flight.active || flight.phase == FlightPhase::Surface {
         return;
@@ -202,14 +274,20 @@ pub fn tick_rocket_flight(
         flight.body = dominant_body_at(pos, t);
     }
 
-    flight.yaw += intent.move_x * ROCKET_ROT_SPEED * dt;
-    flight.pitch = (flight.pitch + intent.move_z * ROCKET_ROT_SPEED * dt).clamp(-1.2, 1.2);
+    // Stick input hands control back to the pilot — no explicit cancel button.
+    if flight.autopilot && (intent.move_x.abs() > 0.25 || intent.move_z.abs() > 0.25) {
+        flight.autopilot = false;
+        eprintln!("ha-flight: autopilot disengaged — manual input");
+    }
 
+    // Aim-based steering: `steer_flight_from_look` (Update) already set yaw/pitch
+    // from the look direction (mouse on PC / drag on mobile), so the ship points
+    // where you look and the chase camera follows — same feel as on foot.
+    // Thrust along the rocket's nose (+Y of the same rotation the visual and the
+    // camera use — see `flight_world_transform`): pitch 0 = straight up.
     let thrust_dir = {
-        let cp = flight.pitch.cos();
-        let cy = flight.yaw.cos();
-        let sy = flight.yaw.sin();
-        Vec3::new(sy * cp, cp * cy.max(0.01), -cy * cp).normalize_or_zero()
+        let rot = Quat::from_rotation_y(flight.yaw) * Quat::from_rotation_x(flight.pitch);
+        (rot * Vec3::Y).normalize_or_zero()
     };
 
     let mut accel = match flight.surface_flight {
@@ -222,7 +300,7 @@ pub fn tick_rocket_flight(
         let alt_gp = altitude_above_planet_gameplay(body, pos);
         let escape_alt = body_walk_radius(body) * 0.2;
         if alt_gp > escape_alt || in_vacuum(pos) {
-            flight.pos = Vec3::from_array(remap_planet_gameplay_to_orbital(body, pos));
+            flight.pos = Vec3::from_array(remap_planet_gameplay_to_orbital_at(body, pos, t));
             flight.surface_flight = None;
             flight.body = body;
             eprintln!("ha-flight: {:?} gameplay → orbital", body);
@@ -250,23 +328,63 @@ pub fn tick_rocket_flight(
         flight.fuel = (flight.fuel - 25.0 * dt).max(0.0);
     }
 
+    // Mass taxes the burn rate, never the acceleration (arcade §23). The
+    // autopilot burns slightly leaner as its incentive.
+    let burn_scale = flight.burn_rate_factor()
+        * if flight.autopilot {
+            ha_shared::AUTOPILOT_BURN_EFFICIENCY
+        } else {
+            1.0
+        };
     if retro_hold && flight.fuel > 0.0 && flight.vel.length() > 0.5 {
         let retro = -flight.vel.normalize_or_zero();
         accel += retro * ROCKET_RETRO_THRUST_M_S2;
-        flight.fuel = (flight.fuel - ROCKET_RETRO_FUEL_BURN_PER_S * dt).max(0.0);
+        flight.fuel = (flight.fuel - ROCKET_RETRO_FUEL_BURN_PER_S * burn_scale * dt).max(0.0);
         flight.phase = FlightPhase::Retro;
-    } else if actions.action && flight.fuel > 0.0 {
+    } else if (actions.action || intent.move_z > 0.3) && flight.fuel > 0.0 {
+        // Thrust forward along the nose: ACTION button (mobile) or W / forward
+        // stick (desktop) — you point with the look and push here.
         accel += thrust_dir * ROCKET_THRUST_M_S2;
-        flight.fuel = (flight.fuel - ROCKET_FUEL_BURN_PER_S * dt).max(0.0);
+        flight.fuel = (flight.fuel - ROCKET_FUEL_BURN_PER_S * burn_scale * dt).max(0.0);
         flight.phase = FlightPhase::Powered;
     } else {
         flight.phase = FlightPhase::Coast;
     }
 
+    // Autopilot mid-course correction: with ~30 min orbital periods a 180 s
+    // cruise sees the target move tens of degrees — re-aim the velocity at
+    // the led intercept (same `body_intercept_point` rule as the burn) ~1 Hz.
+    if flight.autopilot && flight.surface_flight.is_none() {
+        *ap_retarget += dt;
+        if *ap_retarget >= 1.0 {
+            *ap_retarget = 0.0;
+            let cruise = flight.vel.length();
+            if cruise > 1.0 {
+                let aim = Vec3::from_array(ha_shared::body_intercept_point(
+                    flight.body,
+                    t,
+                    flight.pos.to_array(),
+                    cruise,
+                ));
+                let dir = (aim - flight.pos).normalize_or_zero();
+                if dir.length_squared() > 1e-6 {
+                    flight.vel = dir * cruise;
+                }
+            }
+        }
+    }
+
     flight.vel += accel * dt;
     let speed = flight.vel.length();
-    if speed > ROCKET_MAX_V {
-        flight.vel = flight.vel * (ROCKET_MAX_V / speed);
+    // Fast cruise only in open vacuum; near a body's shell keep the tighter
+    // cap so descents are pilotable.
+    let max_v = if flight.surface_flight.is_none() && flight.in_vacuum() {
+        ROCKET_CRUISE_MAX_V
+    } else {
+        ROCKET_MAX_V
+    };
+    if speed > max_v {
+        flight.vel = flight.vel * (max_v / speed);
     }
     let step = flight.vel * dt;
     flight.pos += step;
@@ -275,8 +393,10 @@ pub fn tick_rocket_flight(
     launch_atmo.active = earth_alt < EARTH_ATMO_TOP_M * 1.5 && earth_alt > -10.0;
     launch_atmo.blend = (1.0 - earth_alt / (EARTH_ATMO_TOP_M * 1.5)).clamp(0.0, 1.0);
 
-    if flight.in_vacuum() && !space.spawned {
-        space.needs_spawn = true;
+    // Space is continuous FLIGHT, not a walk-around hub — do NOT auto-spawn
+    // the orbital station scenery on reaching vacuum. Stars + body impostors
+    // come from `flight_celestials` while flying.
+    if flight.in_vacuum() {
         cleanup.despawn_moon = false;
     }
     if !flight.surface_flight.is_some() {
@@ -488,10 +608,6 @@ fn sync_flight_world_state(
             region.active = RegionId::Overworld { gx: 0, gz: 0 };
         }
     }
-}
-
-pub fn earth_chunk_load_radius(_rocket: &RocketFlight) -> Option<i32> {
-    None
 }
 
 pub fn flight_world_transform(

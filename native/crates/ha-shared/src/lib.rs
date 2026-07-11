@@ -2,6 +2,7 @@
 //! The TypeScript sim remains authoritative for netcode until full parity tests land.
 
 pub mod assets;
+pub mod blocks;
 pub mod catalog_parity;
 pub mod celestial_bodies;
 pub mod classes;
@@ -29,8 +30,16 @@ pub mod luna_locomotion;
 pub mod luna_terrain;
 pub mod surface_locomotion;
 pub mod surface_deposits;
+pub mod surface_biome;
+pub mod surface_climate;
+pub mod surface_chunk;
+pub mod biome_content;
+pub mod surface_flora;
+pub mod building;
 pub mod world;
 pub mod world_context;
+pub mod nav_data;
+pub mod ship_mass;
 pub mod solar_light;
 pub mod solar_ephemeris;
 pub mod space_base;
@@ -106,7 +115,8 @@ pub use flight_physics::{
     gravity_accel_planet_gameplay, in_vacuum, moon_center, parachute_drag,
     remap_luna_gameplay_to_orbital, should_auto_deploy_parachute, sun_proximity_damage,
     surface_normal, surface_normal_at, surface_world_pos, surface_world_pos_at,
-    effective_safe_landing_v, FlightPhase, ROCKET_FUEL_BURN_PER_S, ROCKET_FUEL_MAX, ROCKET_MAX_V,
+    effective_safe_landing_v, FlightPhase, ROCKET_CRUISE_MAX_V, ROCKET_FUEL_BURN_PER_S,
+    ROCKET_FUEL_MAX, ROCKET_MAX_V,
     ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2, ROCKET_ROT_SPEED, ROCKET_THRUST_M_S2,
     SAFE_LANDING_V, PARACHUTE_DEPLOY_ALT_M,
 };
@@ -114,7 +124,8 @@ pub use planet_surface::{
     altitude_above_planet_gameplay, block_surface_steep_step, block_surface_unwalkable_ascent,
     follow_surface_ground, planet_dir_from_tangent, planet_displacement_at_dir,
     planet_gameplay_center, planet_gameplay_world_pos, planet_ground_y_at, planet_tangent_from_dir,
-    planet_tangent_half, remap_planet_gameplay_to_orbital, surface_relief_at, surface_slope_at,
+    planet_tangent_half, remap_planet_gameplay_to_orbital, remap_planet_gameplay_to_orbital_at,
+    surface_relief_at, surface_slope_at,
 };
 pub use luna_locomotion::step_luna_movement;
 pub use luna_terrain::{
@@ -124,13 +135,40 @@ pub use luna_terrain::{
     luna_tangent_from_dir, luna_wrap_tangent, luna_clamp_tangent, luna_crater_rim_markers,
     LUNA_TANGENT_HALF,
 };
-pub use surface_locomotion::step_surface_movement;
+pub use blocks::{
+    cell_of, is_block_item, raycast_terrain_place_cell, BlockCell, PlacedBlockKind,
+    PlacedBlockWorld, BLOCK_STEP_UP,
+};
+pub use surface_locomotion::{
+    effective_ground_y, step_surface_creative_fly, step_surface_movement, step_surface_movement_with_blocks,
+};
 pub use surface_deposits::{
     generate_earth_deposits, generate_luna_deposits, generate_planet_deposits, SurfaceDeposit,
 };
+pub use surface_biome::{surface_biome_at, SurfaceBiome};
+pub use surface_climate::{sample_climate, ClimateSample};
+pub use surface_chunk::{
+    chunk_center, chunk_key_at, generate_chunk_deposits, generate_chunk_flora,
+    surface_chunk_load_radius, SURFACE_CHUNK_LOAD_RADIUS, SURFACE_CHUNK_SIZE,
+};
+pub use surface_flora::FloraProp;
+pub use building::{
+    damage_build_piece, preview_placement, snap_scalar, snap_yaw_quarter, BuildPieceKind,
+    BuildPlacementPreview, PlacedBuildPiece, BUILD_FLOOR_THICK, BUILD_GRID, BUILD_PIECE_HP,
+    BUILD_WALL_HEIGHT,
+};
+pub use nav_data::{
+    probe_transmit_secs, probe_travel_secs, NavData, ProbeMission, ProbePhase,
+    PROBE_SCAN_SECS, PROBE_SPEED_FACTOR,
+};
+pub use ship_mass::{
+    burn_factor, fuel_max_for_tanks, ship_mass_t, transit_fuel_cost,
+    AUTOPILOT_BURN_EFFICIENCY, FUEL_CAP_PER_TANK, MASS_REF_T, TRANSIT_FUEL_MARGIN,
+};
 pub use solar_ephemeris::{
-    body_center_at, direction_to, earth_center_at, gameplay_shell_center_at, moon_center_at,
-    sun_position,
+    body_center_at, body_intercept_point, direction_to, earth_center_at,
+    gameplay_shell_center_at, moon_center_at, plan_transit, sun_position,
+    transit_cruise_secs, TransitPlan,
 };
 pub use world::{
     collision_obstacles, generate_world, ground_height_at, ground_height_at_footprint,

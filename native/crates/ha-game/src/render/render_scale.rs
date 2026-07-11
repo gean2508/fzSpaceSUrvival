@@ -1,9 +1,9 @@
 //! Keep the 3D camera rendering directly to the window (no offscreen blit).
+//! Internal scale blit regressed on Redmi — geometry + shader tier cuts are preferred.
 
 use bevy::prelude::*;
 use bevy::render::camera::RenderTarget;
 use bevy::window::{PrimaryWindow, WindowRef};
-use ha_shared::Ps1Retro;
 
 use crate::camera::GameCamera;
 use crate::input::calibration::DEFAULT_RENDER_SCALE;
@@ -47,12 +47,13 @@ fn sync_render_target(
     state.size = UVec2::new(win.physical_width().max(64), win.physical_height().max(64));
     state.image = None;
     game_camera.is_active = true;
+    game_camera.order = 0;
     game_camera.target = RenderTarget::Window(WindowRef::Primary);
-    game_camera.clear_color = ClearColorConfig::Custom(Color::srgb(
-        Ps1Retro::SKY_ZENITH[0],
-        Ps1Retro::SKY_ZENITH[1],
-        Ps1Retro::SKY_ZENITH[2],
-    ));
+    // Usar el `ClearColor` GLOBAL (lo maneja `sky_clock` en la Tierra y
+    // `transition_zone_atmosphere` en Luna/espacio/cueva → oscuro fuera de la
+    // Tierra). Antes se forzaba a SKY_ZENITH (azul Tierra) cada frame → la Luna
+    // tenía fondo azul en vez de espacio negro.
+    game_camera.clear_color = ClearColorConfig::Default;
 }
 
 /// Used at startup before UiLayoutConfig is loaded.

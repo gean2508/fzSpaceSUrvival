@@ -20,6 +20,7 @@ pub enum InteractTargetKind {
     SpaceStationModule,
     LunarReturn,
     PlanetReturn,
+    ProbeConsole,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +35,7 @@ pub enum InteractActionKind {
     ReturnEarth,
     TravelLuna,
     TravelBody,
+    LaunchProbe,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -115,6 +117,10 @@ pub static INTERACTION_RULES: &[InteractionRule] = &[
         None,
     ),
     rule("hand", InteractTargetKind::Tree, InteractActionKind::Gather, 2200, Some("wood"), None),
+    // Placed voxel blocks — break refunds the block's own item (handler decides).
+    rule("hand", InteractTargetKind::Block, InteractActionKind::Mine, 750, None, None),
+    rule("pickaxe", InteractTargetKind::Block, InteractActionKind::Mine, 350, None, None),
+    rule("axe", InteractTargetKind::Block, InteractActionKind::Mine, 450, None, None),
     rule("hand", InteractTargetKind::Rock, InteractActionKind::None, 0, None, None),
     rule("hand", InteractTargetKind::OreIron, InteractActionKind::None, 0, None, None),
     rule("hand", InteractTargetKind::OreGold, InteractActionKind::None, 0, None, None),
@@ -206,6 +212,29 @@ pub static INTERACTION_RULES: &[InteractionRule] = &[
         None,
         None,
     ),
+    rule(
+        "hand",
+        InteractTargetKind::ProbeConsole,
+        InteractActionKind::LaunchProbe,
+        2000,
+        None,
+        None,
+    ),
+    // --- Tiered tools (Minecraft progression) --------------------------------
+    // Axes chop trees faster than bare hands.
+    rule("wood_axe", InteractTargetKind::Tree, InteractActionKind::Gather, 1100, Some("wood"), None),
+    rule("stone_axe", InteractTargetKind::Tree, InteractActionKind::Gather, 750, Some("wood"), None),
+    // Wood pickaxe: stone + gems only. It has NO ore rule, so `resolve_interaction`
+    // falls back to hand → None → ore stays gated until a stone pickaxe.
+    rule("wood_pickaxe", InteractTargetKind::Rock, InteractActionKind::Mine, 900, Some("stone"), None),
+    rule("wood_pickaxe", InteractTargetKind::GemBlue, InteractActionKind::Mine, 1000, Some("gem_blue"), None),
+    rule("wood_pickaxe", InteractTargetKind::GemRed, InteractActionKind::Mine, 1000, Some("gem_red"), None),
+    // Stone pickaxe: unlocks iron/gold ore.
+    rule("stone_pickaxe", InteractTargetKind::Rock, InteractActionKind::Mine, 650, Some("stone"), None),
+    rule("stone_pickaxe", InteractTargetKind::OreIron, InteractActionKind::Mine, 900, Some("iron_ingot"), None),
+    rule("stone_pickaxe", InteractTargetKind::OreGold, InteractActionKind::Mine, 1050, Some("gold_ingot"), None),
+    rule("stone_pickaxe", InteractTargetKind::GemBlue, InteractActionKind::Mine, 900, Some("gem_blue"), None),
+    rule("stone_pickaxe", InteractTargetKind::GemRed, InteractActionKind::Mine, 900, Some("gem_red"), None),
 ];
 
 pub fn interact_target_for_kind(kind: crate::world::InteractableKind) -> InteractTargetKind {
@@ -310,7 +339,18 @@ mod tests {
 
     #[test]
     fn rule_count_stable() {
-        assert_eq!(INTERACTION_RULES.len(), 24);
+        // 28 base + 10 tiered tool rules (wood/stone axe + pickaxe, jul 2026).
+        assert_eq!(INTERACTION_RULES.len(), 38);
+    }
+
+    #[test]
+    fn block_rules_resolve() {
+        let r = resolve_interaction(Some("pickaxe"), InteractTargetKind::Block).unwrap();
+        assert_eq!(r.kind, InteractActionKind::Mine);
+        assert!(r.duration_ms < 800);
+        // Hand fallback also breaks blocks, slower.
+        let hand = resolve_interaction(Some("hand"), InteractTargetKind::Block).unwrap();
+        assert!(hand.duration_ms > r.duration_ms);
     }
 
     #[test]

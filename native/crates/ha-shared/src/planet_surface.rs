@@ -188,27 +188,42 @@ pub fn altitude_above_planet_gameplay(body: CelestialBody, pos: [f32; 3]) -> f32
 }
 
 pub fn remap_planet_gameplay_to_orbital(body: CelestialBody, pos: [f32; 3]) -> [f32; 3] {
-    if body == CelestialBody::Moon {
-        let gp = luna_gameplay_center();
-        let oc = body_center(CelestialBody::Moon);
-        let offset = [pos[0] - gp[0], pos[1] - gp[1], pos[2] - gp[2]];
-        let dist = dist3(pos, gp).max(body_walk_radius(body) + 0.5);
-        let n = normalize3(offset);
-        return [
-            oc[0] + n[0] * dist,
-            oc[1] + n[1] * dist,
-            oc[2] + n[2] * dist,
-        ];
+    remap_planet_gameplay_to_orbital_at(body, pos, 0.0)
+}
+
+/// Time-aware remap — with compressed orbital periods (~30 min) the static
+/// `body_center` variant popped an escaping ship out at the planet's t=0
+/// position, potentially half an orbit away from where it visibly is.
+pub fn remap_planet_gameplay_to_orbital_at(
+    body: CelestialBody,
+    pos: [f32; 3],
+    t_secs: f32,
+) -> [f32; 3] {
+    // CONTINUIDAD (fase 1): la Tierra es un marco ÚNICO — caminable == orbital
+    // (mismo centro fijo, mismo radio 1500). El remap es identidad: despegar no
+    // teletransporta. Cortocircuito explícito para blindar contra drift FP.
+    if body == CelestialBody::Earth {
+        return pos;
     }
-    let gp = planet_gameplay_center(body);
-    let oc = body_center(body);
+    let gp = if body == CelestialBody::Moon {
+        luna_gameplay_center()
+    } else {
+        planet_gameplay_center(body)
+    };
+    let oc = crate::solar_ephemeris::body_center_at(body, t_secs);
     let offset = [pos[0] - gp[0], pos[1] - gp[1], pos[2] - gp[2]];
-    let dist = dist3(pos, gp).max(body_walk_radius(body) + 0.5);
     let n = normalize3(offset);
+    // Preserve ALTITUDE above the surface, not the raw distance. Moon/planets
+    // keep a near-origin gameplay frame whose radius already matches the
+    // orbital radius, so altitude-above-surface maps 1:1 across the two frames.
+    let gp_r = body_walk_radius(body);
+    let orbital_r = crate::celestial_bodies::body_radius(body);
+    let alt = (dist3(pos, gp) - gp_r).max(0.5);
+    let orbital_dist = orbital_r + alt;
     [
-        oc[0] + n[0] * dist,
-        oc[1] + n[1] * dist,
-        oc[2] + n[2] * dist,
+        oc[0] + n[0] * orbital_dist,
+        oc[1] + n[1] * orbital_dist,
+        oc[2] + n[2] * orbital_dist,
     ]
 }
 

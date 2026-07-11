@@ -15,7 +15,7 @@ pub struct ViewTargetPlugin;
 impl Plugin for ViewTargetPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ViewTarget>()
-            .add_systems(Update, (sync_view_target_observer, hide_player_during_remote));
+            .add_systems(Update, sync_view_target_observer);
     }
 }
 
@@ -107,16 +107,6 @@ fn sync_view_target_observer(
     }
 }
 
-fn hide_player_during_remote(
-    view: Res<ViewTarget>,
-    mut body: Query<&mut Visibility, (With<Player>, With<Mesh3d>)>,
-) {
-    let vis = if view.is_remote() {
-        Visibility::Hidden
-    } else {
-        Visibility::Visible
-    };
-    for mut v in &mut body {
-        *v = vis;
-    }
-}
+// Player mesh visibility is owned by `camera::sync_player_mesh_for_view`
+// (view mode + flight + remote aware) — a second writer here caused per-frame
+// flicker fighting over the same component.

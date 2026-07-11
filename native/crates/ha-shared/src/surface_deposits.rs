@@ -1,6 +1,7 @@
 //! Procedural mineral deposits on sphere surfaces (Luna + visitable planets).
 
 use crate::celestial_bodies::CelestialBody;
+use crate::constants::{LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z};
 use crate::luna_terrain::LUNA_TANGENT_HALF;
 use crate::planet_surface::planet_tangent_half;
 use crate::rng::Rng;
@@ -21,7 +22,7 @@ const PLANET_SPAWN_CLEAR: f32 = 5.0;
 const MIN_DEPOSIT_SPACING: f32 = 4.5;
 
 pub fn generate_earth_deposits(seed: u32) -> Vec<SurfaceDeposit> {
-    generate_sphere_deposits(CelestialBody::Earth, seed, 36, 8.0)
+    generate_sphere_deposits(CelestialBody::Earth, seed, 52, 22.0)
 }
 
 pub fn generate_luna_deposits(seed: u32) -> Vec<SurfaceDeposit> {
@@ -50,7 +51,7 @@ fn generate_sphere_deposits(
         attempts += 1;
         let tx = rng.range(-tangent_half * 0.85, tangent_half * 0.85);
         let tz = rng.range(-tangent_half * 0.85, tangent_half * 0.85);
-        if tx * tx + tz * tz < spawn_clear * spawn_clear {
+        if too_close_to_spawn(body, tx, tz, spawn_clear) {
             continue;
         }
         if out.iter().any(|d| {
@@ -69,6 +70,15 @@ fn generate_sphere_deposits(
         });
     }
     out
+}
+
+fn too_close_to_spawn(body: CelestialBody, tx: f32, tz: f32, clear: f32) -> bool {
+    if body == CelestialBody::Earth {
+        let dx = tx - LAUNCH_PAD_ZONE_X;
+        let dz = tz - LAUNCH_PAD_ZONE_Z;
+        return dx * dx + dz * dz < clear * clear;
+    }
+    tx * tx + tz * tz < clear * clear
 }
 
 struct DepositWeights {

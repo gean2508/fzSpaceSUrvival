@@ -9,6 +9,7 @@ use ha_shared::{
 use crate::lunar_surface::build_planet_patch_mesh;
 use crate::materials::{block_std_material, luna_regolith_std};
 use crate::planet_world::ActivePlanet;
+use crate::quality::{surface_patch_half, surface_patch_step as quality_patch_step};
 use crate::rocket_flight::RocketFlight;
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, SimState};
@@ -51,11 +52,7 @@ pub fn default_spawn_tangent(body: CelestialBody) -> (f32, f32) {
 }
 
 pub fn patch_mesh_step(body: CelestialBody) -> f32 {
-    if body == CelestialBody::Moon {
-        LUNA_PATCH_STEP
-    } else {
-        SURFACE_PATCH_STEP
-    }
+    quality_patch_step(body)
 }
 
 pub fn spawn_celestial_surface_patch<D: Component + Clone>(
@@ -69,8 +66,9 @@ pub fn spawn_celestial_surface_patch<D: Component + Clone>(
     name: impl Into<String>,
     extra: impl Bundle,
 ) {
+    let half = surface_patch_half();
     let step = patch_mesh_step(body);
-    let mesh = meshes.add(build_planet_patch_mesh(body, cx, cz, SURFACE_PATCH_HALF, step));
+    let mesh = meshes.add(build_planet_patch_mesh(body, cx, cz, half, step));
     let material = patch_material(body, std_mats);
 
     commands.spawn((
@@ -88,10 +86,27 @@ fn patch_material(
     body: CelestialBody,
     std_mats: &mut Assets<StandardMaterial>,
 ) -> Handle<StandardMaterial> {
-    if body == CelestialBody::Moon {
-        std_mats.add(luna_regolith_std())
-    } else {
-        std_mats.add(block_std_material(body_def(body).color))
+    // PERF (Redmi): el suelo cubre casi toda la pantalla; con PBR lit es el
+    // mayor costo de fill-rate en GLES. En Android → unlit (respeta vertex
+    // color; el día/noche lo dan cielo + ambiente, no la luz por-fragmento del
+    // suelo). Desktop mantiene lit lambert.
+    #[cfg(target_os = "android")]
+    {
+        let rgb = if body == CelestialBody::Moon {
+            [0.62, 0.63, 0.67]
+        } else {
+            body_def(body).color
+        };
+        std_mats.add(crate::materials::unlit_srgb(rgb))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        if body == CelestialBody::Moon {
+            std_mats.add(luna_regolith_std())
+        } else {
+            // Basic lit (lambert, no shadows) — vertex albedo multiplies base.
+            std_mats.add(crate::materials::lit_surface_std(body_def(body).color))
+        }
     }
 }
 
@@ -121,7 +136,10 @@ fn stream_active_surface_patch(
     mut stream: ResMut<SurfacePatchStreamState>,
     mut patches: Query<(&CelestialSurfacePatch, &mut Mesh3d)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut span: ResMut<crate::debug::CpuSpanStats>,
 ) {
+    // `terrain=` in ha-span — patch rebuild spikes every 28 m live here.
+    let _guard = crate::debug::span_guard(&mut span, crate::debug::CpuSpanSlot::Terrain);
     let Some(body) = active_landable_body(&region, &world_ctx, &flight, &planet) else {
         return;
     };
@@ -150,11 +168,12 @@ fn stream_active_surface_patch(
     }
 
     let step = patch_mesh_step(body);
+    let half = surface_patch_half();
     let new_mesh = meshes.add(build_planet_patch_mesh(
         body,
         stream.center_tx,
         stream.center_tz,
-        SURFACE_PATCH_HALF,
+        half,
         step,
     ));
 

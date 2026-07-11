@@ -4,7 +4,6 @@ use ha_shared::{interact_radius_for, interact_reach_for, InteractTargetKind};
 use crate::camera::look_forward;
 use crate::debug::{span_guard, CpuSpanSlot, CpuSpanStats};
 use crate::input::CameraLookIntent;
-use crate::celestial_sphere::{moon_sphere_center, moon_sphere_radius, ray_sphere_t};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::Player;
 
@@ -22,14 +21,17 @@ pub struct LookTarget {
     pub hit_point: Vec3,
     pub block_cell: Option<(i32, i32, i32)>,
     pub place_cell: Option<(i32, i32, i32)>,
+    /// Streamed tree (chunk cx, cz, prop id) — no entity, harvest via `FloraHarvest`.
+    pub flora_cell: Option<(i32, i32, u32)>,
 }
 
 #[derive(Resource, Default)]
-struct TargetingCache {
+pub(crate) struct TargetingCache {
     player_hash: u32,
     yaw_bits: u32,
     pitch_bits: u32,
     region_tag: u8,
+    flora_version: u64,
 }
 
 pub struct TargetingPlugin;
@@ -89,9 +91,10 @@ fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool 
     }
 }
 
-fn update_look_target(
+pub(crate) fn update_look_target(
     look: Res<CameraLookIntent>,
     region: Res<RegionRuntime>,
+    flora: Res<crate::harvest::FloraHarvest>,
     player: Query<&Transform, With<Player>>,
     targets: Query<(Entity, &GlobalTransform, &InteractTarget)>,
     mut current: ResMut<LookTarget>,
@@ -104,8 +107,10 @@ fn update_look_target(
         *current = LookTarget::default();
         return;
     };
-    let origin = player_tf.translation + Vec3::Y * 1.55;
-    let dir = look_forward(&look);
+    // Player rotation is surface-aligned on sphere worlds — ray must match the camera.
+    let up = (player_tf.rotation * Vec3::Y).normalize_or_zero();
+    let origin = player_tf.translation + up * 1.55;
+    let dir = crate::camera::surface_look_forward(up, &look);
     if dir.length_squared() < 0.001 {
         *current = LookTarget::default();
         return;
@@ -119,6 +124,7 @@ fn update_look_target(
         && cache.yaw_bits == yaw_bits
         && cache.pitch_bits == pitch_bits
         && cache.region_tag == region_tag
+        && cache.flora_version == flora.version
     {
         return;
     }
@@ -126,6 +132,7 @@ fn update_look_target(
     cache.yaw_bits = yaw_bits;
     cache.pitch_bits = pitch_bits;
     cache.region_tag = region_tag;
+    cache.flora_version = flora.version;
 
     let mut best: Option<(Entity, InteractTargetKind, f32, Vec3)> = None;
     for (entity, gtf, target) in &targets {
@@ -158,8 +165,26 @@ fn update_look_target(
             hit_point: hit,
             block_cell: None,
             place_cell: None,
+            flora_cell: None,
         };
         return;
+    }
+
+    // No entity target — fall back to streamed trees (no per-tree entity).
+    if matches!(region.active, RegionId::Overworld { .. }) {
+        let reach = interact_reach_for(InteractTargetKind::Tree);
+        if let Some((cx, cz, id)) = flora.ray_hit(origin, dir, reach) {
+            *current = LookTarget {
+                entity: None,
+                kind: Some(InteractTargetKind::Tree),
+                distance: reach,
+                hit_point: origin + dir * reach,
+                block_cell: None,
+                place_cell: None,
+                flora_cell: Some((cx, cz, id)),
+            };
+            return;
+        }
     }
 
     *current = LookTarget::default();
@@ -176,53 +201,3 @@ fn region_tag(region: &RegionId) -> u8 {
     }
 }
 
-fn update_space_moon_target(
-    look: &CameraLookIntent,
-    player: &Query<&Transform, With<Player>>,
-    current: &mut LookTarget,
-    cache: &mut TargetingCache,
-    region: &RegionRuntime,
-) {
-    let Ok(player_tf) = player.get_single() else {
-        *current = LookTarget::default();
-        return;
-    };
-    let origin = player_tf.translation + Vec3::Y * 1.55;
-    let dir = look_forward(look);
-    if dir.length_squared() < 0.001 {
-        *current = LookTarget::default();
-        return;
-    }
-    let region_tag = region_tag(&region.active);
-    let pos_hash = (player_tf.translation.x.to_bits() ^ player_tf.translation.z.to_bits()) as u32;
-    let yaw_bits = look.yaw.to_bits();
-    let pitch_bits = look.pitch.to_bits();
-    if cache.player_hash == pos_hash
-        && cache.yaw_bits == yaw_bits
-        && cache.pitch_bits == pitch_bits
-        && cache.region_tag == region_tag
-    {
-        return;
-    }
-    cache.player_hash = pos_hash;
-    cache.yaw_bits = yaw_bits;
-    cache.pitch_bits = pitch_bits;
-    cache.region_tag = region_tag;
-
-    let center = moon_sphere_center();
-    let radius = moon_sphere_radius();
-    if let Some(along) = ray_sphere_t(origin, dir, center, radius) {
-        if along > 0.2 && along < interact_reach_for(InteractTargetKind::SpaceTransitLuna) {
-            *current = LookTarget {
-                entity: None,
-                kind: Some(InteractTargetKind::SpaceTransitLuna),
-                distance: along,
-                hit_point: origin + dir * along,
-                block_cell: None,
-                place_cell: None,
-            };
-            return;
-        }
-    }
-    *current = LookTarget::default();
-}

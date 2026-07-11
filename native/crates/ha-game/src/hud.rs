@@ -25,6 +25,7 @@ use ha_shared::{
     LAUNCH_PAD_MODULE_COUNT,
 };
 use crate::ui_theme::{self, UiButtonState, UiButtonTone};
+use crate::ghibli_atmosphere::PlayerLanternControl;
 use crate::platform;
 
 mod icons;
@@ -45,6 +46,15 @@ use inventory_ui::{
     InventorySlotName,
     HeldItemGhost, GRID_COLS, GRID_ROWS, HOTBAR_ITEM_SLOTS, HOTBAR_SLOTS_TOTAL,
 };
+
+#[derive(Component)]
+struct LanternToggleRoot;
+
+#[derive(Component)]
+struct LanternToggleButton;
+
+#[derive(Component)]
+struct LanternToggleLabel;
 
 pub struct PixelHudPlugin;
 
@@ -87,8 +97,14 @@ impl Plugin for PixelHudPlugin {
             ))
             .add_systems(Update, (
                 equip_from_hotbar_selection,
+                equip_from_hotbar_click,
+                equip_toast_system,
                 hotbar_hammer_system,
+                sync_lantern_equipped,
+                lantern_toggle_system,
+                update_lantern_toggle_ui,
                 update_held_item_ghost,
+                scroll_craft_list,
             ))
             .add_systems(
                 Update,
@@ -98,9 +114,6 @@ impl Plugin for PixelHudPlugin {
                         .after(crate::machines::try_place_on_hold)
                         .after(crate::launch_pad::try_assemble_on_hold)
                         .after(crate::launch_pad::try_ignite_on_hold)
-                        .after(crate::space_travel::try_assemble_station_module)
-                        .after(crate::space_travel::try_space_reentry)
-                        .after(crate::space_travel::try_space_transit_luna)
                         .after(crate::space_travel::try_lunar_return_to_space),
                 ),
             );
@@ -176,13 +189,13 @@ struct BagPanelBase {
 }
 
 #[derive(Component)]
-struct HoldBarRoot;
+pub(crate) struct HoldBarRoot;
 
 #[derive(Component)]
-struct HoldBarFill;
+pub(crate) struct HoldBarFill;
 
 #[derive(Component)]
-struct AbilityCooldownRing;
+pub(crate) struct AbilityCooldownRing;
 
 #[derive(Component)]
 struct InteractPromptText;
@@ -267,7 +280,7 @@ impl Default for BagPanelState {
 }
 
 #[derive(Resource, Default)]
-struct HudDisplayCache {
+pub(crate) struct HudDisplayCache {
     initialized: bool,
     heart_units: i32,
     energy_units: i32,
@@ -385,6 +398,8 @@ fn spawn_hud_once(
             });
 
         spawn_hotbar(parent, &layout, short, heart);
+        spawn_equip_toast(parent, &layout, heart);
+        spawn_lantern_toggle(parent, &layout, short);
         spawn_interact_hud(parent, &layout, short);
     });
 }
@@ -663,6 +678,56 @@ fn spawn_hotbar(parent: &mut ChildBuilder, layout: &TouchLayout, _short: f32, he
         });
 }
 
+fn spawn_lantern_toggle(parent: &mut ChildBuilder, layout: &TouchLayout, short: f32) {
+    let (_, _, total, bottom) = hotbar_layout_metrics(layout);
+    let btn_h = (short * 0.052).clamp(28.0, 40.0);
+    let btn_w = btn_h * 2.1;
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(game_ui::ui_center_left(layout, total) + total + 8.0),
+                bottom: Val::Px(bottom),
+                width: Val::Px(btn_w),
+                height: Val::Px(btn_h),
+                display: Display::None,
+                ..default()
+            },
+            LanternToggleRoot,
+            Name::new("LanternToggle"),
+        ))
+        .with_children(|root| {
+            root.spawn((
+                Button,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    border: UiRect::all(Val::Px(2.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(ui_theme::accent_cyan()),
+                BackgroundColor(ui_theme::button_bg(
+                    UiButtonTone::Use,
+                    UiButtonState::Normal,
+                )),
+                LanternToggleButton,
+            ))
+            .with_children(|btn| {
+                btn.spawn((
+                    Text::new("LAMP ON"),
+                    TextFont {
+                        font_size: (btn_h * 0.28).clamp(9.0, 12.0),
+                        ..default()
+                    },
+                    TextColor(ui_theme::text_primary()),
+                    LanternToggleLabel,
+                ));
+            });
+        });
+}
+
 fn update_hud_layout(
     layout: Res<TouchLayout>,
     mut hotbar: Query<&mut Node, (With<HotbarRoot>, Without<HotbarSlot>)>,
@@ -757,6 +822,7 @@ fn update_survival_hud(
     inv: Res<PlayerInventory>,
     pads: Res<LaunchPadWorld>,
     flight: Res<RocketFlight>,
+    loadout: Res<crate::rocket_flight::ShipLoadout>,
     mut cache: ResMut<HudDisplayCache>,
     mut prompts: Query<(&mut Text, &mut TextColor), With<InteractPromptText>>,
     mut prompt_roots: Query<(&mut BackgroundColor, &mut BorderColor), With<StatusPromptRoot>>,
@@ -771,6 +837,7 @@ fn update_survival_hud(
         &inv,
         &pads,
         &flight,
+        &loadout,
         player_pos,
     );
     if cache.prompt_line != prompt_line {
@@ -928,6 +995,40 @@ fn recipe_status(inv: &PlayerInventory, recipe: &CraftRecipe) -> (bool, String) 
     (false, format!("Need {}", missing.join(", ")))
 }
 
+/// Touch-drag + mouse-wheel scroll for the BAG panels (CRAFT recipe list AND
+/// the inventory grid). Both had `Overflow::scroll_y()` + `ScrollPosition` but
+/// no input driver, so content below the fold was unreachable on mobile.
+/// BAG-open gates gameplay input, so any drag while open scrolls. The hidden
+/// tab's ScrollPosition is harmless to touch.
+fn scroll_craft_list(
+    bag: Res<BagPanelState>,
+    touches: Res<Touches>,
+    mut wheel: EventReader<bevy::input::mouse::MouseWheel>,
+    mut sections: Query<
+        &mut ScrollPosition,
+        Or<(With<BagCraftSection>, With<BagInventorySection>)>,
+    >,
+) {
+    if !bag.open {
+        wheel.clear();
+        return;
+    }
+    let mut dy = 0.0f32;
+    for ev in wheel.read() {
+        dy -= ev.y * 26.0;
+    }
+    for t in touches.iter() {
+        dy -= t.delta().y;
+    }
+    if dy.abs() < 0.5 {
+        return;
+    }
+    for mut sp in &mut sections {
+        // Generous content bound (12 recipes / 8 inventory rows + machines).
+        sp.offset_y = (sp.offset_y + dy).clamp(0.0, 900.0);
+    }
+}
+
 fn build_machine_panel_text(
     player_pos: Option<Vec3>,
     inv: &PlayerInventory,
@@ -979,6 +1080,7 @@ fn build_interact_prompt(
     inv: &PlayerInventory,
     pads: &LaunchPadWorld,
     flight: &RocketFlight,
+    loadout: &crate::rocket_flight::ShipLoadout,
     player_pos: Option<Vec3>,
 ) -> String {
     if flight.active {
@@ -993,8 +1095,13 @@ fn build_interact_prompt(
         } else {
             ""
         };
+        let ap = if flight.autopilot { " · AUTOPILOT" } else { "" };
+        // Autonomy = seconds of continuous thrust left at this ship's mass.
+        let autonomy =
+            flight.fuel / (ha_shared::flight_physics::ROCKET_FUEL_BURN_PER_S * flight.burn_rate_factor()).max(0.01);
         return format!(
-            "FLIGHT — {body} · alt {alt:.0}m · {spd:.0} m/s · fuel {fuel:.0}% · {vac}{chute}{retro} · ACTION thrust · SHIFT/jump retro"
+            "FLIGHT — {body} · alt {alt:.0}m · {spd:.0} m/s · fuel {fuel:.0}% · masa {:.1}t · ~{autonomy:.0}s thrust · {vac}{chute}{retro}{ap} · ACTION thrust · SHIFT/jump retro",
+            loadout.mass_t
         );
     }
 
@@ -1038,6 +1145,15 @@ fn build_interact_prompt(
                 }
             }
         }
+        if kind == InteractTargetKind::Block {
+            if ha_shared::is_block_item(&equipped.item_id) {
+                return format!(
+                    "HOLD → Place {}",
+                    ha_shared::item_display_name(&equipped.item_id)
+                );
+            }
+            return "HOLD → Break block".to_string();
+        }
         if let Some(rule) = resolve_interaction(Some(equipped.item_id.as_str()), kind) {
             return match rule.kind {
                 InteractActionKind::Gather => {
@@ -1056,8 +1172,26 @@ fn build_interact_prompt(
                     "HOLD → Return to orbital hub".to_string()
                 }
                 InteractActionKind::ReturnEarth => "HOLD → Re-enter Earth".to_string(),
-                InteractActionKind::TravelLuna => "HOLD → Transit burn to Moon".to_string(),
-                InteractActionKind::TravelBody => "HOLD → Transit burn to planet".to_string(),
+                InteractActionKind::TravelLuna => {
+                    // Earth→Moon distance is effectively fixed (~52 km flight
+                    // metres) — cost preview without needing the clock.
+                    let secs = ha_shared::transit_cruise_secs(52_000.0);
+                    let cost = ha_shared::transit_fuel_cost(secs, flight.burn_rate_factor());
+                    format!(
+                        "HOLD → AUTOPILOT Luna · ~{secs:.0}s · {cost:.0} fuel (tenés {:.0}) · requiere nav data",
+                        flight.fuel
+                    )
+                }
+                InteractActionKind::TravelBody => {
+                    "HOLD → AUTOPILOT a planeta · coste según distancia · requiere nav data".to_string()
+                }
+                InteractActionKind::LaunchProbe => {
+                    if inv.qty("probe") > 0 {
+                        "HOLD → Launch nav probe".to_string()
+                    } else {
+                        "Need Nav Probe — BAG → CRAFT".to_string()
+                    }
+                }
                 InteractActionKind::Attack => "TAP → Ability".to_string(),
                 InteractActionKind::None => match kind {
                     InteractTargetKind::Rock
@@ -1069,6 +1203,13 @@ fn build_interact_prompt(
                 },
             };
         }
+    }
+
+    if ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some() {
+        return format!(
+            "HOLD → Place {}",
+            ha_shared::item_display_name(&equipped.item_id)
+        );
     }
 
     if equipped.item_id == "hammer" {
@@ -1148,6 +1289,9 @@ fn spawn_interact_hud(parent: &mut ChildBuilder, layout: &TouchLayout, short: f3
             width: Val::Px(ring),
             height: Val::Px(ring),
             border: UiRect::all(Val::Px(ui_theme::panel_border_width())),
+            // Hidden until an ability is actually on cooldown (the update
+            // system reveals it) — it was showing as a stray magenta square.
+            display: Display::None,
             ..default()
         },
         BorderColor(ui_theme::accent_magenta()),
@@ -1329,10 +1473,11 @@ fn spawn_bag_panel(
                                     } else {
                                         Display::None
                                     },
-                                    overflow: Overflow::clip(),
+                                    overflow: Overflow::scroll_y(),
                                     ..default()
                                 },
                                 BagInventorySection,
+                                ScrollPosition::default(),
                             ))
                             .with_children(|section| {
                                 section.spawn((
@@ -1395,11 +1540,10 @@ fn spawn_bag_panel(
                                 ScrollPosition::default(),
                             ))
                             .with_children(|section| {
+                                // All recipes are craftable from obtainable
+                                // materials now (the old id 2/3 skip hid the
+                                // wood pickaxe/axe after the recipe renumber).
                                 for recipe in CRAFT_RECIPES {
-                                    // MVP: hide recipes that need unobtainable items (gem/potion/leather).
-                                    if recipe.id == 2 || recipe.id == 3 {
-                                        continue;
-                                    }
                                     spawn_recipe_button(section, recipe, heart);
                                 }
                                 spawn_machine_select_button(
@@ -1908,6 +2052,7 @@ pub(crate) fn update_interact_hud(
     mut inv: ResMut<PlayerInventory>,
     mut inv_ui: ResMut<InventoryUiState>,
     mut persist: ResMut<InventoryPersistState>,
+    mut flora: ResMut<crate::harvest::FloraHarvest>,
     mut cache: ResMut<HudDisplayCache>,
     mut ui: ParamSet<(
         Query<&mut Node, With<HoldBarRoot>>,
@@ -1936,6 +2081,13 @@ pub(crate) fn update_interact_hud(
                                 && equipped.item_id == "hand"
                             {
                                 add_item_to_slots(&mut inv_ui, "sticks", 1);
+                            }
+                            // Chopping a streamed tree removes it from the world
+                            // (persisted, re-merges the batch without it).
+                            if kind == InteractTargetKind::Tree {
+                                if let Some((cx, cz, pid)) = target.flora_cell {
+                                    flora.harvest(ha_shared::CelestialBody::Earth, cx, cz, pid);
+                                }
                             }
                             flush_slots_to_inventory(&inv_ui, &mut inv);
                             cache.inv_signature = inventory_signature(&inv);
@@ -1998,6 +2150,77 @@ pub(crate) fn update_interact_hud(
         if let Ok((_, mut border)) = ui.p2().get_single_mut() {
             *border = BorderColor(ui_theme::accent_magenta().with_alpha(cooldown_alpha));
         }
+    }
+}
+
+fn sync_lantern_equipped(
+    equipped: Res<EquippedItem>,
+    mut ctrl: ResMut<PlayerLanternControl>,
+) {
+    ctrl.equipped = equipped.item_id == "lantern";
+}
+
+fn lantern_toggle_system(
+    keys: Res<ButtonInput<KeyCode>>,
+    equipped: Res<EquippedItem>,
+    editor: Res<crate::ui_editor::UiEditorState>,
+    gameplay_block: Res<UiGameplayBlock>,
+    mut ctrl: ResMut<PlayerLanternControl>,
+    mut buttons: Query<&Interaction, (With<LanternToggleButton>, Changed<Interaction>)>,
+) {
+    if equipped.item_id != "lantern" {
+        return;
+    }
+    if !editor.menu_open && !editor.enabled && !gameplay_block.blocked {
+        if keys.just_pressed(KeyCode::KeyL) {
+            ctrl.lit = !ctrl.lit;
+        }
+    }
+    for interaction in &buttons {
+        if *interaction == Interaction::Pressed {
+            ctrl.lit = !ctrl.lit;
+        }
+    }
+}
+
+fn update_lantern_toggle_ui(
+    equipped: Res<EquippedItem>,
+    ctrl: Res<PlayerLanternControl>,
+    layout: Res<TouchLayout>,
+    mut root: Query<(&mut Node, &mut Visibility), With<LanternToggleRoot>>,
+    mut labels: Query<&mut Text, With<LanternToggleLabel>>,
+    mut buttons: Query<&mut BackgroundColor, With<LanternToggleButton>>,
+) {
+    let show = equipped.item_id == "lantern";
+    let short = layout.width.min(layout.height);
+    let (_, _, total, bottom) = hotbar_layout_metrics(&layout);
+    let btn_h = (short * 0.052).clamp(28.0, 40.0);
+    let btn_w = btn_h * 2.1;
+
+    for (mut node, mut vis) in &mut root {
+        *vis = if show {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        node.left = Val::Px(game_ui::ui_center_left(&layout, total) + total + 8.0);
+        node.bottom = Val::Px(bottom);
+        node.width = Val::Px(btn_w);
+        node.height = Val::Px(btn_h);
+    }
+    let label = if ctrl.lit { "LAMP ON" } else { "LAMP OFF" };
+    for mut text in &mut labels {
+        if text.0 != label {
+            text.0 = label.to_string();
+        }
+    }
+    let tone = if ctrl.lit {
+        UiButtonState::Pressed
+    } else {
+        UiButtonState::Normal
+    };
+    for mut bg in &mut buttons {
+        *bg = BackgroundColor(ui_theme::button_bg(UiButtonTone::Use, tone));
     }
 }
 
@@ -2077,7 +2300,8 @@ fn update_held_item_ghost(
 fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
     matches!(
         kind,
-        InteractTargetKind::LaunchModule
+        InteractTargetKind::Block
+            | InteractTargetKind::LaunchModule
             | InteractTargetKind::LaunchIgnition
             | InteractTargetKind::SpaceReentry
             | InteractTargetKind::SpaceTransitLuna
@@ -2110,12 +2334,17 @@ fn append_hud_touch_blocks(
 fn sync_inventory_from_player(
     inv: Res<PlayerInventory>,
     mut ui: ResMut<InventoryUiState>,
+    mut equipped: ResMut<EquippedItem>,
     mut cache: ResMut<HudDisplayCache>,
 ) {
     let sig = inventory_signature(&inv);
     if !ui.loaded_from_disk {
         load_grid_from_inventory(&mut ui, &inv);
         ui.loaded_from_disk = true;
+        if ui.hotbar[0].item_id.as_deref() == Some("lantern") && ui.hotbar[0].qty > 0 {
+            ui.selected = Some(SlotId::Hotbar(0));
+            equipped.item_id = "lantern".to_string();
+        }
         cache.inv_signature = sig;
         return;
     }
@@ -2393,4 +2622,96 @@ fn equip_from_hotbar_selection(
     if equipped.item_id != *id {
         equipped.item_id = id.clone();
     }
+}
+
+/// Tapping/clicking a hotbar item cell selects + equips it — works for both
+/// touch (mobile) and mouse (desktop), so the hotbar is usable without the bag.
+fn equip_from_hotbar_click(
+    mut ui: ResMut<InventoryUiState>,
+    mut equipped: ResMut<EquippedItem>,
+    slots: Query<(&Interaction, &HotbarItemSlot), Changed<Interaction>>,
+) {
+    for (interaction, slot) in &slots {
+        if *interaction == Interaction::Pressed {
+            select_hotbar_slot(&mut ui, &mut equipped, slot.index);
+        }
+    }
+}
+
+/// How long the "en mano: X" toast stays before it starts vanishing, and the
+/// fade-out window (alpha ramps down over the final `FADE` seconds).
+const EQUIP_TOAST_HOLD: f32 = 1.1;
+const EQUIP_TOAST_FADE: f32 = 0.8;
+
+/// The floating "en mano: <item>" label that appears when the equipped item
+/// changes and then fades away (only the text fades — nothing stays on screen).
+#[derive(Component)]
+struct EquipToast {
+    /// Seconds of visible life remaining; 0 = hidden.
+    life: f32,
+}
+
+fn equip_toast_system(
+    time: Res<Time>,
+    equipped: Res<EquippedItem>,
+    mut last: Local<Option<String>>,
+    mut q: Query<(&mut EquipToast, &mut Text, &mut TextColor, &mut Node)>,
+) {
+    // Seed on first run so we don't flash a toast on boot.
+    if last.is_none() {
+        *last = Some(equipped.item_id.clone());
+        return;
+    }
+    let changed = last.as_deref() != Some(equipped.item_id.as_str());
+    if changed {
+        *last = Some(equipped.item_id.clone());
+    }
+    for (mut toast, mut text, mut color, mut node) in &mut q {
+        if changed {
+            let name = item_display_name(&equipped.item_id);
+            text.0 = format!("en mano: {name}");
+            toast.life = EQUIP_TOAST_HOLD + EQUIP_TOAST_FADE;
+            node.display = Display::Flex;
+        }
+        if toast.life > 0.0 {
+            toast.life = (toast.life - time.delta_secs()).max(0.0);
+            let alpha = (toast.life / EQUIP_TOAST_FADE).clamp(0.0, 1.0);
+            *color = TextColor(ui_theme::accent_cyan().with_alpha(alpha));
+            if toast.life <= 0.0 {
+                node.display = Display::None;
+            }
+        }
+    }
+}
+
+fn spawn_equip_toast(parent: &mut ChildBuilder, layout: &TouchLayout, heart: f32) {
+    let (slot, gap, _, bottom) = hotbar_layout_metrics(layout);
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                bottom: Val::Px(bottom + slot + gap + 6.0),
+                width: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Name::new("EquipToastRow"),
+        ))
+        .with_children(|row| {
+            row.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: (heart * 0.5).clamp(12.0, 18.0),
+                    ..default()
+                },
+                TextColor(ui_theme::accent_cyan().with_alpha(0.0)),
+                Node {
+                    display: Display::None,
+                    ..default()
+                },
+                EquipToast { life: 0.0 },
+            ));
+        });
 }

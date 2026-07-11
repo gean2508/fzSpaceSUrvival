@@ -102,11 +102,21 @@ if (removedLocks > 0) {
 
 const rustUpToDate = !forceRust && jniLibsUpToDate(JNI_LIBS, sourceRoots);
 
+// ABIs a compilar. Por defecto SOLO arm64-v8a (Redmi 10 en adelante y todo
+// equipo moderno es 64-bit; la de 32-bit armeabi-v7a duplica build/disco/APK
+// sin usarse). Override: ANDROID_ABIS="arm64-v8a,armeabi-v7a".
+const ABIS = (process.env.ANDROID_ABIS || "arm64-v8a")
+  .split(",")
+  .map((a) => a.trim())
+  .filter(Boolean);
+const abiFlags = ABIS.map((a) => `-t ${a}`).join(" ");
+
 if (rustUpToDate) {
   console.log("⊘ Skip cargo ndk — jniLibs al día (usá --rebuild-rust para forzar)");
 } else {
+  console.log(`▶ cargo ndk ABIs: ${ABIS.join(", ")}`);
   run(
-    `cargo ndk -t arm64-v8a -t armeabi-v7a -o "${JNI_LIBS}" build -p ha-game --profile release-native --features android`,
+    `cargo ndk ${abiFlags} -o "${JNI_LIBS}" build -p ha-game --profile release-native --features android`,
     NATIVE,
     buildEnv
   );

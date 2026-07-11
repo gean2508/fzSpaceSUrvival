@@ -11,47 +11,92 @@ pub struct CraftRecipe {
     pub output_qty: u32,
 }
 
+// Minecraft-style tech tree — MUST mirror packages/shared/.../recipes.ts.
+// Early tier (sticks → wood tools → stone tools) bootstraps from an empty
+// inventory; tools gate what you can mine via the interaction rules.
 pub const CRAFT_RECIPES: &[CraftRecipe] = &[
     CraftRecipe {
         id: 1,
-        display_name: "Stone Pickaxe",
-        ingredients: &[("wood", 3), ("stone", 2), ("sticks", 1)],
-        output_id: "pickaxe",
-        output_qty: 1,
+        display_name: "Sticks",
+        ingredients: &[("wood", 2)],
+        output_id: "sticks",
+        output_qty: 4,
     },
     CraftRecipe {
         id: 2,
-        display_name: "Firefly Torch",
-        ingredients: &[("wood", 2), ("gem_blue", 1), ("potion_green", 1)],
-        output_id: "potion_blue",
+        display_name: "Wood Pickaxe",
+        ingredients: &[("wood", 3), ("sticks", 2)],
+        output_id: "wood_pickaxe",
         output_qty: 1,
     },
     CraftRecipe {
         id: 3,
-        display_name: "Wood Shield",
-        ingredients: &[("wood", 4), ("leather", 1)],
-        output_id: "shield_wood",
+        display_name: "Wood Axe",
+        ingredients: &[("wood", 3), ("sticks", 2)],
+        output_id: "wood_axe",
         output_qty: 1,
     },
     CraftRecipe {
         id: 4,
+        display_name: "Stone Pickaxe",
+        ingredients: &[("stone", 3), ("sticks", 2)],
+        output_id: "stone_pickaxe",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 5,
+        display_name: "Stone Axe",
+        ingredients: &[("stone", 3), ("sticks", 2)],
+        output_id: "stone_axe",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 6,
         display_name: "Iron Ingot",
         ingredients: &[("stone", 3), ("wood", 1)],
         output_id: "iron_ingot",
         output_qty: 1,
     },
     CraftRecipe {
-        id: 5,
+        id: 7,
         display_name: "Gold Ingot",
         ingredients: &[("iron_ingot", 2), ("stone", 2)],
         output_id: "gold_ingot",
         output_qty: 1,
     },
     CraftRecipe {
-        id: 6,
+        id: 8,
+        display_name: "Lantern",
+        ingredients: &[("wood", 2), ("iron_ingot", 1), ("sticks", 2)],
+        output_id: "lantern",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 9,
+        display_name: "Firefly Torch",
+        ingredients: &[("wood", 2), ("gem_blue", 1), ("sticks", 2)],
+        output_id: "potion_blue",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 10,
+        display_name: "Wood Shield",
+        ingredients: &[("wood", 4), ("iron_ingot", 1)],
+        output_id: "shield_wood",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 11,
         display_name: "Jetpack",
         ingredients: &[("iron_ingot", 2), ("gold_ingot", 1), ("sticks", 4)],
         output_id: "jetpack",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 12,
+        display_name: "Nav Probe",
+        ingredients: &[("iron_ingot", 2), ("gold_ingot", 1), ("stone", 2)],
+        output_id: "probe",
         output_qty: 1,
     },
 ];
@@ -77,29 +122,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pickaxe_recipe_matches_ts() {
-        let recipe = get_craft_recipe(1).expect("pickaxe recipe");
-        assert_eq!(recipe.ingredients.len(), 3);
-        assert_eq!(recipe.output_id, "pickaxe");
+    fn sticks_recipe_bootstraps_from_wood() {
+        let recipe = get_craft_recipe(1).expect("sticks recipe");
+        assert_eq!(recipe.output_id, "sticks");
+        assert_eq!(recipe.output_qty, 4);
     }
 
     #[test]
-    fn craft_consumes_and_outputs() {
-        let recipe = get_craft_recipe(1).unwrap();
+    fn wood_pickaxe_craftable_from_tree_drops_only() {
+        // Empty-start bootstrap: wood + sticks (both from punching trees) →
+        // wood pickaxe. No stone/metal needed.
+        let recipe = get_craft_recipe(2).unwrap();
         let mut inv = PlayerInventory::default();
         inv.add("wood", 3);
-        inv.add("stone", 2);
-        inv.add("sticks", 1);
+        inv.add("sticks", 2);
         assert!(craft(&mut inv, recipe));
-        assert_eq!(inv.qty("pickaxe"), 1);
+        assert_eq!(inv.qty("wood_pickaxe"), 1);
         assert_eq!(inv.qty("wood"), 0);
     }
 
     #[test]
     fn craft_fails_without_materials() {
-        let recipe = get_craft_recipe(2).unwrap();
+        let recipe = get_craft_recipe(4).unwrap(); // stone pickaxe
         let mut inv = PlayerInventory::starter();
         assert!(!craft(&mut inv, recipe));
-        assert_eq!(inv.qty("potion_blue"), 0);
+        assert_eq!(inv.qty("stone_pickaxe"), 0);
     }
 }

@@ -2,10 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::assets::AssetFactory;
-use crate::deposit_spawn::spawn_sphere_deposits;
 use crate::materials::ToonMaterial;
-use crate::sim::WorldLayout;
 use crate::surface_patch::{
     default_spawn_tangent, spawn_celestial_surface_patch,
 };
@@ -22,17 +19,22 @@ impl Plugin for EarthWorldPlugin {
 #[derive(Component, Clone, Copy)]
 pub struct EarthDecor;
 
+#[derive(Component, Clone, Copy)]
+pub struct StreamedChunkMark {
+    pub cx: i32,
+    pub cz: i32,
+}
+
 #[derive(Component)]
 pub struct EarthSurface;
 
 fn spawn_earth_world(
     mut commands: Commands,
-    mut factory: ResMut<AssetFactory>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut toon_mats: ResMut<Assets<ToonMaterial>>,
     mut std_mats: ResMut<Assets<StandardMaterial>>,
-    world: Res<WorldLayout>,
+    mut toon_mats: ResMut<Assets<ToonMaterial>>,
 ) {
+    let _ = &mut toon_mats;
     let (cx, cz) = default_spawn_tangent(CelestialBody::Earth);
     spawn_celestial_surface_patch(
         &mut commands,
@@ -46,21 +48,9 @@ fn spawn_earth_world(
         (EarthSurface,),
     );
 
-    spawn_sphere_deposits(
-        &mut commands,
-        &mut factory,
-        &mut meshes,
-        &mut toon_mats,
-        &mut std_mats,
-        CelestialBody::Earth,
-        &world.0.deposits,
-        EarthDecor,
-    );
-
     eprintln!(
-        "ha-earth: SFS patch half={} R={} deposits={}",
+        "ha-earth: SFS patch half={} R={} — flora/deposits stream per chunk",
         crate::surface_patch::SURFACE_PATCH_HALF,
         EARTH_GAMEPLAY_RADIUS_M,
-        world.0.deposits.len()
     );
 }

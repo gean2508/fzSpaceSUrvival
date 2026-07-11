@@ -29,3 +29,6 @@
 {"ts":"2026-06-24T22:27:37Z","version":"1.0.98","fps":11,"frame_ms":89.3,"jitter_ms":27.3,"res":"2400x1080","draw3d":74,"ui":64,"ents":310,"ocean":1,"ground":0,"chunk":3,"obs":0,"nodes":11,"outline":1,"other3d":58}
 {"ts":"2026-06-27T15:21:37Z","version":"1.0.110","fps":13,"frame_ms":75.8,"jitter_ms":19.1,"res":"2400x1080","draw3d":15,"ui":86,"ents":159,"ocean":0,"ground":10,"chunk":0,"obs":0,"nodes":0,"outline":0,"other3d":5}
 {"ts":"2026-06-28T07:12:48Z","version":"1.0.115","fps":9,"frame_ms":113.1,"jitter_ms":41.2,"res":"2400x1080","draw3d":16,"ui":80,"ents":208,"ocean":0,"ground":0,"chunk":11,"obs":0,"nodes":0,"outline":0,"other3d":5}
+{"ts":"2026-06-28T18:50:47Z","version":"0.1.0","fps":16,"frame_ms":63.0,"jitter_ms":0.2,"res":"2400x1080","draw3d":174,"ui":219,"ents":450,"ocean":0,"ground":168,"chunk":0,"obs":0,"nodes":0,"outline":0,"other3d":6}
+{"ts":"2026-06-28T19:03:22Z","version":"0.1.0","fps":13,"frame_ms":75.5,"jitter_ms":0.6,"res":"2400x1080","draw3d":173,"ui":85,"ents":321,"ocean":0,"ground":169,"chunk":0,"obs":0,"nodes":0,"outline":0,"other3d":4}
+{"ts":"2026-06-28T19:13:21Z","version":"0.1.0","fps":19,"frame_ms":51.7,"jitter_ms":0.2,"res":"2400x1080","draw3d":177,"ui":85,"ents":320,"ocean":0,"ground":172,"chunk":0,"obs":0,"nodes":0,"outline":0,"other3d":5}

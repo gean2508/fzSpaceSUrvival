@@ -1,9 +1,9 @@
 {
   "items": {
-    "iron_ingot": 30,
     "sticks": 18,
-    "stone": 40,
+    "iron_ingot": 30,
+    "wood": 48,
     "gold_ingot": 5,
-    "wood": 48
+    "stone": 40
   }
 }

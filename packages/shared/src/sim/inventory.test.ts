@@ -34,36 +34,35 @@ describe("PlayerInventory", () => {
   });
 
   it("checks recipe affordability", () => {
-    const pickaxe = CRAFT_RECIPES.find((r) => r.id === 1)!;
-    const inv = createPlayerInventory({ wood: 3, stone: 2, sticks: 1 });
-    expect(hasItems(inv, pickaxe.ingredients)).toBe(true);
-    inv.stone = 1;
-    expect(hasItems(inv, pickaxe.ingredients)).toBe(false);
+    const woodPick = CRAFT_RECIPES.find((r) => r.id === 2)!;
+    const inv = createPlayerInventory({ wood: 3, sticks: 2 });
+    expect(hasItems(inv, woodPick.ingredients)).toBe(true);
+    inv.sticks = 1;
+    expect(hasItems(inv, woodPick.ingredients)).toBe(false);
   });
 
   it("crafts when materials are sufficient", () => {
-    const pickaxe = CRAFT_RECIPES.find((r) => r.id === 1)!;
-    const inv = createPlayerInventory({ wood: 3, stone: 2, sticks: 1 });
-    expect(craftFromRecipe(inv, pickaxe)).toBe(true);
-    expect(getQty(inv, "pickaxe")).toBe(1);
+    const woodPick = CRAFT_RECIPES.find((r) => r.id === 2)!;
+    const inv = createPlayerInventory({ wood: 3, sticks: 2 });
+    expect(craftFromRecipe(inv, woodPick)).toBe(true);
+    expect(getQty(inv, "wood_pickaxe")).toBe(1);
     expect(getQty(inv, "wood")).toBe(0);
-    expect(getQty(inv, "stone")).toBe(0);
     expect(getQty(inv, "sticks")).toBe(0);
   });
 
   it("rejects craft when materials are insufficient", () => {
-    const pickaxe = CRAFT_RECIPES.find((r) => r.id === 1)!;
-    const inv = createPlayerInventory({ wood: 1, stone: 2, sticks: 1 });
-    expect(craftFromRecipe(inv, pickaxe)).toBe(false);
-    expect(getQty(inv, "pickaxe")).toBe(0);
+    const woodPick = CRAFT_RECIPES.find((r) => r.id === 2)!;
+    const inv = createPlayerInventory({ wood: 1, sticks: 2 });
+    expect(craftFromRecipe(inv, woodPick)).toBe(false);
+    expect(getQty(inv, "wood_pickaxe")).toBe(0);
     expect(getQty(inv, "wood")).toBe(1);
   });
 
   it("consumeItems is atomic", () => {
-    const inv = createPlayerInventory({ wood: 3, stone: 1, sticks: 1 });
-    const reqs = CRAFT_RECIPES[0]!.ingredients;
-    expect(consumeItems(inv, reqs)).toBe(false);
+    const woodPick = CRAFT_RECIPES.find((r) => r.id === 2)!;
+    const inv = createPlayerInventory({ wood: 3, sticks: 1 });
+    expect(consumeItems(inv, woodPick.ingredients)).toBe(false);
     expect(getQty(inv, "wood")).toBe(3);
-    expect(getQty(inv, "stone")).toBe(1);
+    expect(getQty(inv, "sticks")).toBe(1);
   });
 });

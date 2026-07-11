@@ -107,6 +107,11 @@ export const ASSET_CATALOG: AssetDef[] = [
   { kind: "interior_chair", class: "prop", category: "construction", displayName: "Chair", palette: "wood", hints: { ...PROP, scale: 0.6 }, craftTags: ["furniture"] },
   { kind: "interior_book", class: "item", category: "construction", displayName: "Book", palette: "earth", hints: ITEM, craftTags: ["furniture", "lore"] },
   { kind: "interior_scroll", class: "item", category: "construction", displayName: "Scroll", palette: "fog", hints: ITEM, craftTags: ["furniture", "lore"] },
+  { kind: "build_floor_wood", class: "prop", category: "construction", displayName: "Wood floor", palette: "wood", hints: PROP, craftTags: ["build", "snap"] },
+  { kind: "build_wall_wood", class: "prop", category: "construction", displayName: "Wood wall", palette: "wood", hints: PROP, craftTags: ["build", "snap"] },
+  { kind: "build_wall_stone", class: "prop", category: "construction", displayName: "Stone wall", palette: "stone", hints: PROP, craftTags: ["build", "snap"] },
+  { kind: "build_roof_wood", class: "prop", category: "construction", displayName: "Wood roof", palette: "wood", hints: PROP, craftTags: ["build", "snap"] },
+  { kind: "build_stairs_wood", class: "prop", category: "construction", displayName: "Wood stairs", palette: "wood", hints: PROP, craftTags: ["build", "snap"] },
 
   // ── Equipment ──
   { kind: "equip_sword_iron", class: "item", category: "equipment", displayName: "Iron sword", palette: "iron", hints: ITEM, craftTags: ["weapon", "melee"] },

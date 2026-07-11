@@ -16,8 +16,10 @@ pub struct TelemetryPlugin;
 
 impl Plugin for TelemetryPlugin {
     fn build(&self, app: &mut App) {
+        // TX button removed from the HUD — base telemetry (remote camera) is a
+        // future feature with no bases to monitor yet; it was just clutter in
+        // the top-right. The systems stay (dormant) for when bases ship.
         app.init_resource::<TelemetryUiState>()
-            .add_systems(Startup, spawn_telemetry_button)
             .add_systems(
                 Update,
                 (

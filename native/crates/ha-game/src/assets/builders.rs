@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, VertexAttributeValues};
-use ha_shared::{AssetClass, AssetDef};
+use ha_shared::{AssetClass, AssetDef, BUILD_FLOOR_THICK, BUILD_GRID, BUILD_WALL_HEIGHT};
 
 fn mesh<M: Into<Mesh>>(builder: M) -> Mesh {
     builder.into()
@@ -65,6 +65,10 @@ fn build_prop(kind: &str, scale: f32) -> Mesh {
         k if k.contains("bed") => (1.4, 0.35, 0.9),
         k if k.contains("table") => (1.2, 0.45, 0.8),
         k if k.contains("chair") => (0.45, 0.55, 0.45),
+        k if k.starts_with("build_floor") => (BUILD_GRID, BUILD_FLOOR_THICK, BUILD_GRID),
+        k if k.starts_with("build_wall") => (BUILD_GRID, BUILD_WALL_HEIGHT, 0.2),
+        k if k.starts_with("build_roof") => (BUILD_GRID, BUILD_FLOOR_THICK, BUILD_GRID),
+        k if k.starts_with("build_stairs") => (BUILD_GRID, BUILD_WALL_HEIGHT, BUILD_GRID),
         _ => (1.0, 1.0, 1.0),
     };
     mesh(Cuboid::new(w * scale, h * scale, d * scale))

@@ -11,6 +11,7 @@ use super::actions::{self, TouchActions};
 use super::calibration::CAMERA_LOOK_SMOOTH_RATE;
 use super::CameraLookIntent;
 use crate::camera::{FP_MAX_PITCH, FP_MIN_PITCH};
+use crate::building_world::BuildModeActive;
 use crate::machines::PendingMachinePlacement;
 use crate::targeting::LookTarget;
 use crate::game_ui::UiGameplayBlock;
@@ -25,11 +26,15 @@ pub struct HoldInteractState {
     pub completed: bool,
     /// Hammer build gesture without interact target.
     pub placing_machine: bool,
+    /// Hammer + build mode — modular snap placement.
+    pub placing_build: bool,
     /// Launch / orbital beacon hold — looser drift, no machine steal.
     pub flight_hold: bool,
     pub locked_kind: Option<ha_shared::InteractTargetKind>,
     /// Hold without target + hammer: place stone extractor instead of wood.
     pub placing_stone: bool,
+    /// Block item equipped + valid place slot — Minecraft-style place hold.
+    pub placing_block: bool,
 }
 
 #[derive(Resource, Default)]
@@ -75,10 +80,13 @@ impl Plugin for LookInteractPlugin {
                 Update,
                 (
                     look_gesture_system,
-                    apply_smoothed_look.after(look_gesture_system),
+                    apply_smoothed_look,
                     actions::highlight_action_buttons,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(|editor: Res<UiEditorState>, block: Res<UiGameplayBlock>| {
+                        !editor.enabled && !editor.menu_open && !block.blocked
+                    }),
             )
             .add_systems(FixedUpdate, (tick_hold_interact, tick_ability_cooldown));
     }
@@ -105,11 +113,10 @@ fn look_gesture_system(
     config: Res<UiLayoutConfig>,
     blocks: Res<TouchBlockRects>,
     button_rects: Res<actions::ActionButtonRects>,
-    editor: Res<UiEditorState>,
-    gameplay_block: Res<UiGameplayBlock>,
     target: Res<LookTarget>,
     equipped: Res<EquippedItem>,
     pending: Res<PendingMachinePlacement>,
+    build_mode: Res<BuildModeActive>,
     mut touches: EventReader<TouchInput>,
     mut runtime: ResMut<LookGestureRuntime>,
     mut look_delta: ResMut<SmoothedLookDelta>,
@@ -118,9 +125,6 @@ fn look_gesture_system(
     mut tap: ResMut<AbilityTapPulse>,
 ) {
     tap.slot = None;
-    if editor.enabled || editor.menu_open || gameplay_block.blocked {
-        return;
-    }
 
     let sens = layout::look_sensitivity(&layout) * config.calibration.camera_sensitivity;
     let now_ms = time.elapsed_secs() * 1000.0;
@@ -148,6 +152,8 @@ fn look_gesture_system(
                 hold.cancelled = false;
                 hold.completed = false;
                 hold.placing_machine = false;
+                hold.placing_build = false;
+                hold.placing_block = false;
                 hold.flight_hold = false;
                 hold.locked_kind = None;
             }
@@ -198,7 +204,23 @@ fn look_gesture_system(
     if runtime.pointer_id.is_some() && !runtime.moved {
         let held_ms = now_ms - runtime.start_ms;
         if !runtime.hold_started && held_ms >= GESTURE_HOLD_START_MS as f32 {
-            if let Some(kind) = target.kind {
+            // Block item equipped + valid slot → place (even against a block face,
+            // Minecraft-style: to break, equip hand/pickaxe instead).
+            let block_place = ha_shared::is_block_item(&equipped.item_id)
+                && target.place_cell.is_some();
+            if block_place {
+                runtime.hold_started = true;
+                hold.active = true;
+                hold.duration_ms = 300;
+                hold.progress_ms = 0;
+                hold.cancelled = false;
+                hold.completed = false;
+                hold.placing_machine = false;
+                hold.placing_build = false;
+                hold.placing_block = true;
+                hold.flight_hold = false;
+                hold.locked_kind = None;
+            } else if let Some(kind) = target.kind {
                 if let Some(rule) = resolve_interaction(Some(equipped.item_id.as_str()), kind) {
                     if rule.kind != InteractActionKind::None && rule.duration_ms > 0 {
                         runtime.hold_started = true;
@@ -219,15 +241,23 @@ fn look_gesture_system(
             {
                 runtime.hold_started = true;
                 hold.active = true;
-                let def = ha_shared::require_machine(pending.machine_id);
-                hold.duration_ms = def.place_duration_ms;
                 hold.progress_ms = 0;
                 hold.cancelled = false;
                 hold.completed = false;
-                hold.placing_machine = true;
-                hold.placing_stone = pending.machine_id == ha_shared::STONE_EXTRACTOR.id;
                 hold.flight_hold = false;
                 hold.locked_kind = None;
+                if build_mode.active {
+                    hold.placing_build = true;
+                    hold.placing_machine = false;
+                    hold.placing_stone = false;
+                    hold.duration_ms = 1200;
+                } else {
+                    let def = ha_shared::require_machine(pending.machine_id);
+                    hold.duration_ms = def.place_duration_ms;
+                    hold.placing_machine = true;
+                    hold.placing_build = false;
+                    hold.placing_stone = pending.machine_id == ha_shared::STONE_EXTRACTOR.id;
+                }
             }
         }
     }
@@ -274,6 +304,8 @@ pub(crate) fn tick_hold_interact(
     let target_valid = target.entity.is_some()
         || target.block_cell.is_some()
         || hold.placing_machine
+        || hold.placing_build
+        || (hold.placing_block && target.place_cell.is_some())
         || (hold.flight_hold && hold.locked_kind.is_some());
     let delta_ms = (time.delta_secs() * 1000.0) as u32;
     let next = ha_shared::advance_hold_progress(
@@ -284,6 +316,7 @@ pub(crate) fn tick_hold_interact(
             cancelled: hold.cancelled,
             completed: hold.completed,
             placing_machine: hold.placing_machine,
+            placing_build: hold.placing_build,
         },
         delta_ms,
         target_valid,

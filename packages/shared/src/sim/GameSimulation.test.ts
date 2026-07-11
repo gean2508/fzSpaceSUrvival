@@ -70,15 +70,14 @@ describe("GameSimulation", () => {
     const p = sim.getEntity("p1")!;
     p.inventory.push(
       { itemId: "wood", qty: 3 },
-      { itemId: "stone", qty: 2 },
-      { itemId: "sticks", qty: 1 }
+      { itemId: "sticks", qty: 2 }
     );
     sim.queueInput("p1", {
       ...emptyInput(1),
-      abilities: encodeCraftIntent(0, 1),
+      abilities: encodeCraftIntent(0, 2),
     });
     sim.step();
-    expect(p.inventory.find((i) => i.itemId === "pickaxe")?.qty).toBe(1);
+    expect(p.inventory.find((i) => i.itemId === "wood_pickaxe")?.qty).toBe(1);
     expect(p.inventory.find((i) => i.itemId === "wood")).toBeUndefined();
   });
 

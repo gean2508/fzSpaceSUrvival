@@ -111,6 +111,7 @@ fn sync_planet_world(
         body,
         &deposits,
         PlanetDecor,
+        None,
     );
 
     let return_tx = 0.0_f32;

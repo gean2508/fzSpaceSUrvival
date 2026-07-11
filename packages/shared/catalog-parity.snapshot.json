@@ -1,10 +1,50 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-22T23:17:32.818Z",
+  "generatedAt": "2026-07-06T03:47:25.475Z",
   "modules": [
     {
       "id": "assets",
       "entries": [
+        {
+          "id": "build_floor_wood",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "build_roof_wood",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "build_stairs_wood",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
+        {
+          "id": "build_wall_stone",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "stone"
+          }
+        },
+        {
+          "id": "build_wall_wood",
+          "fields": {
+            "class": "prop",
+            "category": "construction",
+            "palette": "wood"
+          }
+        },
         {
           "id": "building_barn",
           "fields": {
@@ -923,6 +963,14 @@
           }
         },
         {
+          "id": "dirt",
+          "fields": {
+            "assetKind": "terrain_dirt",
+            "category": "material",
+            "maxStack": 99
+          }
+        },
+        {
           "id": "gem_blue",
           "fields": {
             "assetKind": "item_mat_gem_blue",
@@ -971,11 +1019,27 @@
           }
         },
         {
+          "id": "jetpack",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 1
+          }
+        },
+        {
           "id": "key",
           "fields": {
             "assetKind": "item_key",
             "category": "key",
             "maxStack": 10
+          }
+        },
+        {
+          "id": "lantern",
+          "fields": {
+            "assetKind": "prop_lantern",
+            "category": "tool",
+            "maxStack": 1
           }
         },
         {
@@ -1019,6 +1083,14 @@
           }
         },
         {
+          "id": "probe",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 4
+          }
+        },
+        {
           "id": "shield_wood",
           "fields": {
             "assetKind": "equip_shield_wood",
@@ -1040,6 +1112,22 @@
             "assetKind": "item_mat_stone",
             "category": "material",
             "maxStack": 99
+          }
+        },
+        {
+          "id": "stone_axe",
+          "fields": {
+            "assetKind": "equip_axe",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "stone_pickaxe",
+          "fields": {
+            "assetKind": "equip_pickaxe",
+            "category": "tool",
+            "maxStack": 1
           }
         },
         {
@@ -1080,6 +1168,22 @@
             "assetKind": "item_mat_log",
             "category": "material",
             "maxStack": 99
+          }
+        },
+        {
+          "id": "wood_axe",
+          "fields": {
+            "assetKind": "equip_axe",
+            "category": "tool",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "wood_pickaxe",
+          "fields": {
+            "assetKind": "equip_pickaxe",
+            "category": "tool",
+            "maxStack": 1
           }
         }
       ]

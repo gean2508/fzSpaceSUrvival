@@ -23,6 +23,10 @@ pub const ROCKET_FUEL_BURN_PER_S: f32 = 8.0;
 pub const ROCKET_RETRO_FUEL_BURN_PER_S: f32 = 14.0;
 pub const ROCKET_ROT_SPEED: f32 = 1.8;
 pub const ROCKET_MAX_V: f32 = 280.0;
+/// Higher cap in open vacuum so a manual Earth→Moon crossing (~52 km) takes
+/// ~80 s instead of ~3 min. Near a body's gameplay shell the tighter
+/// `ROCKET_MAX_V` still applies so descents stay controllable.
+pub const ROCKET_CRUISE_MAX_V: f32 = 640.0;
 pub const SAFE_LANDING_V: f32 = 12.0;
 pub const PARACHUTE_DRAG: f32 = 2.8;
 pub const PARACHUTE_DEPLOY_ALT_M: f32 = 65.0;

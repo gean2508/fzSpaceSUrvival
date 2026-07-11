@@ -8,7 +8,9 @@
 |------|---------|
 | `generate_assets.py` | Run inside Blender (Scripting tab or headless) |
 | `run_generate.sh` | Headless batch export → game models dir |
-| `staging/` | GLBs whose kinds are not in `catalog-kinds.txt` yet |
+| `manual/` | `.blend` y `overrides/*.json` — tus correcciones manuales (ver `manual/README.md`) |
+| `editable/` | `.blend` de partida generados con `--save-blend` |
+| `staging/` | GLBs cuyos kinds aún no están en `catalog-kinds.txt` |
 | `../../native/crates/ha-game/assets/models/` | **Game drop-in dir** (`{catalog_kind}.glb`) |
 
 Generated `.glb` files are **gitignored** (see repo `.gitignore`). Procedural meshes in `builders.rs` remain the fallback when a file is missing.
@@ -39,7 +41,7 @@ npm run view:assets   # http://localhost:5199 — tools/asset-viewer/
 
 The game loads **`{kind}.glb`** where `kind` must match `native/crates/ha-game/assets/models/catalog-kinds.txt`.
 
-The script maps generator names → catalog kinds (e.g. `tree_oak` → `flora_tree_oak`). Assets without a catalog entry export to `tools/blender/staging/` only.
+The script reads **`catalog-kinds.txt`** and generates one `{kind}.glb` per line (109 catalog assets). Extra space/future kinds export to `staging/` only (`prop_campfire`, rocket modules, lunar props, etc.).
 
 ## Procedural animation nodes (Bevy)
 
@@ -56,3 +58,21 @@ Child object names in GLB hierarchy (for future runtime animation):
 - Cylinder segments: 8 max; icosphere subdiv: 1 max
 
 See comment block at top of `generate_assets.py`.
+
+## Ajustes manuales en Blender
+
+Si corriges assets en la GUI, guarda overrides para que `generate:assets` no los pise:
+
+- **`manual/{kind}.blend`** — exporta tal cual (máxima prioridad)
+- **`manual/overrides/{kind}.json`** — solo transforms por nombre de objeto
+
+```bash
+# Capturar transforms después de editar en Blender
+blender tools/blender/editable/flora_tree_cherry.blend --background \
+  --python tools/blender/generate_assets.py -- --capture flora_tree_cherry
+
+# Regenerar respetando overrides (--force ignora manual/JSON)
+npm run generate:assets -- --only flora_tree_cherry
+```
+
+Detalle completo: [`manual/README.md`](manual/README.md).

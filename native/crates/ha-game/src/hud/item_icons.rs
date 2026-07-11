@@ -50,8 +50,9 @@ pub fn rasterize_item_icon(item_id: &str) -> Image {
         "wood" => draw_log(&mut data, size),
         "stone" => draw_stone(&mut data, size),
         "sticks" => draw_sticks(&mut data, size),
-        "pickaxe" => draw_pickaxe(&mut data, size),
+        "pickaxe" | "wood_pickaxe" | "stone_pickaxe" => draw_pickaxe(&mut data, size),
         "hammer" => draw_hammer(&mut data, size),
+        "lantern" => draw_lantern(&mut data, size),
         "shield_wood" => draw_shield(&mut data, size),
         "jetpack" => draw_jetpack(&mut data, size),
         "iron_ingot" => draw_ingot(&mut data, size, PaletteKey::Iron),
@@ -59,7 +60,7 @@ pub fn rasterize_item_icon(item_id: &str) -> Image {
         "potion_blue" | "potion_green" => draw_potion(&mut data, size, PaletteKey::NeonCyan),
         "gem_blue" => draw_gem(&mut data, size, PaletteKey::NeonCyan),
         "leather" => draw_leather(&mut data, size),
-        "axe" => draw_axe(&mut data, size),
+        "axe" | "wood_axe" | "stone_axe" => draw_axe(&mut data, size),
         _ => draw_generic(&mut data, size, item_id),
     }
     Image::new(
@@ -146,6 +147,17 @@ fn draw_hammer(data: &mut [u8], size: u32) {
     let handle = rgba(PaletteKey::Wood, 1.0);
     fill_rect(data, size, 8, 8, 30, 16, head);
     fill_rect(data, size, 18, 16, 24, 34, handle);
+}
+
+fn draw_lantern(data: &mut [u8], size: u32) {
+    let metal = rgba(PaletteKey::Iron, 1.0);
+    let glow = rgba(PaletteKey::Gold, 1.0);
+    let flame = rgba(PaletteKey::PotionRed, 1.0);
+    fill_rect(data, size, 16, 6, 24, 10, metal);
+    fill_rect(data, size, 14, 10, 26, 26, metal);
+    fill_rect(data, size, 16, 12, 24, 24, glow);
+    fill_rect(data, size, 18, 14, 22, 22, flame);
+    fill_rect(data, size, 18, 26, 22, 32, metal);
 }
 
 fn draw_shield(data: &mut [u8], size: u32) {

@@ -119,10 +119,10 @@ fn log_cpu_spans(
     mut start: ResMut<TotalUpdateStart>,
 ) {
     stats.frames = start.frames;
-    start.frames = 0;
     if stats.frames < 60 {
         return;
     }
+    start.frames = 0;
     let n = stats.frames as u64;
     let row = [
         stats.camera_us / n,

@@ -4,14 +4,8 @@ import type { InventoryItem } from "./types.js";
 /** Deterministic item map — itemId → quantity. */
 export type PlayerInventoryMap = Record<string, number>;
 
-/** Agency demo kit — enough for launch pad modules + craft extras. */
-export const DEFAULT_STARTER_INVENTORY: PlayerInventoryMap = {
-  wood: 48,
-  stone: 40,
-  sticks: 18,
-  iron_ingot: 30,
-  gold_ingot: 5,
-};
+/** Minecraft-style cold start: empty hands. Punch trees to begin. */
+export const DEFAULT_STARTER_INVENTORY: PlayerInventoryMap = {};
 
 export function createPlayerInventory(initial?: PlayerInventoryMap): PlayerInventoryMap {
   return { ...(initial ?? DEFAULT_STARTER_INVENTORY) };

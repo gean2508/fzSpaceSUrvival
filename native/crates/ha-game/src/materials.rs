@@ -94,9 +94,27 @@ impl Default for ToonMaterial {
     }
 }
 
+/// FLAG: PS1 vertex snapping (`ps1_snap_clip` in toon.wgsl). View-dependent by
+/// design — it cracked silhouettes of large merged meshes at some camera
+/// angles. Re-enable once the retro wobble is wanted again; dither is separate
+/// and stays on.
+pub const PS1_VERTEX_SNAP: bool = false;
+
 pub fn ps1_settings_default() -> Vec4 {
+    let snap = if !PS1_VERTEX_SNAP {
+        0.0
+    } else {
+        #[cfg(target_os = "android")]
+        {
+            Ps1Retro::SNAP_RES * 0.55
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Ps1Retro::SNAP_RES * 0.75
+        }
+    };
     Vec4::new(
-        Ps1Retro::SNAP_RES * 0.75,
+        snap,
         Ps1Retro::FOG_START,
         Ps1Retro::FOG_END,
         Ps1Retro::DITHER * 0.32,
@@ -110,7 +128,8 @@ pub fn ps1_settings_flat_terrain() -> Vec4 {
 
 /// Extended fog for orbital / lunar vistas (planets sit hundreds of metres away).
 pub fn ps1_settings_celestial() -> Vec4 {
-    Vec4::new(Ps1Retro::SNAP_RES, 600.0, 2_400.0, Ps1Retro::DITHER * 0.65)
+    let snap = if PS1_VERTEX_SNAP { Ps1Retro::SNAP_RES } else { 0.0 };
+    Vec4::new(snap, 600.0, 2_400.0, Ps1Retro::DITHER * 0.65)
 }
 
 pub fn ps1_settings_for_region(region: &crate::scene::RegionId) -> Vec4 {
@@ -141,14 +160,14 @@ pub fn ps1_fog_for_zone(zone: &str, region: &crate::scene::RegionId) -> (Vec4, f
     }
     match zone {
         "cave" => (
-            Vec4::new(0.05, 0.04, 0.06, 1.0),
+            Vec4::new(0.03, 0.06, 0.12, 1.0),
             4.0,
             22.0,
         ),
         "mystic" => (
-            Vec4::new(0.55, 0.35, 0.75, 1.0),
-            18.0,
-            72.0,
+            Vec4::new(0.04, 0.10, 0.22, 1.0),
+            10.0,
+            64.0,
         ),
         "launch" | "meadow" => (
             Vec4::new(0.75, 0.85, 0.92, 1.0),
@@ -228,6 +247,17 @@ pub fn block_toon(rgb: [f32; 3]) -> ToonMaterial {
 /// GLES-safe block voxels — lit PBR + custom toon both fail on some Android GPUs.
 pub fn block_std_material(rgb: [f32; 3]) -> StandardMaterial {
     unlit_srgb(rgb)
+}
+
+/// Minimal lit surface — plain lambert, GLES3-safe (no shadows, no specular).
+pub fn lit_surface_std(rgb: [f32; 3]) -> StandardMaterial {
+    StandardMaterial {
+        base_color: Color::srgb(rgb[0], rgb[1], rgb[2]),
+        perceptual_roughness: 1.0,
+        metallic: 0.0,
+        reflectance: 0.0,
+        ..default()
+    }
 }
 
 pub fn luna_regolith_std() -> StandardMaterial {
@@ -516,6 +546,7 @@ pub struct GhibliSkyMaterial {
     /// x = cloud cover, y = rain, z = moon phase (0..1), w = storm.
     #[uniform(0)]
     pub weather: Vec4,
+    /// xyz = sun direction; w = shader quality (0 lite, 1 full).
     #[uniform(0)]
     pub sun_dir: Vec4,
 }

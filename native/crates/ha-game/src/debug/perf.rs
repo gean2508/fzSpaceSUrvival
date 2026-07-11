@@ -286,6 +286,9 @@ fn log_perf_periodic(
     time: Res<Time>,
     stats: Res<PerfStats>,
     span: Res<CpuSpanStats>,
+    region: Res<crate::scene::RegionRuntime>,
+    world_ctx: Res<crate::scene::WorldContextRuntime>,
+    flight: Res<crate::rocket_flight::RocketFlight>,
     mut ring: ResMut<PerfRingBuffer>,
     mut log_timer: Local<f32>,
 ) {
@@ -306,6 +309,7 @@ fn log_perf_periodic(
     });
     eprintln!(
         "ha-perf fps={:.0} frame_ms={:.1} jitter={:.1} res={}x{} \
+         region={:?} ctx={:?} flight={} \
          draw3d~={} ui={} ents={} \
          ocean={} ground={} chunk={} obs={} nodes={} outline={} other3d={} \
          span[cam={} chk={} tgt={} hud={} ptc={} atm={}]us",
@@ -314,6 +318,9 @@ fn log_perf_periodic(
         stats.frame_jitter_ms,
         stats.window_w,
         stats.window_h,
+        region.active,
+        world_ctx.active,
+        flight.active,
         stats.draw_calls,
         b.ui_nodes,
         stats.active_entities,

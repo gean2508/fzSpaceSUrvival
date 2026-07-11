@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use ha_shared::{body_center_at, body_def, body_radius, body_soi, body_transit_burn, body_walk_radius,
+use ha_shared::{body_center_at, body_def, body_radius, body_soi,
     direction_to, gameplay_shell_center_at, CelestialBody, WorldContext};
 
 use crate::earth_world::EarthDecor;
@@ -138,11 +138,33 @@ fn sync_flight_celestials(
         (&mut Transform, &mut Visibility),
         (With<FlightStarfield>, Without<FlightCelestial>),
     >,
+    mut was_active: Local<bool>,
 ) {
     let observer = observer_pos(&flight, &origin, &view, &player);
     let shift = origin.shift;
     let in_flight = flight.active;
     let t = clock.t;
+
+    // UN SOLO UNIVERSO: son siempre los mismos cuerpos reales (esferas a
+    // posición/escala por efemérides). Se ven al ACERCARTE volando (vacío) o por
+    // cámara remota. Desde una superficie lo lejano NO se dibuja (culling por
+    // distancia) — para navegar está el mapa 2D; al aproximarte, el cuerpo
+    // aparece y crece hasta que aterrizás.
+    let impostors_active = (in_flight && flight.in_vacuum()) || view.is_remote();
+
+    if !impostors_active {
+        if *was_active {
+            for (_, _, mut vis) in celestials.iter_mut() {
+                *vis = Visibility::Hidden;
+            }
+            for (_, mut vis) in starfield.iter_mut() {
+                *vis = Visibility::Hidden;
+            }
+            *was_active = false;
+        }
+        return;
+    }
+    *was_active = true;
 
     for (fc, mut tf, mut vis) in celestials.iter_mut() {
         let center = Vec3::from_array(body_center_at(fc.body, t));
@@ -150,10 +172,11 @@ fn sync_flight_celestials(
         let r = body_radius(fc.body);
         tf.scale = Vec3::splat(r / fc.mesh_unit_r);
 
+        // Culling por distancia — lo muy lejano no se rinde en la vista 3D.
         let dist = observer.distance(tf.translation);
         let max_dist = celestial_render_distance(fc.body, flight.body);
         let priority = fc.body == flight.body;
-        let show = in_flight && (dist <= max_dist || priority);
+        let show = dist <= max_dist || priority;
         *vis = if show {
             Visibility::Visible
         } else {
@@ -161,7 +184,7 @@ fn sync_flight_celestials(
         };
     }
 
-    let show_stars = in_flight && flight.in_vacuum();
+    let show_stars = impostors_active;
     for (mut tf, mut vis) in starfield.iter_mut() {
         tf.translation = observer;
         *vis = if show_stars {

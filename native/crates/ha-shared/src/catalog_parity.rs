@@ -130,10 +130,9 @@ pub fn rust_module_entries(module_id: &str) -> Option<Vec<ParityEntry>> {
                 .map(|m| {
                     let mut fields = BTreeMap::new();
                     fields.insert("passive".into(), json_bool(m.passive));
-                    fields.insert(
-                        "outputPerSecond".into(),
-                        json_num(serde_json::Number::from_f64(m.output_per_second as f64).unwrap()),
-                    );
+                    let output_per_second = serde_json::Number::from_f64(m.output_per_second as f64)
+                        .unwrap_or_else(|| 0.into());
+                    fields.insert("outputPerSecond".into(), json_num(output_per_second));
                     fields.insert("placeDurationMs".into(), json_num(m.place_duration_ms));
                     fields.insert("assetKind".into(), json_str(m.asset_kind));
                     ParityEntry {
@@ -197,7 +196,9 @@ fn assert_fields_match(
 ) {
     assert_eq!(left.len(), right.len(), "field count in {module}/{entry_id}");
     for (key, rv) in left {
-        let lv = right.get(key).unwrap_or_else(|| panic!("missing field {key} in snapshot"));
+        let lv = right
+            .get(key)
+            .unwrap_or_else(|| panic!("missing field {key} in snapshot for {module}/{entry_id}"));
         match (rv, lv) {
             (serde_json::Value::Number(a), serde_json::Value::Number(b)) => {
                 let af = a.as_f64().unwrap_or(0.0);

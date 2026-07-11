@@ -1,8 +1,7 @@
-//! SFS-style world — sphere surface deposits per celestial body (no voxel island).
+//! SFS-style world — seed + streamed chunks (flora/deposits generated on demand).
 
 use crate::celestial_bodies::CelestialBody;
 use crate::planet_surface::planet_ground_y_at;
-use crate::surface_deposits::{generate_earth_deposits, SurfaceDeposit};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InteractableKind {
@@ -37,16 +36,14 @@ pub struct InteractableNode {
     pub z: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GeneratedWorld {
-    pub deposits: Vec<SurfaceDeposit>,
+    pub seed: u32,
 }
 
-/// Earth home-body resource layout (tangent coords on gameplay sphere).
+/// Earth home-body — flora and deposits stream per chunk at runtime.
 pub fn generate_world(seed: u32) -> GeneratedWorld {
-    GeneratedWorld {
-        deposits: generate_earth_deposits(seed),
-    }
+    GeneratedWorld { seed }
 }
 
 pub fn ground_height_at(tx: f32, tz: f32) -> f32 {
@@ -88,12 +85,6 @@ mod tests {
     fn world_deterministic_for_seed() {
         let a = generate_world(42);
         let b = generate_world(42);
-        assert_eq!(a.deposits, b.deposits);
-    }
-
-    #[test]
-    fn earth_has_deposits() {
-        let w = generate_world(42);
-        assert!(w.deposits.len() >= 24);
+        assert_eq!(a, b);
     }
 }

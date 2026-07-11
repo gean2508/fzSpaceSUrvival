@@ -23,6 +23,12 @@ struct ToonMaterial {
 @group(2) @binding(0)
 var<uniform> material: ToonMaterial;
 
+// FLAGS — minimal stable shading base. These additive terms are view-dependent
+// and popped on merged low-poly silhouettes at some camera angles. Flip back on
+// when polishing atmosphere effects (dead code is eliminated at compile time).
+const ENABLE_RIM_LIGHT: bool = false;
+const ENABLE_BLOOM_APPROX: bool = false;
+
 fn ps1_snap_clip(clip: vec4<f32>) -> vec4<f32> {
     let res = material.ps1_settings.x;
     if res < 4.0 {
@@ -148,10 +154,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let cam = material.camera_pos.xyz;
     let view_dir = normalize(cam - in.world_position.xyz);
-    let solar_rim = rim_light(n, view_dir, light_dir);
 
     var color = material.base_color.rgb * (hemi * 0.48 + direct * 0.92);
-    color += material.base_color.rgb * solar_rim * sun_strength * 0.28;
+    if ENABLE_RIM_LIGHT {
+        let solar_rim = rim_light(n, view_dir, light_dir);
+        color += material.base_color.rgb * solar_rim * sun_strength * 0.28;
+    }
     color = mix(color, color * vec3<f32>(0.55, 0.62, 0.82), night * 0.55);
 
 #ifdef VERTEX_COLORS
@@ -167,7 +175,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let atten = light_attenuation(dist_l, lr);
         let crafted_ndotl = max(dot(n, crafted_dir), 0.0);
         let crafted_cel = floor(crafted_ndotl * 2.0) / 2.0;
-        let crafted_rim = rim_light(n, view_dir, crafted_dir);
+        // Stable fill instead of the view-dependent rim while flag is off.
+        var crafted_rim = 0.12;
+        if ENABLE_RIM_LIGHT {
+            crafted_rim = rim_light(n, view_dir, crafted_dir);
+        }
         let crafted = material.light_color.rgb
             * material.light_color.a
             * atten
@@ -184,11 +196,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let dither_amt = material.ps1_settings.w * material.ps1_settings.w * 0.85;
     color = ps1_dither(color, in.position.xy, dither_amt);
 
-    // Bloom after cel + fog — cave lantern uses lower threshold / higher strength.
-    let in_cave_glow = material.atmos_sky.w > 0.9 && material.light_color.a > 1.0;
-    let bloom_threshold = select(0.75, 0.6, in_cave_glow);
-    let bloom_strength = select(0.4, 0.6, in_cave_glow);
-    color = apply_bloom_approx(color, bloom_threshold, bloom_strength);
+    // Bloom after cel + fog — crafted lights punch through navy mist.
+    if ENABLE_BLOOM_APPROX {
+        let in_cave_glow = material.atmos_sky.w > 0.9 && material.light_color.a > 1.0;
+        let night_glow = material.atmos_sky.w > 0.45 && material.light_color.a > 0.01;
+        var bloom_threshold = select(0.75, 0.6, in_cave_glow);
+        bloom_threshold = select(bloom_threshold, 0.48, night_glow);
+        var bloom_strength = select(0.4, 0.6, in_cave_glow);
+        bloom_strength = select(bloom_strength, 0.82, night_glow);
+        color = apply_bloom_approx(color, bloom_threshold, bloom_strength);
+    }
 
     return vec4<f32>(color, material.base_color.a);
 }

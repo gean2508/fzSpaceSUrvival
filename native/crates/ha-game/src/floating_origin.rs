@@ -32,9 +32,12 @@ impl FloatingOrigin {
 
 const SHIFT_ON_DIST: f32 = 22_000.0;
 const SHIFT_OFF_DIST: f32 = 15_000.0;
-const LERP_BACK: f32 = 0.12;
+/// Settle rate (per second) — converted to a per-frame factor via dt so the
+/// origin drifts back identically at 30, 60 or 150 fps (frame-independent).
+const LERP_BACK_RATE: f32 = 7.5;
 
 fn update_floating_origin(
+    time: Res<Time>,
     clock: Res<SolarSystemClock>,
     view: Res<ViewTarget>,
     mut origin: ResMut<FloatingOrigin>,
@@ -47,7 +50,8 @@ fn update_floating_origin(
     if dist > SHIFT_ON_DIST {
         origin.shift = rel;
     } else if dist < SHIFT_OFF_DIST {
-        origin.shift = origin.shift.lerp(Vec3::ZERO, LERP_BACK);
+        let k = 1.0 - (-LERP_BACK_RATE * time.delta_secs()).exp();
+        origin.shift = origin.shift.lerp(Vec3::ZERO, k);
     }
 }
 

@@ -125,7 +125,7 @@ pub fn build_displaced_sphere(
     // Normals from displaced geometry — sphere normals hide crater relief under lighting.
     recompute_grid_normals(&mut normals, &positions, lat, lon, row);
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
@@ -192,6 +192,19 @@ pub fn build_planet_patch_mesh(
     let mut colors = Vec::with_capacity(cols * rows);
     let mut indices = Vec::new();
 
+    // Analytic world position — also sampled PAST the patch edge for normals
+    // (grid-clamped neighbors left hard seams when the sliding patch rebuilt).
+    let world_at = |tx: f32, tz: f32| -> Vec3 {
+        let dir = if body == CelestialBody::Moon {
+            luna_dir_from_tangent(tx, tz)
+        } else {
+            planet_dir_from_tangent(body, tx, tz)
+        };
+        let n = normalize_dir(dir);
+        let radial = r + ha_shared::surface_relief_at(body, tx, tz);
+        center + Vec3::new(n[0] * radial, n[1] * radial, n[2] * radial)
+    };
+
     for iz in 0..rows {
         let tz = cz - half + iz as f32 * step;
         for ix in 0..cols {
@@ -201,16 +214,22 @@ pub fn build_planet_patch_mesh(
             } else {
                 planet_dir_from_tangent(body, tx, tz)
             };
-            let disp = ha_shared::surface_relief_at(body, tx, tz);
-            let n = normalize_dir(dir);
-            let radial = r + disp;
-            let world = center + Vec3::from_array([
-                n[0] * radial,
-                n[1] * radial,
-                n[2] * radial,
-            ]);
+            let world = world_at(tx, tz);
             positions.push(world.to_array());
-            normals.push(n);
+
+            let radial_out = Vec3::from_array(normalize_dir(dir));
+            let mut n = (world_at(tx + step, tz) - world_at(tx - step, tz))
+                .cross(world_at(tx, tz + step) - world_at(tx, tz - step));
+            if n.length_squared() < 1e-10 {
+                n = radial_out;
+            } else {
+                n = n.normalize();
+                if n.dot(radial_out) < 0.0 {
+                    n = -n;
+                }
+            }
+            normals.push(n.to_array());
+
             let albedo = if body == CelestialBody::Moon {
                 luna_albedo_at_dir(dir)
             } else {
@@ -220,8 +239,6 @@ pub fn build_planet_patch_mesh(
             colors.push(albedo);
         }
     }
-
-    recompute_grid_normals(&mut normals, &positions, rows - 1, cols - 1, cols);
 
     for iz in 0..(rows - 1) {
         for ix in 0..(cols - 1) {
@@ -233,7 +250,7 @@ pub fn build_planet_patch_mesh(
         }
     }
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);

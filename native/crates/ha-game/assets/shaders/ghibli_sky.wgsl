@@ -49,11 +49,11 @@ fn noise3(p: vec3<f32>) -> f32 {
     );
 }
 
-fn fbm3(p: vec3<f32>) -> f32 {
+fn fbm3(p: vec3<f32>, octaves: i32) -> f32 {
     var v = 0.0;
     var a = 0.5;
     var pp = p;
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < octaves; i++) {
         v += a * noise3(pp);
         pp = pp * 2.02 + vec3<f32>(1.7, 2.3, 0.9);
         a *= 0.5;
@@ -106,16 +106,23 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let haze = exp(-abs(dir.y) * 5.5) * (0.12 + cloud_cover * 0.18);
     col = mix(col, horizon * 1.08, haze);
 
-    // Procedural sky clouds — drift with time, density from weather.
-    let wind = vec3<f32>(time * 0.018, time * 0.004, time * 0.014);
-    let cloud_p = dir * 3.2 + wind;
-    let n = fbm3(cloud_p);
-    let n2 = fbm3(cloud_p * 1.7 + vec3<f32>(4.1, 1.2, 2.8));
-    let cloud_noise = (n * 0.65 + n2 * 0.35);
-    let thresh = 0.52 - cloud_cover * 0.38;
-    let cloud_mask = smoothstep(thresh, thresh + 0.22, cloud_noise);
-    let cloud_bright = mix(vec3<f32>(0.92, 0.95, 1.0), vec3<f32>(0.55, 0.58, 0.62), storm);
-    col = mix(col, cloud_bright, cloud_mask * cloud_cover * (0.35 + (1.0 - elev) * 0.45));
+    // Procedural sky clouds — FULL quality only. The "lite" tier still ran a
+    // 2-octave fbm3 (~16 hash31 + mixes) per pixel: a fullscreen noise pass at
+    // 2400×1080 on Mali — measured as the frame-time floor on the Redmi
+    // (looking at pure sky cost ~66 ms with game CPU at 0.1 ms).
+    let quality = sky.sun_dir.w;
+    if quality > 0.5 {
+        let octaves = 4;
+        let wind = vec3<f32>(time * 0.018, time * 0.004, time * 0.014);
+        let cloud_p = dir * 3.2 + wind;
+        let n = fbm3(cloud_p, octaves);
+        let n2 = fbm3(cloud_p * 1.7 + vec3<f32>(4.1, 1.2, 2.8), octaves);
+        let cloud_noise = n * 0.65 + n2 * 0.35;
+        let thresh = 0.52 - cloud_cover * 0.38;
+        let cloud_mask = smoothstep(thresh, thresh + 0.22, cloud_noise);
+        let cloud_bright = mix(vec3<f32>(0.92, 0.95, 1.0), vec3<f32>(0.55, 0.58, 0.62), storm);
+        col = mix(col, cloud_bright, cloud_mask * cloud_cover * (0.35 + (1.0 - elev) * 0.45));
+    }
 
     // Sun disc.
     let sun_dir = normalize(sky.sun_dir.xyz);
@@ -142,16 +149,19 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     col += vec3<f32>(1.0, 0.28, 0.62) * horizon_mask * neon * 0.55 * (1.0 - storm);
     col += vec3<f32>(0.2, 0.85, 1.0) * horizon_mask * neon * 0.22 * (1.0 - storm);
 
-    // Stars — shader + parallax shells.
+    // Stars — shader + parallax shells (sparse on mobile).
     if night > 0.08 {
+        let star_scale = select(90.0, 130.0, quality > 0.5);
         let uv = vec2<f32>(atan2(dir.z, dir.x), dir.y);
-        let cell = floor(uv * 130.0);
+        let cell = floor(uv * star_scale);
         let h = hash21(cell);
         let twinkle = 0.6 + 0.4 * sin(time * 2.2 + h * 50.0);
         let star_vis = (1.0 - cloud_cover * 0.85) * (1.0 - rain * 0.6);
-        let star = step(0.993, h) * twinkle * smoothstep(0.08, 0.55, night) * star_vis;
+        let star_thresh = select(0.996, 0.993, quality > 0.5);
+        let star = step(star_thresh, h) * twinkle * smoothstep(0.08, 0.55, night) * star_vis;
         col += vec3<f32>(0.92, 0.96, 1.0) * star;
-        let pin = step(0.9985, h) * twinkle * smoothstep(0.25, 0.7, night) * star_vis;
+        let pin_thresh = select(0.9992, 0.9985, quality > 0.5);
+        let pin = step(pin_thresh, h) * twinkle * smoothstep(0.25, 0.7, night) * star_vis;
         col += vec3<f32>(1.0, 0.98, 0.9) * pin * 0.8;
     }
 

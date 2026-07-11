@@ -34,6 +34,8 @@ impl Plugin for UiEditorPlugin {
                     dedupe_menu_buttons,
                     sync_editor_panels.after(dedupe_menu_buttons),
                     editor_button_system,
+                    cam_button_system,
+                    creative_topup_system,
                     editor_touch_drag_system,
                     update_editor_overlay.after(sync_editor_panels),
                     update_settings_labels,
@@ -76,8 +78,10 @@ impl Default for UiLayoutConfig {
     fn default() -> Self {
         Self {
             move_stick: UiSlot::new(0.14, 0.78, 1.18),
-            use_button: UiSlot::new(0.62, 0.78, 1.0),
-            jump_button: UiSlot::new(0.48, 0.78, 1.0),
+            // Bottom-right cluster within reach of the right thumb (was
+            // jump at x=0.48 — screen centre, unreachable one-handed).
+            use_button: UiSlot::new(0.76, 0.82, 1.0),
+            jump_button: UiSlot::new(0.92, 0.80, 1.0),
             calibration: InputCalibration::default(),
         }
     }
@@ -141,6 +145,9 @@ pub struct UiEditorState {
     pub menu_open: bool,
     pub settings_open: bool,
     pub selected: UiEditable,
+    /// Creative/dev mode: keeps the inventory stocked with the full kit so
+    /// every system can be tested without grinding (Minecraft gamemode 1).
+    pub creative: bool,
     active_pointer: Option<u64>,
 }
 
@@ -151,6 +158,7 @@ impl Default for UiEditorState {
             menu_open: false,
             settings_open: false,
             selected: UiEditable::UseButton,
+            creative: false,
             active_pointer: None,
         }
     }
@@ -196,8 +204,11 @@ struct UiEditorLabel;
 #[derive(Component)]
 struct UiMenuButton;
 
+#[derive(Component)]
+struct UiCamButton;
+
 #[derive(Component, Clone, Copy)]
-enum UiEditorCommand {
+pub enum UiEditorCommand {
     Menu,
     CloseMenu,
     CloseSettings,
@@ -207,6 +218,7 @@ enum UiEditorCommand {
     SelectJump,
     OpenSettings,
     TogglePerf,
+    ToggleCreative,
     GoLuna,
     GoSpace,
     GoEarth,
@@ -269,6 +281,38 @@ fn ensure_editor_ui(
                     TextColor(ui_theme::text_primary()),
                 ));
             });
+
+        // CAM — cycles 1st/3rd person on mobile (no keyboard F5 there).
+        parent
+            .spawn((
+                Button,
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Px(52.0),
+                    height: Val::Px(26.0),
+                    border: UiRect::all(Val::Px(2.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(ui_theme::button_border(UiButtonTone::Primary)),
+                BackgroundColor(ui_theme::button_bg(
+                    UiButtonTone::Primary,
+                    ui_theme::interaction_state(Interaction::None, false),
+                )),
+                UiCamButton,
+                Name::new("InGameCamButton"),
+            ))
+            .with_children(|button| {
+                button.spawn((
+                    Text::new("CAM"),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(ui_theme::text_primary()),
+                ));
+            });
     });
 }
 
@@ -295,6 +339,7 @@ fn spawn_editor_menu_panel(commands: &mut Commands, root: Entity) -> Entity {
                 spawn_editor_button(panel, "CLOSE", UiEditorCommand::CloseMenu);
                 spawn_editor_button(panel, "SETTINGS", UiEditorCommand::OpenSettings);
                 spawn_editor_button(panel, "PERF", UiEditorCommand::TogglePerf);
+                spawn_editor_button(panel, "CREATIVE", UiEditorCommand::ToggleCreative);
                 spawn_editor_button(panel, "GO MOON", UiEditorCommand::GoLuna);
                 spawn_editor_button(panel, "GO SPACE", UiEditorCommand::GoSpace);
                 spawn_editor_button(panel, "GO EARTH", UiEditorCommand::GoEarth);
@@ -380,7 +425,8 @@ fn sync_editor_panels(
     root: Query<Entity, With<GameUiRoot>>,
     mut panels: ResMut<EditorPanelsState>,
 ) {
-    let need_editor = (state.menu_open && !state.settings_open) || state.enabled;
+    // Old vertical panel only in edit-UI mode now; MENU opens the GTA V menu.
+    let need_editor = state.enabled;
     let need_settings = state.menu_open && state.settings_open;
 
     if !need_editor {
@@ -589,6 +635,77 @@ fn update_settings_labels(
     }
 }
 
+/// Creative mode (gamemode 1): while ON, keep the inventory topped up with the
+/// full kit so every system — crafting, building, machines, flight — can be
+/// tested instantly without grinding. Runs every ~2 s (cheap, gated OFF).
+fn creative_topup_system(
+    time: Res<Time>,
+    state: Res<UiEditorState>,
+    mut inv_ui: ResMut<crate::hud::inventory_ui::InventoryUiState>,
+    mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
+    mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
+    mut timer: Local<f32>,
+) {
+    if !state.creative {
+        return;
+    }
+    *timer += time.delta_secs();
+    if *timer < 2.0 {
+        return;
+    }
+    *timer = 0.0;
+
+    // Materials kept near a target so slots stay stocked but not overflowing.
+    const MATERIALS: &[(&str, u32)] = &[
+        ("wood", 64), ("stone", 64), ("sticks", 64), ("dirt", 64),
+        ("iron_ingot", 64), ("gold_ingot", 32), ("gem_blue", 16), ("gem_red", 16),
+    ];
+    // Tools + special items given once (stack 1 — only if missing).
+    const TOOLS: &[&str] = &[
+        "wood_pickaxe", "stone_pickaxe", "pickaxe", "wood_axe", "stone_axe",
+        "hammer", "lantern", "jetpack", "probe", "shield_wood",
+    ];
+
+    let mut changed = false;
+    for &(id, target) in MATERIALS {
+        if inv.qty(id) < target {
+            let need = target - inv.qty(id);
+            crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, id, need);
+            changed = true;
+        }
+    }
+    for &id in TOOLS {
+        if inv.qty(id) == 0 {
+            crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, id, 1);
+            changed = true;
+        }
+    }
+    if changed {
+        crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+        persist.mark_immediate();
+    }
+}
+
+/// CAM button → request a camera-perspective cycle (mobile has no F5).
+/// Separate from `editor_button_system` to stay under Bevy's 16-param limit.
+fn cam_button_system(
+    mut request: ResMut<crate::camera::CameraCycleRequest>,
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<UiCamButton>),
+    >,
+) {
+    for (interaction, mut bg) in &mut buttons {
+        if *interaction == Interaction::Pressed {
+            request.0 = true;
+        }
+        *bg = BackgroundColor(ui_theme::button_bg(
+            UiButtonTone::Primary,
+            ui_theme::interaction_state(*interaction, false),
+        ));
+    }
+}
+
 fn editor_button_system(
     mut state: ResMut<UiEditorState>,
     mut config: ResMut<UiLayoutConfig>,
@@ -597,7 +714,6 @@ fn editor_button_system(
     mut region: ResMut<RegionRuntime>,
     mut world_ctx: ResMut<WorldContextRuntime>,
     mut moon: ResMut<MoonWorldState>,
-    mut space: ResMut<crate::space_world::SpaceWorldState>,
     mut launch_atmo: ResMut<LaunchAtmosphere>,
     mut flight: ResMut<RocketFlight>,
     mut transition: ResMut<FlightTransition>,
@@ -617,10 +733,19 @@ fn editor_button_system(
                     state.enabled = false;
                     state.active_pointer = None;
                 }
+                UiEditorCommand::ToggleCreative => {
+                    // Flag only — `creative_topup_system` does the stocking so
+                    // this system stays under Bevy's 16-param limit.
+                    state.creative = !state.creative;
+                    state.menu_open = false;
+                    state.settings_open = false;
+                    state.enabled = false;
+                    state.active_pointer = None;
+                    eprintln!("ha-creative: {}", if state.creative { "ON" } else { "OFF" });
+                }
                 UiEditorCommand::GoLuna => {
                     flight.end_surface();
                     flight.active = false;
-                    cleanup.despawn_space = true;
                     cleanup.despawn_moon = false;
                     cleanup.despawn_planet = false;
                     region.active = RegionId::Luna;
@@ -671,10 +796,9 @@ fn editor_button_system(
                     flight.begin_coast_toward(dock, Vec3::ZERO, ha_shared::CelestialBody::Earth);
                     region.active = RegionId::Space;
                     world_ctx.active = ha_shared::WorldContext::Space;
-                    space.needs_spawn = true;
                     cleanup.despawn_moon = false;
                     launch_atmo.active = false;
-                    transition.begin("Dev → orbital dock");
+                    transition.begin("Dev → órbita");
                     state.menu_open = false;
                     state.settings_open = false;
                     state.enabled = false;
@@ -682,7 +806,6 @@ fn editor_button_system(
                 UiEditorCommand::GoEarth => {
                     flight.end_surface();
                     flight.active = false;
-                    cleanup.despawn_space = true;
                     cleanup.despawn_moon = true;
                     transition.begin("Dev → Earth pad");
                     launch_atmo.active = false;
@@ -836,12 +959,22 @@ fn update_editor_overlay(
     mut panel: Query<&mut Node, With<UiEditorPanel>>,
     mut settings: Query<&mut Node, (With<SettingsPanel>, Without<UiEditorPanel>)>,
     mut menu_button: Query<&mut Node, (With<UiMenuButton>, Without<UiEditorPanel>, Without<SettingsPanel>)>,
+    mut cam_button: Query<&mut Node, (With<UiCamButton>, Without<UiMenuButton>, Without<UiEditorPanel>, Without<SettingsPanel>)>,
     mut label: Query<&mut Text, With<UiEditorLabel>>,
     mut editor_blocks: ResMut<EditorTouchBlocks>,
 ) {
     let menu_top = layout.insets.top as f32 + 8.0;
     if let Ok(mut node) = menu_button.get_single_mut() {
         apply_top_center(&mut node, &layout, MENU_BUTTON_WIDTH, menu_top);
+    }
+    // CAM sits just right of MENU at the top.
+    if let Ok(mut node) = cam_button.get_single_mut() {
+        node.position_type = PositionType::Absolute;
+        node.top = Val::Px(menu_top);
+        let cam_w = 52.0;
+        let left = (layout.width * 0.5 + MENU_BUTTON_WIDTH * 0.5 + 8.0)
+            .min(layout.width - layout.insets.right as f32 - cam_w - 6.0);
+        node.left = Val::Px(left);
     }
     if let Ok(mut node) = panel.get_single_mut() {
         apply_center(&mut node, &layout, EDITOR_PANEL_W, EDITOR_PANEL_H);

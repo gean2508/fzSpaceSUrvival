@@ -1,11 +1,12 @@
 //! Starship — native ECS client (Bevy + ha-shared). SFS-style 3D solar system.
 
+mod boot_ui;
+mod game_menu;
 mod game_time;
 mod sky_clock;
 mod assets;
 mod camera;
 mod celestial_cleanup;
-mod celestial_sphere;
 mod floating_origin;
 mod view_target;
 mod world_persist;
@@ -29,13 +30,13 @@ mod moon_world;
 mod earth_world;
 mod planet_surface_mesh;
 mod planet_world;
-mod solar_system;
 mod platform;
 mod render;
 mod rocket_flight;
 mod scene;
-mod space_world;
 mod space_travel;
+mod nav_computer;
+mod harvest;
 mod sim;
 mod solar_lighting;
 mod targeting;
@@ -45,8 +46,13 @@ mod asset_dev;
 mod ui_theme;
 mod ui;
 mod deposit_spawn;
+mod flora_spawn;
+mod block_world;
+mod building_world;
+mod world_stream;
 mod surface_placement;
 mod surface_patch;
+mod quality;
 
 use bevy::prelude::*;
 use bevy::winit::WinitSettings;
@@ -70,8 +76,13 @@ use flight_celestials::FlightCelestialsPlugin;
 use world_travel::WorldTravelPlugin;
 use solar_system_clock::SolarSystemClockPlugin;
 use earth_world::EarthWorldPlugin;
+use block_world::BlockWorldPlugin;
+use world_stream::WorldStreamPlugin;
+use building_world::BuildingPlugin;
 use surface_patch::SurfacePatchPlugin;
 use hud::PixelHudPlugin;
+use boot_ui::BootUiPlugin;
+use game_menu::GameMenuPlugin;
 use input::{InputPlugin, LookInteractPlugin};
 use materials::ToonMaterialPlugin;
 use launch_pad::LaunchPadPlugin;
@@ -80,7 +91,8 @@ use moon_world::MoonWorldPlugin;
 use planet_world::PlanetWorldPlugin;
 use rocket_flight::RocketFlightPlugin;
 use space_travel::SpaceTravelPlugin;
-use space_world::SpaceWorldPlugin;
+use nav_computer::NavComputerPlugin;
+use harvest::HarvestPlugin;
 use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
 use render::render_scale::RenderScalePlugin;
@@ -191,12 +203,15 @@ fn run_app_inner() {
             ToonMaterialPlugin,
             SimPlugin,
             EarthWorldPlugin,
+            WorldStreamPlugin,
             SurfacePatchPlugin,
             ScenePlugin,
         ))
         .add_plugins((
             RenderScalePlugin,
             InventoryPersistPlugin,
+            BuildingPlugin,
+            BlockWorldPlugin,
             MachinesPlugin,
             LaunchPadPlugin,
             WorldTravelPlugin,
@@ -211,14 +226,17 @@ fn run_app_inner() {
             MoonWorldPlugin,
             PlanetWorldPlugin,
             CelestialCleanupPlugin,
-            SpaceWorldPlugin,
             SpaceTravelPlugin,
+            NavComputerPlugin,
+            HarvestPlugin,
             JetpackTransitPlugin,
         ))
         .add_plugins((
             FollowCameraPlugin,
             TelemetryPlugin,
             PixelHudPlugin,
+            BootUiPlugin,
+            GameMenuPlugin,
             ParticlesPlugin,
             PerfDebugPlugin,
             CpuSpanPlugin,

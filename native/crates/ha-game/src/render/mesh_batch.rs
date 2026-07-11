@@ -3,6 +3,15 @@ use bevy::render::mesh::{Indices, VertexAttributeValues};
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::PrimitiveTopology as Topo;
 
+/// Per-kind instance data from one streamed chunk — the world streamer merges
+/// entries across all loaded chunks into a single mesh per kind.
+pub struct ChunkBatchEntry {
+    pub kind: String,
+    pub material: crate::assets::WorldMaterial,
+    pub mesh: Handle<Mesh>,
+    pub transforms: Vec<Transform>,
+}
+
 /// Smooth terrain patch — vertex heights from `height_at` (matches `terrain_height_at` collision).
 /// Vertices sit on a world-aligned lattice so adjacent chunks share watertight edges.
 pub fn build_terrain_heightmap(
@@ -50,6 +59,7 @@ pub fn build_terrain_heightmap_colored_with_slope(
     let rows = (iz1 - iz0 + 1) as usize;
 
     let mut positions: Vec<[f32; 3]> = Vec::with_capacity(cols * rows);
+    let mut normals: Vec<[f32; 3]> = Vec::with_capacity(cols * rows);
     let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(cols * rows);
     let mut colors: Vec<[f32; 4]> = Vec::with_capacity(cols * rows);
     let mut indices: Vec<u32> = Vec::with_capacity((cols.saturating_sub(1)) * (rows.saturating_sub(1)) * 6);
@@ -60,6 +70,14 @@ pub fn build_terrain_heightmap_colored_with_slope(
             let x = (ix0 + col as i32) as f32 * step;
             let y = height_at(x, z);
             positions.push([x, y, z]);
+            // Analytic central differences sample PAST the chunk edge — per-chunk
+            // `compute_smooth_normals` left hard normal seams along borders.
+            let hl = height_at(x - step, z);
+            let hr = height_at(x + step, z);
+            let hd = height_at(x, z - step);
+            let hu = height_at(x, z + step);
+            let n = Vec3::new(hl - hr, 2.0 * step, hd - hu).normalize_or_zero();
+            normals.push(n.to_array());
             colors.push(color_at(x, z, y));
             let u = if cols > 1 {
                 col as f32 / (cols - 1) as f32
@@ -85,12 +103,12 @@ pub fn build_terrain_heightmap_colored_with_slope(
         }
     }
 
-    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
     mesh.insert_indices(Indices::U32(indices));
-    mesh.compute_smooth_normals();
     mesh
 }
 
@@ -144,7 +162,7 @@ pub fn build_merged_sized_cuboids(cuboids: &[(Vec3, f32, f32, f32)]) -> Mesh {
         }
     }
 
-    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
@@ -203,7 +221,7 @@ pub fn build_merged_cuboids(transforms: &[Transform], w: f32, h: f32, d: f32) ->
         }
     }
 
-    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
@@ -247,32 +265,28 @@ pub fn build_merged_instances(base: &Mesh, transforms: &[Transform]) -> Mesh {
     let mut uvs: Vec<[f32; 2]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
 
-    let uv_fallback = base_uv.is_empty();
     for tf in transforms {
         let offset = positions.len() as u32;
-        for p in &base_pos {
+        // Every attribute padded to EXACTLY base_pos.len() per instance — a
+        // base mesh with short/missing UVs or normals must not desync the
+        // merged buffers (truncated vertex buffer + out-of-range indices =
+        // garbage stretched triangles).
+        for (i, p) in base_pos.iter().enumerate() {
             positions.push(tf.transform_point(Vec3::from_array(*p)).to_array());
-        }
-        for n in &base_norm {
-            let v = (tf.rotation * Vec3::from_array(*n)).normalize_or_zero();
+            let n = base_norm.get(i).copied().unwrap_or([0.0, 1.0, 0.0]);
+            let v = (tf.rotation * Vec3::from_array(n)).normalize_or_zero();
             normals.push(v.to_array());
-        }
-        if uv_fallback {
-            uvs.extend(std::iter::repeat([0.0, 0.0]).take(base_pos.len()));
-        } else {
-            uvs.extend(base_uv.iter().copied());
+            uvs.push(base_uv.get(i).copied().unwrap_or([0.0, 0.0]));
         }
         for idx in &base_idx {
             indices.push(idx + offset);
         }
     }
 
-    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(Topo::TriangleList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    if !uvs.is_empty() {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    }
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
     mesh
 }

@@ -4,15 +4,11 @@ use bevy::prelude::*;
 
 use crate::moon_world::{despawn_moon_entities, MoonWorldState};
 use crate::planet_world::{despawn_planet_entities, PlanetWorldState};
-use crate::rocket_flight::RocketFlight;
 use crate::scene::{RegionId, RegionRuntime};
-use crate::space_world::{despawn_space_entities, SpaceWorldState};
 use crate::view_target::ViewTarget;
-use ha_shared::FlightPhase;
 
 #[derive(Resource, Default)]
 pub struct CelestialCleanup {
-    pub despawn_space: bool,
     pub despawn_moon: bool,
     pub despawn_planet: bool,
 }
@@ -21,10 +17,8 @@ pub struct CelestialCleanup {
 #[derive(Resource)]
 pub struct RegionCleanupScheduler {
     pub last_region: Option<RegionId>,
-    pub space_timer: Timer,
     pub moon_timer: Timer,
     pub planet_timer: Timer,
-    pub pending_space: bool,
     pub pending_moon: bool,
     pub pending_planet: bool,
 }
@@ -33,10 +27,8 @@ impl Default for RegionCleanupScheduler {
     fn default() -> Self {
         Self {
             last_region: None,
-            space_timer: Timer::from_seconds(2.0, TimerMode::Once),
             moon_timer: Timer::from_seconds(2.0, TimerMode::Once),
             planet_timer: Timer::from_seconds(2.0, TimerMode::Once),
-            pending_space: false,
             pending_moon: false,
             pending_planet: false,
         }
@@ -57,9 +49,7 @@ impl Plugin for CelestialCleanupPlugin {
 fn schedule_region_cleanup(
     time: Res<Time>,
     region: Res<RegionRuntime>,
-    flight: Res<RocketFlight>,
     view: Res<ViewTarget>,
-    space: Res<SpaceWorldState>,
     moon: Res<MoonWorldState>,
     planet: Res<PlanetWorldState>,
     mut sched: ResMut<RegionCleanupScheduler>,
@@ -69,30 +59,22 @@ fn schedule_region_cleanup(
         sched.last_region = Some(region.active);
     }
 
-    let on_space = matches!(region.active, RegionId::Space | RegionId::Transit)
-        || (flight.active && flight.phase != FlightPhase::Surface && flight.in_vacuum());
     let on_moon = matches!(region.active, RegionId::Luna) || view.is_remote();
     let on_planet = matches!(region.active, RegionId::Planet(_));
-    let on_earth = matches!(region.active, RegionId::Overworld { .. });
 
     // Schedule despawn when region no longer needed.
-    if !on_space && space.spawned {
-        sched.pending_space = true;
-        sched.space_timer.reset();
-    }
-    if !on_moon && moon.spawned && !view.is_remote() {
+    // Reset the timer only on the transition — resetting every frame would
+    // keep it from ever finishing and the region would never despawn (OOM).
+    if !on_moon && moon.spawned && !view.is_remote() && !sched.pending_moon {
         sched.pending_moon = true;
         sched.moon_timer.reset();
     }
-    if !on_planet && planet.spawned {
+    if !on_planet && planet.spawned && !sched.pending_planet {
         sched.pending_planet = true;
         sched.planet_timer.reset();
     }
 
     // Cancel pending if we return to region.
-    if on_space {
-        sched.pending_space = false;
-    }
     if on_moon {
         sched.pending_moon = false;
     }
@@ -105,14 +87,9 @@ fn schedule_region_cleanup(
         sched.pending_moon = false;
     }
 
-    sched.space_timer.tick(time.delta());
     sched.moon_timer.tick(time.delta());
     sched.planet_timer.tick(time.delta());
 
-    if sched.pending_space && sched.space_timer.finished() && on_earth {
-        cleanup.despawn_space = true;
-        sched.pending_space = false;
-    }
     if sched.pending_moon && sched.moon_timer.finished() {
         cleanup.despawn_moon = true;
         sched.pending_moon = false;
@@ -126,26 +103,11 @@ fn schedule_region_cleanup(
 fn process_celestial_cleanup(
     mut commands: Commands,
     mut cleanup: ResMut<CelestialCleanup>,
-    mut space: ResMut<SpaceWorldState>,
     mut moon: ResMut<MoonWorldState>,
     mut planet: ResMut<PlanetWorldState>,
-    space_entities: Query<Entity, With<crate::space_world::SpaceDecor>>,
-    space_slots: Query<Entity, With<crate::space_world::SpaceStationModuleSlot>>,
-    space_visuals: Query<Entity, With<crate::space_world::SpaceStationModuleVisual>>,
     moon_entities: Query<Entity, With<crate::moon_world::MoonDecor>>,
     planet_entities: Query<Entity, With<crate::planet_world::PlanetDecor>>,
 ) {
-    if cleanup.despawn_space {
-        despawn_space_entities(
-            &mut commands,
-            &mut space,
-            &space_entities,
-            &space_slots,
-            &space_visuals,
-        );
-        cleanup.despawn_space = false;
-        eprintln!("ha-celestial: despawned orbital hub");
-    }
     if cleanup.despawn_moon {
         despawn_moon_entities(&mut commands, &mut moon, &moon_entities);
         cleanup.despawn_moon = false;

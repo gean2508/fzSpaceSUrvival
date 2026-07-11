@@ -1,0 +1,49 @@
+{
+  "vessels": [
+    {
+      "id": "PlayerShip",
+      "label": "PLAYER SHIP",
+      "mode": "Inactive",
+      "body": "Earth",
+      "orbit_phase": 0.0,
+      "surface_tz": 0.0,
+      "orbit_alt_m": 420.0,
+      "fuel_pct": 100.0,
+      "power": {
+        "generation_w": 0.0,
+        "load_w": 0.0,
+        "storage_wh": 0.0,
+        "storage_max_wh": 0.0,
+        "solar_efficiency": 0.0
+      },
+      "connectivity": {
+        "earth_los": false,
+        "repeater_los": false,
+        "signal_strength": 0.0
+      }
+    },
+    {
+      "id": "OrbitalStation",
+      "label": "ORBITAL STATION",
+      "mode": "ParkedOrbit",
+      "body": "Earth",
+      "orbit_phase": 2.4783297,
+      "surface_tz": 0.0,
+      "orbit_alt_m": 600.0,
+      "fuel_pct": 100.0,
+      "power": {
+        "generation_w": 0.0,
+        "load_w": 38.0,
+        "storage_wh": 0.0,
+        "storage_max_wh": 500.0,
+        "solar_efficiency": 0.0
+      },
+      "connectivity": {
+        "earth_los": false,
+        "repeater_los": false,
+        "signal_strength": 0.0
+      }
+    }
+  ],
+  "active_vessel": "PlayerShip"
+}

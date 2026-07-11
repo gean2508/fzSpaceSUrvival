@@ -107,3 +107,8 @@ ui_icon_quest
 ui_icon_map
 ui_icon_settings
 ui_icon_chat
+build_floor_wood
+build_wall_wood
+build_wall_stone
+build_roof_wood
+build_stairs_wood

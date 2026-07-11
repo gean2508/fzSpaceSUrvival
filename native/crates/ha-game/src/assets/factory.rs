@@ -23,9 +23,18 @@ pub struct ProceduralAsset {
     pub source: AssetSource,
 }
 
+/// GLB baked texture waiting for `Assets<Image>` — bound one frame after the
+/// material is created so `require()` keeps its signature (no `Assets<Image>`
+/// threading through every call site).
+pub struct PendingGlbTexture {
+    pub material: Handle<StandardMaterial>,
+    pub image: bevy::image::Image,
+}
+
 #[derive(Resource, Default)]
 pub struct AssetFactory {
     cache: HashMap<&'static str, ProceduralAsset>,
+    pending_textures: Vec<PendingGlbTexture>,
 }
 
 impl AssetFactory {
@@ -46,6 +55,14 @@ impl AssetFactory {
 
         if let Some(payload) = try_load_kind(kind) {
             let material = world_material_from_glb(&payload, def.palette, toon_mats, std_mats);
+            if let (Some(image), WorldMaterial::Standard(handle)) =
+                (payload.base_color_image, &material)
+            {
+                self.pending_textures.push(PendingGlbTexture {
+                    material: handle.clone(),
+                    image,
+                });
+            }
             let mesh = meshes.add(payload.mesh);
             let entry = ProceduralAsset {
                 def,
@@ -113,6 +130,45 @@ pub struct AssetFactoryPlugin;
 
 impl Plugin for AssetFactoryPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AssetFactory>();
+        app.init_resource::<AssetFactory>()
+            .add_systems(PostStartup, preload_catalog_assets)
+            .add_systems(Update, apply_pending_glb_textures);
+    }
+}
+
+/// Warm the whole catalog at boot — lazy `require` mid-walk paid a GLB parse
+/// + PNG texture decode inside a gameplay frame the first time each flora
+/// kind streamed in (visible hitch on the Redmi).
+fn preload_catalog_assets(
+    mut factory: ResMut<AssetFactory>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut toon_mats: ResMut<Assets<ToonMaterial>>,
+    mut std_mats: ResMut<Assets<StandardMaterial>>,
+) {
+    let t0 = std::time::Instant::now();
+    for def in ha_shared::ASSET_CATALOG {
+        let _ = factory.get(def.kind, &mut meshes, &mut toon_mats, &mut std_mats);
+    }
+    eprintln!(
+        "ha-assets: preloaded {} catalog kinds in {:.0?}",
+        factory.cached_count(),
+        t0.elapsed()
+    );
+}
+
+/// Bind decoded GLB bake textures to their (kind-shared) materials.
+fn apply_pending_glb_textures(
+    mut factory: ResMut<AssetFactory>,
+    mut images: ResMut<Assets<Image>>,
+    mut std_mats: ResMut<Assets<StandardMaterial>>,
+) {
+    if factory.pending_textures.is_empty() {
+        return;
+    }
+    for pending in factory.pending_textures.drain(..) {
+        let handle = images.add(pending.image);
+        if let Some(mat) = std_mats.get_mut(&pending.material) {
+            mat.base_color_texture = Some(handle);
+        }
     }
 }

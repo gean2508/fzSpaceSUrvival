@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use ha_shared::{require_ui_icon, UI_ICON_CATALOG};
+use ha_shared::{get_ui_icon, UI_ICON_CATALOG};
 
 use super::icon_builders::rasterize_icon;
 
@@ -18,7 +18,8 @@ impl IconFactory {
         if let Some(hit) = self.cache.get(kind) {
             return hit.clone();
         }
-        let def = require_ui_icon(kind);
+        // Unknown kind must not crash the HUD — fall back to first catalog icon.
+        let def = get_ui_icon(kind).unwrap_or(&UI_ICON_CATALOG[0]);
         let handle = images.add(rasterize_icon(def));
         self.cache.insert(def.kind, handle.clone());
         handle

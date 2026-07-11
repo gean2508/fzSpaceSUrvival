@@ -166,4 +166,10 @@ pub static ASSET_CATALOG: &[AssetDef] = &[
     a!("ui_icon_map", AssetClass::Ui, AssetCategory::Ui, PaletteKey::Earth, U),
     a!("ui_icon_settings", AssetClass::Ui, AssetCategory::Ui, PaletteKey::Stone, U),
     a!("ui_icon_chat", AssetClass::Ui, AssetCategory::Ui, PaletteKey::NeonCyan, U),
+    // Modular building (snap grid)
+    a!("build_floor_wood", AssetClass::Prop, AssetCategory::Construction, PaletteKey::Wood, P),
+    a!("build_wall_wood", AssetClass::Prop, AssetCategory::Construction, PaletteKey::Wood, P),
+    a!("build_wall_stone", AssetClass::Prop, AssetCategory::Construction, PaletteKey::Stone, P),
+    a!("build_roof_wood", AssetClass::Prop, AssetCategory::Construction, PaletteKey::Wood, P),
+    a!("build_stairs_wood", AssetClass::Prop, AssetCategory::Construction, PaletteKey::Wood, P),
 ];

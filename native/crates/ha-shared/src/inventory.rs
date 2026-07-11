@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::building::BuildPieceKind;
 use crate::machines::MachineDef;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -12,29 +13,14 @@ pub struct PlayerInventory {
 }
 
 impl PlayerInventory {
+    /// Minecraft-style cold start: empty hands. Punch a tree → wood → sticks →
+    /// wood pickaxe → mine stone → stone pickaxe → ore. No handouts.
     pub fn starter() -> Self {
-        let mut inv = Self::default();
-        inv.add("wood", 48);
-        inv.add("stone", 40);
-        inv.add("dirt", 48);
-        inv.add("sticks", 18);
-        inv.add("iron_ingot", 30);
-        inv.add("gold_ingot", 5);
-        inv
+        Self::default()
     }
 
-    /// Top up legacy saves that predate agency demo kit.
-    pub fn ensure_agency_demo_kit(&mut self) {
-        if self.qty("iron_ingot") >= 15 {
-            return;
-        }
-        self.add("wood", 40);
-        self.add("stone", 35);
-        self.add("dirt", 32);
-        self.add("sticks", 16);
-        self.add("iron_ingot", 30);
-        self.add("gold_ingot", 5);
-    }
+    /// Kept for the load path; no longer tops up (empty-start progression).
+    pub fn ensure_agency_demo_kit(&mut self) {}
 
     pub fn qty(&self, item_id: &str) -> u32 {
         *self.items.get(item_id).unwrap_or(&0)
@@ -100,6 +86,14 @@ impl PlayerInventory {
         true
     }
 
+    pub fn can_afford_build(&self, piece: BuildPieceKind) -> bool {
+        self.has_ingredients(piece.build_cost())
+    }
+
+    pub fn consume_build_cost(&mut self, piece: BuildPieceKind) -> bool {
+        self.consume_ingredients(piece.build_cost())
+    }
+
     pub fn sorted_entries(&self) -> Vec<(&str, u32)> {
         let mut out: Vec<_> = self
             .items
@@ -117,11 +111,11 @@ mod tests {
     use crate::recipes::{craft, get_craft_recipe};
 
     #[test]
-    fn starter_matches_ts_defaults() {
+    fn starter_is_empty() {
         let inv = PlayerInventory::starter();
-        assert_eq!(inv.qty("wood"), 48);
-        assert_eq!(inv.qty("iron_ingot"), 30);
-        assert_eq!(inv.qty("gold_ingot"), 5);
+        assert_eq!(inv.qty("wood"), 0);
+        assert_eq!(inv.qty("iron_ingot"), 0);
+        assert!(inv.items.is_empty());
     }
 
     #[test]
@@ -136,24 +130,23 @@ mod tests {
     }
 
     #[test]
-    fn craft_pickaxe_parity_with_ts() {
-        let recipe = get_craft_recipe(1).unwrap();
+    fn craft_wood_pickaxe_parity_with_ts() {
+        let recipe = get_craft_recipe(2).unwrap(); // wood pickaxe
         let mut inv = PlayerInventory::default();
         inv.add("wood", 3);
-        inv.add("stone", 2);
-        inv.add("sticks", 1);
+        inv.add("sticks", 2);
         assert!(craft(&mut inv, recipe));
-        assert_eq!(inv.qty("pickaxe"), 1);
+        assert_eq!(inv.qty("wood_pickaxe"), 1);
         assert_eq!(inv.qty("wood"), 0);
     }
 
     #[test]
     fn insufficient_craft_leaves_inventory() {
-        let recipe = get_craft_recipe(1).unwrap();
+        let recipe = get_craft_recipe(1).unwrap(); // sticks (needs wood 2)
         let mut inv = PlayerInventory::default();
         inv.add("wood", 1);
         assert!(!craft(&mut inv, recipe));
         assert_eq!(inv.qty("wood"), 1);
-        assert_eq!(inv.qty("pickaxe"), 0);
+        assert_eq!(inv.qty("sticks"), 0);
     }
 }

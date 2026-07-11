@@ -2,7 +2,7 @@
 
 use bevy::prelude::Vec2;
 
-/// Default 3D render resolution scale (Camera3d only; HUD stays native).
+/// Default 3D render resolution scale (reserved — direct window render on Android today).
 pub const DEFAULT_RENDER_SCALE: f32 = 1.0;
 
 /// Stick magnitude curve: 1.0 = linear, ~1.7 = fine center + full edge speed.
@@ -32,8 +32,7 @@ impl Default for InputCalibration {
             camera_sensitivity: 1.0,
             movement_sensitivity: 1.0,
             stick_curve_exponent: DEFAULT_STICK_CURVE_EXPONENT,
-            // 0.75 regressed on Redmi (blit UI pass); keep 1.0 until blit path is cheaper.
-            render_scale: 1.0,
+            render_scale: DEFAULT_RENDER_SCALE,
         }
     }
 }

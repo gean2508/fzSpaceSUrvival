@@ -19,6 +19,35 @@ const MAX_TRIS_WARN: usize = 350;
 pub struct GlbPayload {
     pub mesh: Mesh,
     pub standard_material: StandardMaterial,
+    /// Baked base-color texture embedded in the GLB (PNG from Blender bakes) —
+    /// bound to the material by `apply_pending_glb_textures` one frame later.
+    pub base_color_image: Option<bevy::image::Image>,
+}
+
+/// Decode an embedded GLB texture (buffer-view source) with Bevy's decoders.
+fn decode_glb_image(
+    texture: &gltf::texture::Texture,
+    blob: &[u8],
+) -> Option<bevy::image::Image> {
+    use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
+
+    let gltf::image::Source::View { view, mime_type } = texture.source().source() else {
+        // External URI textures unsupported — bake + embed in the .glb.
+        return None;
+    };
+    let start = view.offset();
+    let end = start + view.length();
+    let bytes = blob.get(start..end)?;
+    bevy::image::Image::from_buffer(
+        bytes,
+        ImageType::MimeType(mime_type),
+        CompressedImageFormats::NONE,
+        true,
+        ImageSampler::nearest(),
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .map_err(|err| eprintln!("{GLB_TAG}: texture decode failed: {err}"))
+    .ok()
 }
 
 /// Resolve candidate filesystem / APK-relative paths for a catalog kind.
@@ -115,6 +144,7 @@ pub fn load_from_bytes(bytes: &[u8]) -> Option<GlbPayload> {
     let mut indices: Vec<u32> = Vec::new();
     let mut standard_material = StandardMaterial::default();
     let mut got_material = false;
+    let mut base_color_image: Option<bevy::image::Image> = None;
 
     let scene = gltf.default_scene().or_else(|| gltf.scenes().next())?;
     for node in scene.nodes() {
@@ -128,6 +158,7 @@ pub fn load_from_bytes(bytes: &[u8]) -> Option<GlbPayload> {
             &mut indices,
             &mut standard_material,
             &mut got_material,
+            &mut base_color_image,
         );
     }
 
@@ -157,9 +188,11 @@ pub fn load_from_bytes(bytes: &[u8]) -> Option<GlbPayload> {
     Some(GlbPayload {
         mesh,
         standard_material,
+        base_color_image,
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn visit_gltf_node(
     node: gltf::Node,
     parent: Mat4,
@@ -170,6 +203,7 @@ fn visit_gltf_node(
     indices: &mut Vec<u32>,
     standard_material: &mut StandardMaterial,
     got_material: &mut bool,
+    base_color_image: &mut Option<bevy::image::Image>,
 ) {
     let world = parent * node_transform_mat4(node.transform());
     if let Some(gltf_mesh) = node.mesh() {
@@ -184,11 +218,23 @@ fn visit_gltf_node(
                 indices,
                 standard_material,
                 got_material,
+                base_color_image,
             );
         }
     }
     for child in node.children() {
-        visit_gltf_node(child, world, blob, positions, normals, uvs, indices, standard_material, got_material);
+        visit_gltf_node(
+            child,
+            world,
+            blob,
+            positions,
+            normals,
+            uvs,
+            indices,
+            standard_material,
+            got_material,
+            base_color_image,
+        );
     }
 }
 
@@ -202,6 +248,7 @@ fn node_transform_mat4(tf: gltf::scene::Transform) -> Mat4 {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn append_primitive_merged(
     primitive: &gltf::Primitive,
     world: Mat4,
@@ -212,6 +259,7 @@ fn append_primitive_merged(
     indices: &mut Vec<u32>,
     standard_material: &mut StandardMaterial,
     got_material: &mut bool,
+    base_color_image: &mut Option<bevy::image::Image>,
 ) {
     let reader = primitive.reader(|_| Some(blob));
     let base = positions.len() as u32;
@@ -234,6 +282,14 @@ fn append_primitive_merged(
     if let Some(iter) = reader.read_tex_coords(0) {
         uvs.extend(iter.into_f32().map(|uv| [uv[0], uv[1]]));
     }
+    // UV count MUST track position count across primitives: a mixed GLB
+    // (one primitive with UVs, one without) left `uvs.len() < positions.len()`
+    // → Bevy truncates the vertex buffer to the shortest attribute → indices
+    // read past it → garbage stretched triangles flickering with the frustum.
+    // (Normals already have the `use_normals` length guard in the caller.)
+    while uvs.len() < positions.len() {
+        uvs.push([0.0, 0.0]);
+    }
     if let Some(iter) = reader.read_indices() {
         let chunk: Vec<u32> = match iter {
             ReadIndices::U8(i) => i.map(u32::from).collect(),
@@ -244,12 +300,14 @@ fn append_primitive_merged(
     }
 
     if !*got_material {
-        let factor = primitive
-            .material()
-            .pbr_metallic_roughness()
-            .base_color_factor();
+        let pbr = primitive.material().pbr_metallic_roughness();
+        let factor = pbr.base_color_factor();
         standard_material.base_color =
             Color::srgba(factor[0], factor[1], factor[2], factor[3]);
+        // Baked albedo from Blender — respected instead of flat shading.
+        if let Some(info) = pbr.base_color_texture() {
+            *base_color_image = decode_glb_image(&info.texture(), blob);
+        }
         *got_material = true;
     }
 }

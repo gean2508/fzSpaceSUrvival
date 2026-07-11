@@ -12,5 +12,5 @@ fi
 
 echo "ha-blender: using $("$BLENDER" --version | head -1)"
 echo "ha-blender: script $SCRIPT"
-"$BLENDER" --background --python "$SCRIPT"
+"$BLENDER" --background --python "$SCRIPT" -- "$@"
 echo "ha-blender: done. Game models: $ROOT/native/crates/ha-game/assets/models/"

@@ -66,8 +66,10 @@ fn harvest_reactive(kind: InteractableKind) -> bool {
     )
 }
 
-/// Spawn mineral/resource nodes on a displaced sphere shell.
-pub fn spawn_sphere_deposits<D: Component + Clone>(
+/// Spawn interact markers and collect per-kind instance data. Returns the
+/// batch entries so the caller decides whether to spawn meshes immediately
+/// (Luna/planets, one-shot) or merge across chunks (streamed Earth).
+pub fn collect_deposit_batches<D: Component + Clone>(
     commands: &mut Commands,
     factory: &mut AssetFactory,
     meshes: &mut Assets<Mesh>,
@@ -76,13 +78,9 @@ pub fn spawn_sphere_deposits<D: Component + Clone>(
     body: CelestialBody,
     deposits: &[SurfaceDeposit],
     decor: D,
-) {
-    struct BatchAcc {
-        material: crate::assets::WorldMaterial,
-        mesh: Handle<Mesh>,
-        transforms: Vec<Transform>,
-    }
-    let mut by_kind: HashMap<String, BatchAcc> = HashMap::new();
+    chunk: Option<crate::earth_world::StreamedChunkMark>,
+) -> Vec<crate::render::mesh_batch::ChunkBatchEntry> {
+    let mut by_kind: HashMap<String, crate::render::mesh_batch::ChunkBatchEntry> = HashMap::new();
 
     for node in deposits {
         let kind_str = node.kind.tag();
@@ -110,7 +108,8 @@ pub fn spawn_sphere_deposits<D: Component + Clone>(
 
         by_kind
             .entry(kind_str.to_string())
-            .or_insert_with(|| BatchAcc {
+            .or_insert_with(|| crate::render::mesh_batch::ChunkBatchEntry {
+                kind: kind_str.to_string(),
                 material: asset.material.clone(),
                 mesh: asset.mesh.clone(),
                 transforms: Vec::new(),
@@ -128,24 +127,51 @@ pub fn spawn_sphere_deposits<D: Component + Clone>(
             Visibility::Visible,
             Name::new(format!("Deposit_{kind_str}_{}", node.id)),
         ));
+        if let Some(mark) = chunk {
+            marker.insert(mark);
+        }
         if harvest_reactive(node.kind) {
             marker.insert(HarvestReactive);
         }
     }
 
-    for (kind_str, acc) in by_kind {
+    by_kind.into_values().collect()
+}
+
+/// Spawn mineral/resource nodes on a displaced sphere shell (one-shot bodies:
+/// Luna and planets — batches spawn immediately, one mesh per kind).
+pub fn spawn_sphere_deposits<D: Component + Clone>(
+    commands: &mut Commands,
+    factory: &mut AssetFactory,
+    meshes: &mut Assets<Mesh>,
+    toon_mats: &mut Assets<ToonMaterial>,
+    std_mats: &mut Assets<StandardMaterial>,
+    body: CelestialBody,
+    deposits: &[SurfaceDeposit],
+    decor: D,
+    chunk: Option<crate::earth_world::StreamedChunkMark>,
+) {
+    let batches = collect_deposit_batches(
+        commands, factory, meshes, toon_mats, std_mats, body, deposits, decor.clone(), chunk,
+    );
+    for acc in batches {
         if acc.transforms.is_empty() {
             continue;
         }
-        let base_mesh = meshes.get(&acc.mesh).expect("deposit mesh").clone();
+        let Some(base_mesh) = meshes.get(&acc.mesh).cloned() else {
+            continue;
+        };
         let mesh = meshes.add(build_merged_instances(&base_mesh, &acc.transforms));
         let mut entity = commands.spawn((
             Mesh3d(mesh),
             Transform::IDENTITY,
             decor.clone(),
             Visibility::Visible,
-            Name::new(format!("DepositBatch_{kind_str}_{}", body.label())),
+            Name::new(format!("DepositBatch_{}_{}", acc.kind, body.label())),
         ));
+        if let Some(mark) = chunk {
+            entity.insert(mark);
+        }
         acc.material.insert_on(&mut entity);
     }
 }
