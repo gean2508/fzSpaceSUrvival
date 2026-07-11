@@ -218,3 +218,23 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - **Persistencia:** `survival.json` (hp + barras), flush-on-pause + debounce 20 s — patrón B10.
 - **HUD:** 3 barras finas bajo los corazones (`hud/survival_bars.rs`); la de O₂ solo aparece en vacío o si no está llena.
 - **Regla:** cualquier cambio numérico va a TS **y** Rust (regla 10 de §3).
+
+---
+
+## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
+
+**Hecho y shipeado (v1.0.147, commits 792b98d..793be81):** F0 tests verdes · F1 survival core (§12) · F2 ship builder Fase 1 (contadores) · F3 base lunar (taladro/antena/monitoreo, máquinas por cuerpo) · F4 gamepad · F6 APK publicado. F5 perf: **medición bloqueada hasta conectar el Redmi** (plan en memoria del agente + §6).
+
+**Fases restantes, EN ESTE ORDEN (aprobadas por el usuario 12 jul):**
+
+1. **Ship Builder Fase 2 — piezas estructurales + nave visible** (en curso):
+   - Ítems `part_fin` (aletas: +estabilidad = menos drift/wobble en vuelo manual) y `part_nose` (cono: −drag atmosférico = ascenso más rápido). Recetas 17/18. TS `shipMass.ts` → espejo `ship_mass.rs`: `ShipConfig` gana `fins: u32 (0..=4)` y `nose: u32 (0..=1)`; `ShipConfigStats` gana `drag_factor` y `stability`.
+   - Efecto en vuelo: `rocket_flight.rs` — drag atmosférico × `drag_factor` (nose 1.0→0.75), damping de rotación × stability.
+   - **La nave del pad refleja la config** (el payoff SFS): `launch_pad.rs` respawnea el stack visual al cambiar config — tanques apilados (altura = 1+tanks), motores en anillo (n=engines), aletas, cono. Marker `ShipConfigVisual` + sistema `sync_ship_config_visual` (compara `builder.is_changed()`).
+   - Tab SHIP: filas FINS y NOSE. NO editor 3D libre en móvil (desviación deliberada de la Fase 2 del design doc — riesgo UX; anotar en SHIP_BUILDER_DESIGN.md).
+2. **Interior lunar (cueva)** — reusar el sistema de cueva Tierra (`scene.rs` ~470-530: portal → teleport a `CAVE_INTERIOR_ORIGIN`, contexto Mission, `cave_surface_return`): portal "boca de mina" en Luna (tx,tz fijos cerca del spawn), la instancia asigna recurso raro (gem_red denso) + oscuridad (linterna manda). `RegionRuntime` necesita saber A QUÉ cuerpo vuelve la cueva (hoy asume Tierra — agregar `cave_return_body`).
+3. **Colonos v1** — sim TS `packages/shared/src/sim/colony.ts` PRIMERO + espejo `ha-shared/colony.rs`: `Colonist {o2, food, assigned_machine_uid}`, tick barras, boost ×1.5 al output de la máquina asignada. Máquina `habitat` (catálogo TS+Rust+parity). Solicitud desde Tierra vía panel del mapa (gated: antena + habitat + stock comida). Persistencia `colony.json`. Línea en monitor BASE LUNA.
+4. **Tierra fases 2-3** (retune contenido radio 1500 + pase visual) — pendiente de sensaciones en device, NO hacer a ciegas.
+5. **Ship Builder Fase 3** (bisagras/pistones) — al final, pesado.
+
+**Al cerrar cada fase:** tests ambos lados + `UPDATE_CATALOG_PARITY=1 npm test` si tocaste catálogos + fila en §4 + `graphify update .` + commit. Publicar con `npm run ship:android` (URLs LAN :5173/:2567; servers ya corren).
