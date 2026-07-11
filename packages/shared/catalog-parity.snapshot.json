@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-06T03:47:25.475Z",
+  "generatedAt": "2026-07-11T15:35:24.399Z",
   "modules": [
     {
       "id": "assets",
@@ -995,6 +995,14 @@
           }
         },
         {
+          "id": "grape",
+          "fields": {
+            "assetKind": "item_food_grape",
+            "category": "consumable",
+            "maxStack": 30
+          }
+        },
+        {
           "id": "hammer",
           "fields": {
             "assetKind": "equip_hammer",
@@ -1051,11 +1059,35 @@
           }
         },
         {
+          "id": "meat",
+          "fields": {
+            "assetKind": "item_food_meat",
+            "category": "consumable",
+            "maxStack": 20
+          }
+        },
+        {
+          "id": "orange",
+          "fields": {
+            "assetKind": "item_food_orange",
+            "category": "consumable",
+            "maxStack": 30
+          }
+        },
+        {
           "id": "pickaxe",
           "fields": {
             "assetKind": "equip_pickaxe",
             "category": "tool",
             "maxStack": 1
+          }
+        },
+        {
+          "id": "pie",
+          "fields": {
+            "assetKind": "item_food_pie",
+            "category": "consumable",
+            "maxStack": 10
           }
         },
         {
@@ -1096,6 +1128,14 @@
             "assetKind": "equip_shield_wood",
             "category": "equipment",
             "maxStack": 1
+          }
+        },
+        {
+          "id": "soup",
+          "fields": {
+            "assetKind": "item_food_soup",
+            "category": "consumable",
+            "maxStack": 10
           }
         },
         {

@@ -61,3 +61,12 @@ export const HUNGER_DECAY = 0.12;
 export const THIRST_DECAY = 0.18;
 /** Damage per second when hunger or thirst hit zero. */
 export const STARVE_DAMAGE = 1.5;
+
+// ---- Oxygen (vacuum bodies: Luna, space EVA, airless planets) ----
+export const OXYGEN_MAX = 100;
+/** Drain per second while exposed to vacuum (~83 s full tank). */
+export const OXYGEN_DRAIN_VACUUM = 1.2;
+/** Recharge per second inside a capsule / near a pad / in atmosphere. */
+export const OXYGEN_RECHARGE = 25;
+/** Damage per second once oxygen hits zero. */
+export const SUFFOCATE_DAMAGE = 4;

@@ -406,18 +406,28 @@ pub enum FlightPhase { Surface, Powered, Coast, Retro }
 
 ---
 
-## Plugins de mundo en `ha-game/src/lib.rs`
+## Plugins de mundo en `ha-game/src/lib.rs` (lista real, jul 2026)
 
 ```rust
-SkyClockPlugin, CloudLayerPlugin,
-ScenePlugin, InstancedDecorPlugin,
-MachinesPlugin, LaunchPadPlugin, LaunchSequencePlugin,
-FlightStatePlugin, FloatingOriginPlugin, CurvedWorldPlugin,
-GhibliAtmospherePlugin, RocketFlightPlugin,
-MoonWorldPlugin, PlanetWorldPlugin, CelestialCleanupPlugin,
-SpaceWorldPlugin, SpaceTravelPlugin, JetpackTransitPlugin, LunarLandingPlugin,
-ChunkManagerPlugin, TerrainStreamingPlugin, BlockEditingPlugin,
+// bloque 1 — marco/luz/mundo base
+PlatformPlugin, FloatingOriginPlugin, ViewTargetPlugin, WorldPersistPlugin,
+SolarSystemClockPlugin, SkyClockPlugin, SolarLightingPlugin,
+AssetFactoryPlugin, IconFactoryPlugin, ToonMaterialPlugin,
+SimPlugin, EarthWorldPlugin, WorldStreamPlugin, SurfacePatchPlugin, ScenePlugin,
+// bloque 2 — gameplay tierra
+RenderScalePlugin, InventoryPersistPlugin, BuildingPlugin, BlockWorldPlugin,
+MachinesPlugin, LaunchPadPlugin, WorldTravelPlugin,
+InputPlugin, TargetingPlugin, LookInteractPlugin,
+// bloque 3 — espacio + survival
+GhibliAtmospherePlugin, RocketFlightPlugin, FlightCelestialsPlugin,
+MoonWorldPlugin, PlanetWorldPlugin, CelestialCleanupPlugin, SpaceTravelPlugin,
+NavComputerPlugin, HarvestPlugin, SurvivalStatsPlugin, JetpackTransitPlugin,
+// bloque 4 — cámara/UI/debug
+FollowCameraPlugin, TelemetryPlugin, PixelHudPlugin, BootUiPlugin, GameMenuPlugin,
+ParticlesPlugin, PerfDebugPlugin, CpuSpanPlugin, CrashReportPlugin, UiEditorPlugin,
 ```
+
+**Survival stats (11 jul 2026):** hambre/sed/O₂ en `SimState.survival` — tick, comer (hold), respawn amable y `survival.json` en `ha-game/src/survival_stats.rs`; barras HUD en `hud/survival_bars.rs`; reglas espejo en `ha-shared/survival.rs` ← `packages/shared/src/sim/survivalStats.ts`. Detalle: `labiblia.md` §12.
 
 ---
 

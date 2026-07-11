@@ -109,6 +109,7 @@ Validar: `npm run validate:arch`.
 | **Día/noche + luz solar** | `ha-game/sky_clock.rs` (ciclo 720 s), `solar_lighting.rs` |
 | **Construcción / bloques** | `ha-shared/building.rs` `blocks.rs`, `ha-game/building_world.rs` `block_world.rs` |
 | **Máquinas + inventario** | `ha-game/machines.rs`, `inventory_persist.rs`; sim `packages/shared/src/sim/machines.ts` |
+| **Survival stats** (hambre/sed/O₂, comer, respawn amable) | sim `packages/shared/src/sim/survivalStats.ts` → espejo `ha-shared/survival.rs`; cliente `ha-game/survival_stats.rs`, barras `hud/survival_bars.rs` (ver §12) |
 | **Cámara FP + targeting** (alineada a normal de superficie) | `ha-game/camera.rs`, `targeting.rs`, `input/look_interact.rs` |
 | **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `ui_theme.rs` |
 | **Calidad por plataforma** (patch step, radios, sombras, sky lite, suelo unlit Android) | `ha-game/quality.rs`, `render/render_scale.rs` |
@@ -197,3 +198,20 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 **Jetpack = herramienta universal.** El boost de jetpack (`sim.rs`, item `jetpack`: JUMP para saltar + mantener para sostener el ascenso) funciona en **cualquier cuerpo caminable** (Tierra/Luna/planetas), no solo en el overworld. Regla general del proyecto: nada de mecánicas encerradas por escena — "todo se usa en todo el juego". (El escape-transit `jetpack_transit.rs` hacia la Tierra sigue acotado a la Luna: es un "volver a casa" de contenido, no el boost de movimiento.)
 
 **Transiciones de contexto (B8):** cambian el marco de referencia, **nunca** bloquean input ni cámara ni aplican patadas. Si algo "salta" al despegar/aterrizar, hay un clamp/teleport/ignición forzada en el camino — se elimina, no se parchea con un fade.
+
+---
+
+## §12 Survival stats — hambre / sed / oxígeno (añadido 11 jul 2026)
+
+**Fuente de verdad:** `packages/shared/src/sim/survivalStats.ts` (constantes en `constants.ts`) → espejo numérico `ha-shared/survival.rs` (tests en ambos lados; mantener sincronizados).
+
+- **Barras** en `SimState.survival` (cliente `ha-game/survival_stats.rs`, tick 20 Hz):
+  - **Hambre** decae 0.12/s; **sed** decae a mitad de ritmo (0.09/s) hasta que existan fuentes de agua — la fruta hidrata.
+  - **Oxígeno** solo drena **expuesto al vacío** (Luna, Space, planeta con `atmo_top_m == 0`) y **fuera de la cápsula** (`RocketFlight.active` = presurizado). Recarga 25/s con suministro: atmósfera, cápsula, o a <14 m de un beacon de pad/lander/dock (`is_supply_beacon`).
+  - Hambre o sed en 0 → 1.5 dmg/s; asfixia → 4 dmg/s.
+- **Comer:** comida equipada + sin target → **HOLD para comer** (touch look-zone y clic derecho desktop; `HoldInteractState.eating`, consumidor en `survival_stats.rs` ANTES de `update_interact_hud`). Tabla de restauración `food_restore` (apple 30/8, pie 60/5, soup 40/35…).
+- **Fuentes de comida:** manzana = drop determinista de 1 de cada 3 árboles por hash de celda (`hud.rs` grant); receta 13 **Fruit Pie** (3 apple + 1 wood). Ítems food en catálogo TS + iconos procedurales (`item_icons.rs::draw_fruit/draw_meal`).
+- **Muerte amable** (visión): hp 0 → barras e hp llenos, inventario intacto; en Tierra despertás en el pad de la agencia; off-world te levantás en el lugar (el tether de O₂ del beacon lo hace sobrevivible). Sin game over duro.
+- **Persistencia:** `survival.json` (hp + barras), flush-on-pause + debounce 20 s — patrón B10.
+- **HUD:** 3 barras finas bajo los corazones (`hud/survival_bars.rs`); la de O₂ solo aparece en vacío o si no está llena.
+- **Regla:** cualquier cambio numérico va a TS **y** Rust (regla 10 de §3).

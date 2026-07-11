@@ -216,6 +216,7 @@ pub(crate) fn spawn_world(
                 },
                 hp: class.max_hp,
                 max_hp: class.max_hp,
+                survival: ha_shared::SurvivalStats::default(),
                 prev_action: false,
                 prev_jump: false,
             },

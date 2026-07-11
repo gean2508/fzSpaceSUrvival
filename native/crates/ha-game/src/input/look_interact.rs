@@ -35,6 +35,8 @@ pub struct HoldInteractState {
     pub placing_stone: bool,
     /// Block item equipped + valid place slot — Minecraft-style place hold.
     pub placing_block: bool,
+    /// Food equipped + no target — hold to eat (consumed in `survival_stats.rs`).
+    pub eating: bool,
 }
 
 #[derive(Resource, Default)]
@@ -155,6 +157,7 @@ fn look_gesture_system(
                 hold.placing_build = false;
                 hold.placing_block = false;
                 hold.flight_hold = false;
+                hold.eating = false;
                 hold.locked_kind = None;
             }
             TouchPhase::Moved => {
@@ -235,6 +238,22 @@ fn look_gesture_system(
                         hold.locked_kind = Some(kind);
                     }
                 }
+            } else if ha_shared::food_restore(&equipped.item_id).is_some()
+                && target.kind.is_none()
+            {
+                // Food equipped, nothing targeted → hold to eat.
+                runtime.hold_started = true;
+                hold.active = true;
+                hold.duration_ms = 1100;
+                hold.progress_ms = 0;
+                hold.cancelled = false;
+                hold.completed = false;
+                hold.placing_machine = false;
+                hold.placing_build = false;
+                hold.placing_block = false;
+                hold.flight_hold = false;
+                hold.eating = true;
+                hold.locked_kind = None;
             } else if equipped.item_id == "hammer"
                 && held_ms >= GESTURE_MACHINE_HOLD_DELAY_MS as f32
                 && target.kind.is_none()
@@ -305,6 +324,7 @@ pub(crate) fn tick_hold_interact(
         || target.block_cell.is_some()
         || hold.placing_machine
         || hold.placing_build
+        || hold.eating
         || (hold.placing_block && target.place_cell.is_some())
         || (hold.flight_hold && hold.locked_kind.is_some());
     let delta_ms = (time.delta_secs() * 1000.0) as u32;

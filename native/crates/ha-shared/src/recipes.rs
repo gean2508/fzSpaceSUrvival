@@ -99,6 +99,13 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "probe",
         output_qty: 1,
     },
+    CraftRecipe {
+        id: 13,
+        display_name: "Fruit Pie",
+        ingredients: &[("apple", 3), ("wood", 1)],
+        output_id: "pie",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {

@@ -43,6 +43,7 @@ pub mod ship_mass;
 pub mod solar_light;
 pub mod solar_ephemeris;
 pub mod space_base;
+pub mod survival;
 pub mod vessel;
 pub mod power;
 pub mod connectivity;
@@ -65,6 +66,10 @@ pub use interactions::{
 };
 pub use constants::*;
 pub use hold::{advance_hold_progress, tick_ability_cooldown, HoldProgress};
+pub use survival::{
+    apply_food, food_restore, step_survival_stats, SurvivalEnv, SurvivalStats,
+    OXYGEN_DRAIN_VACUUM, OXYGEN_MAX, OXYGEN_RECHARGE, SUFFOCATE_DAMAGE,
+};
 pub use input::{empty_input, InputState};
 pub use inventory::PlayerInventory;
 pub use items::{item_display_name, item_hotbar_label};

@@ -61,6 +61,10 @@ pub fn rasterize_item_icon(item_id: &str) -> Image {
         "gem_blue" => draw_gem(&mut data, size, PaletteKey::NeonCyan),
         "leather" => draw_leather(&mut data, size),
         "axe" | "wood_axe" | "stone_axe" => draw_axe(&mut data, size),
+        "apple" => draw_fruit(&mut data, size, PaletteKey::Foe),
+        "orange" => draw_fruit(&mut data, size, PaletteKey::Gold),
+        "grape" => draw_fruit(&mut data, size, PaletteKey::NeonPink),
+        "bread" | "pie" | "meat" | "soup" => draw_meal(&mut data, size),
         _ => draw_generic(&mut data, size, item_id),
     }
     Image::new(
@@ -234,6 +238,23 @@ fn draw_axe(data: &mut [u8], size: u32) {
     let handle = rgba(PaletteKey::Wood, 1.0);
     fill_rect(data, size, 8, 8, 22, 18, head);
     fill_rect(data, size, 18, 14, 24, 32, handle);
+}
+
+/// Round fruit body + stem — tone picks the fruit.
+fn draw_fruit(data: &mut [u8], size: u32, tone: PaletteKey) {
+    let body = rgba(tone, 1.0);
+    let stem = rgba(PaletteKey::Bark, 1.0);
+    fill_rect(data, size, 14, 14, 28, 30, body);
+    fill_rect(data, size, 12, 18, 30, 26, body);
+    fill_rect(data, size, 20, 8, 23, 14, stem);
+}
+
+/// Cooked meal — plate + warm mound.
+fn draw_meal(data: &mut [u8], size: u32) {
+    let plate = rgba(PaletteKey::Stone, 1.0);
+    let food = rgba(PaletteKey::Gold, 1.0);
+    fill_rect(data, size, 8, 24, 34, 30, plate);
+    fill_rect(data, size, 14, 14, 28, 24, food);
 }
 
 fn draw_generic(data: &mut [u8], size: u32, item_id: &str) {

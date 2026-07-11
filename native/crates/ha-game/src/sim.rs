@@ -50,6 +50,8 @@ pub struct SimState {
     pub body: ha_shared::MovementBody,
     pub hp: f32,
     pub max_hp: f32,
+    /// Hunger / thirst / oxygen bars — ticked by `survival_stats.rs`.
+    pub survival: ha_shared::SurvivalStats,
     pub prev_action: bool,
     pub prev_jump: bool,
 }

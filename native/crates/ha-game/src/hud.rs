@@ -31,6 +31,7 @@ use crate::platform;
 mod icons;
 mod item_icons;
 pub mod inventory_ui;
+mod survival_bars;
 
 use icons::{
     energy_image_for_units, heart_image_for_units, spawn_stat_energy, spawn_stat_heart, HudIconAtlas,
@@ -72,6 +73,7 @@ impl Plugin for PixelHudPlugin {
             .init_resource::<UiGameplayBlock>()
             .init_resource::<HudTouchBlocks>()
             .init_resource::<HudDisplayCache>()
+            .init_resource::<survival_bars::SurvivalBarsCache>()
             .add_systems(Startup, (spawn_hud_camera, ensure_game_ui_root))
             .add_systems(Update, (
                 sync_game_ui_root,
@@ -106,6 +108,7 @@ impl Plugin for PixelHudPlugin {
                 update_held_item_ghost,
                 scroll_craft_list,
             ))
+            .add_systems(Update, survival_bars::update_survival_bars)
             .add_systems(
                 Update,
                 (
@@ -374,6 +377,7 @@ fn spawn_hud_once(
                             spawn_stat_heart(row, idx, heart, &atlas);
                         }
                     });
+                survival_bars::spawn_survival_bars(panel, heart, gap);
                 spawn_status_prompt_block(panel, heart, gap);
             });
 
@@ -1113,6 +1117,29 @@ fn build_interact_prompt(
             0
         };
         return format!("BUILD {} — {}%", def.display_name, pct);
+    }
+
+    if hold.active && hold.eating {
+        let pct = if hold.duration_ms > 0 {
+            (hold.progress_ms as f32 / hold.duration_ms as f32 * 100.0) as u32
+        } else {
+            0
+        };
+        return format!(
+            "EATING {} — {}%",
+            ha_shared::item_display_name(&equipped.item_id),
+            pct
+        );
+    }
+    if target.kind.is_none()
+        && !hold.active
+        && ha_shared::food_restore(&equipped.item_id).is_some()
+        && inv.qty(&equipped.item_id) > 0
+    {
+        return format!(
+            "HOLD → Eat {}",
+            ha_shared::item_display_name(&equipped.item_id)
+        );
     }
 
     if let Some(pos) = player_pos {
@@ -2086,6 +2113,13 @@ pub(crate) fn update_interact_hud(
                             // (persisted, re-merges the batch without it).
                             if kind == InteractTargetKind::Tree {
                                 if let Some((cx, cz, pid)) = target.flora_cell {
+                                    // Deterministic fruit tree: every 3rd tree
+                                    // by cell hash also drops an apple (food).
+                                    let hash =
+                                        cx as i64 * 7 + cz as i64 * 13 + pid as i64;
+                                    if hash.rem_euclid(3) == 0 {
+                                        add_item_to_slots(&mut inv_ui, "apple", 1);
+                                    }
                                     flora.harvest(ha_shared::CelestialBody::Earth, cx, cz, pid);
                                 }
                             }

@@ -134,6 +134,7 @@ pub fn desktop_hold_interact(
         hold.placing_build = false;
         hold.placing_block = false;
         hold.flight_hold = false;
+        hold.eating = false;
         hold.locked_kind = None;
 
         if place_pressed {
@@ -141,6 +142,13 @@ pub fn desktop_hold_interact(
                 hold.active = true;
                 hold.duration_ms = 300;
                 hold.placing_block = true;
+            } else if ha_shared::food_restore(&equipped.item_id).is_some()
+                && target.kind.is_none()
+            {
+                // Food equipped, nothing targeted → hold RIGHT mouse to eat.
+                hold.active = true;
+                hold.duration_ms = 1100;
+                hold.eating = true;
             } else if equipped.item_id == "hammer" && target.kind.is_none() {
                 if build_mode.active {
                     hold.active = true;
