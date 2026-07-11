@@ -37,6 +37,7 @@ mod scene;
 mod space_travel;
 mod nav_computer;
 mod harvest;
+mod ship_builder;
 mod sim;
 mod survival_stats;
 mod solar_lighting;
@@ -94,6 +95,7 @@ use rocket_flight::RocketFlightPlugin;
 use space_travel::SpaceTravelPlugin;
 use nav_computer::NavComputerPlugin;
 use harvest::HarvestPlugin;
+use ship_builder::ShipBuilderPlugin;
 use survival_stats::SurvivalStatsPlugin;
 use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
@@ -232,6 +234,7 @@ fn run_app_inner() {
             NavComputerPlugin,
             HarvestPlugin,
             SurvivalStatsPlugin,
+            ShipBuilderPlugin,
             JetpackTransitPlugin,
         ))
         .add_plugins((

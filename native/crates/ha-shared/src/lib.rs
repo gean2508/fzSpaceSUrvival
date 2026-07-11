@@ -167,8 +167,10 @@ pub use nav_data::{
     PROBE_SCAN_SECS, PROBE_SPEED_FACTOR,
 };
 pub use ship_mass::{
-    burn_factor, fuel_max_for_tanks, ship_mass_t, transit_fuel_cost,
-    AUTOPILOT_BURN_EFFICIENCY, FUEL_CAP_PER_TANK, MASS_REF_T, TRANSIT_FUEL_MARGIN,
+    burn_factor, clamp_ship_config, fuel_max_for_tanks, ship_config_stats, ship_mass_t,
+    thrust_factor, transit_fuel_cost, ShipConfig, ShipConfigStats,
+    AUTOPILOT_BURN_EFFICIENCY, FUEL_CAP_PER_TANK, MASS_REF_T, SHIP_MAX_ENGINES,
+    SHIP_MAX_EXTRA_TANKS, SHIP_MAX_LANDERS, TRANSIT_FUEL_MARGIN,
 };
 pub use solar_ephemeris::{
     body_center_at, body_intercept_point, direction_to, earth_center_at,

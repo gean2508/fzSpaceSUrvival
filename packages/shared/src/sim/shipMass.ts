@@ -55,3 +55,69 @@ export function transitCruiseSecs(distanceM: number): number {
 export function transitFuelCost(cruiseSecs: number, burnFactorValue: number): number {
   return cruiseSecs * TRANSIT_FUEL_PER_CRUISE_SEC * burnFactorValue;
 }
+
+// ---- Ship builder Fase 1 (SFS-style: count parts, stats emerge) -------------
+// The pad's 3 assembled modules ARE the baseline hull+tank+engine; the player
+// then adds crafted parts on top. Mirror: `ha-shared/src/ship_mass.rs`.
+
+/** Extra fuel tanks on top of the baseline tank. */
+export const SHIP_MAX_EXTRA_TANKS = 3;
+/** Total engines (baseline has 1). */
+export const SHIP_MAX_ENGINES = 4;
+/** Lander leg sets (improves assisted touchdown; v1: 0..1). */
+export const SHIP_MAX_LANDERS = 1;
+/** Thrust multiplier gained per engine beyond the first. */
+export const ENGINE_THRUST_BONUS = 0.15;
+
+/** Player ship configuration — counters, not free placement (Fase 1). */
+export interface ShipConfig {
+  /** Extra tanks beyond baseline (0..SHIP_MAX_EXTRA_TANKS). */
+  tanks: number;
+  /** Total engines (1..SHIP_MAX_ENGINES). */
+  engines: number;
+  /** Lander sets (0..SHIP_MAX_LANDERS). */
+  landers: number;
+}
+
+export function clampShipConfig(cfg: ShipConfig): ShipConfig {
+  return {
+    tanks: Math.min(SHIP_MAX_EXTRA_TANKS, Math.max(0, Math.floor(cfg.tanks))),
+    engines: Math.min(SHIP_MAX_ENGINES, Math.max(1, Math.floor(cfg.engines))),
+    landers: Math.min(SHIP_MAX_LANDERS, Math.max(0, Math.floor(cfg.landers))),
+  };
+}
+
+/** Module list the config resolves to (feeds shipMassT). */
+export function shipConfigModules(cfg: ShipConfig): string[] {
+  const c = clampShipConfig(cfg);
+  const modules: string[] = ["hull"];
+  for (let i = 0; i < 1 + c.tanks; i++) modules.push("fuel_tank");
+  for (let i = 0; i < c.engines; i++) modules.push("engine");
+  for (let i = 0; i < c.landers; i++) modules.push("lander");
+  return modules;
+}
+
+/** Arcade thrust multiplier — more engines, snappier burns (never less). */
+export function thrustFactor(engines: number): number {
+  const n = Math.min(SHIP_MAX_ENGINES, Math.max(1, Math.floor(engines)));
+  return 1 + ENGINE_THRUST_BONUS * (n - 1);
+}
+
+export interface ShipConfigStats {
+  massT: number;
+  fuelMax: number;
+  burnFactor: number;
+  thrustFactor: number;
+}
+
+/** Live panel stats — the SFS trade-off the player sees while building. */
+export function shipConfigStats(cfg: ShipConfig): ShipConfigStats {
+  const c = clampShipConfig(cfg);
+  const massT = shipMassT(shipConfigModules(c));
+  return {
+    massT,
+    fuelMax: fuelMaxForTanks(1 + c.tanks),
+    burnFactor: burnFactor(massT),
+    thrustFactor: thrustFactor(c.engines),
+  };
+}

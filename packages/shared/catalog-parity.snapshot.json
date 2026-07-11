@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-11T15:35:24.399Z",
+  "generatedAt": "2026-07-11T19:07:27.642Z",
   "modules": [
     {
       "id": "assets",
@@ -1072,6 +1072,30 @@
             "assetKind": "item_food_orange",
             "category": "consumable",
             "maxStack": 30
+          }
+        },
+        {
+          "id": "part_engine",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 4
+          }
+        },
+        {
+          "id": "part_lander",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 2
+          }
+        },
+        {
+          "id": "part_tank",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 4
           }
         },
         {

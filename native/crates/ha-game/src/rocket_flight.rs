@@ -48,6 +48,7 @@ pub struct ShipLoadout {
     pub mass_t: f32,
     pub fuel_max: f32,
     pub burn_factor: f32,
+    pub thrust_factor: f32,
 }
 
 impl Default for ShipLoadout {
@@ -57,6 +58,7 @@ impl Default for ShipLoadout {
             mass_t: mass,
             fuel_max: ha_shared::fuel_max_for_tanks(1),
             burn_factor: ha_shared::burn_factor(mass),
+            thrust_factor: 1.0,
         }
     }
 }
@@ -83,6 +85,8 @@ pub struct RocketFlight {
     /// Mirrored here (not read as a Res) — `tick_rocket_flight` is at Bevy's
     /// 16-system-param limit.
     pub burn_factor: f32,
+    /// Engine-count thrust multiplier from the loadout (0.0 default → 1.0).
+    pub thrust_factor: f32,
 }
 
 impl RocketFlight {
@@ -142,6 +146,14 @@ impl RocketFlight {
     pub fn burn_rate_factor(&self) -> f32 {
         if self.burn_factor > 0.0 {
             self.burn_factor
+        } else {
+            1.0
+        }
+    }
+
+    pub fn thrust_rate_factor(&self) -> f32 {
+        if self.thrust_factor > 0.0 {
+            self.thrust_factor
         } else {
             1.0
         }
@@ -343,8 +355,9 @@ pub fn tick_rocket_flight(
         flight.phase = FlightPhase::Retro;
     } else if (actions.action || intent.move_z > 0.3) && flight.fuel > 0.0 {
         // Thrust forward along the nose: ACTION button (mobile) or W / forward
-        // stick (desktop) — you point with the look and push here.
-        accel += thrust_dir * ROCKET_THRUST_M_S2;
+        // stick (desktop) — you point with the look and push here. Extra
+        // engines from the ship builder multiply thrust (arcade, never mass).
+        accel += thrust_dir * ROCKET_THRUST_M_S2 * flight.thrust_rate_factor();
         flight.fuel = (flight.fuel - ROCKET_FUEL_BURN_PER_S * burn_scale * dt).max(0.0);
         flight.phase = FlightPhase::Powered;
     } else {

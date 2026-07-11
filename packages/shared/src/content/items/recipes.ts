@@ -141,6 +141,36 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     ],
     output: { itemId: "pie", qty: 1 },
   },
+  {
+    id: 14,
+    key: "part_tank",
+    displayName: "Fuel Tank",
+    ingredients: [
+      { itemId: "iron_ingot", qty: 6 },
+      { itemId: "stone", qty: 2 },
+    ],
+    output: { itemId: "part_tank", qty: 1 },
+  },
+  {
+    id: 15,
+    key: "part_engine",
+    displayName: "Rocket Engine",
+    ingredients: [
+      { itemId: "iron_ingot", qty: 8 },
+      { itemId: "gold_ingot", qty: 2 },
+    ],
+    output: { itemId: "part_engine", qty: 1 },
+  },
+  {
+    id: 16,
+    key: "part_lander",
+    displayName: "Lander Legs",
+    ingredients: [
+      { itemId: "iron_ingot", qty: 4 },
+      { itemId: "sticks", qty: 6 },
+    ],
+    output: { itemId: "part_lander", qty: 1 },
+  },
 ];
 
 const byId = new Map<number, CraftRecipe>(CRAFT_RECIPES.map((r) => [r.id, r]));

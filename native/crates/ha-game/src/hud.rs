@@ -156,10 +156,12 @@ struct HudTouchBlocks(pub Vec<[f32; 4]>);
 struct BagPanelCloseButton;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
-enum BagTab {
+pub(crate) enum BagTab {
     #[default]
     Inventory,
     Craft,
+    /// Ship builder — part counters + live stats (`ship_builder.rs`).
+    Ship,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -259,9 +261,9 @@ impl Default for StaminaMeter {
 
 
 #[derive(Resource)]
-struct BagPanelState {
-    open: bool,
-    tab: BagTab,
+pub(crate) struct BagPanelState {
+    pub(crate) open: bool,
+    pub(crate) tab: BagTab,
     pulse: Timer,
     modal: Option<Entity>,
 }
@@ -1390,6 +1392,8 @@ fn spawn_bag_panel(
     layout: &TouchLayout,
     tune: &HudTune,
     tab: BagTab,
+    ship_state: &crate::ship_builder::ShipBuilderState,
+    inv: &PlayerInventory,
 ) -> Entity {
     let short = layout.width.min(layout.height);
     let heart = tune.heart_px;
@@ -1486,6 +1490,7 @@ fn spawn_bag_panel(
                             .with_children(|tabs| {
                                 spawn_bag_tab_button(tabs, "INVENTORY", BagTab::Inventory, heart);
                                 spawn_bag_tab_button(tabs, "CRAFT", BagTab::Craft, heart);
+                                spawn_bag_tab_button(tabs, "SHIP", BagTab::Ship, heart);
                             });
 
                         panel
@@ -1601,6 +1606,14 @@ fn spawn_bag_panel(
                                     heart,
                                 );
                             });
+
+                        crate::ship_builder::spawn_ship_section(
+                            panel,
+                            heart,
+                            tab == BagTab::Ship,
+                            ship_state,
+                            inv,
+                        );
                     });
             })
             .id();
@@ -1869,6 +1882,7 @@ fn bag_panel_system(
     layout: Res<TouchLayout>,
     tune: Res<HudTune>,
     root: Query<Entity, With<GameUiRoot>>,
+    ship_state: Res<crate::ship_builder::ShipBuilderState>,
     mut commands: Commands,
     mut bag_state: ResMut<BagPanelState>,
     mut craft_intent: ResMut<CraftIntent>,
@@ -1936,6 +1950,8 @@ fn bag_panel_system(
             &layout,
             &tune,
             bag_state.tab,
+            &ship_state,
+            &inv,
         ));
     }
 
@@ -1979,19 +1995,19 @@ fn bag_panel_system(
         ));
     }
 
-    let show_inventory = bag_state.tab == BagTab::Inventory;
+    // SHIP section visibility is owned by `ship_builder_panel_system`.
     for mut node in &mut inventory_sections {
-        node.display = if show_inventory {
+        node.display = if bag_state.tab == BagTab::Inventory {
             Display::Flex
         } else {
             Display::None
         };
     }
     for mut node in &mut craft_sections {
-        node.display = if show_inventory {
-            Display::None
-        } else {
+        node.display = if bag_state.tab == BagTab::Craft {
             Display::Flex
+        } else {
+            Display::None
         };
     }
 

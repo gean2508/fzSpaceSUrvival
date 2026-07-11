@@ -1,6 +1,6 @@
 # Ship Builder — diseño (estilo Spaceflight Simulator, adaptado)
 
-> Estado: DISEÑO. Fase 1 pendiente de implementar tras verificar el build de vuelo continuo (v1.0.134).
+> Estado: **Fase 1 IMPLEMENTADA (11 jul 2026)** — piezas crafteables (`part_tank`/`part_engine`/`part_lander`, recetas 14–16), tab **BAG → SHIP** con contadores [−]/[+] que consumen/devuelven piezas del inventario, stats en vivo (masa/fuel/burn/thrust/autonomía), persistencia `ship.json`, extras aplicados al `ShipLoadout` cuando el pad está completo; motores extra multiplican thrust (`thrust_factor`, cap x1.45). Desviación deliberada: el casco no es ítem — sigue siendo el módulo 1 del pad. Fases 2–3 pendientes.
 
 ## La idea (capturada del usuario + SFS)
 

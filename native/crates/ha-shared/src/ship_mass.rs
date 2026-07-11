@@ -63,6 +63,73 @@ pub fn transit_fuel_cost(cruise_secs: f32, burn_factor: f32) -> f32 {
     cruise_secs * TRANSIT_FUEL_PER_CRUISE_SEC * burn_factor
 }
 
+// ---- Ship builder Fase 1 — mirror of shipMass.ts (count parts, stats emerge)
+// The pad's 3 assembled modules ARE the baseline hull+tank+engine; the player
+// adds crafted parts (`part_tank`/`part_engine`/`part_lander`) on top.
+
+/// Extra fuel tanks on top of the baseline tank.
+pub const SHIP_MAX_EXTRA_TANKS: u32 = 3;
+/// Total engines (baseline has 1).
+pub const SHIP_MAX_ENGINES: u32 = 4;
+/// Lander leg sets (v1: 0..1).
+pub const SHIP_MAX_LANDERS: u32 = 1;
+/// Thrust multiplier gained per engine beyond the first.
+pub const ENGINE_THRUST_BONUS: f32 = 0.15;
+
+/// Player ship configuration — counters, not free placement (Fase 1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShipConfig {
+    /// Extra tanks beyond baseline (0..=SHIP_MAX_EXTRA_TANKS).
+    pub tanks: u32,
+    /// Total engines (1..=SHIP_MAX_ENGINES).
+    pub engines: u32,
+    /// Lander sets (0..=SHIP_MAX_LANDERS).
+    pub landers: u32,
+}
+
+impl Default for ShipConfig {
+    fn default() -> Self {
+        Self { tanks: 0, engines: 1, landers: 0 }
+    }
+}
+
+pub fn clamp_ship_config(cfg: ShipConfig) -> ShipConfig {
+    ShipConfig {
+        tanks: cfg.tanks.min(SHIP_MAX_EXTRA_TANKS),
+        engines: cfg.engines.clamp(1, SHIP_MAX_ENGINES),
+        landers: cfg.landers.min(SHIP_MAX_LANDERS),
+    }
+}
+
+/// Arcade thrust multiplier — more engines, snappier burns (never less).
+pub fn thrust_factor(engines: u32) -> f32 {
+    let n = engines.clamp(1, SHIP_MAX_ENGINES);
+    1.0 + ENGINE_THRUST_BONUS * (n - 1) as f32
+}
+
+/// Live panel stats — the SFS trade-off the player sees while building.
+#[derive(Clone, Copy, Debug)]
+pub struct ShipConfigStats {
+    pub mass_t: f32,
+    pub fuel_max: f32,
+    pub burn_factor: f32,
+    pub thrust_factor: f32,
+}
+
+pub fn ship_config_stats(cfg: ShipConfig) -> ShipConfigStats {
+    let c = clamp_ship_config(cfg);
+    let mut mass = module_mass_t("hull");
+    mass += module_mass_t("fuel_tank") * (1 + c.tanks) as f32;
+    mass += module_mass_t("engine") * c.engines as f32;
+    mass += module_mass_t("lander") * c.landers as f32;
+    ShipConfigStats {
+        mass_t: mass,
+        fuel_max: fuel_max_for_tanks(1 + c.tanks),
+        burn_factor: burn_factor(mass),
+        thrust_factor: thrust_factor(c.engines),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +154,30 @@ mod tests {
         // plus the autopilot margin.
         let worst = transit_fuel_cost(TRANSIT_CRUISE_MAX_SECS, 1.0);
         assert!(worst * TRANSIT_FUEL_MARGIN < FUEL_CAP_PER_TANK);
+    }
+
+    #[test]
+    fn ship_builder_baseline_config_matches_reference() {
+        let stats = ship_config_stats(ShipConfig::default());
+        assert!((stats.mass_t - MASS_REF_T).abs() < 1e-6);
+        assert!((stats.burn_factor - 1.0).abs() < 1e-6);
+        assert_eq!(stats.fuel_max, FUEL_CAP_PER_TANK);
+        assert!((stats.thrust_factor - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn ship_builder_tanks_tradeoff_and_clamps() {
+        let base = ship_config_stats(ShipConfig::default());
+        let heavy = ship_config_stats(ShipConfig { tanks: 2, engines: 1, landers: 0 });
+        assert_eq!(heavy.fuel_max, FUEL_CAP_PER_TANK * 3.0);
+        assert!(heavy.mass_t > base.mass_t);
+        assert!(heavy.burn_factor > base.burn_factor);
+
+        assert!((thrust_factor(3) - 1.3).abs() < 1e-6);
+        assert!((thrust_factor(99) - thrust_factor(SHIP_MAX_ENGINES)).abs() < 1e-6);
+        let clamped = clamp_ship_config(ShipConfig { tanks: 99, engines: 0, landers: 5 });
+        assert_eq!(clamped.tanks, SHIP_MAX_EXTRA_TANKS);
+        assert_eq!(clamped.engines, 1);
+        assert_eq!(clamped.landers, SHIP_MAX_LANDERS);
     }
 }

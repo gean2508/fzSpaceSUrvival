@@ -450,10 +450,11 @@ pub(crate) fn try_ignite_on_hold(
 /// at Bevy's system-param limit and can't take the loadout as a Res.
 pub(crate) fn sync_ship_loadout(
     pads: Res<LaunchPadWorld>,
+    builder: Res<crate::ship_builder::ShipBuilderState>,
     mut loadout: ResMut<crate::rocket_flight::ShipLoadout>,
     mut flight: ResMut<RocketFlight>,
 ) {
-    if !pads.is_changed() {
+    if !pads.is_changed() && !builder.is_changed() {
         return;
     }
     const PAD_MODULE_IDS: [&str; 3] = ["hull", "fuel_tank", "engine"];
@@ -467,12 +468,24 @@ pub(crate) fn sync_ship_loadout(
     if assembled == 0 {
         return;
     }
-    let modules = &PAD_MODULE_IDS[..assembled];
-    let mass = ha_shared::ship_mass_t(modules);
-    let tanks = modules.iter().filter(|m| **m == "fuel_tank").count() as u32;
-    loadout.mass_t = mass;
-    loadout.burn_factor = ha_shared::burn_factor(mass);
-    loadout.fuel_max = ha_shared::fuel_max_for_tanks(tanks);
+    if assembled < PAD_MODULE_IDS.len() {
+        // Pad still under construction — partial baseline, no extras yet.
+        let modules = &PAD_MODULE_IDS[..assembled];
+        let mass = ha_shared::ship_mass_t(modules);
+        let tanks = modules.iter().filter(|m| **m == "fuel_tank").count() as u32;
+        loadout.mass_t = mass;
+        loadout.burn_factor = ha_shared::burn_factor(mass);
+        loadout.fuel_max = ha_shared::fuel_max_for_tanks(tanks);
+        loadout.thrust_factor = 1.0;
+    } else {
+        // Complete baseline + the player's ship-builder extras (BAG → SHIP).
+        let stats = ha_shared::ship_config_stats(builder.config);
+        loadout.mass_t = stats.mass_t;
+        loadout.burn_factor = stats.burn_factor;
+        loadout.fuel_max = stats.fuel_max;
+        loadout.thrust_factor = stats.thrust_factor;
+    }
     flight.fuel_max = loadout.fuel_max;
     flight.burn_factor = loadout.burn_factor;
+    flight.thrust_factor = loadout.thrust_factor;
 }

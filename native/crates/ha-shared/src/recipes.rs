@@ -106,6 +106,27 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "pie",
         output_qty: 1,
     },
+    CraftRecipe {
+        id: 14,
+        display_name: "Fuel Tank",
+        ingredients: &[("iron_ingot", 6), ("stone", 2)],
+        output_id: "part_tank",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 15,
+        display_name: "Rocket Engine",
+        ingredients: &[("iron_ingot", 8), ("gold_ingot", 2)],
+        output_id: "part_engine",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 16,
+        display_name: "Lander Legs",
+        ingredients: &[("iron_ingot", 4), ("sticks", 6)],
+        output_id: "part_lander",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {
