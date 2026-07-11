@@ -113,6 +113,7 @@ Validar: `npm run validate:arch`.
 | **Ship builder** (piezas crafteables → contadores → stats emergen) | sim `shipMass.ts` (`ShipConfig`, `shipConfigStats`) → espejo `ha-shared/ship_mass.rs`; cliente `ha-game/ship_builder.rs` (tab BAG→SHIP, `ship.json`), extras aplican vía `launch_pad.rs::sync_ship_loadout`; motores extra multiplican thrust en `rocket_flight.rs` |
 | **Base lunar** (Acto II: taladro regolito, antena, monitoreo) | máquinas por CUERPO (`ha-game/machines.rs`: gates `machine_allowed_on`, `machines.json`, respawn `sync_machine_visuals` B6); off-body banquean `stored_output` (se cobra al volver); campamento = O₂ tether en `survival_stats.rs`; antena → línea "BASE LUNA" en mapa orbital (`game_menu.rs::update_luna_base_monitor`) |
 | **Cámara FP + targeting** (alineada a normal de superficie) | `ha-game/camera.rs`, `targeting.rs`, `input/look_interact.rs` |
+| **Gamepad** (stick izq mover+sprint, der cámara; A salto/retro, RT acción/romper, LT colocar/comer/retro, Y cámara 1ª/3ª, Start mapa, B cerrar, D-pad bag/hotbar) | `input/gamepad.rs` — alimenta los MISMOS intents que touch/teclado; prioridad touch > pad > teclado |
 | **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `ui_theme.rs` |
 | **Calidad por plataforma** (patch step, radios, sombras, sky lite, suelo unlit Android) | `ha-game/quality.rs`, `render/render_scale.rs` |
 | **Debug/perf** | `ha-game/debug/perf.rs` (MENU→PERF / F3), `cpu_span.rs` (ha-span), `crash.rs` |

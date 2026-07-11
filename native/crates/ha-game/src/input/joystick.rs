@@ -38,12 +38,12 @@ impl Default for CameraLookIntent {
 }
 
 #[derive(Resource, Clone, Copy, Default)]
-struct RawMovementIntent {
-    move_x: f32,
-    move_z: f32,
-    aim_x: f32,
-    aim_z: f32,
-    sprint: bool,
+pub(super) struct RawMovementIntent {
+    pub(super) move_x: f32,
+    pub(super) move_z: f32,
+    pub(super) aim_x: f32,
+    pub(super) aim_z: f32,
+    pub(super) sprint: bool,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -75,6 +75,8 @@ impl Plugin for InputPlugin {
         app.init_resource::<MovementIntent>()
             .init_resource::<CameraLookIntent>()
             .init_resource::<RawMovementIntent>()
+            .init_resource::<super::gamepad::GamepadActive>()
+            .init_resource::<super::gamepad::GamepadHotbarIndex>()
             .init_resource::<DualJoystickState>()
             .init_resource::<TouchLayout>()
             .init_resource::<TouchBlockRects>()
@@ -113,12 +115,21 @@ impl Plugin for InputPlugin {
                     actions::poll_action_buttons_held,
                     actions::update_jump_button_label,
                     keyboard_input,
+                    super::gamepad::gamepad_input,
                     touch_move_stick.after(actions::poll_action_buttons_held),
                     smooth_movement_intent,
                     update_joystick_ui,
                 )
                     .chain(),
             );
+        app.add_systems(
+            Update,
+            (
+                super::gamepad::gamepad_hold_interact
+                    .after(crate::block_world::sync_block_target),
+                super::gamepad::gamepad_menu_buttons,
+            ),
+        );
     }
 }
 

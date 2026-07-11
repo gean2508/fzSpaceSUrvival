@@ -73,6 +73,7 @@ impl Plugin for PixelHudPlugin {
             .init_resource::<UiGameplayBlock>()
             .init_resource::<HudTouchBlocks>()
             .init_resource::<HudDisplayCache>()
+            .init_resource::<HotbarSelectRequest>()
             .init_resource::<survival_bars::SurvivalBarsCache>()
             .add_systems(Startup, (spawn_hud_camera, ensure_game_ui_root))
             .add_systems(Update, (
@@ -1829,17 +1830,27 @@ fn spawn_machine_select_button(
     });
 }
 
+/// Gamepad D-pad (or any other device) asks for a hotbar slot; consumed here.
+#[derive(Resource, Default)]
+pub(crate) struct HotbarSelectRequest {
+    pub(crate) slot: Option<usize>,
+}
+
 fn bag_hotbar_system(
     keys: Res<ButtonInput<KeyCode>>,
     editor: Res<crate::ui_editor::UiEditorState>,
     mut bag_state: ResMut<BagPanelState>,
     mut ui: ResMut<InventoryUiState>,
     mut equipped: ResMut<EquippedItem>,
+    mut select_req: ResMut<HotbarSelectRequest>,
     mut hotbar: Query<
         (&Interaction, &HotbarSlot, &mut BackgroundColor),
         (With<HotbarCraftButton>, Changed<Interaction>),
     >,
 ) {
+    if let Some(idx) = select_req.slot.take() {
+        select_hotbar_slot(&mut ui, &mut equipped, idx.min(7));
+    }
     let desktop = !platform::uses_touch_gameplay_ui();
     if desktop && !editor.enabled && !editor.menu_open {
         if keys.just_pressed(KeyCode::KeyI) {

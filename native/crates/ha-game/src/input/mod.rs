@@ -1,6 +1,7 @@
 pub mod calibration;
 mod actions;
 mod desktop_input;
+pub(crate) mod gamepad;
 mod joystick;
 mod layout;
 mod look_interact;
