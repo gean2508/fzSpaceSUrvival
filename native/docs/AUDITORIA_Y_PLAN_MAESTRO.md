@@ -1,6 +1,9 @@
 # Auditoría + Plan Maestro — Agencia Espacial Survival
 
-> **Fecha:** 2026-07-11 · **Estado:** PARA APROBACIÓN
+> **Fecha:** 2026-07-11 · **Estado:** EJECUTADO (mismo día)
+>
+> **Progreso:** ✅ F0 (working tree commiteado, tests verdes) · ✅ F1 survival core (hambre/sed/O₂, comer, respawn amable — biblia §12) · ✅ F2 ship builder (piezas + BAG→SHIP + stats en vivo) · ✅ F3 base lunar (taladro regolito, antena, monitoreo, máquinas por cuerpo) · ✅ F4 gamepad completo · ⚠️ F5 perf: estático hecho; **medición 60 FPS bloqueada hasta conectar el Redmi** (plan en memoria del agente) · F6 APK publicado vía `ship:android`.
+> Nota de orden: F4 (gamepad) se ejecutó antes que la fase de perf, sin impacto.
 > Visión de referencia: `SPACE_SURVIVAL_VISION.md` · builder: `SHIP_BUILDER_DESIGN.md` · movimiento: `PLAYER_WORLD_DESIGN.md`
 > Pedido del usuario: juego 3D Android (Redmi 10+, 60 FPS objetivo), mezcla KSP/SFS (arcade, sin física pesada)
 > + survival Zomboid/Minecraft/Terraria, 1ª/3ª persona, controles móvil/PC/mando, documentación exhaustiva.

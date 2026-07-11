@@ -148,7 +148,7 @@ cd native && make run     # cliente desktop (o cargo run -p ha-game --features d
 **Breakdown típico Tierra:** `draw3d~58` (de los cuales `ground≈54` = batches flora/depósitos), `ui≈92` (draws de HUD), `ents≈210`. `outline=0`, `ocean=0`, `chunk=0`.
 
 **Palancas por impacto (mayor → menor):**
-1. **Resolución interna** (la más grande si se logra): renderizar el 3D a menos píxeles. El **blit offscreen REGRESÓ** en Redmi (el blit mismo era lento) → probar en cambio bajar la resolución de la SUPERFICIE/ventana Android nativa (que el compositor escale), no un blit extra. Bloqueado hasta encontrar método sin blit.
+1. **Resolución interna** (la más grande si se logra): renderizar el 3D a menos píxeles. El **blit offscreen REGRESÓ** en Redmi (el blit mismo era lento) → probar en cambio bajar la resolución de la SUPERFICIE/ventana Android nativa (que el compositor escale), no un blit extra. **Candidato concreto (11 jul, sin probar):** `ANativeWindow_setBuffersGeometry(win, w/1.5, h/1.5, 0)` vía crate `ndk` sobre el raw window handle — es el mecanismo canónico Android para que SurfaceFlinger escale gratis, cero blit. OJO: verificar mapeo de coords touch (físico vs lógico) en el device antes de shipear.
 2. **Fill-rate / fragment** (cobertura de pantalla × costo por píxel):
    - Suelo casi-fullscreen: **unlit en Android** ✅ (`patch_material`).
    - **Domo de cielo Ghibli**: fullscreen aun en "lite" (`sky_shader_quality=0`) → sospechoso #1 ahora que el suelo es unlit. Considerar gradiente barato en Android.
