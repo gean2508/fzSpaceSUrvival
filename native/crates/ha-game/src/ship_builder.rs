@@ -7,7 +7,10 @@
 //! BAG→SHIP tab UI, the config resource and `ship.json` persistence.
 
 use bevy::prelude::*;
-use ha_shared::{ship_config_stats, ShipConfig, SHIP_MAX_ENGINES, SHIP_MAX_EXTRA_TANKS, SHIP_MAX_LANDERS};
+use ha_shared::{
+    ship_config_stats, ShipConfig, SHIP_MAX_ENGINES, SHIP_MAX_EXTRA_TANKS, SHIP_MAX_FINS,
+    SHIP_MAX_LANDERS, SHIP_MAX_NOSE,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::hud::inventory_ui::{
@@ -41,14 +44,26 @@ pub enum ShipPart {
     Tank,
     Engine,
     Lander,
+    Fin,
+    Nose,
 }
 
 impl ShipPart {
+    const ALL: [ShipPart; 5] = [
+        ShipPart::Tank,
+        ShipPart::Engine,
+        ShipPart::Lander,
+        ShipPart::Fin,
+        ShipPart::Nose,
+    ];
+
     fn item_id(self) -> &'static str {
         match self {
             ShipPart::Tank => "part_tank",
             ShipPart::Engine => "part_engine",
             ShipPart::Lander => "part_lander",
+            ShipPart::Fin => "part_fin",
+            ShipPart::Nose => "part_nose",
         }
     }
 
@@ -57,6 +72,8 @@ impl ShipPart {
             ShipPart::Tank => "FUEL TANKS",
             ShipPart::Engine => "ENGINES",
             ShipPart::Lander => "LANDER",
+            ShipPart::Fin => "AERO FINS",
+            ShipPart::Nose => "NOSE CONE",
         }
     }
 }
@@ -81,6 +98,8 @@ fn part_count(config: &ShipConfig, part: ShipPart) -> u32 {
         ShipPart::Tank => config.tanks,
         ShipPart::Engine => config.engines,
         ShipPart::Lander => config.landers,
+        ShipPart::Fin => config.fins,
+        ShipPart::Nose => config.nose,
     }
 }
 
@@ -89,6 +108,8 @@ fn set_part_count(config: &mut ShipConfig, part: ShipPart, value: u32) {
         ShipPart::Tank => config.tanks = value,
         ShipPart::Engine => config.engines = value,
         ShipPart::Lander => config.landers = value,
+        ShipPart::Fin => config.fins = value,
+        ShipPart::Nose => config.nose = value,
     }
 }
 
@@ -98,6 +119,8 @@ fn part_range(part: ShipPart) -> (u32, u32) {
         ShipPart::Tank => (0, SHIP_MAX_EXTRA_TANKS),
         ShipPart::Engine => (1, SHIP_MAX_ENGINES),
         ShipPart::Lander => (0, SHIP_MAX_LANDERS),
+        ShipPart::Fin => (0, SHIP_MAX_FINS),
+        ShipPart::Nose => (0, SHIP_MAX_NOSE),
     }
 }
 
@@ -115,8 +138,14 @@ fn stats_line(config: ShipConfig) -> String {
     let autonomy = stats.fuel_max
         / (ha_shared::flight_physics::ROCKET_FUEL_BURN_PER_S * stats.burn_factor).max(0.01);
     format!(
-        "MASS {:.1} t · FUEL {:.0} · BURN x{:.2} · THRUST x{:.2} · ~{:.0}s",
-        stats.mass_t, stats.fuel_max, stats.burn_factor, stats.thrust_factor, autonomy
+        "MASS {:.1} t · FUEL {:.0} · BURN x{:.2} · THRUST x{:.2} · DRAG x{:.2} · AERO {:.0}% · ~{:.0}s",
+        stats.mass_t,
+        stats.fuel_max,
+        stats.burn_factor,
+        stats.thrust_factor,
+        stats.drag_factor,
+        stats.fin_align_rate * 100.0,
+        autonomy
     )
 }
 
@@ -151,7 +180,7 @@ pub fn spawn_ship_section(
                 },
                 TextColor(ui_theme::text_muted()),
             ));
-            for part in [ShipPart::Tank, ShipPart::Engine, ShipPart::Lander] {
+            for part in ShipPart::ALL {
                 spawn_part_row(section, part, heart, state, inv);
             }
             section.spawn((
@@ -320,6 +349,11 @@ struct ShipSave {
     tanks: u32,
     engines: u32,
     landers: u32,
+    // Fase 2 parts — default 0 so pre-existing ship.json still loads.
+    #[serde(default)]
+    fins: u32,
+    #[serde(default)]
+    nose: u32,
 }
 
 fn ship_path() -> std::path::PathBuf {
@@ -336,6 +370,8 @@ fn load_ship_config_on_startup(mut state: ResMut<ShipBuilderState>) {
                 tanks: save.tanks,
                 engines: save.engines,
                 landers: save.landers,
+                fins: save.fins,
+                nose: save.nose,
             });
         }
         Err(_) => eprintln!("ha-ship: ship.json unreadable — baseline config"),
@@ -352,6 +388,8 @@ fn debounced_ship_save(mut state: ResMut<ShipBuilderState>) {
         tanks: state.config.tanks,
         engines: state.config.engines,
         landers: state.config.landers,
+        fins: state.config.fins,
+        nose: state.config.nose,
     };
     match serde_json::to_string(&save) {
         Ok(json) => {

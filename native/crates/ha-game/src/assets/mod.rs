@@ -6,4 +6,4 @@ mod glb;
 
 pub use factory::{AssetFactory, AssetFactoryPlugin, AssetSource, ProceduralAsset};
 pub use glb::WorldMaterial;
-pub use builders::build_demo_ship_mesh;
+pub use builders::{build_config_ship_mesh, build_demo_ship_mesh};

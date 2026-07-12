@@ -40,6 +40,8 @@ export const ITEM_CATALOG: ItemDef[] = [
   { id: "part_tank", assetKind: "item_mat_ingot_iron", displayName: "Fuel Tank", category: "equipment", maxStack: 4, craftTags: ["ship", "part"] },
   { id: "part_engine", assetKind: "item_mat_ingot_iron", displayName: "Rocket Engine", category: "equipment", maxStack: 4, craftTags: ["ship", "part"] },
   { id: "part_lander", assetKind: "item_mat_ingot_iron", displayName: "Lander Legs", category: "equipment", maxStack: 2, craftTags: ["ship", "part"] },
+  { id: "part_fin", assetKind: "item_mat_ingot_iron", displayName: "Aero Fin", category: "equipment", maxStack: 4, craftTags: ["ship", "part"] },
+  { id: "part_nose", assetKind: "item_mat_ingot_iron", displayName: "Nose Cone", category: "equipment", maxStack: 1, craftTags: ["ship", "part"] },
   { id: "dirt", assetKind: "terrain_dirt", displayName: "Dirt", category: "material", maxStack: 99, craftTags: ["earth", "build"] },
   { id: "key", assetKind: "item_key", displayName: "Key", category: "key", maxStack: 10, craftTags: ["key"] },
   { id: "coin", assetKind: "item_coin", displayName: "Coin", category: "misc", maxStack: 999, craftTags: ["currency"] },

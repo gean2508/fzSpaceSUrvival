@@ -153,6 +153,98 @@ pub fn build_demo_ship_mesh() -> Mesh {
     append_meshes(append_meshes(m0, m1), m2)
 }
 
+/// The player's ACTUAL ship, stacked from the builder config (SFS payoff:
+/// what you configure in BAG→SHIP is what stands on the pad). One merged
+/// mesh — a single draw, same budget as the old demo prop.
+pub fn build_config_ship_mesh(cfg: &ha_shared::ShipConfig) -> Mesh {
+    use crate::render::mesh_batch::build_merged_instances;
+
+    let c = ha_shared::clamp_ship_config(*cfg);
+    let base_y = 0.75;
+    let mut parts: Vec<Mesh> = Vec::new();
+
+    // Engine bells — single centred, extras in a ring.
+    let engine = Mesh::from(Cylinder::new(0.45, 1.0));
+    let mut engine_tfs: Vec<Transform> = Vec::new();
+    if c.engines == 1 {
+        engine_tfs.push(Transform::from_xyz(0.0, base_y + 0.5, 0.0));
+    } else {
+        for i in 0..c.engines {
+            let a = i as f32 / c.engines as f32 * std::f32::consts::TAU;
+            engine_tfs.push(Transform::from_xyz(
+                a.cos() * 0.62,
+                base_y + 0.5,
+                a.sin() * 0.62,
+            ));
+        }
+    }
+    parts.push(build_merged_instances(&engine, &engine_tfs));
+
+    // Tank stack — baseline + extras, straight up.
+    let tank = Mesh::from(Capsule3d::new(0.68, 1.15));
+    let tank_step = 1.55;
+    let tank_base = base_y + 1.55;
+    let tank_tfs: Vec<Transform> = (0..(1 + c.tanks))
+        .map(|i| Transform::from_xyz(0.0, tank_base + i as f32 * tank_step, 0.0))
+        .collect();
+    let stack_top = tank_base + (c.tanks) as f32 * tank_step + 1.0;
+    parts.push(build_merged_instances(&tank, &tank_tfs));
+
+    // Capsule/hull on top of the stack.
+    let hull = Mesh::from(Cuboid::new(1.25, 1.5, 1.25));
+    parts.push(build_merged_instances(
+        &hull,
+        &[Transform::from_xyz(0.0, stack_top + 0.75, 0.0)],
+    ));
+
+    // Nose cone above the hull.
+    if c.nose > 0 {
+        let nose = Mesh::from(Cone {
+            radius: 0.75,
+            height: 1.3,
+        });
+        parts.push(build_merged_instances(
+            &nose,
+            &[Transform::from_xyz(0.0, stack_top + 1.5 + 0.65, 0.0)],
+        ));
+    }
+
+    // Aero fins around the base.
+    if c.fins > 0 {
+        let fin = Mesh::from(Cuboid::new(0.14, 1.35, 0.85));
+        let fin_tfs: Vec<Transform> = (0..c.fins)
+            .map(|i| {
+                let a = i as f32 / c.fins as f32 * std::f32::consts::TAU;
+                Transform::from_xyz(a.cos() * 1.0, base_y + 1.15, a.sin() * 1.0)
+                    .with_rotation(Quat::from_rotation_y(-a))
+            })
+            .collect();
+        parts.push(build_merged_instances(&fin, &fin_tfs));
+    }
+
+    // Lander legs — three struts splayed outward.
+    if c.landers > 0 {
+        let leg = Mesh::from(Cuboid::new(0.12, 1.6, 0.12));
+        let leg_tfs: Vec<Transform> = (0..3)
+            .map(|i| {
+                let a = i as f32 / 3.0 * std::f32::consts::TAU;
+                Transform::from_xyz(a.cos() * 1.05, base_y + 0.55, a.sin() * 1.05)
+                    .with_rotation(Quat::from_axis_angle(
+                        Vec3::new(-a.sin(), 0.0, a.cos()),
+                        0.5,
+                    ))
+            })
+            .collect();
+        parts.push(build_merged_instances(&leg, &leg_tfs));
+    }
+
+    let mut merged = parts.remove(0);
+    for p in parts {
+        merged = append_meshes(merged, p);
+    }
+    merged
+}
+
 pub(crate) fn append_meshes(a: Mesh, b: Mesh) -> Mesh {
     use bevy::render::mesh::{Indices, VertexAttributeValues};
     use bevy::render::render_asset::RenderAssetUsages;

@@ -7,7 +7,7 @@ use ha_shared::{
     LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z, CelestialBody, WorldContext,
 };
 
-use crate::assets::{build_demo_ship_mesh, AssetFactory};
+use crate::assets::AssetFactory;
 use crate::earth_world::EarthDecor;
 use crate::flight_beacon::spawn_interact_beacon;
 use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
@@ -32,7 +32,12 @@ impl Plugin for LaunchPadPlugin {
             .add_systems(PostStartup, spawn_demo_launch_pad)
             .add_systems(
                 Update,
-                (try_assemble_on_hold, try_ignite_on_hold, sync_ship_loadout),
+                (
+                    try_assemble_on_hold,
+                    try_ignite_on_hold,
+                    sync_ship_loadout,
+                    sync_ship_config_visual,
+                ),
             );
     }
 }
@@ -85,6 +90,7 @@ fn spawn_demo_launch_pad(
     mut meshes: ResMut<Assets<Mesh>>,
     mut toon_mats: ResMut<Assets<ToonMaterial>>,
     mut std_mats: ResMut<Assets<StandardMaterial>>,
+    builder: Res<crate::ship_builder::ShipBuilderState>,
     collision: Res<WorldCollision>,
     _layout: Res<WorldLayout>,
 ) {
@@ -128,6 +134,7 @@ fn spawn_demo_launch_pad(
         y,
         z,
         &mut pads,
+        &builder.config,
     );
     eprintln!("ha-launch: demo pad at ({x}, {z}) — ship ready for launch");
 }
@@ -141,6 +148,11 @@ fn module_slot_tangent(x: f32, z: f32) -> [((f32, f32, f32), u8); 3] {
     ]
 }
 
+/// Marker for the config-driven ship visual — respawned when the player
+/// edits the ship in BAG→SHIP (`sync_ship_config_visual`).
+#[derive(Component)]
+pub struct ShipConfigVisual;
+
 /// Demo pad ships pre-assembled so the Tierra → orbit loop is always testable.
 fn preassemble_demo_ship(
     commands: &mut Commands,
@@ -151,24 +163,64 @@ fn preassemble_demo_ship(
     _y: f32,
     z: f32,
     pads: &mut LaunchPadWorld,
+    config: &ha_shared::ShipConfig,
 ) {
     if let Some(pad) = pads.pads.iter_mut().find(|p| p.uid == uid) {
         pad.assembled_modules = LAUNCH_PAD_MODULE_COUNT;
         pad.ready = true;
     }
+    spawn_config_ship_visual(commands, meshes, std_mats, uid, x, z, config);
+}
+
+fn spawn_config_ship_visual(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    std_mats: &mut Assets<StandardMaterial>,
+    uid: u32,
+    x: f32,
+    z: f32,
+    config: &ha_shared::ShipConfig,
+) {
     let ship_mat = std_mats.add(crate::materials::unlit_srgb([0.72, 0.74, 0.78]));
     let ship_tf = sphere_surface_transform(CelestialBody::Earth, x, z, PAD_SURFACE_LIFT, 0.0);
     commands.spawn((
-        Mesh3d(meshes.add(build_demo_ship_mesh())),
+        Mesh3d(meshes.add(crate::assets::build_config_ship_mesh(config))),
         MeshMaterial3d(ship_mat),
         ship_tf,
         EarthDecor,
-        LaunchModuleVisual {
-            pad_uid: uid,
-            module_index: 0,
-        },
+        ShipConfigVisual,
         Name::new(format!("ShipPrefab_{uid}")),
     ));
+}
+
+/// BAG→SHIP edits rebuild the pad ship on the spot — the SFS payoff: what
+/// you configure is what stands on the pad (still one merged draw).
+pub(crate) fn sync_ship_config_visual(
+    builder: Res<crate::ship_builder::ShipBuilderState>,
+    pads: Res<LaunchPadWorld>,
+    old: Query<Entity, With<ShipConfigVisual>>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut std_mats: ResMut<Assets<StandardMaterial>>,
+) {
+    if !builder.is_changed() || builder.is_added() {
+        return;
+    }
+    let Some(pad) = pads.pads.iter().find(|p| p.ready) else {
+        return;
+    };
+    for e in &old {
+        commands.entity(e).despawn_recursive();
+    }
+    spawn_config_ship_visual(
+        &mut commands,
+        &mut meshes,
+        &mut std_mats,
+        pad.uid,
+        pad.x,
+        pad.z,
+        &builder.config,
+    );
 }
 
 /// One merged mesh via AssetFactory + invisible ECS markers for hold-interact (zero extra draws).
@@ -478,6 +530,9 @@ pub(crate) fn sync_ship_loadout(
         loadout.burn_factor = ha_shared::burn_factor(mass);
         loadout.fuel_max = ha_shared::fuel_max_for_tanks(tanks);
         loadout.thrust_factor = 1.0;
+        loadout.drag_factor = 1.0;
+        loadout.fin_align_rate = 0.0;
+        loadout.safe_landing_bonus = 0.0;
     } else {
         // Complete baseline + the player's ship-builder extras (BAG → SHIP).
         let stats = ha_shared::ship_config_stats(builder.config);
@@ -485,8 +540,14 @@ pub(crate) fn sync_ship_loadout(
         loadout.burn_factor = stats.burn_factor;
         loadout.fuel_max = stats.fuel_max;
         loadout.thrust_factor = stats.thrust_factor;
+        loadout.drag_factor = stats.drag_factor;
+        loadout.fin_align_rate = stats.fin_align_rate;
+        loadout.safe_landing_bonus = stats.safe_landing_bonus;
     }
     flight.fuel_max = loadout.fuel_max;
     flight.burn_factor = loadout.burn_factor;
     flight.thrust_factor = loadout.thrust_factor;
+    flight.drag_factor = loadout.drag_factor;
+    flight.fin_align_rate = loadout.fin_align_rate;
+    flight.safe_v_bonus = loadout.safe_landing_bonus;
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-11T19:19:06.696Z",
+  "generatedAt": "2026-07-12T00:05:28.247Z",
   "modules": [
     {
       "id": "assets",
@@ -1083,11 +1083,27 @@
           }
         },
         {
+          "id": "part_fin",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 4
+          }
+        },
+        {
           "id": "part_lander",
           "fields": {
             "assetKind": "item_mat_ingot_iron",
             "category": "equipment",
             "maxStack": 2
+          }
+        },
+        {
+          "id": "part_nose",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "equipment",
+            "maxStack": 1
           }
         },
         {

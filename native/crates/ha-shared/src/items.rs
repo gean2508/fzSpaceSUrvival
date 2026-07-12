@@ -26,6 +26,8 @@ pub fn item_display_name(id: &str) -> &'static str {
         "part_tank" => "Fuel Tank",
         "part_engine" => "Rocket Engine",
         "part_lander" => "Lander Legs",
+        "part_fin" => "Aero Fin",
+        "part_nose" => "Nose Cone",
         "apple" => "Apple",
         "orange" => "Orange",
         "grape" => "Grapes",

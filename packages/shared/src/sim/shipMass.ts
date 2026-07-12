@@ -15,6 +15,8 @@ export const MODULE_MASS_T: Record<string, number> = {
   cargo: 2.0,
   lander: 1.0,
   scanner: 0.8,
+  fin: 0.4,
+  nose: 0.6,
 };
 
 /** Baseline ship (hull + fuel_tank + engine) — burn factor exactly 1.0. */
@@ -64,12 +66,22 @@ export function transitFuelCost(cruiseSecs: number, burnFactorValue: number): nu
 export const SHIP_MAX_EXTRA_TANKS = 3;
 /** Total engines (baseline has 1). */
 export const SHIP_MAX_ENGINES = 4;
-/** Lander leg sets (improves assisted touchdown; v1: 0..1). */
+/** Lander leg sets (raises safe touchdown speed; v1: 0..1). */
 export const SHIP_MAX_LANDERS = 1;
+/** Aerodynamic fins (in-atmosphere velocity alignment; 0..4). */
+export const SHIP_MAX_FINS = 4;
+/** Nose cone (drag reduction; 0..1). */
+export const SHIP_MAX_NOSE = 1;
 /** Thrust multiplier gained per engine beyond the first. */
 export const ENGINE_THRUST_BONUS = 0.15;
+/** Atmospheric drag multiplier with a nose cone fitted. */
+export const NOSE_DRAG_FACTOR = 0.75;
+/** Velocity→nose alignment rate per fin per second (in atmosphere). */
+export const FIN_ALIGN_RATE_PER_FIN = 0.12;
+/** Extra safe-touchdown m/s per lander set. */
+export const LANDER_SAFE_V_BONUS = 6.0;
 
-/** Player ship configuration — counters, not free placement (Fase 1). */
+/** Player ship configuration — counters, not free placement (Fase 1/2). */
 export interface ShipConfig {
   /** Extra tanks beyond baseline (0..SHIP_MAX_EXTRA_TANKS). */
   tanks: number;
@@ -77,6 +89,10 @@ export interface ShipConfig {
   engines: number;
   /** Lander sets (0..SHIP_MAX_LANDERS). */
   landers: number;
+  /** Aerodynamic fins (0..SHIP_MAX_FINS). Optional: pre-Fase 2 configs. */
+  fins?: number;
+  /** Nose cone (0..SHIP_MAX_NOSE). Optional: pre-Fase 2 configs. */
+  nose?: number;
 }
 
 export function clampShipConfig(cfg: ShipConfig): ShipConfig {
@@ -84,6 +100,8 @@ export function clampShipConfig(cfg: ShipConfig): ShipConfig {
     tanks: Math.min(SHIP_MAX_EXTRA_TANKS, Math.max(0, Math.floor(cfg.tanks))),
     engines: Math.min(SHIP_MAX_ENGINES, Math.max(1, Math.floor(cfg.engines))),
     landers: Math.min(SHIP_MAX_LANDERS, Math.max(0, Math.floor(cfg.landers))),
+    fins: Math.min(SHIP_MAX_FINS, Math.max(0, Math.floor(cfg.fins ?? 0))),
+    nose: Math.min(SHIP_MAX_NOSE, Math.max(0, Math.floor(cfg.nose ?? 0))),
   };
 }
 
@@ -94,6 +112,8 @@ export function shipConfigModules(cfg: ShipConfig): string[] {
   for (let i = 0; i < 1 + c.tanks; i++) modules.push("fuel_tank");
   for (let i = 0; i < c.engines; i++) modules.push("engine");
   for (let i = 0; i < c.landers; i++) modules.push("lander");
+  for (let i = 0; i < (c.fins ?? 0); i++) modules.push("fin");
+  for (let i = 0; i < (c.nose ?? 0); i++) modules.push("nose");
   return modules;
 }
 
@@ -108,6 +128,12 @@ export interface ShipConfigStats {
   fuelMax: number;
   burnFactor: number;
   thrustFactor: number;
+  /** Atmospheric drag multiplier (1.0 = bare, NOSE_DRAG_FACTOR with cone). */
+  dragFactor: number;
+  /** Velocity→nose alignment rate in atmosphere (0 = ballistic drift). */
+  finAlignRate: number;
+  /** Extra m/s of safe touchdown speed from lander legs. */
+  safeLandingBonus: number;
 }
 
 /** Live panel stats — the SFS trade-off the player sees while building. */
@@ -119,5 +145,8 @@ export function shipConfigStats(cfg: ShipConfig): ShipConfigStats {
     fuelMax: fuelMaxForTanks(1 + c.tanks),
     burnFactor: burnFactor(massT),
     thrustFactor: thrustFactor(c.engines),
+    dragFactor: (c.nose ?? 0) > 0 ? NOSE_DRAG_FACTOR : 1.0,
+    finAlignRate: (c.fins ?? 0) * FIN_ALIGN_RATE_PER_FIN,
+    safeLandingBonus: c.landers * LANDER_SAFE_V_BONUS,
   };
 }

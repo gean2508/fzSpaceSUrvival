@@ -15,6 +15,8 @@ pub const MODULE_MASS_T: &[(&str, f32)] = &[
     ("cargo", 2.0),
     ("lander", 1.0),
     ("scanner", 0.8),
+    ("fin", 0.4),
+    ("nose", 0.6),
 ];
 
 /// Baseline ship (hull + fuel_tank + engine) — today's 3-module pad build.
@@ -71,12 +73,22 @@ pub fn transit_fuel_cost(cruise_secs: f32, burn_factor: f32) -> f32 {
 pub const SHIP_MAX_EXTRA_TANKS: u32 = 3;
 /// Total engines (baseline has 1).
 pub const SHIP_MAX_ENGINES: u32 = 4;
-/// Lander leg sets (v1: 0..1).
+/// Lander leg sets (raises safe touchdown speed; v1: 0..1).
 pub const SHIP_MAX_LANDERS: u32 = 1;
+/// Aerodynamic fins (in-atmosphere velocity alignment; 0..4).
+pub const SHIP_MAX_FINS: u32 = 4;
+/// Nose cone (drag reduction; 0..1).
+pub const SHIP_MAX_NOSE: u32 = 1;
 /// Thrust multiplier gained per engine beyond the first.
 pub const ENGINE_THRUST_BONUS: f32 = 0.15;
+/// Atmospheric drag multiplier with a nose cone fitted.
+pub const NOSE_DRAG_FACTOR: f32 = 0.75;
+/// Velocity→nose alignment rate per fin per second (in atmosphere).
+pub const FIN_ALIGN_RATE_PER_FIN: f32 = 0.12;
+/// Extra safe-touchdown m/s per lander set.
+pub const LANDER_SAFE_V_BONUS: f32 = 6.0;
 
-/// Player ship configuration — counters, not free placement (Fase 1).
+/// Player ship configuration — counters, not free placement (Fase 1/2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ShipConfig {
     /// Extra tanks beyond baseline (0..=SHIP_MAX_EXTRA_TANKS).
@@ -85,11 +97,15 @@ pub struct ShipConfig {
     pub engines: u32,
     /// Lander sets (0..=SHIP_MAX_LANDERS).
     pub landers: u32,
+    /// Aerodynamic fins (0..=SHIP_MAX_FINS).
+    pub fins: u32,
+    /// Nose cone (0..=SHIP_MAX_NOSE).
+    pub nose: u32,
 }
 
 impl Default for ShipConfig {
     fn default() -> Self {
-        Self { tanks: 0, engines: 1, landers: 0 }
+        Self { tanks: 0, engines: 1, landers: 0, fins: 0, nose: 0 }
     }
 }
 
@@ -98,6 +114,8 @@ pub fn clamp_ship_config(cfg: ShipConfig) -> ShipConfig {
         tanks: cfg.tanks.min(SHIP_MAX_EXTRA_TANKS),
         engines: cfg.engines.clamp(1, SHIP_MAX_ENGINES),
         landers: cfg.landers.min(SHIP_MAX_LANDERS),
+        fins: cfg.fins.min(SHIP_MAX_FINS),
+        nose: cfg.nose.min(SHIP_MAX_NOSE),
     }
 }
 
@@ -114,6 +132,12 @@ pub struct ShipConfigStats {
     pub fuel_max: f32,
     pub burn_factor: f32,
     pub thrust_factor: f32,
+    /// Atmospheric drag multiplier (1.0 = bare, NOSE_DRAG_FACTOR with cone).
+    pub drag_factor: f32,
+    /// Velocity→nose alignment rate in atmosphere (0 = ballistic drift).
+    pub fin_align_rate: f32,
+    /// Extra m/s of safe touchdown speed from lander legs.
+    pub safe_landing_bonus: f32,
 }
 
 pub fn ship_config_stats(cfg: ShipConfig) -> ShipConfigStats {
@@ -122,11 +146,16 @@ pub fn ship_config_stats(cfg: ShipConfig) -> ShipConfigStats {
     mass += module_mass_t("fuel_tank") * (1 + c.tanks) as f32;
     mass += module_mass_t("engine") * c.engines as f32;
     mass += module_mass_t("lander") * c.landers as f32;
+    mass += module_mass_t("fin") * c.fins as f32;
+    mass += module_mass_t("nose") * c.nose as f32;
     ShipConfigStats {
         mass_t: mass,
         fuel_max: fuel_max_for_tanks(1 + c.tanks),
         burn_factor: burn_factor(mass),
         thrust_factor: thrust_factor(c.engines),
+        drag_factor: if c.nose > 0 { NOSE_DRAG_FACTOR } else { 1.0 },
+        fin_align_rate: c.fins as f32 * FIN_ALIGN_RATE_PER_FIN,
+        safe_landing_bonus: c.landers as f32 * LANDER_SAFE_V_BONUS,
     }
 }
 
@@ -168,16 +197,44 @@ mod tests {
     #[test]
     fn ship_builder_tanks_tradeoff_and_clamps() {
         let base = ship_config_stats(ShipConfig::default());
-        let heavy = ship_config_stats(ShipConfig { tanks: 2, engines: 1, landers: 0 });
+        let heavy = ship_config_stats(ShipConfig { tanks: 2, ..Default::default() });
         assert_eq!(heavy.fuel_max, FUEL_CAP_PER_TANK * 3.0);
         assert!(heavy.mass_t > base.mass_t);
         assert!(heavy.burn_factor > base.burn_factor);
 
         assert!((thrust_factor(3) - 1.3).abs() < 1e-6);
         assert!((thrust_factor(99) - thrust_factor(SHIP_MAX_ENGINES)).abs() < 1e-6);
-        let clamped = clamp_ship_config(ShipConfig { tanks: 99, engines: 0, landers: 5 });
+        let clamped = clamp_ship_config(ShipConfig {
+            tanks: 99,
+            engines: 0,
+            landers: 5,
+            fins: 99,
+            nose: 7,
+        });
         assert_eq!(clamped.tanks, SHIP_MAX_EXTRA_TANKS);
         assert_eq!(clamped.engines, 1);
         assert_eq!(clamped.landers, SHIP_MAX_LANDERS);
+        assert_eq!(clamped.fins, SHIP_MAX_FINS);
+        assert_eq!(clamped.nose, SHIP_MAX_NOSE);
+    }
+
+    #[test]
+    fn ship_builder_fase2_aero_effects() {
+        let bare = ship_config_stats(ShipConfig::default());
+        assert_eq!(bare.drag_factor, 1.0);
+        assert_eq!(bare.fin_align_rate, 0.0);
+        assert_eq!(bare.safe_landing_bonus, 0.0);
+
+        let aero = ship_config_stats(ShipConfig {
+            landers: 1,
+            fins: 3,
+            nose: 1,
+            ..Default::default()
+        });
+        assert!((aero.drag_factor - NOSE_DRAG_FACTOR).abs() < 1e-6);
+        assert!((aero.fin_align_rate - 3.0 * FIN_ALIGN_RATE_PER_FIN).abs() < 1e-6);
+        assert!((aero.safe_landing_bonus - LANDER_SAFE_V_BONUS).abs() < 1e-6);
+        // Aero parts cost mass — the trade-off holds.
+        assert!(aero.mass_t > bare.mass_t);
     }
 }

@@ -10,11 +10,16 @@ import {
   thrustFactor,
   transitCruiseSecs,
   transitFuelCost,
+  FIN_ALIGN_RATE_PER_FIN,
   FUEL_CAP_PER_TANK,
+  LANDER_SAFE_V_BONUS,
   MASS_REF_T,
+  NOSE_DRAG_FACTOR,
   SHIP_MAX_ENGINES,
   SHIP_MAX_EXTRA_TANKS,
+  SHIP_MAX_FINS,
   SHIP_MAX_LANDERS,
+  SHIP_MAX_NOSE,
   TRANSIT_CRUISE_MAX_SECS,
   TRANSIT_CRUISE_MIN_SECS,
   TRANSIT_FUEL_MARGIN,
@@ -64,6 +69,24 @@ describe("shipMass", () => {
     expect(heavy.fuelMax).toBe(FUEL_CAP_PER_TANK * 3);
     expect(heavy.massT).toBeGreaterThan(base.massT);
     expect(heavy.burnFactor).toBeGreaterThan(base.burnFactor);
+  });
+
+  it("ship builder fase 2: nose cuts drag, fins align, landers soften touchdown", () => {
+    const bare = shipConfigStats({ tanks: 0, engines: 1, landers: 0 });
+    expect(bare.dragFactor).toBe(1.0);
+    expect(bare.finAlignRate).toBe(0);
+    expect(bare.safeLandingBonus).toBe(0);
+
+    const aero = shipConfigStats({ tanks: 0, engines: 1, landers: 1, fins: 3, nose: 1 });
+    expect(aero.dragFactor).toBeCloseTo(NOSE_DRAG_FACTOR);
+    expect(aero.finAlignRate).toBeCloseTo(3 * FIN_ALIGN_RATE_PER_FIN);
+    expect(aero.safeLandingBonus).toBeCloseTo(LANDER_SAFE_V_BONUS);
+    // Aero parts cost mass — the trade-off holds.
+    expect(aero.massT).toBeGreaterThan(bare.massT);
+
+    const clamped = clampShipConfig({ tanks: 0, engines: 1, landers: 0, fins: 99, nose: 7 });
+    expect(clamped.fins).toBe(SHIP_MAX_FINS);
+    expect(clamped.nose).toBe(SHIP_MAX_NOSE);
   });
 
   it("ship builder: engines raise thrust, config clamps to limits", () => {

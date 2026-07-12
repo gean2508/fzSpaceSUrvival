@@ -227,7 +227,7 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 
 **Fases restantes, EN ESTE ORDEN (aprobadas por el usuario 12 jul):**
 
-1. **Ship Builder Fase 2 — piezas estructurales + nave visible** (en curso):
+1. **Ship Builder Fase 2 — piezas estructurales + nave visible** ✅ HECHO (12 jul):
    - Ítems `part_fin` (aletas: +estabilidad = menos drift/wobble en vuelo manual) y `part_nose` (cono: −drag atmosférico = ascenso más rápido). Recetas 17/18. TS `shipMass.ts` → espejo `ship_mass.rs`: `ShipConfig` gana `fins: u32 (0..=4)` y `nose: u32 (0..=1)`; `ShipConfigStats` gana `drag_factor` y `stability`.
    - Efecto en vuelo: `rocket_flight.rs` — drag atmosférico × `drag_factor` (nose 1.0→0.75), damping de rotación × stability.
    - **La nave del pad refleja la config** (el payoff SFS): `launch_pad.rs` respawnea el stack visual al cambiar config — tanques apilados (altura = 1+tanks), motores en anillo (n=engines), aletas, cono. Marker `ShipConfigVisual` + sistema `sync_ship_config_visual` (compara `builder.is_changed()`).

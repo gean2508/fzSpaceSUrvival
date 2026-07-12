@@ -49,6 +49,9 @@ pub struct ShipLoadout {
     pub fuel_max: f32,
     pub burn_factor: f32,
     pub thrust_factor: f32,
+    pub drag_factor: f32,
+    pub fin_align_rate: f32,
+    pub safe_landing_bonus: f32,
 }
 
 impl Default for ShipLoadout {
@@ -59,6 +62,9 @@ impl Default for ShipLoadout {
             fuel_max: ha_shared::fuel_max_for_tanks(1),
             burn_factor: ha_shared::burn_factor(mass),
             thrust_factor: 1.0,
+            drag_factor: 1.0,
+            fin_align_rate: 0.0,
+            safe_landing_bonus: 0.0,
         }
     }
 }
@@ -87,6 +93,12 @@ pub struct RocketFlight {
     pub burn_factor: f32,
     /// Engine-count thrust multiplier from the loadout (0.0 default → 1.0).
     pub thrust_factor: f32,
+    /// Nose-cone drag multiplier from the loadout (0.0 default → 1.0).
+    pub drag_factor: f32,
+    /// Fin alignment rate in atmosphere (0.0 = no fins, ballistic).
+    pub fin_align_rate: f32,
+    /// Lander-legs bonus to safe touchdown speed (m/s).
+    pub safe_v_bonus: f32,
 }
 
 impl RocketFlight {
@@ -154,6 +166,14 @@ impl RocketFlight {
     pub fn thrust_rate_factor(&self) -> f32 {
         if self.thrust_factor > 0.0 {
             self.thrust_factor
+        } else {
+            1.0
+        }
+    }
+
+    pub fn drag_rate_factor(&self) -> f32 {
+        if self.drag_factor > 0.0 {
+            self.drag_factor
         } else {
             1.0
         }
@@ -306,7 +326,23 @@ pub fn tick_rocket_flight(
         Some(body) => Vec3::from_array(gravity_accel_planet_gameplay(body, pos)),
         None => Vec3::from_array(gravity_accel_at_time(pos, t)),
     };
-    accel += Vec3::from_array(atmosphere_drag(pos, flight.vel.to_array()));
+    // Nose cone cuts atmospheric drag (ship builder Fase 2).
+    accel += Vec3::from_array(atmosphere_drag(pos, flight.vel.to_array()))
+        * flight.drag_rate_factor();
+
+    // Aero fins: in atmosphere the velocity leans toward where the nose
+    // points — with fins your rocket flies where you aim it; without them
+    // it drifts ballistic (SFS feel, no aerodynamics sim).
+    let in_atmo = !in_vacuum(pos);
+    if in_atmo && flight.fin_align_rate > 0.0 {
+        let speed = flight.vel.length();
+        if speed > 4.0 {
+            let k = (flight.fin_align_rate * dt).clamp(0.0, 0.35);
+            let aligned = flight.vel.lerp(thrust_dir * speed, k);
+            // Preserve speed — fins redirect, they don't brake or boost.
+            flight.vel = aligned.normalize_or_zero() * speed;
+        }
+    }
 
     if let Some(body) = flight.surface_flight {
         let alt_gp = altitude_above_planet_gameplay(body, pos);
@@ -465,7 +501,8 @@ fn try_land(
     if alt > 3.0 {
         return;
     }
-    let safe_v = effective_safe_landing_v(flight.parachute_open);
+    // Lander legs raise the safe touchdown speed (ship builder Fase 2).
+    let safe_v = effective_safe_landing_v(flight.parachute_open) + flight.safe_v_bonus.max(0.0);
     if v_down > safe_v {
         let n = if let Some(gp) = flight.surface_flight {
             let c = Vec3::from_array(planet_gameplay_center(gp));

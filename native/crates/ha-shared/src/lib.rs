@@ -170,7 +170,7 @@ pub use ship_mass::{
     burn_factor, clamp_ship_config, fuel_max_for_tanks, ship_config_stats, ship_mass_t,
     thrust_factor, transit_fuel_cost, ShipConfig, ShipConfigStats,
     AUTOPILOT_BURN_EFFICIENCY, FUEL_CAP_PER_TANK, MASS_REF_T, SHIP_MAX_ENGINES,
-    SHIP_MAX_EXTRA_TANKS, SHIP_MAX_LANDERS, TRANSIT_FUEL_MARGIN,
+    SHIP_MAX_EXTRA_TANKS, SHIP_MAX_FINS, SHIP_MAX_LANDERS, SHIP_MAX_NOSE, TRANSIT_FUEL_MARGIN,
 };
 pub use solar_ephemeris::{
     body_center_at, body_intercept_point, direction_to, earth_center_at,
