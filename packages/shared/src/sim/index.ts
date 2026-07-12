@@ -11,6 +11,7 @@ export * from "./lunaTerrain.js";
 export * from "./world_context.js";
 export * from "./launch_pad.js";
 export * from "./survivalStats.js";
+export * from "./colony.js";
 export * from "./abilities/types.js";
 export * from "./ai/types.js";
 export * from "./ai/brain.js";

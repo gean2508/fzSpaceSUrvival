@@ -87,8 +87,23 @@ pub const ANTENNA: MachineDef = MachineDef {
     cost_iron: 8,
 };
 
+/// Act V — sealed habitat: each one houses COLONISTS_PER_HABITAT colonists.
+pub const HABITAT: MachineDef = MachineDef {
+    id: "habitat",
+    display_name: "Habitat",
+    asset_kind: "machine_wood_extractor",
+    output_item_id: "wood",
+    output_per_second: 0.0,
+    passive: false,
+    place_duration_ms: 5000,
+    cost_wood: 20,
+    cost_stone: 0,
+    cost_sticks: 0,
+    cost_iron: 10,
+};
+
 pub const MACHINE_CATALOG: &[MachineDef] =
-    &[WOOD_EXTRACTOR, STONE_EXTRACTOR, LAUNCH_PAD, REGOLITH_DRILL, ANTENNA];
+    &[WOOD_EXTRACTOR, STONE_EXTRACTOR, LAUNCH_PAD, REGOLITH_DRILL, ANTENNA, HABITAT];
 
 pub fn get_machine(id: &str) -> Option<&'static MachineDef> {
     MACHINE_CATALOG.iter().find(|m| m.id == id)

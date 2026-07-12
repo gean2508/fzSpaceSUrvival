@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-12T00:05:28.247Z",
+  "generatedAt": "2026-07-12T00:33:14.833Z",
   "modules": [
     {
       "id": "assets",
@@ -1277,6 +1277,15 @@
             "passive": false,
             "outputPerSecond": 0,
             "placeDurationMs": 3500,
+            "assetKind": "machine_wood_extractor"
+          }
+        },
+        {
+          "id": "habitat",
+          "fields": {
+            "passive": false,
+            "outputPerSecond": 0,
+            "placeDurationMs": 5000,
             "assetKind": "machine_wood_extractor"
           }
         },

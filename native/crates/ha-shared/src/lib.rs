@@ -42,6 +42,7 @@ pub mod nav_data;
 pub mod ship_mass;
 pub mod solar_light;
 pub mod solar_ephemeris;
+pub mod colony;
 pub mod space_base;
 pub mod survival;
 pub mod vessel;
@@ -66,6 +67,10 @@ pub use interactions::{
 };
 pub use constants::*;
 pub use hold::{advance_hold_progress, tick_ability_cooldown, HoldProgress};
+pub use colony::{
+    can_request_colonist, colony_capacity, colony_fed, machine_boost, step_colony, ColonyState,
+    COLONISTS_PER_HABITAT, COLONIST_BOOST, COLONIST_SEND_COST_APPLES, SUPPLY_SEND_APPLES,
+};
 pub use survival::{
     apply_food, food_restore, step_survival_stats, SurvivalEnv, SurvivalStats,
     OXYGEN_DRAIN_VACUUM, OXYGEN_MAX, OXYGEN_RECHARGE, SUFFOCATE_DAMAGE,
@@ -73,7 +78,7 @@ pub use survival::{
 pub use input::{empty_input, InputState};
 pub use inventory::PlayerInventory;
 pub use items::{item_display_name, item_hotbar_label};
-pub use machines::{get_machine, require_machine, MachineDef, ANTENNA, MACHINE_CATALOG, LAUNCH_PAD, REGOLITH_DRILL, STONE_EXTRACTOR, WOOD_EXTRACTOR};
+pub use machines::{get_machine, require_machine, MachineDef, ANTENNA, HABITAT, MACHINE_CATALOG, LAUNCH_PAD, REGOLITH_DRILL, STONE_EXTRACTOR, WOOD_EXTRACTOR};
 pub use launch_pad::{
     assemble_module, can_assemble_module, create_launch_pad_state, LaunchPadState,
     LAUNCH_MODULE_COSTS, LAUNCH_PAD_MODULE_COUNT,

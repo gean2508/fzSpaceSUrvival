@@ -36,6 +36,7 @@ mod rocket_flight;
 mod scene;
 mod space_travel;
 mod nav_computer;
+mod colony;
 mod harvest;
 mod ship_builder;
 mod sim;
@@ -94,6 +95,7 @@ use planet_world::PlanetWorldPlugin;
 use rocket_flight::RocketFlightPlugin;
 use space_travel::SpaceTravelPlugin;
 use nav_computer::NavComputerPlugin;
+use colony::ColonyPlugin;
 use harvest::HarvestPlugin;
 use ship_builder::ShipBuilderPlugin;
 use survival_stats::SurvivalStatsPlugin;
@@ -235,6 +237,7 @@ fn run_app_inner() {
             HarvestPlugin,
             SurvivalStatsPlugin,
             ShipBuilderPlugin,
+            ColonyPlugin,
             JetpackTransitPlugin,
         ))
         .add_plugins((

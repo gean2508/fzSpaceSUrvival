@@ -1614,6 +1614,13 @@ fn spawn_bag_panel(
                                     machine_cost_label(&ha_shared::ANTENNA),
                                     heart,
                                 );
+                                spawn_machine_select_button(
+                                    section,
+                                    "Habitat (Luna)",
+                                    15,
+                                    machine_cost_label(&ha_shared::HABITAT),
+                                    heart,
+                                );
                             });
 
                         crate::ship_builder::spawn_ship_section(
@@ -2066,6 +2073,8 @@ fn bag_panel_system(
                     pending.machine_id = ha_shared::REGOLITH_DRILL.id;
                 } else if recipe_btn.recipe_id == 14 {
                     pending.machine_id = ha_shared::ANTENNA.id;
+                } else if recipe_btn.recipe_id == 15 {
+                    pending.machine_id = ha_shared::HABITAT.id;
                 }
                 bag_state.open = false;
             } else if let Some(recipe) = get_craft_recipe(recipe_btn.recipe_id) {

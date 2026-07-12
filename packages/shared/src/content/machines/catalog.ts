@@ -73,4 +73,18 @@ export const MACHINE_CATALOG: MachineDef[] = [
     passive: false,
     placeDurationMs: 3500,
   },
+  {
+    // Act V — sealed habitat: each one houses COLONISTS_PER_HABITAT colonists.
+    id: "habitat",
+    displayName: "Habitat",
+    assetKind: "machine_wood_extractor",
+    buildCost: [
+      { itemId: "wood", qty: 20 },
+      { itemId: "iron_ingot", qty: 10 },
+    ],
+    outputItemId: "wood",
+    outputPerSecond: 0,
+    passive: false,
+    placeDurationMs: 5000,
+  },
 ];

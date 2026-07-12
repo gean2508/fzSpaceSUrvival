@@ -127,8 +127,10 @@ fn machine_allowed_on(machine_id: &str, body: CelestialBody) -> bool {
     match machine_id {
         // Trees/launch zone are Earth content.
         id if id == WOOD_EXTRACTOR.id || id == LAUNCH_PAD.id => body == CelestialBody::Earth,
-        // Regolith + uplink are the off-world camp kit.
-        id if id == REGOLITH_DRILL.id || id == ANTENNA.id => airless,
+        // Regolith + uplink + sealed habitats are the off-world camp kit.
+        id if id == REGOLITH_DRILL.id || id == ANTENNA.id || id == ha_shared::HABITAT.id => {
+            airless
+        }
         _ => true,
     }
 }
@@ -324,6 +326,7 @@ fn sync_machine_visuals(
 fn tick_machines(
     time: Res<Time<Fixed>>,
     ctx: PlacementCtx,
+    colony: Res<crate::colony::ColonyRuntime>,
     mut world: ResMut<MachineWorld>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
@@ -334,13 +337,22 @@ fn tick_machines(
     let player_body = ctx.body();
     let mut any_flash = false;
     let mut produced = false;
+    // Fed colonists boost the first N lunar drills (stable placement order).
+    let mut moon_drill_idx = 0u32;
     for m in &mut world.placed {
         let def = require_machine(m.machine_id);
         if !def.passive {
             continue;
         }
         let local = player_body == Some(m.body);
-        m.output_accumulator += def.output_per_second * dt;
+        let boost = if m.body == CelestialBody::Moon && m.machine_id == REGOLITH_DRILL.id {
+            let b = ha_shared::machine_boost(&colony.state, moon_drill_idx);
+            moon_drill_idx += 1;
+            b
+        } else {
+            1.0
+        };
+        m.output_accumulator += def.output_per_second * boost * dt;
         let whole = m.output_accumulator.floor() as u32;
         if whole > 0 {
             m.output_accumulator -= whole as f32;

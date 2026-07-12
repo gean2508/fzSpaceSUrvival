@@ -219,6 +219,22 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 Name::new("LunaBaseMonitor"),
             ));
 
+            // Colony uplink actions — hidden until the antenna is up
+            // (`colony::colony_button_system` owns visibility + costs).
+            root.spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(10.0),
+                    ..default()
+                },
+                Name::new("ColonyUplinkRow"),
+            ))
+            .with_children(|row| {
+                use crate::colony::{ColonyAction, ColonyButton};
+                menu_button(row, "COLONO (5🍎)", ColonyButton(ColonyAction::SendColonist));
+                menu_button(row, "VÍVERES (3🍎)", ColonyButton(ColonyAction::SendSupplies));
+            });
+
             // Big-button bar (reuses the dev UiEditorCommands via editor_button_system).
             root.spawn((
                 Node {
@@ -347,6 +363,7 @@ fn update_map_markers(
 fn update_luna_base_monitor(
     menu: Res<GameMenuState>,
     machines: Res<crate::machines::MachineWorld>,
+    colony: Res<crate::colony::ColonyRuntime>,
     mut monitor: Query<&mut Text, With<LunaBaseMonitor>>,
 ) {
     if !menu.spawned {
@@ -360,11 +377,27 @@ fn update_luna_base_monitor(
             .on_body(CelestialBody::Moon)
             .filter(|m| m.machine_id == ha_shared::REGOLITH_DRILL.id)
             .count();
+        let habitats = machines
+            .on_body(CelestialBody::Moon)
+            .filter(|m| m.machine_id == ha_shared::HABITAT.id)
+            .count() as u32;
         let banked: u32 = machines
             .on_body(CelestialBody::Moon)
             .map(|m| m.stored_output)
             .sum();
-        format!("BASE LUNA — antena OK · taladros {drills} · hierro almacenado {banked} · O₂ tether activo")
+        let crew = colony.state.colonists;
+        let cap = ha_shared::colony_capacity(habitats);
+        let fed = if crew == 0 {
+            ""
+        } else if ha_shared::colony_fed(&colony.state) {
+            " (trabajando ×1.5)"
+        } else {
+            " (SIN VÍVERES)"
+        };
+        format!(
+            "BASE LUNA — antena OK · taladros {drills} · hierro {banked} · colonos {crew}/{cap}{fed} · víveres {:.0}",
+            colony.state.food_stock
+        )
     } else {
         String::new()
     };
