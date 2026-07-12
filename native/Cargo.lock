@@ -2255,6 +2255,7 @@ dependencies = [
  "bevy",
  "gltf",
  "ha-shared",
+ "raw-window-handle",
  "serde",
  "serde_json",
  "tempfile",

@@ -18,6 +18,8 @@ impl Plugin for RenderScalePlugin {
                 Update,
                 sync_render_target.after(bevy::transform::TransformSystem::TransformPropagate),
             );
+        #[cfg(target_os = "android")]
+        app.add_systems(Update, android_res::apply_surface_scale);
     }
 }
 
@@ -67,3 +69,89 @@ pub fn initial_render_scale() -> f32 {
         1.0
     }
 }
+
+// --- EXPERIMENTAL: Android surface-resolution scale (bible §6 lever #1) --------
+//
+// `ANativeWindow_setBuffersGeometry` shrinks the window buffers; SurfaceFlinger
+// upscales them to the display for free — the canonical GLES trick, NO blit
+// (the offscreen blit regressed on this device). Toggled by marker files so
+// adb can flip/revert it without touching the UI (debug build: `run-as`):
+//
+//   adb shell "run-as com.hungerarena.app touch files/res-scale-60"   # 60 %
+//   adb shell "run-as com.hungerarena.app rm files/res-scale-60"     # revert
+//   adb shell am force-stop com.hungerarena.app                       # restart
+//
+// Verify on device: image fills the screen (not cropped), touch lands where
+// you tap, ha-res log line shows the applied size.
+
+#[cfg(target_os = "android")]
+mod android_res {
+    use bevy::prelude::*;
+    use bevy::window::{PrimaryWindow, RawHandleWrapper};
+    use raw_window_handle::RawWindowHandle;
+
+    #[link(name = "android")]
+    extern "C" {
+        fn ANativeWindow_setBuffersGeometry(
+            window: *mut std::ffi::c_void,
+            width: i32,
+            height: i32,
+            format: i32,
+        ) -> i32;
+    }
+
+    fn requested_scale() -> f32 {
+        let dir = crate::inventory_persist::persist_dir();
+        for (name, s) in [
+            ("res-scale-50", 0.5_f32),
+            ("res-scale-60", 0.6),
+            ("res-scale-75", 0.75),
+        ] {
+            if dir.join(name).exists() {
+                return s;
+            }
+        }
+        1.0
+    }
+
+    /// Applies once as soon as the winit surface exists.
+    pub fn apply_surface_scale(
+        mut done: Local<bool>,
+        windows: Query<(&Window, &RawHandleWrapper), With<PrimaryWindow>>,
+    ) {
+        if *done {
+            return;
+        }
+        let Ok((win, handle)) = windows.get_single() else {
+            return;
+        };
+        let scale = requested_scale();
+        if scale >= 0.999 {
+            *done = true;
+            return;
+        }
+        let (w, h) = (win.physical_width(), win.physical_height());
+        if w < 64 || h < 64 {
+            return;
+        }
+        let (sw, sh) = (
+            ((w as f32 * scale) as i32).max(64),
+            ((h as f32 * scale) as i32).max(64),
+        );
+        // SAFETY: handle is the live ANativeWindow provided by winit; the call
+        // only resizes its buffer geometry (format 0 = keep current).
+        let raw = handle.window_handle;
+        if let RawWindowHandle::AndroidNdk(ndk) = raw {
+            let ret = unsafe {
+                ANativeWindow_setBuffersGeometry(ndk.a_native_window.as_ptr(), sw, sh, 0)
+            };
+            eprintln!("ha-res: setBuffersGeometry {w}x{h} -> {sw}x{sh} (scale {scale}) ret={ret}");
+        } else {
+            eprintln!("ha-res: no AndroidNdk window handle — skip");
+        }
+        *done = true;
+    }
+}
+
+#[cfg(target_os = "android")]
+pub use android_res::apply_surface_scale;
