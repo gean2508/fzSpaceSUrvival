@@ -174,6 +174,23 @@ fn spawn_luna_props(
         ));
     }
 
+    // Mine mouth — dark disc + rim marker; USE nearby enters Cave(2)
+    // (`scene::update_region_runtime`).
+    let portal_tf = luna_surface_transform(
+        crate::scene::LUNA_CAVE_PORTAL_TX,
+        crate::scene::LUNA_CAVE_PORTAL_TZ,
+        0.10,
+        0.0,
+        Vec3::new(2.3, 0.14, 2.3),
+    );
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(std_mats.add(crate::materials::unlit_srgb([0.12, 0.07, 0.16]))),
+        portal_tf,
+        MoonDecor,
+        Name::new("LunaMineMouth"),
+    ));
+
     let regolith = std_mats.add(luna_regolith_std());
     if !rock_transforms.is_empty() {
         let mesh = meshes.add(build_merged_cuboids(&rock_transforms, 1.0, 1.0, 1.0));

@@ -116,6 +116,8 @@ pub struct RegionRuntime {
     pub edge_pressed: bool,
     /// Surface position restored when leaving cave.
     pub cave_surface_return: Option<Vec3>,
+    /// Body the cave exit returns to (Earth portal or the lunar mine mouth).
+    pub cave_return_body: CelestialBody,
 }
 
 impl Default for RegionRuntime {
@@ -125,15 +127,24 @@ impl Default for RegionRuntime {
             cave_portal: Vec3::new(11.0, 0.0, -9.5),
             edge_pressed: false,
             cave_surface_return: None,
+            cave_return_body: CelestialBody::Earth,
         }
     }
 }
+
+/// Lunar mine mouth (tangent coords near the Luna spawn) — enters Cave(2).
+pub const LUNA_CAVE_PORTAL_TX: f32 = 10.0;
+pub const LUNA_CAVE_PORTAL_TZ: f32 = 8.0;
 
 #[derive(Component)]
 pub struct SolarLight;
 
 #[derive(Component)]
 struct CaveCrystal;
+
+/// Red-gem node visible + minable only in the lunar mine (Cave 2).
+#[derive(Component)]
+struct LunarCaveNode;
 
 #[derive(Component)]
 pub(crate) struct CaveTorch;
@@ -274,6 +285,22 @@ pub(crate) fn spawn_world(
             CaveCrystal,
             CaveInterior,
             Name::new("CaveCrystal"),
+        ));
+    }
+
+    // Lunar mine (Cave 2) — rare red-gem nodes, minable, only lit there.
+    for (i, (lx, lz)) in [(-6.5_f32, 5.0_f32), (0.0, -6.8), (7.0, 2.4)].iter().enumerate() {
+        commands.spawn((
+            Mesh3d(meshes.add(Capsule3d::new(0.34, 0.8))),
+            MeshMaterial3d(std_mats.add(crate::materials::unlit_srgb([0.85, 0.2, 0.32]))),
+            Transform::from_translation(CAVE_INTERIOR_ORIGIN + Vec3::new(*lx, 0.55, *lz)),
+            Visibility::Hidden,
+            LunarCaveNode,
+            crate::targeting::InteractTarget {
+                kind: ha_shared::InteractTargetKind::GemRed,
+                id: 900 + i as u32,
+            },
+            Name::new("LunarGemNode"),
         ));
     }
 
@@ -474,14 +501,29 @@ fn update_region_runtime(
         return;
     }
     if matches!(region.active, RegionId::Cave(_)) {
-        region.active = RegionId::Overworld { gx: 0, gz: 0 };
-        world_ctx.active = WorldContext::Overworld;
-        let return_pos = region.cave_surface_return.take().unwrap_or(region.cave_portal);
+        let body = region.cave_return_body;
+        let default_portal = if body == CelestialBody::Moon {
+            Vec3::new(LUNA_CAVE_PORTAL_TX, 0.0, LUNA_CAVE_PORTAL_TZ)
+        } else {
+            region.cave_portal
+        };
+        let return_pos = region.cave_surface_return.take().unwrap_or(default_portal);
         let return_tx = return_pos.x;
         let return_tz = return_pos.z;
-        let feet = ha_shared::ground_height_for_locomotion(return_tx, return_tz, sim.body.radius);
+        let feet = if body == CelestialBody::Earth {
+            ha_shared::ground_height_for_locomotion(return_tx, return_tz, sim.body.radius)
+        } else {
+            ha_shared::planet_ground_y_at(body, return_tx, return_tz)
+        };
+        if body == CelestialBody::Moon {
+            region.active = RegionId::Luna;
+            world_ctx.active = WorldContext::Luna;
+        } else {
+            region.active = RegionId::Overworld { gx: 0, gz: 0 };
+            world_ctx.active = WorldContext::Overworld;
+        }
         let placed = player_sphere_transform(
-            CelestialBody::Earth,
+            body,
             return_tx,
             return_tz,
             feet,
@@ -496,7 +538,25 @@ fn update_region_runtime(
         sim.body.vy = 0.0;
         return;
     }
-    if matches!(region.active, RegionId::Luna) || matches!(region.active, RegionId::Space) {
+    if matches!(region.active, RegionId::Space) {
+        return;
+    }
+    // Lunar mine mouth → Cave(2), the rare-crystal instance.
+    if matches!(region.active, RegionId::Luna) {
+        let dx = sim.body.x - LUNA_CAVE_PORTAL_TX;
+        let dz = sim.body.z - LUNA_CAVE_PORTAL_TZ;
+        if (dx * dx + dz * dz).sqrt() <= 2.8 {
+            region.cave_surface_return = Some(Vec3::new(sim.body.x, sim.body.y, sim.body.z));
+            region.cave_return_body = CelestialBody::Moon;
+            region.active = RegionId::Cave(2);
+            world_ctx.active = WorldContext::Mission;
+            player_tf.translation = CAVE_INTERIOR_ORIGIN + Vec3::new(0.0, 1.1, 0.0);
+            player_tf.rotation = Quat::IDENTITY;
+            sim.body.x = CAVE_INTERIOR_ORIGIN.x;
+            sim.body.y = CAVE_INTERIOR_ORIGIN.y + 1.1;
+            sim.body.z = CAVE_INTERIOR_ORIGIN.z;
+            sim.body.vy = 0.0;
+        }
         return;
     }
     let near_portal = {
@@ -506,6 +566,7 @@ fn update_region_runtime(
     };
     if near_portal {
         region.cave_surface_return = Some(Vec3::new(sim.body.x, sim.body.y, sim.body.z));
+        region.cave_return_body = CelestialBody::Earth;
         region.active = RegionId::Cave(1);
         world_ctx.active = WorldContext::Mission;
         player_tf.translation = CAVE_INTERIOR_ORIGIN + Vec3::new(0.0, 1.1, 0.0);
@@ -524,9 +585,11 @@ fn update_cave_visual_overrides(
         Query<(&mut PointLight, &mut Transform), With<CaveTorch>>,
     )>,
     mut sun: Query<&mut DirectionalLight>,
-    mut crystals: Query<&mut Visibility, With<CaveCrystal>>,
+    mut crystals: Query<&mut Visibility, (With<CaveCrystal>, Without<LunarCaveNode>)>,
+    mut lunar_nodes: Query<&mut Visibility, (With<LunarCaveNode>, Without<CaveCrystal>)>,
 ) {
     let in_cave = matches!(region.active, RegionId::Cave(_));
+    let in_lunar_cave = matches!(region.active, RegionId::Cave(2));
     // Sun shadows are owned by `sync_solar_lighting` (enable_sun_shadows already
     // accounts for caves) — forcing them off here every frame fought that system.
     let _ = &mut sun;
@@ -551,6 +614,13 @@ fn update_cave_visual_overrides(
     // sin texturas pesadas ni geometría subterránea compleja.
     for mut visibility in &mut crystals {
         *visibility = if in_cave {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    for mut visibility in &mut lunar_nodes {
+        *visibility = if in_lunar_cave {
             Visibility::Visible
         } else {
             Visibility::Hidden

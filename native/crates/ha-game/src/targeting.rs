@@ -87,6 +87,8 @@ fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool 
                 | InteractTargetKind::GemBlue
                 | InteractTargetKind::GemRed
         ),
+        // Lunar mine (Cave 2) — the red-gem nodes are its whole point.
+        RegionId::Cave(2) => matches!(kind, InteractTargetKind::GemRed),
         _ => false,
     }
 }
