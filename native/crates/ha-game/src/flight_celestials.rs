@@ -132,6 +132,7 @@ fn sync_flight_celestials(
     origin: Res<FloatingOrigin>,
     view: Res<ViewTarget>,
     clock: Res<SolarSystemClock>,
+    region: Res<crate::scene::RegionRuntime>,
     player: Query<&GlobalTransform, With<Player>>,
     mut celestials: Query<(&FlightCelestial, &mut Transform, &mut Visibility)>,
     mut starfield: Query<
@@ -145,12 +146,31 @@ fn sync_flight_celestials(
     let in_flight = flight.active;
     let t = clock.t;
 
+    // High-altitude WALKER (creative ascent / jetpack): above the local patch
+    // the planet must read as the real sphere and space must be there —
+    // continuity means the sky doesn't care HOW you climbed. Same culling
+    // rules as flight; this only widens WHO counts as a space observer.
+    let walk_body = match region.active {
+        crate::scene::RegionId::Overworld { .. } => Some(CelestialBody::Earth),
+        crate::scene::RegionId::Luna => Some(CelestialBody::Moon),
+        crate::scene::RegionId::Planet(b) => Some(b),
+        _ => None,
+    };
+    let walker_alt = walk_body
+        .map(|b| {
+            let center = Vec3::from_array(body_center_at(b, t)) - shift;
+            observer.distance(center) - ha_shared::body_walk_radius(b)
+        })
+        .unwrap_or(0.0);
+    let high_walker = !in_flight && walker_alt > 250.0;
+
     // UN SOLO UNIVERSO: son siempre los mismos cuerpos reales (esferas a
-    // posición/escala por efemérides). Se ven al ACERCARTE volando (vacío) o por
-    // cámara remota. Desde una superficie lo lejano NO se dibuja (culling por
-    // distancia) — para navegar está el mapa 2D; al aproximarte, el cuerpo
-    // aparece y crece hasta que aterrizás.
-    let impostors_active = (in_flight && flight.in_vacuum()) || view.is_remote();
+    // posición/escala por efemérides). Se ven al ACERCARTE volando (vacío), por
+    // cámara remota, o al SUBIR mucho a pie (creativo/jetpack). Desde el suelo
+    // lo lejano NO se dibuja (culling por distancia) — para navegar está el
+    // mapa 2D; al aproximarte, el cuerpo aparece y crece hasta que aterrizás.
+    let impostors_active =
+        (in_flight && flight.in_vacuum()) || view.is_remote() || high_walker;
 
     if !impostors_active {
         if *was_active {
@@ -175,7 +195,9 @@ fn sync_flight_celestials(
         // Culling por distancia — lo muy lejano no se rinde en la vista 3D.
         let dist = observer.distance(tf.translation);
         let max_dist = celestial_render_distance(fc.body, flight.body);
-        let priority = fc.body == flight.body;
+        // The body you fly around — or STAND on — always renders: that's the
+        // sphere under your feet (fixes the "square planet" seen from above).
+        let priority = fc.body == flight.body || Some(fc.body) == walk_body;
         let show = dist <= max_dist || priority;
         *vis = if show {
             Visibility::Visible
