@@ -23,3 +23,6 @@ models/*.glb
 hunger-arena.apk
 tools/asset-viewer/node_modules/
 graphify-out/
+
+# Raw LimeZu asset packs (reference for top-down migration Fase 6 — no bundlear)
+/PRUEBAS-CODIGOS/
