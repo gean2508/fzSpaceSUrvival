@@ -1,3 +1,12 @@
 /target/
 **/*.rs.bk
 .cargo-ok
+
+# Runtime save files (per-device state, not repo content)
+/tiles.json
+/machines.json
+/survival.json
+/harvested.json
+/nav_data.json
+/ha-shot-*.png
+/ha-verify-*.png

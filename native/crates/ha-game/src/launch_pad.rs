@@ -35,6 +35,7 @@ impl Plugin for LaunchPadPlugin {
                     try_ignite_on_hold,
                     sync_ship_loadout,
                     sync_ship_config_visual,
+                    sync_pad_visuals,
                 ),
             );
     }
@@ -63,6 +64,11 @@ pub struct LaunchIgnitionMarker {
 
 #[derive(Component)]
 struct LaunchModuleVisual;
+
+/// Every pad-related render entity (platform, slots, ignition, console,
+/// ship stack) — B6: despawned off-Earth, respawned by `sync_pad_visuals`.
+#[derive(Component)]
+pub struct PadDecor;
 
 /// Marker for the config-driven ship visual — respawned when the player
 /// edits the ship in BAG→SHIP (`sync_ship_config_visual`).
@@ -127,6 +133,7 @@ pub fn spawn_launch_pad(
     commands
         .spawn((
             LaunchPadRoot { uid },
+            PadDecor,
             MachineEntity { uid },
             Sprite::from_color(Color::srgb(0.58, 0.61, 0.66), Vec2::new(14.0, 0.8)),
             Transform::from_xyz(x, y + 0.4, 0.8),
@@ -145,6 +152,7 @@ pub fn spawn_launch_pad(
     // Module slots (hull / tank / engine) along the pad.
     for (dx, i) in [(-5.0, 0u8), (5.0, 1u8), (-2.5, 2u8)] {
         commands.spawn((
+            PadDecor,
             Transform::from_xyz(x + dx, y + 1.6, 0.9),
             InteractTarget {
                 kind: InteractTargetKind::LaunchModule,
@@ -161,6 +169,7 @@ pub fn spawn_launch_pad(
 
     // Ignition point above the pad centre.
     commands.spawn((
+        PadDecor,
         Transform::from_xyz(x, y + 3.2, 0.9),
         InteractTarget {
             kind: InteractTargetKind::LaunchIgnition,
@@ -173,6 +182,7 @@ pub fn spawn_launch_pad(
 
     // PROBE CONSOLE — send nav probes without leaving Earth.
     commands.spawn((
+        PadDecor,
         Transform::from_xyz(x + 8.5, y + 1.0, 0.9),
         InteractTarget {
             kind: InteractTargetKind::ProbeConsole,
@@ -197,6 +207,7 @@ fn spawn_config_ship_visual(
     commands
         .spawn((
             ShipConfigVisual,
+            PadDecor,
             Sprite::from_color(Color::srgb(0.72, 0.74, 0.78), Vec2::new(1.8, hull_h)),
             Transform::from_xyz(x, base_y + hull_h * 0.5 + config.tanks.max(1) as f32 * tank_h, 1.2),
             Name::new(format!("ShipPrefab_{uid}")),
@@ -273,6 +284,7 @@ fn spawn_starship_module_visual(
         Sprite::from_color(rgb, Vec2::new(1.2, 1.2)),
         Transform::from_translation(pos.truncate().extend(1.1)),
         LaunchModuleVisual,
+        PadDecor,
         Name::new(format!("ShipModule_{module_index}")),
     ));
 }
@@ -396,6 +408,46 @@ pub(crate) fn try_ignite_on_hold(
     flight.fuel = flight.capacity();
     flight.vel = Vec3::from_array(vel);
     eprintln!("ha-launch: rocket ignition from pad — tank full");
+}
+
+/// B6 for the spaceport: pad visuals exist only on the Earth strip.
+/// Leaving despawns them; returning respawns pad + ready ship from state.
+fn sync_pad_visuals(
+    region: Res<RegionRuntime>,
+    flight: Res<RocketFlight>,
+    pads: Res<LaunchPadWorld>,
+    tiles: Res<TileWorld>,
+    builder: Res<crate::ship_builder::ShipBuilderState>,
+    decor: Query<Entity, With<PadDecor>>,
+    roots: Query<(), With<LaunchPadRoot>>,
+    mut cooldown: Local<u32>,
+    mut commands: Commands,
+) {
+    let on_earth = matches!(region.active, RegionId::Overworld { .. });
+    if !on_earth {
+        for e in &decor {
+            commands.entity(e).despawn_recursive();
+        }
+        *cooldown = 0;
+        return;
+    }
+    if *cooldown > 0 {
+        *cooldown -= 1;
+        return;
+    }
+    if flight.blocks_walking() || !roots.is_empty() {
+        return;
+    }
+    *cooldown = 3;
+    // Back on Earth with pad state but no visuals → rebuild them.
+    let mut pads_rebuilt = LaunchPadWorld::default();
+    for pad in &pads.pads {
+        let ground = tiles.ground_height_at(CelestialBody::Earth, pad.x);
+        spawn_launch_pad(&mut commands, pad.uid, pad.x, ground, &mut pads_rebuilt);
+        if pad.ready {
+            spawn_config_ship_visual(&mut commands, pad.uid, pad.x, ground, &builder.config);
+        }
+    }
 }
 
 /// Derive mass/fuel stats from the assembled pad modules + BAG→SHIP extras.

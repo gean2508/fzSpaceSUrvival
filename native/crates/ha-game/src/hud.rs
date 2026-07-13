@@ -1,7 +1,4 @@
 use bevy::prelude::*;
-use bevy::render::camera::{CameraOutputMode, ClearColorConfig};
-use bevy::render::render_resource::BlendState;
-use bevy::ui::IsDefaultUiCamera;
 
 use bevy::ui::widget::ImageNode;
 
@@ -75,7 +72,7 @@ impl Plugin for PixelHudPlugin {
             .init_resource::<HudDisplayCache>()
             .init_resource::<HotbarSelectRequest>()
             .init_resource::<survival_bars::SurvivalBarsCache>()
-            .add_systems(Startup, (spawn_hud_camera, ensure_game_ui_root))
+            .add_systems(Startup, ensure_game_ui_root)
             .add_systems(Update, (
                 sync_game_ui_root,
                 spawn_hud_once.after(sync_game_ui_root),
@@ -123,9 +120,6 @@ impl Plugin for PixelHudPlugin {
             );
     }
 }
-
-#[derive(Component)]
-struct HudCamera;
 
 #[derive(Component)]
 struct HotbarRoot;
@@ -302,26 +296,6 @@ pub(crate) struct HudDisplayCache {
     inv_signature: String,
     prompt_is_idle: bool,
     prompt_alpha: f32,
-}
-
-fn spawn_hud_camera(mut commands: Commands) {
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 1,
-            // 3D camera (order 0) clears the swapchain each frame; UI only blends widgets on top.
-            // Never use a full-screen boot overlay without despawning — ghost text otherwise.
-            clear_color: ClearColorConfig::None,
-            output_mode: CameraOutputMode::Write {
-                blend_state: Some(BlendState::ALPHA_BLENDING),
-                clear_color: ClearColorConfig::None,
-            },
-            ..default()
-        },
-        IsDefaultUiCamera,
-        HudCamera,
-        Name::new("HudCamera"),
-    ));
 }
 
 fn spawn_hud_once(
@@ -2186,7 +2160,9 @@ pub(crate) fn update_interact_hud(
             } else {
                 hold.completed = false;
             }
-        } else {
+        } else if !hold.placing_block && !hold.placing_machine && !hold.placing_build {
+            // Placement holds have no target kind — their consumers
+            // (world2d/machines/building) own hold.completed.
             hold.completed = false;
         }
     }
@@ -2400,10 +2376,11 @@ fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
 fn sync_ui_gameplay_block(
     bag: Res<BagPanelState>,
     editor: Res<crate::ui_editor::UiEditorState>,
-    flight: Res<RocketFlight>,
     mut block: ResMut<UiGameplayBlock>,
 ) {
-    block.blocked = bag.open || editor.menu_open || editor.enabled || flight.blocks_walking();
+    // Only REAL UI blocks gameplay input. Flight must NOT block (B8): thrust
+    // (JUMP/Space) and steering run through the same action pipeline.
+    block.blocked = bag.open || editor.menu_open || editor.enabled;
 }
 
 fn append_hud_touch_blocks(

@@ -115,7 +115,8 @@ Validar: `npm run validate:arch`.
 | **Gamepad** (stick izq mover+sprint; A salto/thrust, RT acción/romper, LT colocar/comer/retro, Start mapa, B cerrar, D-pad bag/hotbar) | `input/gamepad.rs` — alimenta los MISMOS intents que touch/teclado; prioridad touch > pad > teclado |
 | **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `hud/item_icons.rs`, `ui_theme.rs` |
 | **Partículas 2D + squash** (harvest juice) | `ha-game/render/particles.rs` |
-| **Debug/perf** | `ha-game/debug/perf.rs` (MENU→PERF / F3), `cpu_span.rs` (ha-span), `crash.rs` |
+| **Assets 2D drop-in** (PNG packs sobre arte procedural; `sync:art` genera el manifest) | `ha-game/art2d.rs`, `assets/art/` (+README), `scripts/sync-art.mjs` |
+| **Debug/perf + verificación** (perf HUD, screenshots, autodrive end-to-end) | `ha-game/debug/perf.rs` (MENU→PERF / F3 / F12 screenshot), `debug/autodrive.rs` (`HA_AUTODRIVE=1`), `cpu_span.rs` (ha-span), `crash.rs` |
 | **Legado 3D (borrado en rewrite-2d, recuperable en git `main`)** | surface_patch, floating_origin, view_target, flight_celestials, ghibli_atmosphere, materials(toon), earth/moon/planet_world, block/building_world, assets/, space_travel, jetpack_transit, world_travel, sky_clock, solar_lighting, quality, asset_dev |
 
 `WorldContext` (gravedad/locomoción): Overworld / Mission(cueva) / Luna / Planet / Space. `RegionId` (visibilidad/render): Overworld / Cave / Space / Luna / Planet / Transit. **No confundirlos.**
@@ -229,9 +230,26 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 
 **Pendiente al retomar:**
 1. Probar en el Redmi (APK 2D ya publicado desde `main`) — objetivo 60 fps; §6.
-2. Pulido jugable: agua (visual-only hoy), depósitos re-minables (sin agotamiento), árbol con hoja al talar, cueva lunar retirada (gems embebidas la reemplazan), cámara remota de telemetry (no-op), building pieces 3D retirados (tiles los cubren).
+2. Pulido jugable: agua (visual-only hoy), depósitos re-minables (sin agotamiento), cámara remota de telemetry (no-op).
 3. Retune de contenido para la tira 2D (distancias de depósitos, alturas de vuelo, banda del fade §11).
 4. ~~Merge a `main`~~ HECHO (decisión del usuario, sin esperar al Redmi).
+
+### §13-ter — Assets drop-in + verificación end-to-end (13 jul 2026)
+
+**Capa de arte drop-in (para packs comprados Modern Exteriors/Interiors/UI):**
+- `assets/art/<categoría>/<clave>.png` + `manifest.json` (generado por `npm run sync:art`, embebido en compile-time). `art2d.rs::ArtLibrary` carga y da fallback al arte procedural. `items/<id>.png` reemplaza el ícono en hotbar/bolsa/craft/máquinas. Consumidores conectados: decor (árbol/roca/vetas, variante `_moon`/`_mars`), máquinas, jugador (`player/astronaut`), cohete (`ship/rocket`). Ver `assets/art/README.md`. Tiles/UI/fondos = futuro.
+
+**Arnés de verificación runtime (`debug/autodrive.rs`, gate `HA_AUTODRIVE=1`+`HA_AUTOPLAY=1`):**
+- Maneja el juego por el pipeline REAL de input (ButtonInput virtual en PreUpdate) y loguea `ha-verify: <sistema> PASS/FAIL`. Capturas: `debug_screenshot` (auto a ~7s + F12). `HA_AUTOPLAY` saltea PLAY y fuerza updates continuos (winit no throttlea sin foco).
+- **11/11 PASS (13 jul):** walk · dig · chop+targeting · craft · machine-place · automation · ignition · space-flight · moon-strip · oxygen-vacuum · place-tile. Extender este arnés al agregar sistemas.
+
+**Bugs reales encontrados y corregidos por el arnés/capturas:**
+- **Terreno duplicado (reporte del usuario):** el HUD tenía una 2ª `Camera2d` (`spawn_hud_camera`) que re-renderizaba TODO el mundo 2D como mini-overlay flotante. Fix: una sola cámara con `IsDefaultUiCamera` (mundo+UI). Eliminado `spawn_hud_camera`/`HudCamera`.
+- **Vertex colors lavados:** los quads de tiles usaban sRGB directo en un pipeline lineal → se veían pálidos vs los sprites. Fix: `Color::srgba(...).to_linear()` en `build_chunk_mesh`.
+- **Grant de inventario roto (dig y place):** consumían/flusheaban desde `inv_ui` (desincronizado) en vez de tratar el inventario como verdad. Fix: `inv.add`/`inv.remove` directo (mismo patrón que máquinas); el sync del HUD mergea a los slots.
+- **Relanzamiento espurio del cohete al colocar bloque en la Luna:** un hold activo pone `actions.action=true`; al completar el hold de place, ese `action` queda residual un frame con `hold.active` ya false y el target con `place_cell` (no `block_cell`) → `try_surface_launch` no encontraba guarda y encendía el lander. Fix: la guarda ahora incluye `target.place_cell.is_some()` y `hold.completed`.
+- **Input bloqueado en vuelo (B8):** `sync_ui_gameplay_block` marcaba `blocked` cuando `flight.blocks_walking()`, matando thrust/steering. Fix: sólo UI real (bag/editor) bloquea; el vuelo nunca.
+- **Pad no re-aparecía al volver a la Tierra (B6):** las entidades del pad no se despawneaban off-Earth. Fix: marker `PadDecor` + `sync_pad_visuals` (despawn fuera de Tierra, respawn del pad+nave al volver).
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

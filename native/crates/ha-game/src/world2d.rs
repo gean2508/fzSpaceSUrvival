@@ -299,8 +299,8 @@ impl Plugin for World2dPlugin {
             .add_systems(
                 Update,
                 (
-                    apply_tile_hold,
-                    try_place_tile_on_hold,
+                    apply_tile_hold.before(crate::hud::update_interact_hud),
+                    try_place_tile_on_hold.before(crate::hud::update_interact_hud),
                     stream_tile_chunks,
                     rebuild_dirty_chunks,
                     debounced_tiles_save,
@@ -319,7 +319,6 @@ fn apply_tile_hold(
     planet: Res<ActivePlanet>,
     mut tiles: ResMut<TileWorld>,
     mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
-    mut inv_ui: ResMut<crate::hud::inventory_ui::InventoryUiState>,
     mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
 ) {
     if !hold.completed || target.kind != Some(InteractTargetKind::Block) {
@@ -332,8 +331,9 @@ fn apply_tile_hold(
     let body = active_surface_body(&ctx, &planet);
     if let Some(kind) = tiles.break_tile(body, col as i64, j) {
         if let Some(item) = kind.dug_item() {
-            crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, item, 1);
-            crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+            // Same pattern as machine output: inventory is the truth, the
+            // HUD sync merges the gain into the visible slots.
+            inv.add(item, 1);
             persist.mark_immediate();
         }
     }
@@ -348,7 +348,6 @@ fn try_place_tile_on_hold(
     planet: Res<ActivePlanet>,
     mut tiles: ResMut<TileWorld>,
     mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
-    mut inv_ui: ResMut<crate::hud::inventory_ui::InventoryUiState>,
     mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
 ) {
     if !hold.completed || !hold.placing_block {
@@ -367,8 +366,9 @@ fn try_place_tile_on_hold(
     }
     let body = active_surface_body(&ctx, &planet);
     if tiles.place_tile(body, col as i64, j, kind) {
-        crate::hud::inventory_ui::consume_from_ui_slots(&mut inv_ui, &[(&equipped.item_id, 1)]);
-        crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+        // Inventory is the truth (same as dig/machine grants); the HUD sync
+        // merges the change into the visible slots.
+        inv.remove(&equipped.item_id, 1);
         persist.mark_immediate();
     }
 }
@@ -490,14 +490,17 @@ fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, k: i64) -> Mesh {
     let mut indices: Vec<u32> = Vec::with_capacity(6144);
     let c = body_circumference_tiles(body);
 
+    // Vertex colors are LINEAR in the mesh pipeline — convert from the sRGB
+    // palette values or the terrain renders washed out vs the sprites.
     let mut quad = |x0: f32, y0: f32, size: f32, z: f32, rgba: [f32; 4]| {
         let base = positions.len() as u32;
         positions.push([x0, y0, z]);
         positions.push([x0 + size, y0, z]);
         positions.push([x0 + size, y0 + size, z]);
         positions.push([x0, y0 + size, z]);
+        let lin = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]).to_linear();
         for _ in 0..4 {
-            colors.push(rgba);
+            colors.push([lin.red, lin.green, lin.blue, lin.alpha]);
         }
         indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     };

@@ -68,6 +68,9 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         GameCamera,
         Camera2d,
+        // Single camera: world AND UI (the old separate HUD camera re-drew
+        // the whole 2D world as a mini overlay — and cost a second pass).
+        bevy::ui::IsDefaultUiCamera,
         OrthographicProjection {
             scaling_mode: ScalingMode::FixedVertical {
                 viewport_height: SURFACE_VIEW_H,

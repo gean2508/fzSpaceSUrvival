@@ -46,7 +46,7 @@ use art2d::Art2dPlugin;
 use camera::FollowCameraPlugin;
 use world_persist::WorldPersistPlugin;
 use telemetry::TelemetryPlugin;
-use debug::{apply_android_frame_cap, install_crash_hook, CrashReportPlugin, CpuSpanPlugin, PerfDebugPlugin};
+use debug::{apply_android_frame_cap, install_crash_hook, AutoDrivePlugin, CrashReportPlugin, CpuSpanPlugin, PerfDebugPlugin};
 use solar_system_clock::SolarSystemClockPlugin;
 use hud::PixelHudPlugin;
 use boot_ui::BootUiPlugin;
@@ -153,7 +153,15 @@ fn run_app_inner() {
             }
             #[cfg(not(target_os = "android"))]
             {
-                WinitSettings::game()
+                if std::env::var("HA_AUTOPLAY").is_ok() {
+                    // Agent test drives run unfocused — never throttle.
+                    WinitSettings {
+                        focused_mode: bevy::winit::UpdateMode::Continuous,
+                        unfocused_mode: bevy::winit::UpdateMode::Continuous,
+                    }
+                } else {
+                    WinitSettings::game()
+                }
             }
         })
         .add_plugins((
@@ -193,6 +201,7 @@ fn run_app_inner() {
             CpuSpanPlugin,
             CrashReportPlugin,
             UiEditorPlugin,
+            AutoDrivePlugin,
         ))
         .add_systems(Startup, apply_android_frame_cap)
         .run();

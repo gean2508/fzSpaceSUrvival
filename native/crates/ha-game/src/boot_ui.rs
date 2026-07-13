@@ -262,7 +262,12 @@ fn tick_boot_flow(
                 }
             }
         }
-        BootPhase::Menu => {} // waits for PLAY (play_button_system)
+        BootPhase::Menu => {
+            // Debug/CI: HA_AUTOPLAY=1 skips the PLAY tap (agent test drives).
+            if std::env::var("HA_AUTOPLAY").is_ok() {
+                flow.phase = BootPhase::Loading;
+            }
+        }
         BootPhase::Loading => {
             let pct = (flow.timer / LOADING_SECS).clamp(0.0, 1.0);
             if let Ok(mut node) = fill.get_single_mut() {

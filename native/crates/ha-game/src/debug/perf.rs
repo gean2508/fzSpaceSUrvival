@@ -27,8 +27,32 @@ impl Plugin for PerfDebugPlugin {
                     log_perf_periodic,
                 )
                     .chain(),
-            );
+            )
+            .add_systems(Update, debug_screenshot);
     }
+}
+
+fn debug_screenshot(
+    mut commands: Commands,
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: Local<(bool, u32)>,
+) {
+    use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+    let auto_due = (!state.0 && time.elapsed_secs() > 7.0)
+        || (state.0 && state.1 == 1 && time.elapsed_secs() > 11.0);
+    let manual = keys.just_pressed(KeyCode::F12);
+    if !auto_due && !manual {
+        return;
+    }
+    if auto_due {
+        state.0 = true;
+    }
+    let n = state.1;
+    state.1 += 1;
+    let path = format!("ha-shot-{n}.png");
+    commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.clone()));
+    eprintln!("ha-debug: screenshot → {path}");
 }
 
 #[derive(Resource, Default)]

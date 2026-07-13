@@ -39,7 +39,11 @@ impl Plugin for MachinesPlugin {
             .add_systems(FixedUpdate, tick_machines)
             .add_systems(
                 Update,
-                (try_place_on_hold, sync_machine_visuals, debounced_machines_save),
+                (
+                    try_place_on_hold.before(crate::hud::update_interact_hud),
+                    sync_machine_visuals,
+                    debounced_machines_save,
+                ),
             );
     }
 }

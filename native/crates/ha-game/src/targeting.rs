@@ -36,6 +36,8 @@ pub struct LookTarget {
     pub place_cell: Option<(i32, i32, i32)>,
     /// Tree bookkeeping (chunk cx, 0, wrapped col) — consumed by `FloraHarvest`.
     pub flora_cell: Option<(i32, i32, u32)>,
+    /// Debug/autodrive: freeze the target (targeting skips its update).
+    pub locked: bool,
 }
 
 pub struct TargetingPlugin;
@@ -106,6 +108,9 @@ fn update_look_target(
     targets: Query<(Entity, &GlobalTransform, &InteractTarget)>,
     mut current: ResMut<LookTarget>,
 ) {
+    if current.locked {
+        return;
+    }
     let Ok((player_tf, sim)) = player.get_single() else {
         *current = LookTarget::default();
         return;
@@ -175,6 +180,7 @@ fn update_look_target(
             block_cell: None,
             place_cell: None,
             flora_cell,
+            locked: false,
         };
         return;
     }
@@ -205,6 +211,7 @@ fn update_look_target(
                     block_cell: Some((wrapped_col(body, i) as i32, j, 0)),
                     place_cell: None,
                     flora_cell: None,
+                    locked: false,
                 };
                 return;
             }
@@ -230,6 +237,7 @@ fn update_look_target(
                     block_cell: None,
                     place_cell: Some((wrapped_col(body, i) as i32, j, 0)),
                     flora_cell: None,
+                    locked: false,
                 };
                 return;
             }

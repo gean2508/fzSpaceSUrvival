@@ -418,8 +418,17 @@ fn try_surface_launch(
     if flight.active || !actions.action {
         return;
     }
-    // USE while aiming at an interactable or mid-hold must interact, not ignite.
-    if target.kind.is_some() || target.block_cell.is_some() || hold.active {
+    // USE while aiming at an interactable, over a tile (dig/place), or mid/just-
+    // finished hold must interact, not ignite. `hold.active` sets actions.action
+    // itself, so a completing dig/place hold leaves action=true for a frame with
+    // hold.active already false — without the place_cell/completed guards that
+    // residual USE would re-launch the lander the instant you place a block.
+    if target.kind.is_some()
+        || target.block_cell.is_some()
+        || target.place_cell.is_some()
+        || hold.active
+        || hold.completed
+    {
         return;
     }
     let body = match region.active {
