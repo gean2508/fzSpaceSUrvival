@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use crate::game_time::fixed_delta_secs;
 use crate::launch_pad::{in_launch_pad_zone, spawn_launch_pad, zone_has_launch_pad, LaunchPadWorld};
 
-use crate::camera::facing_sign;
 use crate::hud::item_icons::ItemIconCache;
 use crate::input::{EquippedItem, HoldInteractState};
 use crate::inventory_persist::{persist_dir, InventoryPersistState, PlayerInventory};
@@ -114,9 +113,6 @@ impl PlacementCtx<'_> {
     }
 }
 
-fn ground_y_on(tiles: &TileWorld, body: CelestialBody, s: f32) -> f32 {
-    tiles.ground_height_at(body, s)
-}
 
 /// Machine ↔ body gates: extractors need what they extract to exist there.
 fn machine_allowed_on(machine_id: &str, body: CelestialBody) -> bool {
@@ -175,9 +171,10 @@ pub(crate) fn try_place_on_hold(
     let Ok((_tf, sim)) = player.get_single() else {
         return;
     };
-    let tx = sim.body.x + facing_sign(sim.body.rot) * 2.4;
-    let tz = 0.0;
-    let y = ground_y_on(&tiles, body, tx);
+    // Top-down: place a couple tiles in front of the player (facing dir).
+    let tx = sim.body.x + sim.body.rot.cos() * 2.4;
+    let tz = sim.body.z + sim.body.rot.sin() * 2.4;
+    let _ = &tiles;
 
     if machine_id == LAUNCH_PAD.id && !in_launch_pad_zone(tx, tz) {
         eprintln!("ha-launch: launch pad must be placed in the reserved zone");
@@ -197,7 +194,7 @@ pub(crate) fn try_place_on_hold(
         machine_id: def.id,
         body,
         x: tx,
-        y,
+        y: 0.0,
         z: tz,
         output_accumulator: 0.0,
         stored_output: 0,
@@ -206,27 +203,15 @@ pub(crate) fn try_place_on_hold(
     world.dirty = true;
 
     if machine_id == LAUNCH_PAD.id {
-        spawn_launch_pad(&mut commands, uid, tx, y, &mut launch_pads);
+        spawn_launch_pad(&mut commands, uid, tx, tz, &mut launch_pads);
     } else {
         spawn_machine_visual(
-            &mut commands,
-            &mut icons,
-            &mut images,
-            &art,
-            def.id,
-            body,
-            uid,
-            tx,
-            y,
+            &mut commands, &mut icons, &mut images, &art, def.id, body, uid, tx, tz,
         );
     }
 
-    spawn_harvest_particles(
-        &mut commands,
-        &pool,
-        Vec3::new(tx, y + 0.6, 0.0),
-        uid as usize,
-    );
+    let r = crate::world2d::render_xy(tx, tz);
+    spawn_harvest_particles(&mut commands, &pool, Vec3::new(r.x, r.y + 0.6, 0.0), uid as usize);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -239,7 +224,7 @@ fn spawn_machine_visual(
     body: CelestialBody,
     uid: u32,
     tx: f32,
-    ground_y: f32,
+    tz: f32,
 ) {
     // Drop-in pack art first (machines/<id>.png), then the item icon (which
     // itself may be pack art via items/<id>.png), then procedural raster.
@@ -249,17 +234,19 @@ fn spawn_machine_visual(
     let mut sprite = Sprite::from_image(image);
     sprite.custom_size = Some(Vec2::splat(1.8));
     let _ = body;
+    let r = crate::world2d::render_xy(tx, tz);
     commands
         .spawn((
             sprite,
-            Transform::from_xyz(tx, ground_y + 0.95, 1.0),
+            Transform::from_xyz(r.x, r.y + 0.5, crate::world2d::sort_z(tz)),
             MachineEntity { uid },
             Name::new(format!("Machine_{uid}")),
         ))
         .with_children(|p| {
+            // Base shadow.
             p.spawn((
-                Sprite::from_color(Color::srgb(0.30, 0.32, 0.36), Vec2::new(1.9, 0.25)),
-                Transform::from_xyz(0.0, -1.0, -0.05),
+                Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.25), Vec2::new(1.6, 0.5)),
+                Transform::from_xyz(0.0, -0.9, -0.05),
             ));
         });
 }
@@ -276,11 +263,13 @@ fn sync_machine_visuals(
     mut images: ResMut<Assets<Image>>,
     art: Res<crate::art2d::ArtLibrary>,
 ) {
-    let body = ctx.body();
+    // Machines live on the surface layer (z=0); underground shows none.
+    let surface = tiles.z == 0;
+    let body = if surface { ctx.body() } else { None };
     let by_uid: HashMap<u32, &LocalMachine> =
         world.placed.iter().map(|m| (m.uid, m)).collect();
     let mut spawned: HashSet<u32> = HashSet::new();
-    // B6: despawn machine sprites that belong to another body (or are gone).
+    // B6: despawn sprites that belong to another body/layer (or are gone).
     for (e, me) in &existing {
         let keep = body.is_some() && by_uid.get(&me.uid).map(|m| Some(m.body) == body).unwrap_or(false);
         if keep {
@@ -297,15 +286,7 @@ fn sync_machine_visuals(
             continue;
         }
         spawn_machine_visual(
-            &mut commands,
-            &mut icons,
-            &mut images,
-            &art,
-            m.machine_id,
-            body,
-            m.uid,
-            m.x,
-            ground_y_on(&tiles, body, m.x),
+            &mut commands, &mut icons, &mut images, &art, m.machine_id, body, m.uid, m.x, m.z,
         );
     }
 }

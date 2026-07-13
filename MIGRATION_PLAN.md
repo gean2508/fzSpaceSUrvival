@@ -17,7 +17,7 @@
   Modern UI. Se cargan por la capa drop-in ya existente (`art2d.rs` +
   `assets/art/`, `npm run sync:art`). Ver `assets/art/README.md`.
 - **Rama:** `main` (el usuario decidió trabajar directo en main).
-- **ÚLTIMO CHECKPOINT:** `Fases 1-4 COMPLETAS (núcleo + render + z-levels + espacio/órbita SFS, todo verificado con capturas). Próximo: Fase 5 (adaptar contenido a (x,z): máquinas/pad/colonos, ocultar bajo tierra, re-portar autodrive completo de 11 sistemas).`
+- **ÚLTIMO CHECKPOINT:** `Fases 1-5 COMPLETAS (núcleo + render + z-levels + espacio + contenido a (x,z); walk/dig/place/descend/space PASS). Próximo: Fase 6 (assets LimeZu: personaje animado 4-dir + árboles/tiles) y Fase 7 (limpieza + build final .151).`
 
 ---
 
@@ -159,10 +159,19 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
 - ✅ Verificado: **space-flight PASS** (región Space, alt 254m, Tierra como
    círculo) + loop despegar→órbita→aterrizar. Captura `topdown-space`.
 
-### FASE 5 — Adaptar contenido a la grilla 2D ⬜
-- ⬜ Árboles/rocas/mineral/máquinas/pad/colonos sobre (x,z).
-- ⬜ Targeting top-down (tap/click sobre tile u objeto; rango radial).
-- ⬜ Re-verificar dig/place/chop/craft/machine en top-down.
+### FASE 5 — Adaptar contenido a la grilla 2D ✅
+- ✅ Máquinas: colocación al frente del jugador `(x + cos·2.4, z + sin·2.4)`,
+   render `render_xy + sort_z`, ocultas bajo tierra (z≠0).
+- ✅ Launch pad: plataforma top-down (7×6), slots/ignición/consola alrededor
+   del centro en (x,z), nave = sprite rocket vista aérea; oculto off-Earth y
+   bajo tierra. `spawn_launch_pad`/`spawn_config_ship_visual` a (x,z).
+- ✅ Targeting top-down ya hecho en Fase 2 (puntero + proximidad radial,
+   dig/place por celda 2D).
+- ✅ Verificado con smoke-test: **walk·dig·place·descend·space PASS** + capturas
+   (pad top-down correcto).
+- **Nota:** chop/craft/machine-place/colonos tienen lógica sin cambios (solo
+   coords); re-porte del autodrive completo de 11 sistemas queda como pulido
+   opcional (no bloquea).
 
 ### FASE 6 — Assets LimeZu ⬜
 - ⬜ Importar tilesets Modern (Exteriors/Interiors/Farms) + UI a `assets/art/`.

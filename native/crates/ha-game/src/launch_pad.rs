@@ -94,8 +94,10 @@ fn spawn_demo_launch_pad(
     if zone_has_launch_pad(&pads) {
         return;
     }
+    let _ = &tiles;
     let x = LAUNCH_PAD_ZONE_X;
-    let y = tiles.ground_height_at(CelestialBody::Earth, x);
+    // Top-down: place the spaceport a few tiles south of the player spawn band.
+    let z = 6.0;
     let uid = world.next_uid;
     world.next_uid += 1;
     world.placed.push(LocalMachine {
@@ -103,56 +105,50 @@ fn spawn_demo_launch_pad(
         machine_id: LAUNCH_PAD.id,
         body: CelestialBody::Earth,
         x,
-        y,
-        z: 0.0,
+        y: 0.0,
+        z,
         output_accumulator: 0.0,
         stored_output: 0,
         producing_flash: 0.0,
     });
-    spawn_launch_pad(&mut commands, uid, x, y, &mut pads);
+    spawn_launch_pad(&mut commands, uid, x, z, &mut pads);
     // Demo ship pre-assembled so the Tierra → orbit loop is always testable.
     if let Some(pad) = pads.pads.iter_mut().find(|p| p.uid == uid) {
         pad.assembled_modules = LAUNCH_PAD_MODULE_COUNT;
         pad.ready = true;
     }
-    spawn_config_ship_visual(&mut commands, uid, x, y, &builder.config);
-    eprintln!("ha-launch: demo pad at s={x} — ship ready for launch");
+    spawn_config_ship_visual(&mut commands, uid, x, z, &builder.config);
+    eprintln!("ha-launch: demo pad at ({x},{z}) — ship ready for launch");
 }
 
-/// Pad platform + interact markers + beacons (2D).
+/// Pad platform + interact markers (top-down). `x,z` = world ground coords.
 pub fn spawn_launch_pad(
     commands: &mut Commands,
     uid: u32,
     x: f32,
-    y: f32,
+    z: f32,
     pads: &mut LaunchPadWorld,
 ) {
-    pads.pads.push(create_launch_pad_state(uid, x, y, 0.0));
+    use crate::world2d::{render_xy, sort_z};
+    pads.pads.push(create_launch_pad_state(uid, x, 0.0, z));
+    let base = render_xy(x, z);
 
-    commands
-        .spawn((
-            LaunchPadRoot { uid },
-            PadDecor,
-            MachineEntity { uid },
-            Sprite::from_color(Color::srgb(0.58, 0.61, 0.66), Vec2::new(14.0, 0.8)),
-            Transform::from_xyz(x, y + 0.4, 0.8),
-            Name::new(format!("LaunchPad_{uid}")),
-        ))
-        .with_children(|p| {
-            // Support legs.
-            for dx in [-6.0, 6.0] {
-                p.spawn((
-                    Sprite::from_color(Color::srgb(0.42, 0.44, 0.48), Vec2::new(0.6, 1.2)),
-                    Transform::from_xyz(dx, -0.9, 0.0),
-                ));
-            }
-        });
+    // Wide top-down pad platform.
+    commands.spawn((
+        LaunchPadRoot { uid },
+        PadDecor,
+        MachineEntity { uid },
+        Sprite::from_color(Color::srgb(0.42, 0.44, 0.48), Vec2::new(7.0, 6.0)),
+        Transform::from_xyz(base.x, base.y, sort_z(z) - 1.0),
+        Name::new(format!("LaunchPad_{uid}")),
+    ));
 
-    // Module slots (hull / tank / engine) along the pad.
-    for (dx, i) in [(-5.0, 0u8), (5.0, 1u8), (-2.5, 2u8)] {
+    // Module slots (hull / tank / engine) around the pad centre.
+    for (dx, dz, i) in [(-2.0, 1.0, 0u8), (2.0, 1.0, 1u8), (0.0, 2.0, 2u8)] {
+        let r = render_xy(x + dx, z + dz);
         commands.spawn((
             PadDecor,
-            Transform::from_xyz(x + dx, y + 1.6, 0.9),
+            Transform::from_xyz(r.x, r.y, sort_z(z + dz)),
             InteractTarget {
                 kind: InteractTargetKind::LaunchModule,
                 id: i as u32,
@@ -161,89 +157,72 @@ pub fn spawn_launch_pad(
                 pad_uid: uid,
                 module_index: i,
             },
-            Sprite::from_color(Color::srgba(0.9, 0.8, 0.3, 0.35), Vec2::new(1.4, 1.4)),
+            Sprite::from_color(Color::srgba(0.9, 0.8, 0.3, 0.35), Vec2::new(1.2, 1.2)),
             Name::new(format!("LaunchModule_{uid}_{i}")),
         ));
     }
 
-    // Ignition point above the pad centre.
+    // Ignition point at the pad centre.
     commands.spawn((
         PadDecor,
-        Transform::from_xyz(x, y + 3.2, 0.9),
+        Transform::from_xyz(base.x, base.y, sort_z(z) + 0.5),
         InteractTarget {
             kind: InteractTargetKind::LaunchIgnition,
             id: uid,
         },
         LaunchIgnitionMarker { pad_uid: uid },
-        Sprite::from_color(Color::srgba(1.0, 0.55, 0.12, 0.55), Vec2::new(1.0, 1.0)),
+        Sprite::from_color(Color::srgba(1.0, 0.55, 0.12, 0.55), Vec2::new(1.2, 1.2)),
         Name::new(format!("LaunchIgnition_{uid}")),
     ));
 
     // PROBE CONSOLE — send nav probes without leaving Earth.
+    let pr = render_xy(x + 4.5, z);
     commands.spawn((
         PadDecor,
-        Transform::from_xyz(x + 8.5, y + 1.0, 0.9),
+        Transform::from_xyz(pr.x, pr.y, sort_z(z)),
         InteractTarget {
             kind: InteractTargetKind::ProbeConsole,
             id: uid,
         },
-        Sprite::from_color(Color::srgb(1.0, 0.62, 0.18), Vec2::new(0.9, 1.4)),
+        Sprite::from_color(Color::srgb(1.0, 0.62, 0.18), Vec2::new(0.9, 1.2)),
         Name::new(format!("ProbeConsolePad_{uid}")),
     ));
 }
 
-/// 2D ship stack from the ship-builder config: engines, tanks, fins, nose.
+/// Top-down ship on the pad: a rocket seen from above (nose up = north).
+/// Size hints at the config (more tanks/engines → bigger).
 fn spawn_config_ship_visual(
     commands: &mut Commands,
     uid: u32,
     x: f32,
-    ground_y: f32,
+    z: f32,
     config: &ha_shared::ShipConfig,
 ) {
-    let tank_h = 1.4;
-    let hull_h = 2.2;
-    let base_y = ground_y + 1.0;
+    use crate::world2d::{render_xy, sort_z};
+    let r = render_xy(x, z);
+    let len = 2.6 + config.tanks.max(1) as f32 * 0.5;
+    let wid = 1.1 + config.fins.min(4) as f32 * 0.15;
     commands
         .spawn((
             ShipConfigVisual,
             PadDecor,
-            Sprite::from_color(Color::srgb(0.72, 0.74, 0.78), Vec2::new(1.8, hull_h)),
-            Transform::from_xyz(x, base_y + hull_h * 0.5 + config.tanks.max(1) as f32 * tank_h, 1.2),
+            Sprite::from_color(Color::srgb(0.80, 0.82, 0.86), Vec2::new(wid, len)),
+            Transform::from_xyz(r.x, r.y, sort_z(z) + 0.6),
             Name::new(format!("ShipPrefab_{uid}")),
         ))
         .with_children(|p| {
-            // Fuel tanks stacked below the hull.
-            for t in 0..config.tanks.max(1) {
-                p.spawn((
-                    Sprite::from_color(Color::srgb(0.85, 0.87, 0.9), Vec2::new(1.6, tank_h - 0.1)),
-                    Transform::from_xyz(0.0, -hull_h * 0.5 - tank_h * (t as f32 + 0.5), 0.0),
-                ));
-            }
-            let stack_bottom = -hull_h * 0.5 - config.tanks.max(1) as f32 * tank_h;
-            // Engine bells.
-            let n = config.engines.max(1) as i32;
-            for e in 0..n {
-                let off = (e as f32 - (n as f32 - 1.0) * 0.5) * 0.7;
-                p.spawn((
-                    Sprite::from_color(Color::srgb(0.88, 0.35, 0.2), Vec2::new(0.55, 0.8)),
-                    Transform::from_xyz(off, stack_bottom - 0.4, 0.05),
-                ));
-            }
-            // Fins.
-            for f in 0..config.fins.min(4) {
-                let side = if f % 2 == 0 { -1.0 } else { 1.0 };
-                p.spawn((
-                    Sprite::from_color(Color::srgb(0.6, 0.62, 0.68), Vec2::new(0.7, 1.2)),
-                    Transform::from_xyz(side * 1.2, stack_bottom + 0.7, -0.05),
-                ));
-            }
-            // Nose cone.
+            // Nose (north / up).
             if config.nose > 0 {
                 p.spawn((
-                    Sprite::from_color(Color::srgb(0.92, 0.48, 0.12), Vec2::new(1.2, 1.0)),
-                    Transform::from_xyz(0.0, hull_h * 0.5 + 0.5, 0.05),
+                    Sprite::from_color(Color::srgb(0.92, 0.48, 0.12), Vec2::new(wid * 0.7, 0.7)),
+                    Transform::from_xyz(0.0, len * 0.5, 0.05),
                 ));
             }
+            // Engine bells (south / down).
+            p.spawn((
+                Sprite::from_color(Color::srgb(0.88, 0.35, 0.2), Vec2::new(wid * 0.8, 0.6)),
+                Transform::from_xyz(0.0, -len * 0.5, 0.05),
+            ));
         });
 }
 
@@ -251,7 +230,7 @@ fn spawn_config_ship_visual(
 pub(crate) fn sync_ship_config_visual(
     builder: Res<crate::ship_builder::ShipBuilderState>,
     pads: Res<LaunchPadWorld>,
-    tiles: Res<TileWorld>,
+    _tiles: Res<TileWorld>,
     old: Query<Entity, With<ShipConfigVisual>>,
     mut commands: Commands,
 ) {
@@ -264,8 +243,7 @@ pub(crate) fn sync_ship_config_visual(
     for e in &old {
         commands.entity(e).despawn_recursive();
     }
-    let ground = tiles.ground_height_at(CelestialBody::Earth, pad.x);
-    spawn_config_ship_visual(&mut commands, pad.uid, pad.x, ground, &builder.config);
+    spawn_config_ship_visual(&mut commands, pad.uid, pad.x, pad.z, &builder.config);
 }
 
 /// Assembled module visual — small colored crate beside the slot.
@@ -418,7 +396,9 @@ fn sync_pad_visuals(
     mut cooldown: Local<u32>,
     mut commands: Commands,
 ) {
-    let on_earth = matches!(region.active, RegionId::Overworld { .. });
+    // Pad lives on Earth's surface layer only (z=0); hidden off-Earth or
+    // underground (Z-Level < 0).
+    let on_earth = matches!(region.active, RegionId::Overworld { .. }) && tiles.z == 0;
     if !on_earth {
         for e in &decor {
             commands.entity(e).despawn_recursive();
@@ -437,10 +417,9 @@ fn sync_pad_visuals(
     // Back on Earth with pad state but no visuals → rebuild them.
     let mut pads_rebuilt = LaunchPadWorld::default();
     for pad in &pads.pads {
-        let ground = tiles.ground_height_at(CelestialBody::Earth, pad.x);
-        spawn_launch_pad(&mut commands, pad.uid, pad.x, ground, &mut pads_rebuilt);
+        spawn_launch_pad(&mut commands, pad.uid, pad.x, pad.z, &mut pads_rebuilt);
         if pad.ready {
-            spawn_config_ship_visual(&mut commands, pad.uid, pad.x, ground, &builder.config);
+            spawn_config_ship_visual(&mut commands, pad.uid, pad.x, pad.z, &builder.config);
         }
     }
 }

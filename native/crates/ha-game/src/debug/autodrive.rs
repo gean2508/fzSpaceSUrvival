@@ -10,7 +10,10 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
+use crate::input::HoldInteractState;
+use crate::inventory_persist::PlayerInventory;
 use crate::sim::{Player, PlayerVisual, SimState};
+use crate::targeting::LookTarget;
 use crate::world2d::TileWorld;
 
 pub struct AutoDrivePlugin;
@@ -30,7 +33,72 @@ struct SmokeState {
     phase: u32,
     entered: f32,
     start_x: f32,
+    cell: (i64, i64),
     done: bool,
+}
+
+
+fn player_cell(world: &mut World) -> (i64, i64) {
+    let mut q = world.query_filtered::<&SimState, With<Player>>();
+    let s = q.single(world);
+    (s.body.x.floor() as i64, s.body.z.floor() as i64)
+}
+
+fn dig_loot(world: &mut World) -> u32 {
+    let inv = world.resource::<PlayerInventory>();
+    inv.qty("dirt") + inv.qty("stone") + inv.qty("sand")
+}
+
+fn equip(world: &mut World, id: &str) {
+    // Clear any hotbar selection so `equip_from_hotbar_selection` doesn't
+    // override the forced tool next frame.
+    world
+        .resource_mut::<crate::hud::inventory_ui::InventoryUiState>()
+        .selected = None;
+    world.resource_mut::<crate::input::EquippedItem>().item_id = id.to_string();
+}
+
+fn dig_setup(world: &mut World, cell: (i64, i64)) {
+    equip(world, "hand");
+    world.resource_mut::<SmokeState>().cell = cell;
+}
+
+fn place_setup(world: &mut World, cell: (i64, i64)) {
+    world.resource_mut::<PlayerInventory>().add("stone", 5);
+    equip(world, "stone");
+    world.resource_mut::<SmokeState>().cell = cell;
+}
+
+fn lock_block_target(world: &mut World, tx: i64, tz: i64) {
+    *world.resource_mut::<LookTarget>() = LookTarget {
+        kind: Some(ha_shared::InteractTargetKind::Block),
+        block_cell: Some((tx as i32, tz as i32, 0)),
+        locked: true,
+        ..default()
+    };
+}
+
+fn lock_place_target(world: &mut World, tx: i64, tz: i64) {
+    *world.resource_mut::<LookTarget>() = LookTarget {
+        place_cell: Some((tx as i32, tz as i32, 0)),
+        locked: true,
+        ..default()
+    };
+}
+
+fn complete_hold(world: &mut World, placing_block: bool) {
+    let mut h = world.resource_mut::<HoldInteractState>();
+    h.active = false;
+    h.completed = true;
+    h.placing_block = placing_block;
+    h.placing_machine = false;
+}
+
+fn unlock(world: &mut World) {
+    *world.resource_mut::<LookTarget>() = LookTarget::default();
+    let mut h = world.resource_mut::<HoldInteractState>();
+    h.completed = false;
+    h.placing_block = false;
 }
 
 fn player_x(world: &mut World) -> f32 {
@@ -93,10 +161,58 @@ fn smoke_drive(world: &mut World) {
                 );
                 release_all(world);
                 shot(world, "ha-verify-topdown-walk.png");
-                let mut s = world.resource_mut::<SmokeState>();
-                s.phase = 2;
-                s.entered = now;
-                s.start_x = x;
+                // Dig the tile in front (inject the completed break hold →
+                // real consumer apply_tile_hold digs + grants).
+                let (tx, tz) = player_cell(world);
+                let cell = (tx + 2, tz);
+                dig_setup(world, cell);
+                world.resource_mut::<SmokeState>().phase = 10;
+                world.resource_mut::<SmokeState>().entered = now;
+                world.resource_mut::<SmokeState>().start_x = x;
+            }
+        }
+        10 => {
+            // Digging: keep the break hold locked/completed until the tile opens.
+            equip(world, "hand");
+            let (tx, tz) = world.resource::<SmokeState>().cell;
+            lock_block_target(world, tx, tz);
+            complete_hold(world, false);
+            let dug = !world
+                .resource::<TileWorld>()
+                .solid_at(ha_shared::CelestialBody::Earth, tx, tz);
+            let loot = dig_loot(world);
+            if dug || loot > 0 {
+                eprintln!("ha-verify: dig PASS (dug={dug}, loot={loot})");
+                unlock(world);
+                // Now place a block on that freshly-dug cell's neighbour.
+                place_setup(world, (tx, tz));
+                world.resource_mut::<SmokeState>().phase = 11;
+                world.resource_mut::<SmokeState>().entered = now;
+            } else if dt > 4.0 {
+                eprintln!("ha-verify: dig FAIL");
+                unlock(world);
+                world.resource_mut::<SmokeState>().phase = 2;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
+        }
+        11 => {
+            equip(world, "stone");
+            let (tx, tz) = world.resource::<SmokeState>().cell;
+            lock_place_target(world, tx, tz);
+            complete_hold(world, true);
+            let placed = world
+                .resource::<TileWorld>()
+                .solid_at(ha_shared::CelestialBody::Earth, tx, tz);
+            if placed {
+                eprintln!("ha-verify: place PASS");
+                unlock(world);
+                world.resource_mut::<SmokeState>().phase = 2;
+                world.resource_mut::<SmokeState>().entered = now;
+            } else if dt > 4.0 {
+                eprintln!("ha-verify: place FAIL");
+                unlock(world);
+                world.resource_mut::<SmokeState>().phase = 2;
+                world.resource_mut::<SmokeState>().entered = now;
             }
         }
         2 => {

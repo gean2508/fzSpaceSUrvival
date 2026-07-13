@@ -158,12 +158,6 @@ impl TileWorld {
         self.tile_at(body, tx, tz).solid()
     }
 
-    /// Top-down has no vertical terrain: the ground plane is flat at y=0.
-    /// Kept as a shim so machine/pad placement compiles unchanged.
-    pub fn ground_height_at(&self, _body: CelestialBody, _x: f32) -> f32 {
-        0.0
-    }
-
     pub fn break_tile(&mut self, body: CelestialBody, tx: i64, tz: i64) -> Option<Tile> {
         let t = self.tile_at(body, tx, tz);
         if t == Tile::Bedrock || t == Tile::Air || t == Tile::Water {
