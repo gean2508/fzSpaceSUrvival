@@ -2,6 +2,8 @@
 
 > **Documento de dirección creativa** (jun 2026).  
 > Referencia para features, assets y sim. **No es backlog de implementación inmediata** — ver precondiciones en `labiblia.md` §21.
+>
+> **NOTA (12 jul 2026):** el juego pasó a **2D** (Terraria en superficie + SFS en vuelo; biblia §1). El LOOP de este documento sigue vigente completo; toda mención a render 3D, cámara FP, esferas o meshes describe el motor viejo y NO se reintroduce.
 
 ---
 

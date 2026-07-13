@@ -72,7 +72,7 @@ native/
 6. Landing ≠ juego — `client/` solo descarga.
 7. No reintroducir React/R3F en el cliente de juego (motor = `native/`).
 8. Assets procedurales: def en `packages/shared/src/content/`; espejo Rust en `ha-shared/src/assets/`; meshes en `ha-game/src/assets/`.
-9. Shader Android: `toon.wgsl` embebido (`load_internal_asset!`), no depender de `assets/` del APK.
+9. Cliente 2D sin shaders custom ni assets en disco: tiles = vertex colors, ítems/mundo = íconos procedurales en runtime (`item_icons.rs`/`icon_factory.rs`). No agregar dependencias a `assets/` del APK.
 10. Cambios de reglas → Rust **y** TS; regenerar paridad `UPDATE_CATALOG_PARITY=1 npm test`.
 
 **Guards B1–B10 (cliente nativo — obligatorios en sistemas nuevos):**
@@ -174,7 +174,7 @@ Loop: **construir base en la Tierra → automatizar recolección → naves prefa
 
 ## §9 Skills / docs / herramientas para IA
 
-`ghibli-toon-graphics` (WGSL cel), `procedural-asset-factory` (AssetFactory/IconFactory), `CLAUDE.md` (resumen agente), `native/README.md` (build), `native/docs/SPACE_SURVIVAL_VISION.md` (visión), `native/docs/PLAYER_WORLD_DESIGN.md`, `context_to_ai.md` (mapa detallado de sistemas).
+`ps1-retro-graphics` (paleta), `fstyle-brand` (branding), `CLAUDE.md` (resumen agente), `native/README.md` (build), `native/docs/SPACE_SURVIVAL_VISION.md` (visión — el loop sigue válido; el render descrito ahí es el viejo 3D), `context_to_ai.md`. Retirados con el 3D: `ghibli-toon-graphics`, `hybrid-bd-ghibli-graphics`, `procedural-asset-factory` (meshes), `tools/blender`, `tools/asset-viewer`, `tools/sky_art`.
 
 **graphify (grafo de código) — USAR ANTES de cambios grandes.** Grafo en `graphify-out/` (`graph.json`, `GRAPH_REPORT.md`). Comandos: `graphify explain "Nodo"` (nodo + vecinos), `graphify path "A" "B"` (camino entre dos), `graphify update .` (refrescar tras cambios, sin costo API). **Regla:** antes de tocar un sistema con muchas dependencias (render, marco de mundo, cámara, cielo), consultar el grafo para ver qué depende de eso — así se evitan roturas cruzadas (ej: el refactor `surface_frame` rompió la Luna por no ver que el `LunaSkyShell`/cámara asumían el marco estático). El `GRAPH_REPORT.md` lista god-nodes (`CelestialBody`, `RocketFlight`, `make_material`), ciclos de import (hud↔inventory_ui, varios con scene.rs) y comunidades.
 
