@@ -35,9 +35,9 @@ pub fn look_forward_flat(_look: &crate::input::CameraLookIntent) -> Vec2 {
     Vec2::new(1.0, 0.0)
 }
 
-/// Legacy shim: in 2D the stick maps straight to the strip (no camera yaw).
-pub fn camera_relative_move(mx: f32, _mz: f32, _yaw: f32) -> (f32, f32) {
-    (mx, 0.0)
+/// Top-down: the stick maps straight to the ground plane (x = east, z = south).
+pub fn camera_relative_move(mx: f32, mz: f32, _yaw: f32) -> (f32, f32) {
+    (mx, mz)
 }
 
 /// Gamepad view-cycle plumbing (no-op in 2D, kept so bindings stay stable).
@@ -117,7 +117,8 @@ fn follow_player_camera(
         let Ok(p) = player.get_single() else {
             return;
         };
-        (p.translation.truncate() + Vec2::new(0.0, 3.0), SURFACE_VIEW_H)
+        // Top-down: centre on the player (no look-ahead bias).
+        (p.translation.truncate(), SURFACE_VIEW_H)
     };
 
     let blend = (time.delta_secs() * 6.0).clamp(0.0, 1.0);

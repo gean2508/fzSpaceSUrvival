@@ -17,7 +17,7 @@
   Modern UI. Se cargan por la capa drop-in ya existente (`art2d.rs` +
   `assets/art/`, `npm run sync:art`). Ver `assets/art/README.md`.
 - **Rama:** `main` (el usuario decidió trabajar directo en main).
-- **ÚLTIMO CHECKPOINT:** `Fase 1 COMPLETA (topdown.rs núcleo + 7 tests). Próximo: Fase 2 (render top-down + cámara + player).`
+- **ÚLTIMO CHECKPOINT:** `Fase 2 COMPLETA (render top-down + cámara única + walk 8-dir verificado con captura). Próximo: Fase 5 (adaptar máquinas/pad/colonos a (x,z) + re-portar autodrive completo) y Fase 3 (z-levels) / Fase 6 (assets LimeZu).`
 
 ---
 
@@ -113,13 +113,22 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
   zoom-in a una grilla top-down centrada en el punto de aterrizaje. Los z-level
   portales (escalera/taladro) son lógica de cliente (Fase 3).
 
-### FASE 2 — Render top-down + cámara + player (`ha-game`) ⬜
-- ⬜ `world_topdown.rs`: chunks de grilla 2D (tilemap), streaming del layer
-  activo, y-sorting.
-- ⬜ `camera.rs`: cámara única top-down (fix HUD cam), follow, zoom.
-- ⬜ Player: sprite + animación 4/8-dir (LimeZu vía art2d).
-- ⬜ Swap de plugins en `lib.rs` (topdown reemplaza flat/world2d). `main` compila.
-- ⬜ Verificar con autodrive: walk 8-dir + captura.
+### FASE 2 — Render top-down + cámara + player (`ha-game`) ✅
+- ✅ `world2d.rs` reescrito a top-down: grilla 2D, chunks `Mesh2d` (16×16),
+   streaming en cuadrado alrededor del jugador (sin huecos, verificado),
+   y-sorting (`sort_z`), render `(x,-z)` (`render_xy`), dig/place por celda,
+   persistencia `(body,z,tx,tz)`, decor/depósitos como sprites.
+- ✅ `sim.rs`: tick `step_topdown_movement` (8-dir sin gravedad), render `(x,-z)`.
+- ✅ `camera.rs`: cámara única (ya sin la 2ª cámara HUD del bug), follow
+   centrado sin sesgo vertical; `camera_relative_move` pasa ambos ejes.
+- ✅ `scene.rs`: spawn en celda caminable (`walkable_spawn`), teleport top-down.
+- ✅ `targeting.rs`: pick por puntero + proximidad radial, dig/place por celda.
+- ✅ Verificado con smoke-test (`debug/autodrive.rs`): **walk-east PASS
+   (Δx=15.8)**, biomas visibles (pasto/agua/arena), streaming sin huecos,
+   sin bug de cámara. Capturas `ha-verify-topdown-*.png`.
+- **Pendiente de pulido (fases siguientes):** árboles/personaje procedurales
+   (sprites reales = Fase 6), máquinas/pad aún con colocación de tira (Fase 5),
+   autodrive completo (11 sistemas) re-portar a top-down (Fase 5).
 
 ### FASE 3 — Z-Levels: superficie ↔ subsuelo ⬜
 - ⬜ Portales escalera/taladro, grillas por piso, transición discreta.

@@ -5,10 +5,33 @@
 //! (B8) or via deliberate MENU teleports (`teleport_to_body`).
 
 use bevy::prelude::*;
-use ha_shared::flat2d::ground_height_m;
+use ha_shared::topdown::{topdown_tile, Tile, TILE_M};
 use ha_shared::{CelestialBody, WorldContext};
 
 use crate::sim::{Player, PlayerVisual, SimState};
+use crate::world2d::{render_xy, sort_z};
+
+/// Find a walkable (non-solid, non-water) surface cell near a preferred world
+/// point, spiralling outward. Returns world `(x, z)` metres (cell centre).
+pub fn walkable_spawn(body: CelestialBody, near_x: f32, near_z: f32) -> (f32, f32) {
+    let bx = (near_x / TILE_M).floor() as i64;
+    let bz = (near_z / TILE_M).floor() as i64;
+    for r in 0i64..64 {
+        for dz in -r..=r {
+            for dx in -r..=r {
+                if dx.abs() != r && dz.abs() != r {
+                    continue; // only the ring at radius r
+                }
+                let (tx, tz) = (bx + dx, bz + dz);
+                let t = topdown_tile(body, 0, tx, tz);
+                if !t.solid() && t != Tile::Water {
+                    return (tx as f32 * TILE_M + 0.5, tz as f32 * TILE_M + 0.5);
+                }
+            }
+        }
+    }
+    (near_x, near_z)
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RegionId {
@@ -79,10 +102,11 @@ impl Plugin for ScenePlugin {
 }
 
 fn spawn_player(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
-    let spawn_s = EARTH_PAD_S + 12.0;
-    let mut body = ha_shared::MovementBody::new(5.2, 0.35);
-    body.x = spawn_s;
-    body.y = ground_height_m(CelestialBody::Earth, spawn_s) + 0.1;
+    let (sx, sz) = walkable_spawn(CelestialBody::Earth, EARTH_PAD_S + 4.0, 6.0);
+    let mut body = ha_shared::MovementBody::new(5.2, ha_shared::topdown::PLAYER_RADIUS);
+    body.x = sx;
+    body.z = sz;
+    body.y = 0.0;
 
     let sim = SimState {
         body,
@@ -92,37 +116,38 @@ fn spawn_player(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
         prev_action: false,
         prev_jump: false,
     };
+    let mut visual = PlayerVisual {
+        radius: ha_shared::topdown::PLAYER_RADIUS,
+        ..default()
+    };
+    visual.from_x = sx;
+    visual.to_x = sx;
+    visual.from_z = sz;
+    visual.to_z = sz;
+    let r = render_xy(sx, sz);
+    let tf = Transform::from_xyz(r.x, r.y, sort_z(sz) + 1.0);
 
-    // Drop-in pack sprite (assets/art/player/astronaut.png) or the
-    // procedural astronaut (torso + helmet + visor quads).
+    // Drop-in LimeZu character (assets/art/player/astronaut.png) or a
+    // procedural top-down avatar (body + head).
     if let Some(image) = art.get("player/astronaut") {
         let mut sprite = Sprite::from_image(image);
-        sprite.custom_size = Some(Vec2::new(1.2, 1.85));
-        commands.spawn((
-            Player,
-            sim,
-            PlayerVisual::default(),
-            sprite,
-            Transform::from_xyz(spawn_s, 4.0, 2.0),
-        ));
+        sprite.custom_size = Some(Vec2::new(1.4, 2.0));
+        commands.spawn((Player, sim, visual, sprite, tf));
         return;
     }
     commands
         .spawn((
             Player,
             sim,
-            PlayerVisual::default(),
-            Sprite::from_color(Color::srgb(0.92, 0.55, 0.25), Vec2::new(0.8, 1.7)),
-            Transform::from_xyz(spawn_s, 4.0, 2.0),
+            visual,
+            Sprite::from_color(Color::srgb(0.92, 0.55, 0.25), Vec2::new(0.8, 1.1)),
+            tf,
         ))
         .with_children(|p| {
+            // Head (top of the 3/4 body).
             p.spawn((
-                Sprite::from_color(Color::srgb(0.85, 0.9, 0.95), Vec2::new(0.62, 0.5)),
-                Transform::from_xyz(0.08, 0.62, 0.05),
-            ));
-            p.spawn((
-                Sprite::from_color(Color::srgb(0.25, 0.28, 0.34), Vec2::new(0.5, 0.35)),
-                Transform::from_xyz(0.0, -0.15, 0.04),
+                Sprite::from_color(Color::srgb(0.98, 0.85, 0.7), Vec2::new(0.6, 0.6)),
+                Transform::from_xyz(0.0, 0.7, 0.05),
             ));
         });
 }
@@ -146,17 +171,22 @@ pub fn teleport_to_body(
     if !matches!(body, CelestialBody::Earth | CelestialBody::Moon) {
         planet.body = Some(body);
     }
-    let s = if body == CelestialBody::Earth {
-        EARTH_PAD_S + 12.0
+    let near_x = if body == CelestialBody::Earth {
+        EARTH_PAD_S + 4.0
     } else {
-        6.0
+        0.0
     };
-    sim.body.x = s;
-    sim.body.y = ground_height_m(body, s) + 0.2;
+    let (sx, sz) = walkable_spawn(body, near_x, 6.0);
+    sim.body.x = sx;
+    sim.body.z = sz;
+    sim.body.y = 0.0;
     sim.body.vx = 0.0;
+    sim.body.vz = 0.0;
     sim.body.vy = 0.0;
-    visual.from_x = s;
-    visual.to_x = s;
-    visual.from_y = sim.body.y;
-    visual.to_y = sim.body.y;
+    visual.from_x = sx;
+    visual.to_x = sx;
+    visual.from_z = sz;
+    visual.to_z = sz;
+    visual.from_y = 0.0;
+    visual.to_y = 0.0;
 }

@@ -6,14 +6,14 @@
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use ha_shared::flat2d::TILE_M;
+use ha_shared::topdown::TILE_M;
 use ha_shared::{interact_reach_for, InteractTargetKind};
 
-use crate::camera::{facing_sign, GameCamera};
+use crate::camera::GameCamera;
 use crate::input::{LookPointer, EquippedItem};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, SimState};
-use crate::world2d::{active_surface_body, ActivePlanet, TileWorld};
+use crate::world2d::{active_surface_body, render_xy, ActivePlanet, TileWorld};
 
 /// Reach for digging/placing tiles (m).
 const TILE_REACH: f32 = 5.6;
@@ -89,11 +89,6 @@ fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool 
     }
 }
 
-/// Wrapped column for an unwrapped world column index.
-fn wrapped_col(body: ha_shared::CelestialBody, i: i64) -> u32 {
-    ha_shared::flat2d::wrap_tile(i, ha_shared::flat2d::body_circumference_tiles(body))
-}
-
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn update_look_target(
     pointer: Res<LookPointer>,
@@ -155,23 +150,17 @@ fn update_look_target(
             }
         }
     } else {
-        // Proximity auto-target: nearest interactable in front of the player.
-        let facing = facing_sign(sim.body.rot);
+        // Proximity auto-target (top-down): nearest interactable within reach.
         for (entity, gtf, target) in &targets {
             let center = gtf.translation().truncate();
-            let to = center - origin;
-            if to.x * facing < -0.8 {
-                continue;
-            }
-            consider(entity, target.kind, center, target.id, to.length());
+            consider(entity, target.kind, center, target.id, origin.distance(center));
         }
     }
 
     if let Some((entity, kind, distance, hit, id)) = best {
-        let flora_cell = (kind == InteractTargetKind::Tree).then(|| {
-            let col = id;
-            ((col / 32) as i32, 0, col)
-        });
+        // Trees/rocks use a flat per-body removed set at chunk key (0,0);
+        // `id` = packed global cell.
+        let flora_cell = (kind == InteractTargetKind::Tree).then_some((0, 0, id));
         *current = LookTarget {
             entity: Some(entity),
             kind: Some(kind),
@@ -191,24 +180,27 @@ fn update_look_target(
         return;
     }
 
-    let tile_point = pointer_world.unwrap_or_else(|| {
-        // No pointer: aim at the tile in front of the feet (auto-dig).
-        origin + Vec2::new(facing_sign(sim.body.rot) * 1.3, -0.2)
+    // Aim world point: pointer if present, else the cell the player faces.
+    let aim = pointer_world.unwrap_or_else(|| {
+        let fx = sim.body.rot.cos();
+        let fz = sim.body.rot.sin();
+        render_xy(sim.body.x + fx * 1.2, sim.body.z + fz * 1.2)
     });
-    if origin.distance(tile_point) <= TILE_REACH {
-        let i = (tile_point.x / TILE_M).floor() as i64;
-        let j = (tile_point.y / TILE_M).floor() as i32;
-        if tiles.solid_at(body, i, j) {
-            let kind = tiles.tile_at(body, i, j);
-            if kind != ha_shared::flat2d::TileKind::Bedrock
+    if origin.distance(aim) <= TILE_REACH {
+        // Screen (x, -z) → grid (tx, tz).
+        let tx = (aim.x / TILE_M).floor() as i64;
+        let tz = (-aim.y / TILE_M).floor() as i64;
+        if tiles.solid_at(body, tx, tz) {
+            let t = tiles.tile_at(body, tx, tz);
+            if t != ha_shared::topdown::Tile::Bedrock
                 && target_allowed_in_region(InteractTargetKind::Block, region.active)
             {
                 *current = LookTarget {
                     entity: None,
                     kind: Some(InteractTargetKind::Block),
-                    distance: origin.distance(tile_point),
-                    hit_point: tile_point.extend(0.0),
-                    block_cell: Some((wrapped_col(body, i) as i32, j, 0)),
+                    distance: origin.distance(aim),
+                    hit_point: aim.extend(0.0),
+                    block_cell: Some((tx as i32, tz as i32, 0)),
                     place_cell: None,
                     flora_cell: None,
                     locked: false,
@@ -218,24 +210,22 @@ fn update_look_target(
         } else if ha_shared::is_block_item(&equipped.item_id)
             || crate::world2d::tile_for_block_item(&equipped.item_id).is_some()
         {
-            // Empty cell next to something solid → placement slot.
-            let adjacent_solid = tiles.solid_at(body, i - 1, j)
-                || tiles.solid_at(body, i + 1, j)
-                || tiles.solid_at(body, i, j - 1)
-                || tiles.solid_at(body, i, j + 1);
-            // Don't place inside the player.
-            let feet = sim.body.y;
+            // Empty cell adjacent to something solid → placement slot.
+            let adjacent_solid = tiles.solid_at(body, tx - 1, tz)
+                || tiles.solid_at(body, tx + 1, tz)
+                || tiles.solid_at(body, tx, tz - 1)
+                || tiles.solid_at(body, tx, tz + 1);
             let px = (sim.body.x / TILE_M).floor() as i64;
-            let pj0 = (feet / TILE_M).floor() as i32;
-            let overlaps_player = i == px && (j == pj0 || j == pj0 + 1);
+            let pz = (sim.body.z / TILE_M).floor() as i64;
+            let overlaps_player = tx == px && tz == pz;
             if adjacent_solid && !overlaps_player {
                 *current = LookTarget {
                     entity: None,
                     kind: None,
-                    distance: origin.distance(tile_point),
-                    hit_point: tile_point.extend(0.0),
+                    distance: origin.distance(aim),
+                    hit_point: aim.extend(0.0),
                     block_cell: None,
-                    place_cell: Some((wrapped_col(body, i) as i32, j, 0)),
+                    place_cell: Some((tx as i32, tz as i32, 0)),
                     flora_cell: None,
                     locked: false,
                 };

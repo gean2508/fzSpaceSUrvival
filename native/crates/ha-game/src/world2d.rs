@@ -1,9 +1,14 @@
-//! 2D tile world — Terraria-style diggable surface strip per celestial body.
+//! Top-Down 3/4 tile world (LimeZu) — successor to the side-scroller strip.
 //!
-//! Render frame on a surface: x = arc metres `s` (unwrapped near the player),
-//! y = height above the walk shell. Tile content wraps the circumference so
-//! walking keeps going around the planet. Chunks are Mesh2d quads with vertex
-//! colors; edits (dig/place) are sparse overrides persisted to tiles.json.
+//! Ground plane = XZ. Grid cell `(tx, tz)` renders to screen `(tx*TILE,
+//! -tz*TILE)` — same `(x, -z)` projection as `orbital2d.rs`. Depth is a
+//! discrete Z-Level (`z`): 0 = surface, negative = mine floors (Fase 3).
+//! Chunks are 2D grids of `Mesh2d` quads (vertex colors); decor/deposits are
+//! y-sorted sprites. See `MIGRATION_PLAN.md`.
+//!
+//! Module keeps the old public names (`TileWorld`, `ActivePlanet`,
+//! `active_surface_body`, …) so machines/launch_pad/targeting compile through
+//! the migration; the side-scroller `flat2d`/strip logic is gone from here.
 
 use std::collections::{HashMap, HashSet};
 
@@ -12,10 +17,7 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use serde::{Deserialize, Serialize};
 
-use ha_shared::flat2d::{
-    body_circumference_tiles, ground_row, natural_tile, wrap_tile, TileKind, DIG_DEPTH_TILES,
-    TILE_M,
-};
+use ha_shared::topdown::{deposit_at, topdown_tile, Deposit, Tile, TILE_M};
 use ha_shared::{CelestialBody, InteractTargetKind, WorldContext};
 
 use crate::art2d::ArtLibrary;
@@ -26,21 +28,37 @@ use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::Player;
 use crate::targeting::InteractTarget;
 
-pub const CHUNK_TILES: i64 = 32;
-/// Tile rows meshed per chunk (vertical band around the terrain line).
-pub const ROW_MIN: i32 = -(DIG_DEPTH_TILES + 34);
-pub const ROW_MAX: i32 = 44;
-/// Chunks kept alive around the player (each 32 m wide).
-const CHUNK_RANGE: i64 = 5;
+/// Tiles per chunk side (a chunk is CHUNK×CHUNK cells).
+pub const CHUNK: i64 = 16;
+/// Chunks kept alive around the player (Chebyshev radius).
+const CHUNK_RANGE: i64 = 3;
 
-/// Body whose surface the player is currently on (compat shape with the old
-/// `planet_world::ActivePlanet`).
+/// Screen render position of a world ground point `(x, z)` (metres).
+/// North (−z) is up. Shared with the orbital view.
+pub fn render_xy(x: f32, z: f32) -> Vec2 {
+    Vec2::new(x, -z)
+}
+
+/// Y-sort depth for a sprite at world z (more south / larger z draws in front).
+pub fn sort_z(world_z: f32) -> f32 {
+    2.0 + world_z * 0.001
+}
+
+/// Pack a grid cell into a stable u32 id for flora/harvest bookkeeping
+/// (±32 km range). Trees/rocks use a per-body flat set at chunk key (0,0).
+pub fn pack_cell(tx: i64, tz: i64) -> u32 {
+    ((tx as i16 as u16 as u32) << 16) | (tz as i16 as u16 as u32)
+}
+
+// ---------------------------------------------------------------------------
+// Active body/layer
+// ---------------------------------------------------------------------------
+
 #[derive(Resource, Default, Clone, Copy)]
 pub struct ActivePlanet {
     pub body: Option<CelestialBody>,
 }
 
-/// The body the player currently walks on, resolved from context.
 pub fn active_surface_body(ctx: &WorldContextRuntime, planet: &ActivePlanet) -> CelestialBody {
     match ctx.active {
         WorldContext::Luna => CelestialBody::Moon,
@@ -49,7 +67,6 @@ pub fn active_surface_body(ctx: &WorldContextRuntime, planet: &ActivePlanet) -> 
     }
 }
 
-/// Body the player can act on right now (None mid-flight / in space).
 pub fn active_landable_body(
     region: &RegionRuntime,
     ctx: &WorldContextRuntime,
@@ -64,63 +81,63 @@ pub fn active_landable_body(
 }
 
 // ---------------------------------------------------------------------------
-// Tile storage (natural terrain + sparse edits + embedded deposits)
+// Tile storage (natural terrain + sparse edits per (body, z, tx, tz))
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Default)]
-struct TilesSave {
-    /// body u8 → list of (wrapped col, row, kind name or "" = dug out)
-    edits: HashMap<u8, Vec<(u32, i32, String)>>,
-}
-
-fn tile_kind_name(kind: TileKind) -> &'static str {
-    match kind {
-        TileKind::Air => "",
-        TileKind::Grass => "grass",
-        TileKind::Dirt => "dirt",
-        TileKind::Stone => "stone",
-        TileKind::Sand => "sand",
-        TileKind::Regolith => "regolith",
-        TileKind::RockDark => "rock_dark",
-        TileKind::RockRed => "rock_red",
-        TileKind::Water => "water",
-        TileKind::Bedrock => "bedrock",
-        TileKind::Wood => "wood",
+fn tile_name(t: Tile) -> &'static str {
+    match t {
+        Tile::Air => "air",
+        Tile::Grass => "grass",
+        Tile::Dirt => "dirt",
+        Tile::Sand => "sand",
+        Tile::Water => "water",
+        Tile::Regolith => "regolith",
+        Tile::RockRed => "rock_red",
+        Tile::Stone => "stone",
+        Tile::RockDark => "rock_dark",
+        Tile::Bedrock => "bedrock",
+        Tile::CaveFloor => "cave_floor",
+        Tile::WoodFloor => "wood_floor",
+        Tile::Wall => "wall",
     }
 }
 
-fn tile_kind_from_name(name: &str) -> TileKind {
+fn tile_from_name(name: &str) -> Tile {
     match name {
-        "grass" => TileKind::Grass,
-        "dirt" => TileKind::Dirt,
-        "stone" => TileKind::Stone,
-        "sand" => TileKind::Sand,
-        "regolith" => TileKind::Regolith,
-        "rock_dark" => TileKind::RockDark,
-        "rock_red" => TileKind::RockRed,
-        "water" => TileKind::Water,
-        "bedrock" => TileKind::Bedrock,
-        "wood" => TileKind::Wood,
-        _ => TileKind::Air,
+        "grass" => Tile::Grass,
+        "dirt" => Tile::Dirt,
+        "sand" => Tile::Sand,
+        "water" => Tile::Water,
+        "regolith" => Tile::Regolith,
+        "rock_red" => Tile::RockRed,
+        "stone" => Tile::Stone,
+        "rock_dark" => Tile::RockDark,
+        "bedrock" => Tile::Bedrock,
+        "cave_floor" => Tile::CaveFloor,
+        "wood_floor" => Tile::WoodFloor,
+        "wall" => Tile::Wall,
+        _ => Tile::Air,
     }
 }
 
-/// TileKind for a placeable block item, if the item is a block.
-pub fn tile_for_block_item(item_id: &str) -> Option<TileKind> {
+/// Tile a placeable block item becomes.
+pub fn tile_for_block_item(item_id: &str) -> Option<Tile> {
     match item_id {
-        "wood" => Some(TileKind::Wood),
-        "stone" => Some(TileKind::Stone),
-        "dirt" => Some(TileKind::Dirt),
-        "sand" => Some(TileKind::Sand),
-        "regolith" => Some(TileKind::Regolith),
+        "wood" => Some(Tile::WoodFloor),
+        "stone" => Some(Tile::Wall),
+        "dirt" => Some(Tile::Dirt),
+        "sand" => Some(Tile::Sand),
+        "regolith" => Some(Tile::Regolith),
         _ => None,
     }
 }
 
 #[derive(Resource, Default)]
 pub struct TileWorld {
-    /// (body u8, wrapped col, row) → override (Air = dug out).
-    edits: HashMap<(u8, u32, i32), TileKind>,
+    /// (body u8, z, tx, tz) → override tile.
+    edits: HashMap<(u8, i32, i64, i64), Tile>,
+    /// Active depth layer (0 = surface).
+    pub z: i32,
     pub version: u64,
     dirty: bool,
     was_paused: bool,
@@ -128,58 +145,43 @@ pub struct TileWorld {
 }
 
 impl TileWorld {
-    pub fn tile_at(&self, body: CelestialBody, i: i64, j: i32) -> TileKind {
-        let c = body_circumference_tiles(body);
-        let col = wrap_tile(i, c);
-        if let Some(kind) = self.edits.get(&(body as u8, col, j)) {
-            return *kind;
+    pub fn tile_at(&self, body: CelestialBody, tx: i64, tz: i64) -> Tile {
+        if let Some(t) = self.edits.get(&(body as u8, self.z, tx, tz)) {
+            return *t;
         }
-        natural_tile(body, col as i64, j)
+        topdown_tile(body, self.z, tx, tz)
     }
 
-    pub fn solid_at(&self, body: CelestialBody, i: i64, j: i32) -> bool {
-        self.tile_at(body, i, j).solid()
+    pub fn solid_at(&self, body: CelestialBody, tx: i64, tz: i64) -> bool {
+        self.tile_at(body, tx, tz).solid()
     }
 
-    /// Topmost solid row at column `i` considering edits (for placement).
-    pub fn ground_row_at(&self, body: CelestialBody, i: i64) -> i32 {
-        let natural = ground_row(body, i);
-        let mut j = (natural + 40).min(ROW_MAX);
-        while j > natural - DIG_DEPTH_TILES {
-            if self.solid_at(body, i, j) {
-                return j;
-            }
-            j -= 1;
-        }
-        natural
+    /// Top-down has no vertical terrain: the ground plane is flat at y=0.
+    /// Kept as a shim so machine/pad placement compiles unchanged.
+    pub fn ground_height_at(&self, _body: CelestialBody, _x: f32) -> f32 {
+        0.0
     }
 
-    /// Ground height in metres at arc position `s` (top face of ground tile).
-    pub fn ground_height_at(&self, body: CelestialBody, s: f32) -> f32 {
-        (self.ground_row_at(body, (s / TILE_M).floor() as i64) + 1) as f32 * TILE_M
-    }
-
-    /// Dig out a tile. Returns the removed kind if it was diggable.
-    pub fn break_tile(&mut self, body: CelestialBody, i: i64, j: i32) -> Option<TileKind> {
-        let kind = self.tile_at(body, i, j);
-        if !kind.solid() || kind == TileKind::Bedrock {
+    pub fn break_tile(&mut self, body: CelestialBody, tx: i64, tz: i64) -> Option<Tile> {
+        let t = self.tile_at(body, tx, tz);
+        if t == Tile::Bedrock || t == Tile::Air || t == Tile::Water {
             return None;
         }
-        let c = body_circumference_tiles(body);
+        // Digging a surface tile reveals dirt/cave floor beneath (walkable);
+        // digging underground rock opens cave floor.
+        let revealed = if self.z == 0 { Tile::Dirt } else { Tile::CaveFloor };
         self.edits
-            .insert((body as u8, wrap_tile(i, c), j), TileKind::Air);
+            .insert((body as u8, self.z, tx, tz), revealed);
         self.version = self.version.wrapping_add(1);
         self.dirty = true;
-        Some(kind)
+        Some(t)
     }
 
-    /// Place a tile into an empty cell.
-    pub fn place_tile(&mut self, body: CelestialBody, i: i64, j: i32, kind: TileKind) -> bool {
-        if self.tile_at(body, i, j).solid() {
+    pub fn place_tile(&mut self, body: CelestialBody, tx: i64, tz: i64, kind: Tile) -> bool {
+        if self.solid_at(body, tx, tz) {
             return false;
         }
-        let c = body_circumference_tiles(body);
-        self.edits.insert((body as u8, wrap_tile(i, c), j), kind);
+        self.edits.insert((body as u8, self.z, tx, tz), kind);
         self.version = self.version.wrapping_add(1);
         self.dirty = true;
         true
@@ -187,43 +189,8 @@ impl TileWorld {
 }
 
 // ---------------------------------------------------------------------------
-// Embedded deposits (ore/gem nodes revealed by digging) + surface decor
+// Decor (trees/rocks) + surface deposits — top-down, per grid cell
 // ---------------------------------------------------------------------------
-
-pub struct EmbeddedDeposit {
-    pub col: u32,
-    pub row: i32,
-    pub kind: InteractTargetKind,
-}
-
-/// Deterministic ore/gem node for a column, if any (revealed by digging).
-pub fn embedded_deposit_at(body: CelestialBody, col: u32) -> Option<EmbeddedDeposit> {
-    let seed = ha_shared::body_terrain_seed(body) ^ 0x6f5e_a213;
-    let h = hash2(seed, col, 7);
-    let g = ground_row(body, col as i64);
-    let depth_span = DIG_DEPTH_TILES - 12;
-    let row = g - 8 - (h >> 8) as i32 % depth_span.max(1);
-    let roll = h % 1000;
-    let kind = match body {
-        CelestialBody::Moon => match roll {
-            0..=24 => Some(InteractTargetKind::GemRed),
-            25..=79 => Some(InteractTargetKind::OreIron),
-            _ => None,
-        },
-        CelestialBody::Earth => match roll {
-            0..=39 => Some(InteractTargetKind::OreIron),
-            40..=59 => Some(InteractTargetKind::OreGold),
-            60..=74 => Some(InteractTargetKind::GemBlue),
-            _ => None,
-        },
-        _ => match roll {
-            0..=49 => Some(InteractTargetKind::OreIron),
-            50..=79 => Some(InteractTargetKind::GemBlue),
-            _ => None,
-        },
-    };
-    kind.map(|kind| EmbeddedDeposit { col, row, kind })
-}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DecorKind {
@@ -231,34 +198,10 @@ pub enum DecorKind {
     Rock,
 }
 
-/// Deterministic surface decor for a column, if any.
-pub fn surface_decor_at(body: CelestialBody, col: u32) -> Option<DecorKind> {
-    let seed = ha_shared::body_terrain_seed(body) ^ 0x1234_abcd;
-    let h = hash2(seed, col, 3);
-    match body {
-        CelestialBody::Earth => {
-            // No trees under water.
-            if ground_row(body, col as i64) <= -3 {
-                return match h % 100 {
-                    0..=3 => Some(DecorKind::Rock),
-                    _ => None,
-                };
-            }
-            match h % 100 {
-                0..=10 => Some(DecorKind::Tree),
-                11..=17 => Some(DecorKind::Rock),
-                _ => None,
-            }
-        }
-        _ => match h % 100 {
-            0..=8 => Some(DecorKind::Rock),
-            _ => None,
-        },
-    }
-}
-
-fn hash2(seed: u32, a: u32, b: u32) -> u32 {
-    let mut x = seed ^ a.wrapping_mul(0x9e37_79b9) ^ b.wrapping_mul(0x85eb_ca6b);
+fn hash_cell(seed: u32, tx: i64, tz: i64) -> u32 {
+    let a = (tx as i32 as u32).wrapping_mul(0x9e37_79b9);
+    let b = (tz as i32 as u32).wrapping_mul(0x85eb_ca6b);
+    let mut x = seed ^ a ^ b;
     x ^= x >> 16;
     x = x.wrapping_mul(0x7feb_352d);
     x ^= x >> 15;
@@ -267,22 +210,62 @@ fn hash2(seed: u32, a: u32, b: u32) -> u32 {
     x
 }
 
+/// Deterministic surface decor at a grid cell (only on walkable surface tiles).
+pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKind> {
+    let seed = ha_shared::body_terrain_seed(body) ^ 0x1234_abcd;
+    let tile = topdown_tile(body, 0, tx, tz);
+    if tile.solid() || tile == Tile::Water {
+        return None;
+    }
+    let h = hash_cell(seed, tx, tz);
+    match body {
+        CelestialBody::Earth => {
+            if tile == Tile::Grass {
+                match h % 100 {
+                    0..=7 => Some(DecorKind::Tree),
+                    8..=11 => Some(DecorKind::Rock),
+                    _ => None,
+                }
+            } else {
+                match h % 100 {
+                    0..=3 => Some(DecorKind::Rock),
+                    _ => None,
+                }
+            }
+        }
+        _ => match h % 100 {
+            0..=5 => Some(DecorKind::Rock),
+            _ => None,
+        },
+    }
+}
+
+fn deposit_target_kind(d: Deposit) -> InteractTargetKind {
+    match d {
+        Deposit::OreIron => InteractTargetKind::OreIron,
+        Deposit::OreGold => InteractTargetKind::OreGold,
+        Deposit::GemBlue => InteractTargetKind::GemBlue,
+        Deposit::GemRed => InteractTargetKind::GemRed,
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Chunk streaming + meshing
+// Chunk streaming + meshing (2D grid)
 // ---------------------------------------------------------------------------
 
 #[derive(Component)]
 pub struct TileChunk {
     pub body: CelestialBody,
-    /// Unwrapped chunk index (render window near the player).
-    pub k: i64,
+    pub z: i32,
+    pub cx: i64,
+    pub cz: i64,
     pub built_version: u64,
 }
 
-/// Marker for decor/deposit sprites belonging to a chunk window.
 #[derive(Component)]
 pub struct SurfaceDecor {
-    pub k: i64,
+    pub cx: i64,
+    pub cz: i64,
 }
 
 #[derive(Resource, Default)]
@@ -309,9 +292,22 @@ impl Plugin for World2dPlugin {
     }
 }
 
-/// Dig the targeted tile when the hold completes (consumes `hold.completed`
-/// BEFORE the HUD's generic grant path — same pattern the old block world
-/// used).
+fn init_chunk_material(
+    mut mat: ResMut<ChunkMaterial>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    mat.0 = materials.add(ColorMaterial::default());
+}
+
+pub fn surface_region_active(region: &RegionRuntime) -> Option<()> {
+    match region.active {
+        RegionId::Overworld { .. } | RegionId::Luna | RegionId::Planet(_) | RegionId::Cave(_) => {
+            Some(())
+        }
+        _ => None,
+    }
+}
+
 fn apply_tile_hold(
     mut hold: ResMut<crate::input::HoldInteractState>,
     target: Res<crate::targeting::LookTarget>,
@@ -324,22 +320,19 @@ fn apply_tile_hold(
     if !hold.completed || target.kind != Some(InteractTargetKind::Block) {
         return;
     }
-    let Some((col, j, _)) = target.block_cell else {
+    let Some((tx, tz, _)) = target.block_cell else {
         return;
     };
     hold.completed = false;
     let body = active_surface_body(&ctx, &planet);
-    if let Some(kind) = tiles.break_tile(body, col as i64, j) {
-        if let Some(item) = kind.dug_item() {
-            // Same pattern as machine output: inventory is the truth, the
-            // HUD sync merges the gain into the visible slots.
+    if let Some(t) = tiles.break_tile(body, tx as i64, tz as i64) {
+        if let Some(item) = t.dug_item() {
             inv.add(item, 1);
             persist.mark_immediate();
         }
     }
 }
 
-/// Place the equipped block item into the targeted empty cell.
 fn try_place_tile_on_hold(
     mut hold: ResMut<crate::input::HoldInteractState>,
     target: Res<crate::targeting::LookTarget>,
@@ -353,7 +346,7 @@ fn try_place_tile_on_hold(
     if !hold.completed || !hold.placing_block {
         return;
     }
-    let Some((col, j, _)) = target.place_cell else {
+    let Some((tx, tz, _)) = target.place_cell else {
         hold.completed = false;
         return;
     };
@@ -365,28 +358,9 @@ fn try_place_tile_on_hold(
         return;
     }
     let body = active_surface_body(&ctx, &planet);
-    if tiles.place_tile(body, col as i64, j, kind) {
-        // Inventory is the truth (same as dig/machine grants); the HUD sync
-        // merges the change into the visible slots.
+    if tiles.place_tile(body, tx as i64, tz as i64, kind) {
         inv.remove(&equipped.item_id, 1);
         persist.mark_immediate();
-    }
-}
-
-fn init_chunk_material(
-    mut mat: ResMut<ChunkMaterial>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    mat.0 = materials.add(ColorMaterial::default());
-}
-
-/// Is the player currently in a surface region (tiles visible)?
-pub fn surface_region_active(region: &RegionRuntime) -> Option<()> {
-    match region.active {
-        RegionId::Overworld { .. } | RegionId::Luna | RegionId::Planet(_) | RegionId::Cave(_) => {
-            Some(())
-        }
-        _ => None,
     }
 }
 
@@ -406,7 +380,6 @@ fn stream_tile_chunks(
     decor: Query<(Entity, &SurfaceDecor)>,
 ) {
     if surface_region_active(&region).is_none() {
-        // B6: leaving the surface drops every chunk + decor entity.
         for (e, _) in &chunks {
             commands.entity(e).despawn_recursive();
         }
@@ -419,45 +392,55 @@ fn stream_tile_chunks(
         return;
     };
     let body = active_surface_body(&ctx, &planet);
-    let player_k = (player_tf.translation.x / (CHUNK_TILES as f32 * TILE_M)).floor() as i64;
+    let z = tiles.z;
+    // Player render pos is (x, -z); recover grid chunk from world coords.
+    let px = player_tf.translation.x;
+    let pz = -player_tf.translation.y;
+    let pcx = (px / (CHUNK as f32 * TILE_M)).floor() as i64;
+    let pcz = (pz / (CHUNK as f32 * TILE_M)).floor() as i64;
 
-    let mut live: HashSet<i64> = HashSet::new();
+    let mut live: HashSet<(i64, i64)> = HashSet::new();
     for (e, chunk) in &chunks {
-        if chunk.body != body || (chunk.k - player_k).abs() > CHUNK_RANGE + 1 {
+        let stale = chunk.body != body
+            || chunk.z != z
+            || (chunk.cx - pcx).abs() > CHUNK_RANGE + 1
+            || (chunk.cz - pcz).abs() > CHUNK_RANGE + 1;
+        if stale {
             commands.entity(e).despawn_recursive();
-            let c = body_circumference_tiles(chunk.body);
-            let wrapped_k = wrap_tile(chunk.k * CHUNK_TILES, c) as i32 / CHUNK_TILES as i32;
-            flora.clear_chunk(wrapped_k, 0);
+            flora.clear_chunk(chunk.cx as i32, chunk.cz as i32);
         } else {
-            live.insert(chunk.k);
+            live.insert((chunk.cx, chunk.cz));
         }
     }
     for (e, d) in &decor {
-        if (d.k - player_k).abs() > CHUNK_RANGE + 1 {
+        if (d.cx - pcx).abs() > CHUNK_RANGE + 1 || (d.cz - pcz).abs() > CHUNK_RANGE + 1 {
             commands.entity(e).despawn_recursive();
         }
     }
 
-    for k in (player_k - CHUNK_RANGE)..=(player_k + CHUNK_RANGE) {
-        if live.contains(&k) {
-            continue;
+    for cx in (pcx - CHUNK_RANGE)..=(pcx + CHUNK_RANGE) {
+        for cz in (pcz - CHUNK_RANGE)..=(pcz + CHUNK_RANGE) {
+            if live.contains(&(cx, cz)) {
+                continue;
+            }
+            let mesh = build_chunk_mesh(&tiles, body, cx, cz);
+            commands.spawn((
+                TileChunk {
+                    body,
+                    z,
+                    cx,
+                    cz,
+                    built_version: tiles.version,
+                },
+                Mesh2d(meshes.add(mesh)),
+                MeshMaterial2d(mat.0.clone()),
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ));
+            spawn_chunk_decor(&mut commands, &mut flora, &art, body, z, cx, cz);
         }
-        let mesh = build_chunk_mesh(&tiles, body, k);
-        commands.spawn((
-            TileChunk {
-                body,
-                k,
-                built_version: tiles.version,
-            },
-            Mesh2d(meshes.add(mesh)),
-            MeshMaterial2d(mat.0.clone()),
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        ));
-        spawn_chunk_decor(&mut commands, &tiles, &mut flora, &art, body, k);
     }
 }
 
-/// Body-specific art key suffix (falls back to the generic key).
 fn body_art_suffix(body: CelestialBody) -> &'static str {
     match body {
         CelestialBody::Earth => "",
@@ -475,29 +458,28 @@ fn rebuild_dirty_chunks(
         return;
     }
     for (mut chunk, mesh2d) in &mut chunks {
-        if chunk.built_version == tiles.version {
+        if chunk.built_version == tiles.version || chunk.z != tiles.z {
             continue;
         }
-        let mesh = build_chunk_mesh(&tiles, chunk.body, chunk.k);
+        let mesh = build_chunk_mesh(&tiles, chunk.body, chunk.cx, chunk.cz);
         meshes.insert(mesh2d.0.id(), mesh);
         chunk.built_version = tiles.version;
     }
 }
 
-fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, k: i64) -> Mesh {
-    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(4096);
-    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(4096);
-    let mut indices: Vec<u32> = Vec::with_capacity(6144);
-    let c = body_circumference_tiles(body);
+/// One `Mesh2d` covering a CHUNK×CHUNK grid of tiles, each a colored quad at
+/// render pos `(tx*TILE, -tz*TILE)`.
+fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, cx: i64, cz: i64) -> Mesh {
+    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(1024);
+    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(1024);
+    let mut indices: Vec<u32> = Vec::with_capacity(1536);
 
-    // Vertex colors are LINEAR in the mesh pipeline — convert from the sRGB
-    // palette values or the terrain renders washed out vs the sprites.
-    let mut quad = |x0: f32, y0: f32, size: f32, z: f32, rgba: [f32; 4]| {
+    let mut quad = |x0: f32, y0: f32, size: f32, rgba: [f32; 4]| {
         let base = positions.len() as u32;
-        positions.push([x0, y0, z]);
-        positions.push([x0 + size, y0, z]);
-        positions.push([x0 + size, y0 + size, z]);
-        positions.push([x0, y0 + size, z]);
+        positions.push([x0, y0, 0.0]);
+        positions.push([x0 + size, y0, 0.0]);
+        positions.push([x0 + size, y0 + size, 0.0]);
+        positions.push([x0, y0 + size, 0.0]);
         let lin = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]).to_linear();
         for _ in 0..4 {
             colors.push([lin.red, lin.green, lin.blue, lin.alpha]);
@@ -505,33 +487,21 @@ fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, k: i64) -> Mesh {
         indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     };
 
-    for local in 0..CHUNK_TILES {
-        let i = k * CHUNK_TILES + local;
-        let col = wrap_tile(i, c);
-        let natural_ground = ground_row(body, col as i64);
-        for j in ROW_MIN..=ROW_MAX {
-            let kind = tiles.tile_at(body, i, j);
-            let x = i as f32 * TILE_M;
-            let y = j as f32 * TILE_M;
-            match kind {
-                TileKind::Air => {
-                    // Dug-out pocket below the natural ground: dark backwall.
-                    if j <= natural_ground {
-                        quad(x, y, TILE_M, -0.5, [0.10, 0.09, 0.12, 1.0]);
-                    }
-                }
-                TileKind::Water => {
-                    quad(x, y, TILE_M, -0.3, [0.20, 0.42, 0.66, 1.0]);
-                }
-                _ => {
-                    let mut rgb = kind.color();
-                    // Per-tile shade variation so big fills don't look flat.
-                    let n = (hash2(0x51ce, col, j as u32) % 100) as f32 / 100.0;
-                    let shade = 0.92 + n * 0.10;
-                    rgb = [rgb[0] * shade, rgb[1] * shade, rgb[2] * shade];
-                    quad(x, y, TILE_M, 0.0, [rgb[0], rgb[1], rgb[2], 1.0]);
-                }
-            }
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            let t = tiles.tile_at(body, tx, tz);
+            let mut rgb = t.color();
+            // Per-tile shade so big fills don't look flat.
+            let n = (hash_cell(0x51ce, tx, tz) % 100) as f32 / 100.0;
+            let shade = 0.93 + n * 0.09;
+            rgb = [rgb[0] * shade, rgb[1] * shade, rgb[2] * shade];
+            // Render pos: cell (tx,tz) spans [tx,tx+1]×[tz,tz+1] in world; screen
+            // y = -z so the quad bottom-left is (tx*TILE, -(tz+1)*TILE).
+            let x0 = tx as f32 * TILE_M;
+            let y0 = -(tz as f32 + 1.0) * TILE_M;
+            quad(x0, y0, TILE_M, [rgb[0], rgb[1], rgb[2], 1.0]);
         }
     }
 
@@ -547,130 +517,110 @@ fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, k: i64) -> Mesh {
 
 fn spawn_chunk_decor(
     commands: &mut Commands,
-    tiles: &TileWorld,
     flora: &mut FloraHarvest,
     art: &ArtLibrary,
     body: CelestialBody,
-    k: i64,
+    z: i32,
+    cx: i64,
+    cz: i64,
 ) {
     let suffix = body_art_suffix(body);
-    let c = body_circumference_tiles(body);
-    let wrapped_k = wrap_tile(k * CHUNK_TILES, c) as i32 / CHUNK_TILES as i32;
     let mut trees: Vec<TreeInstance> = Vec::new();
 
-    for local in 0..CHUNK_TILES {
-        let i = k * CHUNK_TILES + local;
-        let col = wrap_tile(i, c);
-        let ground_y = (ground_row(body, col as i64) + 1) as f32 * TILE_M;
-        let x = i as f32 * TILE_M + 0.5;
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            let id = pack_cell(tx, tz);
+            let wx = tx as f32 * TILE_M + 0.5;
+            let wz = tz as f32 * TILE_M + 0.5;
+            let r = render_xy(wx, wz);
+            let sort = sort_z(wz);
 
-        if let Some(decor) = surface_decor_at(body, col) {
-            match decor {
-                DecorKind::Tree => {
-                    if !flora.is_removed(body, wrapped_k, 0, col) {
-                        trees.push(TreeInstance {
-                            cx: wrapped_k,
-                            cz: 0,
-                            id: col,
-                            world: Vec3::new(x, ground_y + 1.4, 0.0),
-                        });
-                        // Drop-in pack art: one tree sprite. Fallback: trunk + canopy quads.
-                        if let Some(image) =
-                            art.get_first(&[&format!("decor/tree{suffix}"), "decor/tree"])
-                        {
-                            let mut sprite = Sprite::from_image(image);
-                            sprite.custom_size = Some(Vec2::new(3.6, 4.6));
-                            commands.spawn((
-                                SurfaceDecor { k },
-                                InteractTarget {
-                                    kind: InteractTargetKind::Tree,
-                                    id: col,
-                                },
-                                crate::render::particles::HarvestReactive,
-                                sprite,
-                                Transform::from_xyz(x, ground_y + 2.3, 0.4),
-                            ));
-                        } else {
-                            let trunk_top = ground_y + 2.6;
-                            commands
-                                .spawn((
-                                    SurfaceDecor { k },
-                                    InteractTarget {
-                                        kind: InteractTargetKind::Tree,
-                                        id: col,
-                                    },
-                                    crate::render::particles::HarvestReactive,
-                                    Sprite::from_color(
-                                        Color::srgb(0.42, 0.30, 0.18),
-                                        Vec2::new(0.6, 2.6),
-                                    ),
-                                    Transform::from_xyz(x, ground_y + 1.3, 0.4),
-                                ))
-                                .with_children(|p| {
-                                    p.spawn((
+            // Surface decor only on the surface layer.
+            if z == 0 {
+                if let Some(decor) = surface_decor_at(body, tx, tz) {
+                    match decor {
+                        DecorKind::Tree => {
+                            // Removed set is a flat per-body set at key (0,0);
+                            // `id` = packed global cell (see `pack_cell`).
+                            if !flora.is_removed(body, 0, 0, id) {
+                                trees.push(TreeInstance {
+                                    cx: 0,
+                                    cz: 0,
+                                    id,
+                                    world: Vec3::new(r.x, r.y, 0.0),
+                                });
+                                let sprite = art
+                                    .get_first(&[&format!("decor/tree{suffix}"), "decor/tree"])
+                                    .map(|img| {
+                                        let mut s = Sprite::from_image(img);
+                                        s.custom_size = Some(Vec2::new(2.4, 3.2));
+                                        s
+                                    })
+                                    .unwrap_or_else(|| {
                                         Sprite::from_color(
                                             Color::srgb(0.30, 0.55, 0.25),
-                                            Vec2::new(3.2, 2.8),
-                                        ),
-                                        Transform::from_xyz(
-                                            0.0,
-                                            trunk_top - ground_y - 1.3 + 0.9,
-                                            0.01,
-                                        ),
-                                    ));
+                                            Vec2::new(2.2, 2.6),
+                                        )
+                                    });
+                                commands.spawn((
+                                    SurfaceDecor { cx, cz },
+                                    InteractTarget {
+                                        kind: InteractTargetKind::Tree,
+                                        id,
+                                    },
+                                    crate::render::particles::HarvestReactive,
+                                    sprite,
+                                    Transform::from_xyz(r.x, r.y + 1.0, sort),
+                                ));
+                            }
+                        }
+                        DecorKind::Rock => {
+                            let sprite = art
+                                .get_first(&[&format!("decor/rock{suffix}"), "decor/rock"])
+                                .map(|img| {
+                                    let mut s = Sprite::from_image(img);
+                                    s.custom_size = Some(Vec2::new(1.3, 1.0));
+                                    s
+                                })
+                                .unwrap_or_else(|| {
+                                    Sprite::from_color(rock_color(body), Vec2::new(1.2, 0.9))
                                 });
+                            commands.spawn((
+                                SurfaceDecor { cx, cz },
+                                InteractTarget {
+                                    kind: InteractTargetKind::Rock,
+                                    id,
+                                },
+                                sprite,
+                                Transform::from_xyz(r.x, r.y, sort),
+                            ));
                         }
                     }
                 }
-                DecorKind::Rock => {
-                    let sprite = match art
-                        .get_first(&[&format!("decor/rock{suffix}"), "decor/rock"])
-                    {
-                        Some(image) => {
-                            let mut s = Sprite::from_image(image);
-                            s.custom_size = Some(Vec2::new(1.5, 1.0));
-                            s
-                        }
-                        None => Sprite::from_color(rock_color(body), Vec2::new(1.5, 1.0)),
-                    };
-                    commands.spawn((
-                        SurfaceDecor { k },
-                        InteractTarget {
-                            kind: InteractTargetKind::Rock,
-                            id: col,
-                        },
-                        sprite,
-                        Transform::from_xyz(x, ground_y + 0.5, 0.4),
-                    ));
-                }
+            }
+
+            // Ore/gem deposits (surface sparse, underground rich).
+            if let Some(dep) = deposit_at(body, z, tx, tz) {
+                let kind = deposit_target_kind(dep);
+                let (color, size) = deposit_style(kind);
+                let key = match kind {
+                    InteractTargetKind::GemRed => "decor/gem_red",
+                    InteractTargetKind::GemBlue => "decor/gem_blue",
+                    InteractTargetKind::OreGold => "decor/ore_gold",
+                    _ => "decor/ore_iron",
+                };
+                commands.spawn((
+                    SurfaceDecor { cx, cz },
+                    InteractTarget { kind, id },
+                    art.sprite_or_color(key, color, size),
+                    Transform::from_xyz(r.x, r.y, sort),
+                ));
             }
         }
-
-        if let Some(dep) = embedded_deposit_at(body, col) {
-            let (color, size) = deposit_style(dep.kind);
-            let key = match dep.kind {
-                InteractTargetKind::GemRed => "decor/gem_red",
-                InteractTargetKind::GemBlue => "decor/gem_blue",
-                InteractTargetKind::OreGold => "decor/ore_gold",
-                _ => "decor/ore_iron",
-            };
-            commands.spawn((
-                SurfaceDecor { k },
-                InteractTarget {
-                    kind: dep.kind,
-                    id: col,
-                },
-                art.sprite_or_color(key, color, size),
-                Transform::from_xyz(
-                    i as f32 * TILE_M + 0.5,
-                    dep.row as f32 * TILE_M + 0.5,
-                    -0.1,
-                ),
-            ));
-        }
-        let _ = tiles;
     }
-    flora.set_chunk_trees(wrapped_k, 0, trees);
+    flora.set_chunk_trees(cx as i32, cz as i32, trees);
 }
 
 fn rock_color(body: CelestialBody) -> Color {
@@ -683,16 +633,22 @@ fn rock_color(body: CelestialBody) -> Color {
 
 fn deposit_style(kind: InteractTargetKind) -> (Color, Vec2) {
     match kind {
-        InteractTargetKind::GemRed => (Color::srgb(0.85, 0.20, 0.25), Vec2::new(1.1, 1.1)),
-        InteractTargetKind::GemBlue => (Color::srgb(0.25, 0.45, 0.90), Vec2::new(1.1, 1.1)),
-        InteractTargetKind::OreGold => (Color::srgb(0.85, 0.70, 0.25), Vec2::new(1.3, 1.0)),
-        _ => (Color::srgb(0.62, 0.48, 0.40), Vec2::new(1.3, 1.0)),
+        InteractTargetKind::GemRed => (Color::srgb(0.85, 0.20, 0.25), Vec2::new(0.9, 0.9)),
+        InteractTargetKind::GemBlue => (Color::srgb(0.25, 0.45, 0.90), Vec2::new(0.9, 0.9)),
+        InteractTargetKind::OreGold => (Color::srgb(0.85, 0.70, 0.25), Vec2::new(1.0, 0.9)),
+        _ => (Color::srgb(0.62, 0.48, 0.40), Vec2::new(1.0, 0.9)),
     }
 }
 
 // ---------------------------------------------------------------------------
-// Persistence (B10: debounce + flush on pause)
+// Persistence (B10)
 // ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Default)]
+struct TilesSave {
+    /// (body, z, tx, tz, kind name)
+    edits: Vec<(u8, i32, i64, i64, String)>,
+}
 
 fn tiles_path() -> std::path::PathBuf {
     persist_dir().join("tiles.json")
@@ -705,12 +661,8 @@ fn load_tiles_on_startup(mut tiles: ResMut<TileWorld>) {
     let Ok(save) = serde_json::from_str::<TilesSave>(&raw) else {
         return;
     };
-    for (body, list) in save.edits {
-        for (col, row, name) in list {
-            tiles
-                .edits
-                .insert((body, col, row), tile_kind_from_name(&name));
-        }
+    for (body, z, tx, tz, name) in save.edits {
+        tiles.edits.insert((body, z, tx, tz), tile_from_name(&name));
     }
     tiles.version = tiles.version.wrapping_add(1);
 }
@@ -728,13 +680,13 @@ fn debounced_tiles_save(time: Res<Time>, mut tiles: ResMut<TileWorld>) {
     }
     tiles.debounce = 0.0;
     tiles.dirty = false;
-    let mut save = TilesSave::default();
-    for ((body, col, row), kind) in &tiles.edits {
-        save.edits
-            .entry(*body)
-            .or_default()
-            .push((*col, *row, tile_kind_name(*kind).to_string()));
-    }
+    let save = TilesSave {
+        edits: tiles
+            .edits
+            .iter()
+            .map(|((b, z, tx, tz), t)| (*b, *z, *tx, *tz, tile_name(*t).to_string()))
+            .collect(),
+    };
     if let Ok(json) = serde_json::to_string(&save) {
         let _ = std::fs::write(tiles_path(), json);
     }
