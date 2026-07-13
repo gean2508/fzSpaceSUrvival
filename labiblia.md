@@ -217,7 +217,9 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 
 ---
 
-## §13-bis ⭐ REWRITE 2D (12 jul 2026, rama `rewrite-2d`) — estado
+## §13-bis ⭐ REWRITE 2D (12 jul 2026) — estado
+
+> **DECISIÓN FINAL del usuario (12 jul):** el 2D es definitivo. `rewrite-2d` se mergeó a `main` (ff, commits fa8f197 + 22e4c09 purga total: shaders/GLB/Blender/skills toon). El 3D existe SOLO en el historial git (hasta a9317df). No se conserva ni se reintroduce.
 
 **Hecho en la rama (compila, tests verdes 90 Rust + 101 TS, boot desktop limpio):**
 - `ha-shared/flat2d.rs`: terreno determinista por cuerpo (wrap circunferencia), locomoción plataformera, remap exacto superficie↔órbita (7 tests).
@@ -226,10 +228,10 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - Borrado: ~25 módulos 3D (recuperables en `main`).
 
 **Pendiente al retomar:**
-1. Probar en el Redmi (`npm run play` desde la rama) — objetivo 60 fps; §6.
+1. Probar en el Redmi (APK 2D ya publicado desde `main`) — objetivo 60 fps; §6.
 2. Pulido jugable: agua (visual-only hoy), depósitos re-minables (sin agotamiento), árbol con hoja al talar, cueva lunar retirada (gems embebidas la reemplazan), cámara remota de telemetry (no-op), building pieces 3D retirados (tiles los cubren).
 3. Retune de contenido para la tira 2D (distancias de depósitos, alturas de vuelo, banda del fade §11).
-4. Merge a `main` cuando el Redmi valide; ahí `ship:android`.
+4. ~~Merge a `main`~~ HECHO (decisión del usuario, sin esperar al Redmi).
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 
