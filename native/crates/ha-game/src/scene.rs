@@ -101,7 +101,16 @@ impl Plugin for ScenePlugin {
     }
 }
 
-fn spawn_player(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
+/// LimeZu character sheet grid: 16×32 frames, 56 cols × 20 rows.
+/// Row 0 base directions: 0 = down (front), 1 = up (back), 2 = side.
+pub const CHAR_COLS: u32 = 56;
+pub const CHAR_ROWS: u32 = 20;
+
+fn spawn_player(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+) {
     let (sx, sz) = walkable_spawn(CelestialBody::Earth, EARTH_PAD_S + 4.0, 6.0);
     let mut body = ha_shared::MovementBody::new(5.2, ha_shared::topdown::PLAYER_RADIUS);
     body.x = sx;
@@ -127,29 +136,21 @@ fn spawn_player(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
     let r = render_xy(sx, sz);
     let tf = Transform::from_xyz(r.x, r.y, sort_z(sz) + 1.0);
 
-    // Drop-in LimeZu character (assets/art/player/astronaut.png) or a
-    // procedural top-down avatar (body + head).
-    if let Some(image) = art.get("player/astronaut") {
-        let mut sprite = Sprite::from_image(image);
-        sprite.custom_size = Some(Vec2::new(1.4, 2.0));
-        commands.spawn((Player, sim, visual, sprite, tf));
-        return;
-    }
-    commands
-        .spawn((
-            Player,
-            sim,
-            visual,
-            Sprite::from_color(Color::srgb(0.92, 0.55, 0.25), Vec2::new(0.8, 1.1)),
-            tf,
-        ))
-        .with_children(|p| {
-            // Head (top of the 3/4 body).
-            p.spawn((
-                Sprite::from_color(Color::srgb(0.98, 0.85, 0.7), Vec2::new(0.6, 0.6)),
-                Transform::from_xyz(0.0, 0.7, 0.05),
-            ));
-        });
+    // LimeZu directional character (assets/art/player/character.png). Frame is
+    // 16×32; drawn ~2.6 m tall so the feet sit near the ground point.
+    let layout = layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::new(16, 32),
+        CHAR_COLS,
+        CHAR_ROWS,
+        None,
+        None,
+    ));
+    let mut sprite = Sprite::from_atlas_image(
+        asset_server.load("art/player/character.png"),
+        TextureAtlas { layout, index: 0 },
+    );
+    sprite.custom_size = Some(Vec2::new(1.6, 3.2));
+    commands.spawn((Player, sim, visual, sprite, tf));
 }
 
 /// Deliberate MENU teleport (creative/dev): put the walker on a body surface.

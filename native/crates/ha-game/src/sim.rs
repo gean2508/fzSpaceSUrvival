@@ -32,7 +32,7 @@ impl Plugin for SimPlugin {
             .insert_resource(WorldCollision(collision_obstacles(&world)))
             .add_systems(Startup, configure_game_clock)
             .add_systems(FixedUpdate, tick_sim)
-            .add_systems(Update, interpolate_player_visual);
+            .add_systems(Update, (interpolate_player_visual, face_player_sprite));
     }
 }
 
@@ -146,6 +146,27 @@ fn interpolate_player_visual(
         let facing_left = visual.to_rot.abs() > std::f32::consts::FRAC_PI_2;
         transform.rotation = Quat::IDENTITY;
         transform.scale = Vec3::new(if facing_left { -1.0 } else { 1.0 }, 1.0, 1.0);
+    }
+}
+
+/// Orient the LimeZu character to the facing direction (row-0 base frames:
+/// 0 = down/front, 1 = up/back, 2 = side; flip X for west). `to_rot` holds the
+/// last movement heading, so the sprite keeps facing when idle.
+fn face_player_sprite(mut query: Query<(&PlayerVisual, &mut Sprite), With<Player>>) {
+    for (visual, mut sprite) in &mut query {
+        if sprite.texture_atlas.is_none() {
+            continue;
+        }
+        let (dx, dz) = (visual.to_rot.cos(), visual.to_rot.sin());
+        let (index, flip) = if dz.abs() >= dx.abs() {
+            if dz > 0.0 { (0, false) } else { (1, false) }
+        } else {
+            (2, dx < 0.0)
+        };
+        if let Some(atlas) = &mut sprite.texture_atlas {
+            atlas.index = index;
+        }
+        sprite.flip_x = flip;
     }
 }
 

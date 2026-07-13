@@ -1,3 +1,7 @@
 {
-  "sprites": {}
+  "sprites": {
+    "decor/rock": "art/decor/rock.png",
+    "decor/tree": "art/decor/tree.png",
+    "player/character": "art/player/character.png"
+  }
 }

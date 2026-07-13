@@ -137,6 +137,13 @@ fn run_app_inner() {
             }),
             ..default()
         });
+        // Desktop: assets live in the crate (crates/ha-game/assets), not the
+        // cwd — point Bevy at the absolute crate dir so drop-in art loads.
+        // Android bundles them in the APK, so its default path is correct.
+        plugins = plugins.set(bevy::asset::AssetPlugin {
+            file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/assets").to_string(),
+            ..default()
+        });
     }
 
     App::new()

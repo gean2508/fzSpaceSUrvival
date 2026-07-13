@@ -17,7 +17,7 @@
   Modern UI. Se cargan por la capa drop-in ya existente (`art2d.rs` +
   `assets/art/`, `npm run sync:art`). Ver `assets/art/README.md`.
 - **Rama:** `main` (el usuario decidió trabajar directo en main).
-- **ÚLTIMO CHECKPOINT:** `Fases 1-5 COMPLETAS (núcleo + render + z-levels + espacio + contenido a (x,z); walk/dig/place/descend/space PASS). Próximo: Fase 6 (assets LimeZu: personaje animado 4-dir + árboles/tiles) y Fase 7 (limpieza + build final .151).`
+- **ÚLTIMO CHECKPOINT:** `Fases 1-6 COMPLETAS (top-down completo + assets LimeZu: personaje direccional, árboles, rocas; fix del path de assets). Próximo: Fase 7 (limpieza de warnings + tests + graphify + build final .151).`
 
 ---
 
@@ -173,10 +173,21 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
    coords); re-porte del autodrive completo de 11 sistemas queda como pulido
    opcional (no bloquea).
 
-### FASE 6 — Assets LimeZu ⬜
-- ⬜ Importar tilesets Modern (Exteriors/Interiors/Farms) + UI a `assets/art/`.
-- ⬜ Autotiling de terreno; sprites de objetos y personaje.
-- ⬜ `sync:art` + claves; fallback procedural mientras falten.
+### FASE 6 — Assets LimeZu ✅ (base; tilesets = pulido futuro)
+- ✅ **Fix crítico del path de assets:** Bevy buscaba en `native/assets/` pero
+   el arte está en `crates/ha-game/assets/`. Se configura `AssetPlugin.file_path
+   = CARGO_MANIFEST_DIR/assets` (desktop). Antes NINGÚN drop-in cargaba →
+   todo caía a procedural. Ahora `ha-art: N drop-in sprites loaded`.
+- ✅ **Personaje LimeZu direccional:** `player/character.png` (premade LimeZu,
+   grid 16×32, 56×20). `spawn_player` usa `TextureAtlas`; `face_player_sprite`
+   elige frame por dirección (0=abajo, 1=arriba, 2=lado + flip X en oeste).
+- ✅ **Árboles y rocas LimeZu:** `decor/tree.png` (Modern Exteriors Tree_227
+   32×64), `decor/rock.png` (Sea Rock 32×32). Reemplazan los blobs procedurales.
+- ✅ `npm run sync:art` genera el manifest; verificado con captura (bosque +
+   personaje + rocas se ven reales).
+- **Pulido futuro:** animación de caminar (ciclo de frames, no solo estático),
+   tilesets de terreno con autotiling, muebles/interiores, UI LimeZu, densidad
+   de árboles.
 
 ### FASE 7 — Limpieza + verificación + ship ⬜
 - ⬜ Borrar flat2d/world2d y restos de strip.
