@@ -3,10 +3,7 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::camera::{CameraViewMode, GameCamera};
-use crate::earth_world::EarthDecor;
-use crate::materials::OutlineShell;
-use crate::scene::Terrain;
+use crate::camera::GameCamera;
 use crate::debug::CpuSpanStats;
 use crate::targeting::InteractTarget;
 use crate::ui_theme;
@@ -175,15 +172,13 @@ fn sample_perf_breakdown(
     mut timer: ResMut<PerfBreakdownTimer>,
     mut stats: ResMut<PerfStats>,
     meshes: Query<(
-        &Mesh3d,
+        &Mesh2d,
         Option<&Visibility>,
         Option<&Name>,
-        Option<&Terrain>,
-        Option<&EarthDecor>,
+        Option<&crate::world2d::TileChunk>,
         Option<&InteractTarget>,
-        Option<&OutlineShell>,
-        Option<&crate::moon_world::MoonDecor>,
     )>,
+    sprites: Query<&Sprite>,
     ui_nodes: Query<&Node>,
     all_entities: Query<Entity>,
 ) {
@@ -203,27 +198,19 @@ fn sample_perf_breakdown(
 
     let mut breakdown = PerfRenderBreakdown::default();
     let mut visible_count = 0u32;
-    for (_, vis, name, terrain, earth_decor, interactable, outline, moon_decor) in &meshes {
+    for (_, vis, _name, chunk, interactable) in &meshes {
         if vis.map(|v| *v != Visibility::Hidden).unwrap_or(true) {
             visible_count += 1;
-            if outline.is_some() {
-                breakdown.outline += 1;
+            if chunk.is_some() {
+                breakdown.island_ground += 1;
             } else if interactable.is_some() {
                 breakdown.interactables += 1;
-            } else if terrain.is_some() || earth_decor.is_some() {
-                breakdown.island_ground += 1;
-            } else if moon_decor.is_some() {
-                breakdown.chunk_decor += 1;
-            } else if name
-                .map(|n| n.as_str().contains("FloraBatch"))
-                .unwrap_or(false)
-            {
-                breakdown.chunk_decor += 1;
             } else {
                 breakdown.other_3d += 1;
             }
         }
     }
+    breakdown.chunk_decor = sprites.iter().count() as u32;
     breakdown.ui_nodes = ui_nodes.iter().count() as u32;
     stats.visible_meshes = visible_count;
     stats.draw_calls = visible_count;
@@ -234,7 +221,6 @@ fn sample_perf_breakdown(
 fn update_perf_overlay(
     visible: Res<PerfOverlayVisible>,
     stats: Res<PerfStats>,
-    view: Res<CameraViewMode>,
     clear: Res<ClearColor>,
     game_cam: Query<&GlobalTransform, With<GameCamera>>,
     mut text: Query<&mut Text, With<PerfOverlayText>>,
@@ -251,7 +237,7 @@ fn update_perf_overlay(
             .unwrap_or(Vec3::ZERO);
         t.0 = format!(
             "FPS {:.0}  {:.1}ms  jitter {:.1}ms  {}x{}\n\
-             cam={} pos=({:.1},{:.1},{:.1})\n\
+             cam pos=({:.1},{:.1})\n\
              clear=({:.2},{:.2},{:.2})\n\
              3D~ {}  ui {}  ents {}\n\
              ocean {} ground {} static {} chunk {} obs {} nodes {} out {} other {}",
@@ -260,10 +246,8 @@ fn update_perf_overlay(
             stats.frame_jitter_ms,
             stats.window_w,
             stats.window_h,
-            view.label(),
             cam_pos.x,
             cam_pos.y,
-            cam_pos.z,
             cc.red,
             cc.green,
             cc.blue,

@@ -1,61 +1,37 @@
-//! Starship — native ECS client (Bevy + ha-shared). SFS-style 3D solar system.
+//! Starship — native ECS client (Bevy + ha-shared). 2D SFS-style solar system
+//! + Terraria-style diggable surfaces (rewrite-2d).
 
 mod boot_ui;
 mod game_menu;
 mod game_time;
-mod sky_clock;
-mod assets;
+mod sky2d;
 mod camera;
-mod celestial_cleanup;
-mod floating_origin;
-mod view_target;
 mod world_persist;
 mod telemetry;
-mod jetpack_transit;
-mod flight_celestials;
-mod world_travel;
 mod solar_system_clock;
-mod ghibli_atmosphere;
 mod debug;
-mod flight_beacon;
 mod game_ui;
 mod hud;
 mod input;
 mod inventory_persist;
 mod launch_pad;
 mod machines;
-mod lunar_surface;
-mod materials;
-mod moon_world;
-mod earth_world;
-mod planet_surface_mesh;
-mod planet_world;
+mod orbital2d;
 mod platform;
 mod render;
 mod rocket_flight;
 mod scene;
-mod space_travel;
 mod nav_computer;
 mod colony;
 mod harvest;
 mod ship_builder;
 mod sim;
 mod survival_stats;
-mod solar_lighting;
 mod targeting;
 mod ui_editor;
-#[cfg(debug_assertions)]
-mod asset_dev;
 mod ui_theme;
 mod ui;
-mod deposit_spawn;
-mod flora_spawn;
-mod block_world;
-mod building_world;
-mod world_stream;
-mod surface_placement;
-mod surface_patch;
-mod quality;
+mod world2d;
 
 use bevy::prelude::*;
 use bevy::winit::WinitSettings;
@@ -65,35 +41,19 @@ use bevy::render::{
     RenderPlugin,
 };
 use ha_shared::Ps1Retro;
-use assets::AssetFactoryPlugin;
 use camera::FollowCameraPlugin;
-use celestial_cleanup::CelestialCleanupPlugin;
-use floating_origin::FloatingOriginPlugin;
-use view_target::ViewTargetPlugin;
 use world_persist::WorldPersistPlugin;
 use telemetry::TelemetryPlugin;
-use jetpack_transit::JetpackTransitPlugin;
-use ghibli_atmosphere::GhibliAtmospherePlugin;
 use debug::{apply_android_frame_cap, install_crash_hook, CrashReportPlugin, CpuSpanPlugin, PerfDebugPlugin};
-use flight_celestials::FlightCelestialsPlugin;
-use world_travel::WorldTravelPlugin;
 use solar_system_clock::SolarSystemClockPlugin;
-use earth_world::EarthWorldPlugin;
-use block_world::BlockWorldPlugin;
-use world_stream::WorldStreamPlugin;
-use building_world::BuildingPlugin;
-use surface_patch::SurfacePatchPlugin;
 use hud::PixelHudPlugin;
 use boot_ui::BootUiPlugin;
 use game_menu::GameMenuPlugin;
 use input::{InputPlugin, LookInteractPlugin};
-use materials::ToonMaterialPlugin;
 use launch_pad::LaunchPadPlugin;
 use machines::MachinesPlugin;
-use moon_world::MoonWorldPlugin;
-use planet_world::PlanetWorldPlugin;
+use orbital2d::Orbital2dPlugin;
 use rocket_flight::RocketFlightPlugin;
-use space_travel::SpaceTravelPlugin;
 use nav_computer::NavComputerPlugin;
 use colony::ColonyPlugin;
 use harvest::HarvestPlugin;
@@ -101,15 +61,14 @@ use ship_builder::ShipBuilderPlugin;
 use survival_stats::SurvivalStatsPlugin;
 use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
-use render::render_scale::RenderScalePlugin;
 use render::particles::ParticlesPlugin;
 use scene::ScenePlugin;
-use sky_clock::SkyClockPlugin;
+use sky2d::Sky2dPlugin;
 use sim::SimPlugin;
-use solar_lighting::SolarLightingPlugin;
 use targeting::TargetingPlugin;
 use ui::IconFactoryPlugin;
 use ui_editor::UiEditorPlugin;
+use world2d::World2dPlugin;
 
 #[bevy_main]
 pub fn main() {
@@ -178,8 +137,7 @@ fn run_app_inner() {
         });
     }
 
-    let mut binding = App::new();
-    let mut app = binding
+    App::new()
         .add_plugins(plugins)
         .insert_resource(ClearColor(Color::srgb(
             Ps1Retro::SKY_ZENITH[0],
@@ -198,47 +156,28 @@ fn run_app_inner() {
         })
         .add_plugins((
             PlatformPlugin,
-            FloatingOriginPlugin,
-            ViewTargetPlugin,
             WorldPersistPlugin,
             SolarSystemClockPlugin,
-            SkyClockPlugin,
-            SolarLightingPlugin,
-            AssetFactoryPlugin,
             IconFactoryPlugin,
-            ToonMaterialPlugin,
             SimPlugin,
-            EarthWorldPlugin,
-            WorldStreamPlugin,
-            SurfacePatchPlugin,
             ScenePlugin,
+            World2dPlugin,
+            Orbital2dPlugin,
+            Sky2dPlugin,
         ))
         .add_plugins((
-            RenderScalePlugin,
             InventoryPersistPlugin,
-            BuildingPlugin,
-            BlockWorldPlugin,
             MachinesPlugin,
             LaunchPadPlugin,
-            WorldTravelPlugin,
             InputPlugin,
             TargetingPlugin,
             LookInteractPlugin,
-        ))
-        .add_plugins((
-            GhibliAtmospherePlugin,
             RocketFlightPlugin,
-            FlightCelestialsPlugin,
-            MoonWorldPlugin,
-            PlanetWorldPlugin,
-            CelestialCleanupPlugin,
-            SpaceTravelPlugin,
             NavComputerPlugin,
             HarvestPlugin,
             SurvivalStatsPlugin,
             ShipBuilderPlugin,
             ColonyPlugin,
-            JetpackTransitPlugin,
         ))
         .add_plugins((
             FollowCameraPlugin,
@@ -251,10 +190,9 @@ fn run_app_inner() {
             CpuSpanPlugin,
             CrashReportPlugin,
             UiEditorPlugin,
-        ));
-    #[cfg(debug_assertions)]
-    app.add_plugins(asset_dev::AssetDevPlugin);
-    app.add_systems(Startup, apply_android_frame_cap).run();
+        ))
+        .add_systems(Startup, apply_android_frame_cap)
+        .run();
 }
 
 #[cfg(not(target_os = "android"))]

@@ -1,31 +1,27 @@
-//! Continuous rocket flight — solar sandbox, parachute, RC retro motors.
+//! 2D SFS-style rocket flight — continuous thrust/coast/retro on the shared
+//! orbital plane. Physics run in world-plane coords (the same plane the
+//! ephemerides live on); render maps to the surface strip below escape
+//! altitude and to the orbital view above it. Transitions are pure frame
+//! changes (guard B8): no cutscenes, no input blocking, no velocity kicks.
 
 use bevy::prelude::*;
+
+use ha_shared::flat2d::{
+    flat_surface_to_orbital, flat_velocity_to_orbital, orbital_to_flat_surface, wrap_delta_m,
+};
+use ha_shared::flight_physics::{PARACHUTE_DRAG, ROCKET_ROT_SPEED};
 use ha_shared::{
-    altitude_above_body, altitude_above_body_at, altitude_above_luna_gameplay,
-    altitude_above_planet_gameplay, atmosphere_drag, body_atmo_top, body_landable, body_radius,
-    body_walk_radius, dominant_body, dominant_body_at, earth_center_at, effective_safe_landing_v,
-    gravity_accel_at_time, gravity_accel_luna_gameplay, gravity_accel_planet_gameplay, in_vacuum,
-    parachute_drag, planet_dir_from_tangent, planet_displacement_at_dir, planet_gameplay_center,
-    planet_gameplay_world_pos, planet_ground_y_at, planet_tangent_from_dir,
-    remap_luna_gameplay_to_orbital, remap_planet_gameplay_to_orbital_at, should_auto_deploy_parachute,
-    sun_proximity_damage, surface_normal, surface_normal_at, surface_world_pos_at, CelestialBody,
-    FlightPhase, EARTH_ATMO_TOP_M, LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z, ROCKET_FUEL_BURN_PER_S,
-    ROCKET_CRUISE_MAX_V, ROCKET_FUEL_MAX, ROCKET_MAX_V, ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2,
-    ROCKET_ROT_SPEED, ROCKET_THRUST_M_S2, WorldContext,
+    body_atmo_top, body_landable, dominant_body_at, gravity_accel_at_time, CelestialBody,
+    FlightPhase, PARACHUTE_DEPLOY_ALT_M, ROCKET_CRUISE_MAX_V, ROCKET_FUEL_BURN_PER_S,
+    ROCKET_FUEL_MAX, ROCKET_MAX_V, ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2,
+    ROCKET_THRUST_M_S2, SAFE_LANDING_V,
 };
 
-use crate::solar_system_clock::SolarSystemClock;
-
-use crate::game_time::fixed_delta_secs;
-
-use crate::celestial_cleanup::CelestialCleanup;
 use crate::input::{MovementIntent, TouchActions};
-use crate::moon_world::MoonWorldState;
-use crate::planet_world::{request_planet_spawn, PlanetWorldState};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
-use crate::sim::{Player, PlayerVisual, SimState, WorldCollision, WorldLayout, earth_surface_y};
-use crate::surface_placement::tangent_at_world;
+use crate::sim::{Player, PlayerVisual, SimState};
+use crate::solar_system_clock::SolarSystemClock;
+use crate::world2d::ActivePlanet;
 
 pub struct RocketFlightPlugin;
 
@@ -36,9 +32,25 @@ impl Plugin for RocketFlightPlugin {
             .add_systems(FixedUpdate, tick_rocket_flight)
             .add_systems(
                 Update,
-                (sync_flight_world_state, try_surface_launch, steer_flight_from_look),
+                (try_surface_launch, sync_flight_world_state, sync_rocket_visual),
             );
     }
+}
+
+/// Altitude above a body where the surface strip hands over to the orbital
+/// view (pure render/frame change — physics never notices).
+pub fn escape_alt(body: CelestialBody) -> f32 {
+    (body_atmo_top(body).max(90.0)) * 1.8
+}
+
+/// Orbital insertion point above the Earth pad (nav-computer probes).
+pub fn orbital_start_above_pad() -> Vec3 {
+    Vec3::from_array(flat_surface_to_orbital(
+        CelestialBody::Earth,
+        0.0,
+        escape_alt(CelestialBody::Earth) + 120.0,
+        0.0,
+    ))
 }
 
 /// Mass/fuel stats derived from the assembled pad modules — a LAYER over the
@@ -73,32 +85,30 @@ impl Default for ShipLoadout {
 pub struct RocketFlight {
     pub active: bool,
     pub phase: FlightPhase,
+    /// World-plane position (x, FLIGHT_PLANE_Y, z) — coplanar with ephemerides.
     pub pos: Vec3,
     pub vel: Vec3,
     pub pitch: f32,
+    /// 2D heading of the nose in the orbital plane (radians, XZ).
     pub yaw: f32,
     pub fuel: f32,
     pub body: CelestialBody,
-    /// Flying on a walkable displaced shell (Luna, Mars, …).
+    /// Flying low over a walkable body's strip (render stays in surface frame).
     pub surface_flight: Option<CelestialBody>,
     pub parachute_open: bool,
     /// Nav-computer cruise: re-aims the velocity at the led intercept each
     /// second; any stick input disengages back to manual.
     pub autopilot: bool,
-    /// Tank capacity from the loadout (0.0 default → treated as one tank).
     pub fuel_max: f32,
-    /// Mass-derived burn multiplier from the loadout (0.0 default → 1.0).
-    /// Mirrored here (not read as a Res) — `tick_rocket_flight` is at Bevy's
-    /// 16-system-param limit.
     pub burn_factor: f32,
-    /// Engine-count thrust multiplier from the loadout (0.0 default → 1.0).
     pub thrust_factor: f32,
-    /// Nose-cone drag multiplier from the loadout (0.0 default → 1.0).
     pub drag_factor: f32,
-    /// Fin alignment rate in atmosphere (0.0 = no fins, ballistic).
     pub fin_align_rate: f32,
-    /// Lander-legs bonus to safe touchdown speed (m/s).
     pub safe_v_bonus: f32,
+    /// Solar-clock snapshot from the last tick (for frame remaps off-tick).
+    pub clock_secs: f32,
+    /// Reference arc position for unwrap-consistent surface render.
+    pub surface_ref_s: f32,
 }
 
 impl RocketFlight {
@@ -108,19 +118,18 @@ impl RocketFlight {
         self.pos = pos;
         self.vel = Vec3::ZERO;
         self.pitch = 0.0;
-        self.yaw = 0.0;
-        // Fuel is a REAL resource now: ignition no longer refuels — only the
-        // Earth pad does (see `try_ignite_on_hold`). Relaunching from Luna or
-        // a planet spends whatever is left in the tank.
         self.fuel = self.fuel.clamp(0.0, self.capacity());
         self.parachute_open = false;
         self.autopilot = false;
         self.body = self
             .surface_flight
-            .unwrap_or_else(|| dominant_body(pos.to_array()));
+            .unwrap_or_else(|| dominant_body_at(pos.to_array(), self.clock_secs));
+        // Nose starts pointing radially out of the current body.
+        let (s, _) = orbital_to_flat_surface(self.body, pos.to_array(), self.clock_secs);
+        self.yaw = ha_shared::flat2d::arc_to_angle(self.body, s);
         eprintln!(
-            "ha-flight: rocket ignition {:?} at ({:.0},{:.0},{:.0}) surface={:?}",
-            self.body, pos.x, pos.y, pos.z, self.surface_flight
+            "ha-flight: rocket ignition {:?} at ({:.0},{:.0})",
+            self.body, pos.x, pos.z
         );
     }
 
@@ -138,15 +147,12 @@ impl RocketFlight {
         self.pos = pos;
         self.vel = vel;
         self.pitch = 0.0;
-        self.yaw = 0.0;
-        // No free refuel on transit burns — the caller charges the burn cost.
         self.fuel = self.fuel.clamp(0.0, self.capacity());
         self.parachute_open = false;
         self.autopilot = false;
         self.body = target;
     }
 
-    /// Tank capacity — `fuel_max` when a loadout synced it, legacy max before.
     pub fn capacity(&self) -> f32 {
         if self.fuel_max > 0.0 {
             self.fuel_max
@@ -197,7 +203,8 @@ impl RocketFlight {
     }
 
     pub fn altitude(&self) -> f32 {
-        altitude_above_body(self.pos.to_array(), self.body)
+        let (_, h) = orbital_to_flat_surface(self.body, self.pos.to_array(), self.clock_secs);
+        h
     }
 
     pub fn altitude_m(&self) -> f32 {
@@ -209,461 +216,323 @@ impl RocketFlight {
     }
 
     pub fn in_vacuum(&self) -> bool {
-        in_vacuum(self.pos.to_array())
+        self.altitude() > body_atmo_top(self.body)
     }
 
-    pub fn render_pos(&self, origin: &crate::floating_origin::FloatingOrigin) -> Vec3 {
-        origin.to_render(self.pos)
+    /// True while render happens on the surface strip (below escape altitude).
+    pub fn surface_frame_render(&self) -> bool {
+        self.altitude() < escape_alt(self.body)
     }
-}
 
-/// Point the ship where the pilot looks (mouse / drag) — the chase camera
-/// follows, so flying feels like aiming on foot. Autopilot keeps its heading.
-fn steer_flight_from_look(
-    look: Res<crate::input::CameraLookIntent>,
-    mut flight: ResMut<RocketFlight>,
-) {
-    if !flight.active || flight.phase == FlightPhase::Surface || flight.autopilot {
-        return;
-    }
-    flight.yaw = look.yaw;
-    flight.pitch = look.pitch.clamp(-1.45, 1.45);
-}
-
-fn try_surface_launch(
-    actions: Res<TouchActions>,
-    region: Res<RegionRuntime>,
-    world_ctx: Res<WorldContextRuntime>,
-    target: Res<crate::targeting::LookTarget>,
-    hold: Res<crate::input::HoldInteractState>,
-    mut flight: ResMut<RocketFlight>,
-    player: Query<&SimState, With<Player>>,
-) {
-    if flight.active {
-        return;
-    }
-    if !actions.action {
-        return;
-    }
-    // USE while aiming at an interactable (deposit, beacon, machine) or mid-hold
-    // must interact, not ignite — otherwise mining on Luna/planets is impossible.
-    if target.kind.is_some() || hold.active {
-        return;
-    }
-    let Ok(sim) = player.get_single() else {
-        return;
-    };
-    match (region.active, world_ctx.active) {
-        (RegionId::Luna, WorldContext::Luna) => {
-            let pos = Vec3::from_array(planet_gameplay_world_pos(
-                CelestialBody::Moon,
-                sim.body.x,
-                sim.body.z,
-                2.0,
-            ));
-            let dir = planet_dir_from_tangent(CelestialBody::Moon, sim.body.x, sim.body.z);
-            flight.begin_surface_gameplay(
-                CelestialBody::Moon,
-                pos,
-                Vec3::from_array(dir) * 42.0,
-            );
+    /// 2D render position: surface strip (s,h) below escape altitude,
+    /// orbital plane (x,-z) above it.
+    pub fn render_pos_2d(&self) -> Vec2 {
+        let (s, h) = orbital_to_flat_surface(self.body, self.pos.to_array(), self.clock_secs);
+        if self.surface_frame_render() {
+            let c = ha_shared::flat2d::body_circumference_m(self.body);
+            let s_render =
+                self.surface_ref_s + wrap_delta_m(self.surface_ref_s.rem_euclid(c), s, c);
+            Vec2::new(s_render, h)
+        } else {
+            Vec2::new(self.pos.x, -self.pos.z)
         }
-        (RegionId::Planet(body), WorldContext::Planet) if body_landable(body) => {
-            let pos = Vec3::from_array(planet_gameplay_world_pos(body, sim.body.x, sim.body.z, 2.0));
-            let dir = planet_dir_from_tangent(body, sim.body.x, sim.body.z);
-            flight.begin_surface_gameplay(body, pos, Vec3::from_array(dir) * 38.0);
+    }
+
+    /// Nose angle for the 2D sprite in the current render frame.
+    pub fn render_rot_2d(&self) -> f32 {
+        if self.surface_frame_render() {
+            // Angle relative to local "up" (radial direction).
+            let (s, _) = orbital_to_flat_surface(self.body, self.pos.to_array(), self.clock_secs);
+            let radial = ha_shared::flat2d::arc_to_angle(self.body, s);
+            angle_delta(self.yaw, radial)
+        } else {
+            // Orbital frame: world (x,-z); heading yaw maps to atan2(-z, x).
+            -self.yaw + std::f32::consts::FRAC_PI_2
         }
-        _ => {}
     }
 }
 
+fn angle_delta(a: f32, b: f32) -> f32 {
+    let mut d = a - b;
+    while d > std::f32::consts::PI {
+        d -= std::f32::consts::TAU;
+    }
+    while d < -std::f32::consts::PI {
+        d += std::f32::consts::TAU;
+    }
+    d
+}
+
+/// One fixed-step of 2D flight physics.
+#[allow(clippy::too_many_arguments)]
 pub fn tick_rocket_flight(
     time: Res<Time<Fixed>>,
     clock: Res<SolarSystemClock>,
     intent: Res<MovementIntent>,
     actions: Res<TouchActions>,
+    loadout: Res<ShipLoadout>,
     mut flight: ResMut<RocketFlight>,
-    mut region: ResMut<RegionRuntime>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
-    mut launch_atmo: ResMut<crate::scene::LaunchAtmosphere>,
-    mut moon: ResMut<MoonWorldState>,
-    mut planet: ResMut<PlanetWorldState>,
-    mut cleanup: ResMut<CelestialCleanup>,
-    layout: Res<WorldLayout>,
-    collision: Res<WorldCollision>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
-    mut ap_retarget: Local<f32>,
 ) {
+    let dt = crate::game_time::fixed_delta_secs(&time);
+    let t = clock.t;
+    flight.clock_secs = t;
+
+    // Loadout mirror (ship builder tanks/engines/fins/nose).
+    flight.fuel_max = loadout.fuel_max;
+    flight.burn_factor = loadout.burn_factor;
+    flight.thrust_factor = loadout.thrust_factor;
+    flight.drag_factor = loadout.drag_factor;
+    flight.fin_align_rate = loadout.fin_align_rate;
+    flight.safe_v_bonus = loadout.safe_landing_bonus;
+
     if !flight.active || flight.phase == FlightPhase::Surface {
         return;
     }
 
-    let dt = fixed_delta_secs(&time);
-    let t = clock.t;
-
-    let pos = flight.pos.to_array();
-    if flight.surface_flight.is_none() {
-        flight.body = dominant_body_at(pos, t);
+    // Keep the render-window reference near the walker (pad) position.
+    if let Ok((sim, _)) = player.get_single() {
+        flight.surface_ref_s = sim.body.x;
     }
 
-    // Stick input hands control back to the pilot — no explicit cancel button.
-    if flight.autopilot && (intent.move_x.abs() > 0.25 || intent.move_z.abs() > 0.25) {
+    // Steering: move_x rotates the nose; manual input disengages autopilot.
+    if intent.move_x.abs() > 0.15 {
         flight.autopilot = false;
-        eprintln!("ha-flight: autopilot disengaged — manual input");
+    }
+    if !flight.autopilot {
+        flight.yaw += intent.move_x * ROCKET_ROT_SPEED * dt;
     }
 
-    // Aim-based steering: `steer_flight_from_look` (Update) already set yaw/pitch
-    // from the look direction (mouse on PC / drag on mobile), so the ship points
-    // where you look and the chase camera follows — same feel as on foot.
-    // Thrust along the rocket's nose (+Y of the same rotation the visual and the
-    // camera use — see `flight_world_transform`): pitch 0 = straight up.
-    let thrust_dir = {
-        let rot = Quat::from_rotation_y(flight.yaw) * Quat::from_rotation_x(flight.pitch);
-        (rot * Vec3::Y).normalize_or_zero()
-    };
-
-    let mut accel = match flight.surface_flight {
-        Some(body) => Vec3::from_array(gravity_accel_planet_gameplay(body, pos)),
-        None => Vec3::from_array(gravity_accel_at_time(pos, t)),
-    };
-    // Nose cone cuts atmospheric drag (ship builder Fase 2).
-    accel += Vec3::from_array(atmosphere_drag(pos, flight.vel.to_array()))
-        * flight.drag_rate_factor();
-
-    // Aero fins: in atmosphere the velocity leans toward where the nose
-    // points — with fins your rocket flies where you aim it; without them
-    // it drifts ballistic (SFS feel, no aerodynamics sim).
-    let in_atmo = !in_vacuum(pos);
-    if in_atmo && flight.fin_align_rate > 0.0 {
-        let speed = flight.vel.length();
-        if speed > 4.0 {
-            let k = (flight.fin_align_rate * dt).clamp(0.0, 0.35);
-            let aligned = flight.vel.lerp(thrust_dir * speed, k);
-            // Preserve speed — fins redirect, they don't brake or boost.
-            flight.vel = aligned.normalize_or_zero() * speed;
-        }
-    }
-
-    if let Some(body) = flight.surface_flight {
-        let alt_gp = altitude_above_planet_gameplay(body, pos);
-        let escape_alt = body_walk_radius(body) * 0.2;
-        if alt_gp > escape_alt || in_vacuum(pos) {
-            flight.pos = Vec3::from_array(remap_planet_gameplay_to_orbital_at(body, pos, t));
-            flight.surface_flight = None;
-            flight.body = body;
-            eprintln!("ha-flight: {:?} gameplay → orbital", body);
-        }
-    }
-
-    let retro_hold = intent.sprint || actions.jump;
-    let alt = if let Some(body) = flight.surface_flight {
-        altitude_above_planet_gameplay(body, pos)
+    // Thrust (hold JUMP), retro (hold sprint).
+    let thrusting = actions.jump && flight.fuel > 0.0;
+    let retro = intent.sprint && flight.fuel > 0.0 && flight.vel.length() > 1.0;
+    flight.phase = if thrusting {
+        FlightPhase::Powered
+    } else if retro {
+        FlightPhase::Retro
     } else {
-        altitude_above_body_at(pos, flight.body, t)
+        FlightPhase::Coast
     };
-    if !flight.parachute_open
-        && should_auto_deploy_parachute(flight.body, alt, flight.speed())
-    {
-        flight.parachute_open = true;
-        eprintln!("ha-flight: parachute deployed");
-    }
-    if flight.parachute_open {
-        accel += Vec3::from_array(parachute_drag(flight.vel.to_array(), 1.0));
+
+    let mut accel = Vec3::from_array(gravity_accel_at_time(flight.pos.to_array(), t));
+    if thrusting {
+        let dir = Vec3::new(flight.yaw.cos(), 0.0, flight.yaw.sin());
+        accel += dir * ROCKET_THRUST_M_S2 * flight.thrust_rate_factor();
+        flight.fuel =
+            (flight.fuel - ROCKET_FUEL_BURN_PER_S * flight.burn_rate_factor() * dt).max(0.0);
+    } else if retro {
+        let dir = -flight.vel.normalize_or_zero();
+        accel += dir * ROCKET_RETRO_THRUST_M_S2;
+        flight.fuel = (flight.fuel - ROCKET_RETRO_FUEL_BURN_PER_S * dt).max(0.0);
     }
 
-    if sun_proximity_damage(pos) {
-        flight.vel += Vec3::from_array(surface_normal_at(pos, CelestialBody::Sun, t)) * 120.0 * dt;
-        flight.fuel = (flight.fuel - 25.0 * dt).max(0.0);
-    }
-
-    // Mass taxes the burn rate, never the acceleration (arcade §23). The
-    // autopilot burns slightly leaner as its incentive.
-    let burn_scale = flight.burn_rate_factor()
-        * if flight.autopilot {
-            ha_shared::AUTOPILOT_BURN_EFFICIENCY
-        } else {
-            1.0
+    // Atmospheric drag + parachute (Earth-like bodies only).
+    let alt = flight.altitude();
+    let atmo_top = body_atmo_top(flight.body);
+    if atmo_top > 0.0 && alt < atmo_top {
+        let density = (1.0 - alt / atmo_top).clamp(0.0, 1.0);
+        let mut drag = 0.055 * density * flight.drag_rate_factor();
+        let descending = {
+            let c = ha_shared::solar_ephemeris::body_center_at(flight.body, t);
+            let radial = (flight.pos - Vec3::from_array(c)).normalize_or_zero();
+            flight.vel.dot(radial) < 0.0
         };
-    if retro_hold && flight.fuel > 0.0 && flight.vel.length() > 0.5 {
-        let retro = -flight.vel.normalize_or_zero();
-        accel += retro * ROCKET_RETRO_THRUST_M_S2;
-        flight.fuel = (flight.fuel - ROCKET_RETRO_FUEL_BURN_PER_S * burn_scale * dt).max(0.0);
-        flight.phase = FlightPhase::Retro;
-    } else if (actions.action || intent.move_z > 0.3) && flight.fuel > 0.0 {
-        // Thrust forward along the nose: ACTION button (mobile) or W / forward
-        // stick (desktop) — you point with the look and push here. Extra
-        // engines from the ship builder multiply thrust (arcade, never mass).
-        accel += thrust_dir * ROCKET_THRUST_M_S2 * flight.thrust_rate_factor();
-        flight.fuel = (flight.fuel - ROCKET_FUEL_BURN_PER_S * burn_scale * dt).max(0.0);
-        flight.phase = FlightPhase::Powered;
-    } else {
-        flight.phase = FlightPhase::Coast;
-    }
-
-    // Autopilot mid-course correction: with ~30 min orbital periods a 180 s
-    // cruise sees the target move tens of degrees — re-aim the velocity at
-    // the led intercept (same `body_intercept_point` rule as the burn) ~1 Hz.
-    if flight.autopilot && flight.surface_flight.is_none() {
-        *ap_retarget += dt;
-        if *ap_retarget >= 1.0 {
-            *ap_retarget = 0.0;
-            let cruise = flight.vel.length();
-            if cruise > 1.0 {
-                let aim = Vec3::from_array(ha_shared::body_intercept_point(
-                    flight.body,
-                    t,
-                    flight.pos.to_array(),
-                    cruise,
-                ));
-                let dir = (aim - flight.pos).normalize_or_zero();
-                if dir.length_squared() > 1e-6 {
-                    flight.vel = dir * cruise;
-                }
-            }
+        if descending && alt < PARACHUTE_DEPLOY_ALT_M && flight.speed() > 9.0 {
+            flight.parachute_open = true;
         }
+        if flight.parachute_open {
+            drag += PARACHUTE_DRAG * density;
+        }
+        accel -= flight.vel * drag;
+    } else {
+        flight.parachute_open = false;
     }
 
     flight.vel += accel * dt;
-    let speed = flight.vel.length();
-    // Fast cruise only in open vacuum; near a body's shell keep the tighter
-    // cap so descents are pilotable.
-    let max_v = if flight.surface_flight.is_none() && flight.in_vacuum() {
+    let max_v = if alt > escape_alt(flight.body) * 2.0 {
         ROCKET_CRUISE_MAX_V
     } else {
         ROCKET_MAX_V
     };
-    if speed > max_v {
-        flight.vel = flight.vel * (max_v / speed);
+    if flight.vel.length() > max_v {
+        flight.vel = flight.vel.normalize_or_zero() * max_v;
     }
+    flight.vel.y = 0.0;
     let step = flight.vel * dt;
     flight.pos += step;
+    flight.pos.y = ha_shared::celestial_bodies::FLIGHT_PLANE_Y;
 
-    let earth_alt = altitude_above_body_at(flight.pos.to_array(), CelestialBody::Earth, t);
-    launch_atmo.active = earth_alt < EARTH_ATMO_TOP_M * 1.5 && earth_alt > -10.0;
-    launch_atmo.blend = (1.0 - earth_alt / (EARTH_ATMO_TOP_M * 1.5)).clamp(0.0, 1.0);
-
-    // Space is continuous FLIGHT, not a walk-around hub — do NOT auto-spawn
-    // the orbital station scenery on reaching vacuum. Stars + body impostors
-    // come from `flight_celestials` while flying.
-    if flight.in_vacuum() {
-        cleanup.despawn_moon = false;
+    // Dominant-body handover (SOI).
+    let dom = dominant_body_at(flight.pos.to_array(), t);
+    if dom != flight.body {
+        flight.body = dom;
+        flight.surface_flight = None;
     }
-    if !flight.surface_flight.is_some() {
-        let approach_alt = altitude_above_body_at(flight.pos.to_array(), flight.body, t);
-        if approach_alt < 800.0 && body_landable(flight.body) {
-            match flight.body {
-                CelestialBody::Moon if !moon.spawned => {
-                    moon.needs_spawn = true;
-                    moon.spawn_after_frames = 0;
-                }
-                b if b != CelestialBody::Earth && b != CelestialBody::Moon && !planet.spawned => {
-                    request_planet_spawn(&mut planet, b);
-                }
-                _ => {}
+
+    // Touchdown on a landable body.
+    let (s, h) = orbital_to_flat_surface(flight.body, flight.pos.to_array(), t);
+    let ground_h = ha_shared::flat2d::ground_height_m(flight.body, s);
+    if body_landable(flight.body) && h <= ground_h + 0.4 {
+        let (_, vh) = ha_shared::flat2d::orbital_velocity_to_flat(
+            flight.body,
+            s,
+            flight.vel.to_array(),
+        );
+        let safe_v = SAFE_LANDING_V + flight.safe_v_bonus + if flight.parachute_open { 8.0 } else { 0.0 };
+        let hard = -vh > safe_v;
+        if let Ok((mut sim, mut visual)) = player.get_single_mut() {
+            let c = ha_shared::flat2d::body_circumference_m(flight.body);
+            let s_render = flight.surface_ref_s
+                + wrap_delta_m(flight.surface_ref_s.rem_euclid(c), s, c);
+            sim.body.x = s_render;
+            sim.body.y = ground_h;
+            sim.body.vx = 0.0;
+            sim.body.vy = 0.0;
+            visual.from_x = s_render;
+            visual.to_x = s_render;
+            visual.from_y = ground_h;
+            visual.to_y = ground_h;
+            if hard {
+                sim.hp = (sim.hp - 25.0).max(1.0);
             }
         }
+        eprintln!(
+            "ha-flight: touchdown on {:?} at s={:.0} h={:.0} (hard={})",
+            flight.body, s, ground_h, hard
+        );
+        flight.end_surface();
     }
-
-    try_land(
-        &mut flight,
-        t,
-        &mut region,
-        &mut world_ctx,
-        &mut moon,
-        &mut planet,
-        &layout,
-        &collision,
-        &mut player,
-    );
 }
 
-fn try_land(
-    flight: &mut RocketFlight,
-    t: f32,
-    region: &mut RegionRuntime,
-    world_ctx: &mut WorldContextRuntime,
-    moon: &mut MoonWorldState,
-    planet: &mut PlanetWorldState,
-    layout: &WorldLayout,
-    collision: &WorldCollision,
-    player: &mut Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
+/// Relaunch from the Moon / a planet: USE with nothing targeted ignites the
+/// lander (spends remaining fuel — only the Earth pad refuels).
+fn try_surface_launch(
+    actions: Res<TouchActions>,
+    region: Res<RegionRuntime>,
+    clock: Res<SolarSystemClock>,
+    target: Res<crate::targeting::LookTarget>,
+    hold: Res<crate::input::HoldInteractState>,
+    mut flight: ResMut<RocketFlight>,
+    player: Query<&SimState, With<Player>>,
 ) {
-    let body = flight.body;
-    if !body_landable(body) {
+    if flight.active || !actions.action {
         return;
     }
-    let alt = if let Some(gp) = flight.surface_flight {
-        altitude_above_planet_gameplay(gp, flight.pos.to_array())
-    } else {
-        altitude_above_body_at(flight.pos.to_array(), body, t)
+    // USE while aiming at an interactable or mid-hold must interact, not ignite.
+    if target.kind.is_some() || target.block_cell.is_some() || hold.active {
+        return;
+    }
+    let body = match region.active {
+        RegionId::Luna => CelestialBody::Moon,
+        RegionId::Planet(b) if body_landable(b) => b,
+        _ => return,
     };
-    let v_down = flight.vel.length();
-    if alt > 3.0 {
+    let Ok(sim) = player.get_single() else {
         return;
-    }
-    // Lander legs raise the safe touchdown speed (ship builder Fase 2).
-    let safe_v = effective_safe_landing_v(flight.parachute_open) + flight.safe_v_bonus.max(0.0);
-    if v_down > safe_v {
-        let n = if let Some(gp) = flight.surface_flight {
-            let c = Vec3::from_array(planet_gameplay_center(gp));
-            (flight.pos - c).normalize_or_zero()
-        } else {
-            Vec3::from_array(surface_normal_at(flight.pos.to_array(), body, t))
-        };
-        flight.vel *= -0.25;
-        flight.pos += n * 2.0;
-        flight.parachute_open = false;
-        eprintln!("ha-flight: hard impact v={v_down:.1}");
-        return;
-    }
-
-    if let Some(gp_body) = flight.surface_flight {
-        land_on_gameplay_shell(flight, region, world_ctx, moon, planet, gp_body, player, v_down);
-        return;
-    }
-
-    let terrain_h = terrain_height_for_landing(flight.pos, body, t, layout, collision);
-    let surf = surface_world_pos_at(flight.pos.to_array(), body, terrain_h, t);
-    flight.pos = Vec3::from_array(surf) + Vec3::from_array(surface_normal_at(surf, body, t)) * 1.2;
-    flight.vel = Vec3::ZERO;
-    flight.parachute_open = false;
-    flight.end_surface();
-
-    if let Ok((mut sim, mut visual)) = player.get_single_mut() {
-        match body {
-            CelestialBody::Earth => {
-                region.active = RegionId::Overworld { gx: 0, gz: 0 };
-                world_ctx.active = WorldContext::Overworld;
-                let (tx, tz) = tangent_at_world(CelestialBody::Earth, flight.pos);
-                sim.body.x = tx;
-                sim.body.z = tz;
-                sim.body.y = earth_surface_y(tx, tz);
-                sim.body.vy = 0.0;
-            }
-            CelestialBody::Moon => {
-                region.active = RegionId::Luna;
-                world_ctx.active = WorldContext::Luna;
-                moon.needs_spawn = true;
-                moon.spawn_after_frames = 0;
-                let dir = surface_normal_at(flight.pos.to_array(), body, t);
-                let (tx, tz) = planet_tangent_from_dir(CelestialBody::Moon, dir);
-                sim.body.x = tx;
-                sim.body.z = tz;
-                sim.body.y = planet_ground_y_at(CelestialBody::Moon, tx, tz);
-                sim.body.vy = 0.0;
-                sim.body.vx = 0.0;
-                sim.body.vz = 0.0;
-            }
-            other => {
-                region.active = RegionId::Planet(other);
-                world_ctx.active = WorldContext::Planet;
-                request_planet_spawn(planet, other);
-                let dir = surface_normal_at(flight.pos.to_array(), body, t);
-                let (tx, tz) = planet_tangent_from_dir(other, dir);
-                sim.body.x = tx;
-                sim.body.z = tz;
-                sim.body.y = planet_ground_y_at(other, tx, tz);
-                sim.body.vy = 0.0;
-                sim.body.vx = 0.0;
-                sim.body.vz = 0.0;
-            }
-        }
-        visual.to_x = sim.body.x;
-        visual.to_z = sim.body.z;
-        visual.to_y = sim.body.y;
-    }
-    eprintln!("ha-flight: touchdown on {body:?} v={v_down:.1}");
+    };
+    flight.clock_secs = clock.t;
+    flight.surface_ref_s = sim.body.x;
+    let pos = flat_surface_to_orbital(body, sim.body.x, sim.body.y + 2.0, clock.t);
+    let vel = flat_velocity_to_orbital(body, sim.body.x, 0.0, 42.0);
+    flight.begin_surface_gameplay(body, Vec3::from_array(pos), Vec3::from_array(vel));
 }
 
-fn land_on_gameplay_shell(
-    flight: &mut RocketFlight,
-    region: &mut RegionRuntime,
-    world_ctx: &mut WorldContextRuntime,
-    moon: &mut MoonWorldState,
-    planet: &mut PlanetWorldState,
-    body: CelestialBody,
-    player: &mut Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
-    v_down: f32,
-) {
-    let c = Vec3::from_array(planet_gameplay_center(body));
-    let n = (flight.pos - c).normalize_or_zero();
-    let (tx, tz) = planet_tangent_from_dir(body, n.to_array());
-    flight.end_surface();
-    if let Ok((mut sim, mut visual)) = player.get_single_mut() {
-        if body == CelestialBody::Moon {
-            region.active = RegionId::Luna;
-            world_ctx.active = WorldContext::Luna;
-            moon.needs_spawn = true;
-            moon.spawn_after_frames = 0;
-        } else {
-            region.active = RegionId::Planet(body);
-            world_ctx.active = WorldContext::Planet;
-            request_planet_spawn(planet, body);
-        }
-        sim.body.x = tx;
-        sim.body.z = tz;
-        sim.body.y = planet_ground_y_at(body, tx, tz);
-        sim.body.vy = 0.0;
-        sim.body.vx = 0.0;
-        sim.body.vz = 0.0;
-        visual.to_x = tx;
-        visual.to_z = tz;
-        visual.to_y = sim.body.y;
-    }
-    eprintln!("ha-flight: touchdown on {body:?} shell v={v_down:.1}");
-}
-
-fn terrain_height_for_landing(
-    pos: Vec3,
-    body: CelestialBody,
-    t: f32,
-    _layout: &WorldLayout,
-    _collision: &WorldCollision,
-) -> f32 {
-    match body {
-        CelestialBody::Earth => {
-            let (tx, tz) = tangent_at_world(CelestialBody::Earth, pos);
-            earth_surface_y(tx, tz).max(0.0)
-        }
-        CelestialBody::Moon => {
-            let dir = surface_normal_at(pos.to_array(), body, t);
-            ha_shared::luna_displacement_at_dir(dir)
-        }
-        other => {
-            let dir = surface_normal_at(pos.to_array(), body, t);
-            planet_displacement_at_dir(other, dir)
-        }
-    }
-}
-
+/// Keep RegionId/WorldContext in sync with the flight frame (B8: the ONLY
+/// place surface↔space transitions happen besides cave portals).
 fn sync_flight_world_state(
     flight: Res<RocketFlight>,
     mut region: ResMut<RegionRuntime>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
+    mut ctx: ResMut<WorldContextRuntime>,
+    mut planet: ResMut<ActivePlanet>,
 ) {
+    use ha_shared::WorldContext;
     if !flight.active || flight.phase == FlightPhase::Surface {
         return;
     }
-    if flight.in_vacuum() {
-        if !matches!(
-            region.active,
-            RegionId::Space | RegionId::Transit | RegionId::Luna | RegionId::Planet(_)
-        ) {
-            region.active = RegionId::Space;
-            world_ctx.active = WorldContext::Space;
+    if flight.surface_frame_render() && body_landable(flight.body) {
+        let (target_region, target_ctx) = match flight.body {
+            CelestialBody::Earth => (RegionId::Overworld { gx: 0, gz: 0 }, WorldContext::Overworld),
+            CelestialBody::Moon => (RegionId::Luna, WorldContext::Luna),
+            other => (RegionId::Planet(other), WorldContext::Planet),
+        };
+        if region.active != target_region {
+            region.active = target_region;
         }
-    } else if flight.body == CelestialBody::Earth {
-        world_ctx.active = WorldContext::Overworld;
-        if matches!(region.active, RegionId::Space) {
-            region.active = RegionId::Overworld { gx: 0, gz: 0 };
+        if ctx.active != target_ctx {
+            ctx.active = target_ctx;
+        }
+        if !matches!(flight.body, CelestialBody::Earth | CelestialBody::Moon) {
+            planet.body = Some(flight.body);
+        }
+    } else {
+        if region.active != RegionId::Space {
+            region.active = RegionId::Space;
+        }
+        if ctx.active != WorldContext::Space {
+            ctx.active = WorldContext::Space;
         }
     }
 }
 
-pub fn flight_world_transform(
-    flight: &RocketFlight,
-    origin: &crate::floating_origin::FloatingOrigin,
-) -> (Vec3, Quat) {
-    let rot = Quat::from_rotation_y(flight.yaw) * Quat::from_rotation_x(flight.pitch);
-    (flight.render_pos(origin), rot)
+// ---------------------------------------------------------------------------
+// 2D rocket sprite
+// ---------------------------------------------------------------------------
+
+#[derive(Component)]
+struct FlightRocketVisual;
+
+#[derive(Component)]
+struct FlightRocketFlame;
+
+fn sync_rocket_visual(
+    mut commands: Commands,
+    flight: Res<RocketFlight>,
+    mut rocket: Query<(Entity, &mut Transform), With<FlightRocketVisual>>,
+    mut flame: Query<&mut Visibility, With<FlightRocketFlame>>,
+) {
+    let flying = flight.blocks_walking();
+    if !flying {
+        for (e, _) in &rocket {
+            commands.entity(e).despawn_recursive();
+        }
+        return;
+    }
+    let pos = flight.render_pos_2d();
+    let rot = flight.render_rot_2d();
+    if let Ok((_, mut tf)) = rocket.get_single_mut() {
+        tf.translation = pos.extend(3.0);
+        // Sprite nose points +Y at rot 0; rotate so it matches heading.
+        tf.rotation = Quat::from_rotation_z(-rot);
+        // At high zoom the rocket sprite scales up so it stays visible.
+        let scale = (flight.altitude_m() / 900.0).clamp(1.0, 26.0);
+        tf.scale = Vec3::splat(scale);
+        for mut vis in &mut flame {
+            *vis = if flight.phase == FlightPhase::Powered {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+        }
+        return;
+    }
+    commands
+        .spawn((
+            FlightRocketVisual,
+            Sprite::from_color(Color::srgb(0.82, 0.84, 0.88), Vec2::new(1.6, 4.6)),
+            Transform::from_translation(pos.extend(3.0)),
+        ))
+        .with_children(|p| {
+            // Nose cone.
+            p.spawn((
+                Sprite::from_color(Color::srgb(0.85, 0.45, 0.2), Vec2::new(1.2, 1.0)),
+                Transform::from_xyz(0.0, 2.6, 0.05),
+            ));
+            // Engine flame.
+            p.spawn((
+                FlightRocketFlame,
+                Sprite::from_color(Color::srgb(1.0, 0.72, 0.25), Vec2::new(0.9, 1.8)),
+                Transform::from_xyz(0.0, -3.0, 0.05),
+                Visibility::Hidden,
+            ));
+        });
 }

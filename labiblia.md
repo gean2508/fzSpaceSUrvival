@@ -10,39 +10,39 @@
 |-------|-------|
 | **Producto** | **Starship** (Agencia Espacial Survival). Repo interno `hunger-arena`; package Android `com.hungerarena.app`. |
 | **Género** | Survival + construir base/laboratorio + automatizar recolección → naves prefab → off-world → colonos. |
-| **Referencias** | KSP / Space Flight Simulator **solo en escala**; **cero** física orbital real (siempre arcade). |
+| **Referencias** | **Space Flight Simulator (2D)** para vuelo/planetas + **Terraria** para superficie/cavado; **cero** física orbital real (siempre arcade). |
 | **Home base** | **Tierra** (seed **42**). |
 | **Plataformas** | Android APK (arm64) + Linux AppImage (Bevy) · landing web · servidor Colyseus. |
-| **Stack** | Colyseus · **Rust/Bevy 0.15** · Postgres+Drizzle · npm + Cargo workspaces. |
+| **Stack** | Colyseus · **Rust/Bevy 0.15 en 2D** (Sprites + Mesh2d, sin pipeline 3D activo) · Postgres+Drizzle · npm + Cargo workspaces. |
 | **Sim** | Determinista TS (`packages/shared`); servidor **input-only**; `ha-shared` porta constantes a Rust. |
-| **Estética** | 3D: Ghibli cel + outline. UI in-game: Borderlands (bordes ink + amarillo). Landing: synthwave. |
+| **Estética** | 2D flat-color (paleta PS1/Ghibli), tiles con sombreado por-celda. UI in-game: Borderlands (bordes ink + amarillo). Landing: synthwave. |
 | **Versión** | ver `native/version.json` (no hardcodear). |
 
-### Regla de migración (INVIOLABLE)
-**No reescribir el motor.** Contenido nuevo sobre motor probado. Intacto: `native/crates/` (Bevy, cámara FP, input 3 gestos, AssetFactory, toon, perf), `server/` (Colyseus, auth, `/updates`), core de `packages/shared/src/sim` (tick 20 Hz, determinismo, parkour, `interactions.ts`).
+### Regla de migración (INVIOLABLE — actualizada 12 jul 2026, rewrite-2d)
+**El motor vigente es el cliente 2D** (rama `rewrite-2d`): el render 3D esférico se ELIMINÓ a propósito para ganar 60 fps (Terraria + SFS 2D). NO reintroducir: cámara FP, esferas caminables por-píxel, AssetFactory de meshes 3D, toon/outline, domo de cielo, floating-origin 3D. Intacto y probado: `server/` (Colyseus, auth, `/updates`), core de `packages/shared/src/sim` (tick 20 Hz, determinismo, `interactions.ts`), gesto de input (joystick + hold-interact), HUD/inventario/craft, máquinas/colonos/ship-builder (lógica), persistencias B10.
 
 ### Legado dormido (NO borrar, NO referenciar en contenido nuevo)
 Clases scout/warrior/mage, habilidades, oleadas survival, AI hostiles — permanecen para fauna/peligro futuro (ver §10).
 
 ---
 
-## §1 ⭐ MODELO VIGENTE — CONTINUIDAD "UN SOLO UNIVERSO"
+## §1 ⭐ MODELO VIGENTE — 2D "UN SOLO UNIVERSO" (Terraria + SFS, 12 jul 2026)
 
-**Esto es el corazón del diseño espacial actual. Léelo antes de tocar espacio/vuelo/cielo/planetas.**
+**Esto es el corazón del diseño. Léelo antes de tocar mundo/vuelo/cielo/planetas.**
 
-- **Un solo espacio/universo.** El espacio ES el escenario; Tierra, Luna, planetas, estrellas son objetos DENTRO, en órbitas **coherentes** (no a escala real; todos en el plano XZ) — la cantidad real de planetas/lunas para empezar. NO hay "cielo de la Tierra" y "cielo de la Luna" separados.
-- **Tierra = marco unificado (sin "corte" al despegar).** `EARTH_GAMEPLAY_RADIUS_M = 1500`; radio caminable == orbital. La Tierra es el **ORIGEN FIJO** (`earth_center_at` no revoluciona; `FLIGHT_PLANE_Y = -1500 = -radio`, todos los cuerpos coplanares). Marco caminable == orbital ⇒ `remap_planet_gameplay_to_orbital_at(Earth)` es **identidad** ⇒ despegue/aterrizaje continuo. El mundo caminable se renderiza vía **floating-origin** (`surface_frame.rs`: `SurfaceAnchored` + `surface_live_offset`); Tierra fija = offset 0 (intacta). `view_target` calcula el observador MUNDIAL desde `SimState` (no del transform, que ya es render).
-- **Culling por distancia + mapa 2D.** Lo lejano NO se renderiza en 3D desde una superficie (parado en la Luna NO ves la Tierra, y está bien). Un cuerpo se ve al **acercarte volando** (vacío), por cámara remota, o al **subir mucho a pie** (>250 m: creativo/jetpack — `high_walker` en `flight_celestials.rs`, 12 jul; el cuerpo bajo tus pies siempre prioriza render para que el planeta no se vea "cuadrado" desde arriba) (la esfera real aparece y crece hasta que aterrizás). Para navegar: **mapa 2D** (`game_menu.rs`, se abre con el botón MENU) — cenital del plano XZ, Sol al centro, anillos de órbita + puntos por efeméride (`body_center_at`), tu posición. Los cuerpos del cielo son **las mismas esferas reales**, no discos/skybox por-escena. El panel es fullscreen y **opaco** (no semitransparente: en el Redmi el blend fullscreen sobre el 3D vivo lo tiraba a ~4 fps). El viewport es **cuadrado** (`Val::VMin`) y los marcadores se posicionan en **porcentaje** (no en px medidos por `ComputedNode`, que devuelve px FÍSICOS mientras `Node` usa px LÓGICOS → en celu high-DPI eso empujaba todo el mapa fuera del panel a la derecha), con `overflow: clip`.
-- **Atmósfera = SOLO la Tierra.** El "cielo" (domo azul Ghibli + nubes/niebla) es exclusivo de la Tierra: subís, la atravesás, llegás al espacio. Cuerpos SIN atmósfera (Luna/planetas airless) → **espacio directo** (negro + starfield), sin domo terrestre (`scene.rs` `sky_vis` oculta el domo en `on_surface`). El look de la Luna (esfera + cráteres) **se conserva, NO se toca**.
-  - **El starfield de cuerpos airless NO es geometría finita cruzable.** En la Luna el shell de estrellas + puntos (`LunaSkyShell` en `moon_world.rs`) se **recentran en el jugador cada frame** (`follow_luna_sky_shell`) = skybox que nunca se puede atravesar. Antes estaba anclado en `moon_center` con R=`MOON_GAMEPLAY_RADIUS_M+460`: subiendo >460 m lo cruzabas y veías una esfera negra finita desde afuera (el "techo de cielo"). Cualquier "cielo" de un cuerpo airless debe seguir a la cámara o ir al far-plane, **nunca** una esfera fija.
-- **Cámara-módulo (futuro).** Pieza de nave = observador remoto arbitrario en cualquier base. Esqueleto: `ViewTarget::RemoteCamera`. Todo el sistema está centrado en "observador arbitrario", justo para esto.
+- **Un solo plano/universo.** El sistema solar vive en el plano XZ de siempre (`solar_ephemeris.rs`, Tierra ORIGEN FIJO, Luna orbita, todos coplanares) — y ahora ese plano ES la pantalla: render orbital `(x, -z)`. Los cuerpos son **círculos reales 2D** (`orbital2d.rs`) con posiciones vivas por efeméride, no fondos por-escena.
+- **Superficie = tira de tiles cavable (Terraria).** Cada cuerpo caminable es su rebanada z=0: coordenada de arco `s` (envuelve la circunferencia `2πR_walk` — caminás y das la vuelta al planeta) × altura `h`. Terreno determinista por seed del cuerpo (`ha-shared/flat2d.rs`: heightline + estratos + vetas), cavable hasta `DIG_DEPTH_TILES`; ediciones sparse persistidas (`tiles.json`, B10). Render: chunks `Mesh2d` de 32 tiles con vertex colors (`world2d.rs`), decor/vetas = Sprites. **Cavar ES la cueva**: los gem_red lunares están embebidos en profundidad; la instancia Cave(2) quedó deprecada.
+- **Continuidad exacta despegue↔aterrizaje (sin corte).** `flat_surface_to_orbital` / `orbital_to_flat_surface` (con velocidad) son inversas exactas: `θ = s/R`, `r = R+h`. El vuelo (`rocket_flight.rs`) simula SIEMPRE en el plano mundial; por debajo de `escape_alt` se renderiza en el marco superficie (subís desde el pad), por encima pasa a la vista orbital con zoom continuo de cámara (`camera.rs`). B8 intacto: una transición es un cambio de marco, JAMÁS una cutscene.
+- **Cielo por región.** Tierra: ciclo día/noche 720 s con ClearColor + overlay nocturno (`sky2d.rs`); al subir (creativo o cohete) el cielo se funde a vacío (§11). Cuerpos airless y espacio: negro + **estrellas que siguen a la cámara** (nunca geometría finita cruzable — la regla del viejo `LunaSkyShell` sobrevive en 2D).
+- **Mapa del sistema** (`game_menu.rs`, botón MENU): cenital del plano, igual que siempre — en 2D es literalmente la misma proyección que la vista orbital.
+- **Cámara-módulo (futuro).** El monitor de vessels (`telemetry.rs`) quedó; la vista por cámara remota se recablea en 2D más adelante.
 
 ### 🚫 ANTI-REGRESIÓN — NO volver a esto
-- NO el **walk-hub orbital caminable** (`dock_rocket_at_station` fuera del schedule; el espacio es vuelo continuo, no una estación donde caminás).
-- NO cielos/hubs **por-escena** (esferas SFS hardcodeadas, `spawn_transit_planets`, `spawn_space_*_sphere`).
-- NO el **split Tierra 480 vs 8000** ni `FLIGHT_PLANE_Y=-8000`.
-- NO forzar cuerpos lejanos visibles desde una superficie (skybox) — culling + mapa 2D.
-- NO cambiar el render de la Luna/esferas.
+- NO reintroducir el **render 3D esférico** (cámara FP, esferas caminables, toon/outline, domo Ghibli, floating-origin, AssetFactory de meshes) — se borró en `rewrite-2d` por los 80-180 ms de frame GPU en el Redmi.
+- NO el **walk-hub orbital caminable** (el espacio es vuelo continuo).
+- NO cielos **por-escena** ni cuerpos lejanos forzados como skybox: culling por región + círculos reales en la vista orbital.
+- NO "cielos" como geometría finita cruzable: estrellas/fondo siguen a la cámara SIEMPRE.
+- NO bloquear input/cámara ni patadas de velocidad en transiciones (B8).
 
 ---
 
@@ -97,27 +97,26 @@ Validar: `npm run validate:arch`.
 |------|----------|
 | **Cuerpos celestes** (catálogo, radios, SOI, gravedad) | `ha-shared/celestial_bodies.rs`, `cosmic_scale.rs` |
 | **Efemérides** (órbitas vivas, Tierra fija, Luna orbita Tierra) | `ha-shared/solar_ephemeris.rs` (`body_center_at`, `earth_center_at`) |
-| **Superficie caminable esférica** (patch tangente streameado, half 120 m Android) | `ha-shared/planet_surface.rs`, `ha-game/surface_patch.rs`, `lunar_surface.rs` |
-| **Marco continuidad** (walkable → floating-origin, offset vivo) | `ha-game/surface_frame.rs`, `floating_origin.rs`, `view_target.rs` |
-| **Vuelo continuo** (thrust/coast/retro, fuel real, drag, paracaídas, SOI dinámica, aterrizaje) | `ha-game/rocket_flight.rs`, `ha-shared/flight_physics.rs` |
-| **Regiones + atmósfera** (Tierra/Cueva/Luna/Planeta; domo solo-Tierra) | `ha-game/scene.rs` (`RegionId`, `sync_biome_visibility`, `sky_vis`) |
-| **Mundos por cuerpo** (spawn/despawn) | `earth_world.rs`, `moon_world.rs`, `planet_world.rs`; limpieza `celestial_cleanup.rs` |
-| **Cielo/impostores** (esferas reales visibles al acercarse; SkyMoon/SkySun estilizados en Tierra) | `ha-game/flight_celestials.rs` |
-| **Mapa 2D del sistema** (navegación, MENU fullscreen + botones TIERRA/LUNA/ESPACIO/CREATIVO) | `ha-game/game_menu.rs` |
+| **Mundo 2D** (tira de tiles por cuerpo: terreno determinista, cavar/colocar, chunks Mesh2d, decor/vetas, `tiles.json`) | `ha-shared/flat2d.rs`, `ha-game/world2d.rs` |
+| **Locomoción plana** (plataformero: gravedad por contexto, salto/coyote, wrap circunferencia, vuelo creativo) | `ha-shared/flat2d.rs` (`step_flat_movement`), `ha-game/sim.rs` |
+| **Vuelo 2D SFS** (thrust/coast/retro, fuel real, drag, paracaídas, SOI dinámica, aterrizaje, relanzamiento off-world, remap exacto superficie↔órbita) | `ha-game/rocket_flight.rs`, `ha-shared/flight_physics.rs`, `flat2d.rs` |
+| **Vista orbital** (cuerpos como círculos reales + halo atmósfera + Sol) | `ha-game/orbital2d.rs` |
+| **Regiones + jugador** (RegionId/WorldContext, spawn, teleports MENU) | `ha-game/scene.rs` (`teleport_to_body`) |
+| **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
+| **Cámara 2D** (follow + zoom continuo superficie↔órbita, shake) | `ha-game/camera.rs` |
+| **Targeting 2D** (puntero touch/cursor + fallback de proximidad; tiles block_cell/place_cell) | `ha-game/targeting.rs`, `input/look_interact.rs` (`LookPointer`) |
+| **Mapa del sistema** (navegación, MENU fullscreen + botones TIERRA/LUNA/ESPACIO/CREATIVO) | `ha-game/game_menu.rs` |
 | **Navegación/sondas** (mapear cuerpos, gate de autopilot) | `ha-game/nav_computer.rs`, `ha-shared/nav_data.rs` |
-| **Depósitos/flora** (procedurales por cuerpo, batch por kind) | `ha-shared/surface_deposits.rs` `surface_biome.rs`, `ha-game/deposit_spawn.rs` `flora_spawn.rs` |
-| **Día/noche + luz solar** | `ha-game/sky_clock.rs` (ciclo 720 s), `solar_lighting.rs` |
-| **Construcción / bloques** | `ha-shared/building.rs` `blocks.rs`, `ha-game/building_world.rs` `block_world.rs` |
-| **Máquinas + inventario** | `ha-game/machines.rs`, `inventory_persist.rs`; sim `packages/shared/src/sim/machines.ts` |
+| **Máquinas + inventario** (sprites por ícono procedural, por-cuerpo, banking off-body) | `ha-game/machines.rs`, `inventory_persist.rs`; sim `packages/shared/src/sim/machines.ts` |
 | **Survival stats** (hambre/sed/O₂, comer, respawn amable) | sim `packages/shared/src/sim/survivalStats.ts` → espejo `ha-shared/survival.rs`; cliente `ha-game/survival_stats.rs`, barras `hud/survival_bars.rs` (ver §12) |
 | **Ship builder** (piezas crafteables → contadores → stats emergen) | sim `shipMass.ts` (`ShipConfig`, `shipConfigStats`) → espejo `ha-shared/ship_mass.rs`; cliente `ha-game/ship_builder.rs` (tab BAG→SHIP, `ship.json`), extras aplican vía `launch_pad.rs::sync_ship_loadout`; motores extra multiplican thrust en `rocket_flight.rs` |
 | **Colonos v1** (Acto V: habitat → enviar colonos, boost taladros) | sim `colony.ts` → espejo `ha-shared/colony.rs`; cliente `ha-game/colony.rs` (`colony.json`, botones COLONO/VÍVERES en el mapa gated por antena, cuestan manzanas); boost ×1.5 a los primeros N taladros lunares en `machines.rs::tick_machines`; estado en línea BASE LUNA |
 | **Base lunar** (Acto II: taladro regolito, antena, monitoreo) | máquinas por CUERPO (`ha-game/machines.rs`: gates `machine_allowed_on`, `machines.json`, respawn `sync_machine_visuals` B6); off-body banquean `stored_output` (se cobra al volver); campamento = O₂ tether en `survival_stats.rs`; antena → línea "BASE LUNA" en mapa orbital (`game_menu.rs::update_luna_base_monitor`) |
-| **Cámara FP + targeting** (alineada a normal de superficie) | `ha-game/camera.rs`, `targeting.rs`, `input/look_interact.rs` |
-| **Gamepad** (stick izq mover+sprint, der cámara; A salto/retro, RT acción/romper, LT colocar/comer/retro, Y cámara 1ª/3ª, Start mapa, B cerrar, D-pad bag/hotbar) | `input/gamepad.rs` — alimenta los MISMOS intents que touch/teclado; prioridad touch > pad > teclado |
-| **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `ui_theme.rs` |
-| **Calidad por plataforma** (patch step, radios, sombras, sky lite, suelo unlit Android) | `ha-game/quality.rs`, `render/render_scale.rs` |
+| **Gamepad** (stick izq mover+sprint; A salto/thrust, RT acción/romper, LT colocar/comer/retro, Start mapa, B cerrar, D-pad bag/hotbar) | `input/gamepad.rs` — alimenta los MISMOS intents que touch/teclado; prioridad touch > pad > teclado |
+| **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `hud/item_icons.rs`, `ui_theme.rs` |
+| **Partículas 2D + squash** (harvest juice) | `ha-game/render/particles.rs` |
 | **Debug/perf** | `ha-game/debug/perf.rs` (MENU→PERF / F3), `cpu_span.rs` (ha-span), `crash.rs` |
+| **Legado 3D (borrado en rewrite-2d, recuperable en git `main`)** | surface_patch, floating_origin, view_target, flight_celestials, ghibli_atmosphere, materials(toon), earth/moon/planet_world, block/building_world, assets/, space_travel, jetpack_transit, world_travel, sky_clock, solar_lighting, quality, asset_dev |
 
 `WorldContext` (gravedad/locomoción): Overworld / Mission(cueva) / Luna / Planet / Space. `RegionId` (visibilidad/render): Overworld / Cave / Space / Luna / Planet / Transit. **No confundirlos.**
 
@@ -144,20 +143,16 @@ cd native && make run     # cliente desktop (o cargo run -p ha-game --features d
 
 ## §6 Perf — camino a 60 fps (cliente nativo, Redmi)
 
-**Diagnóstico (dato duro del HUD `ha-perf`/`ha-span`, 6 jul):** `total_update` CPU ≈ **20-25 µs** (¡microsegundos!) con frame de **80-180 ms**. → **La lógica del juego NO es el cuello. El frame es 100% GPU/render + present.** No optimizar sistemas ECS por FPS; atacar la GPU y la memoria.
+**La palanca grande YA se ejecutó (12 jul): el rewrite 2D.** El diagnóstico histórico era frame 100% GPU (80-180 ms con lógica en µs): domo de cielo fullscreen, esferas 3D, toon, ~58 draws 3D. El cliente 2D elimina ese costo por diseño: tiles = ~11 meshes de vertex-colors sin textura, decor = sprites batcheados, cielo = ClearColor + overlay, sin luces ni sombras ni post.
 
-**Breakdown típico Tierra:** `draw3d~58` (de los cuales `ground≈54` = batches flora/depósitos), `ui≈92` (draws de HUD), `ents≈210`. `outline=0`, `ocean=0`, `chunk=0`.
+**Dato desktop post-rewrite (NVK, NO representativo):** `draw3d~11`, `ents~223`, `total_update ≈ 30-120 µs`. **Pendiente: medir en el Redmi** con input real (MIUI throttlea sin input; ver memoria "pruebas perf Redmi").
 
-**Palancas por impacto (mayor → menor):**
-1. **Resolución interna** (la más grande si se logra): renderizar el 3D a menos píxeles. El **blit offscreen REGRESÓ** en Redmi (el blit mismo era lento) → probar en cambio bajar la resolución de la SUPERFICIE/ventana Android nativa (que el compositor escale), no un blit extra. **Candidato concreto (11 jul, sin probar):** `ANativeWindow_setBuffersGeometry(win, w/1.5, h/1.5, 0)` vía crate `ndk` sobre el raw window handle — es el mecanismo canónico Android para que SurfaceFlinger escale gratis, cero blit. OJO: verificar mapeo de coords touch (físico vs lógico) en el device antes de shipear.
-2. **Fill-rate / fragment** (cobertura de pantalla × costo por píxel):
-   - Suelo casi-fullscreen: **unlit en Android** ✅ (`patch_material`).
-   - **Domo de cielo Ghibli**: fullscreen aun en "lite" (`sky_shader_quality=0`) → sospechoso #1 ahora que el suelo es unlit. Considerar gradiente barato en Android.
-   - Overdraw: outlines ya off (outline=0); nubes/transparencias mínimas.
-3. **Memoria / swap** (causa histórica confirmada): el Redmi con ~285 MB heap nativo y poca RAM libre paga page-faults por frame (mesetas de ~90-250 ms por kswapd). Mitigado con meshes a `RenderAssetUsages::RENDER_WORLD` (libera copia CPU tras subir a GPU). **Vigilar el heap**; menos entidades/texturas ayuda directo al FPS.
-4. **Draw calls** (`ground≈54`, `ui≈92`): re-batching flora/depósitos por grupos 3×3 ya reduce draws; UI con muchos nodos (hotbar iconos + corazones + texto). Importan menos que el fill-rate en este device, pero bajarlos ayuda al margen.
+**Si el Redmi aún no da 60 fps, palancas restantes:**
+1. **Resolución de superficie Android** (`ANativeWindow_setBuffersGeometry`, commit a9317df en `main`) — el experimento quedó fuera del build 2D (render_scale borrado); reintroducir SOLO si hace falta (con 2D probablemente no).
+2. **UI draws** (`ui≈98`): hotbar/corazones/texto — batching de nodos si pesa.
+3. **Memoria/heap**: el 2D baja mucho el heap (sin meshes 3D ni texturas de cielo); vigilar igual (kswapd histórico).
 
-**Método:** medir SIEMPRE en el Redmi jugando con input real (MIUI throttlea apps foregrounded-por-adb sin input → FPS idle mentiroso). Desktop 940M/NVK **no es representativo** (driver open-source + throttle térmico) — solo para correctitud. Herramienta: MENU→PERF (móvil) / F3 (desktop); spans en `debug/cpu_span.rs`.
+**Método:** medir SIEMPRE en el Redmi jugando. Desktop 940M/NVK solo para correctitud. Herramienta: MENU→PERF (móvil) / F3 (desktop); spans en `debug/cpu_span.rs`.
 
 ---
 
@@ -197,7 +192,7 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - Se vuela con la locomoción a pie libre: `sim.rs` en creativo llama `step_surface_creative_fly` (JUMP sube, sprint baja, **sin gravedad**). El controlador de movimiento es el mismo en Tierra/Luna/planeta — el contexto cambia solo para render/culling/efemérides.
 - **Es continuo por construcción:** en espacio-tangente `body.y` crece sin límite y se renderiza a lo largo de la normal (`interpolate_player_visual`), así subir recto desde la Tierra es un ascenso mundial correcto a cualquier altura, sin corte ni cambio de cámara.
 - **NO** hay ignición forzada de `RocketFlight` (se borró `creative_fly_to_space`). Para saltar a otro cuerpo en creativo, usar los botones **LUNA/ESPACIO/TIERRA** del MENU (teleport deliberado, no una animación involuntaria).
-- **Fade atmosférico al subir (hecho).** En `sky_clock.rs` `sync_sky_projection`: en creativo, sobre la Tierra y sin `launch_atmo`, la altura del jugador (`sim.body.y − ground`) rampa entre `CREATIVE_SKY_FADE_START_M`=150 y `END`=1200 un "night boost" (`sample.night.max(f)`) + tira `zenith/horizon` hacia los valores de cielo airless. **Reutiliza la maquinaria día/noche** (no una rampa nueva): el domo Ghibli **envuelve la cámara** (sigue al jugador) así que es el cielo y el ClearColor nunca se ve → no se pelea con guards; el domo se oscurece y las estrellas aparecen, continuo y reversible al bajar. NO se reusó `launch_atmo` (su `blend` está invertido/atado al cohete). Banda a tunear en el Redmi.
+- **Fade atmosférico al subir (2D).** En `sky2d.rs` `sync_sky`: sobre la Tierra la altura del jugador rampa 150→1200 m el ClearColor hacia vacío y enciende las estrellas (que siguen a la cámara). Continuo y reversible al bajar. Banda a tunear en el Redmi.
 
 **Jetpack = herramienta universal.** El boost de jetpack (`sim.rs`, item `jetpack`: JUMP para saltar + mantener para sostener el ascenso) funciona en **cualquier cuerpo caminable** (Tierra/Luna/planetas), no solo en el overworld. Regla general del proyecto: nada de mecánicas encerradas por escena — "todo se usa en todo el juego". (El escape-transit `jetpack_transit.rs` hacia la Tierra sigue acotado a la Luna: es un "volver a casa" de contenido, no el boost de movimiento.)
 
@@ -221,6 +216,20 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - **Regla:** cualquier cambio numérico va a TS **y** Rust (regla 10 de §3).
 
 ---
+
+## §13-bis ⭐ REWRITE 2D (12 jul 2026, rama `rewrite-2d`) — estado
+
+**Hecho en la rama (compila, tests verdes 90 Rust + 101 TS, boot desktop limpio):**
+- `ha-shared/flat2d.rs`: terreno determinista por cuerpo (wrap circunferencia), locomoción plataformera, remap exacto superficie↔órbita (7 tests).
+- Cliente 2D completo: `world2d` (tiles+decor+vetas+persistencia), `sim` (tick plano), `camera` (zoom continuo), `scene`, `sky2d`, `targeting` (puntero), `rocket_flight` (vuelo plano + relanzamiento), `orbital2d` (círculos), `launch_pad`/`machines` (sprites 2D), partículas 2D.
+- Reusado intacto: HUD/inventario/craft (2813 líneas), survival stats, colonos, ship builder, nav computer, harvest, gamepad, persistencias, menú/mapa, boot UI, perf/crash.
+- Borrado: ~25 módulos 3D (recuperables en `main`).
+
+**Pendiente al retomar:**
+1. Probar en el Redmi (`npm run play` desde la rama) — objetivo 60 fps; §6.
+2. Pulido jugable: agua (visual-only hoy), depósitos re-minables (sin agotamiento), árbol con hoja al talar, cueva lunar retirada (gems embebidas la reemplazan), cámara remota de telemetry (no-op), building pieces 3D retirados (tiles los cubren).
+3. Retune de contenido para la tira 2D (distancias de depósitos, alturas de vuelo, banda del fade §11).
+4. Merge a `main` cuando el Redmi valide; ahí `ship:android`.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

@@ -1,28 +1,26 @@
-//! Launch pad placement, module assembly, starship prefab visuals, and ignition targets.
+//! Launch pad placement, module assembly, ship prefab visuals, ignition (2D).
+//!
+//! The pad is a wide platform sprite on the Earth strip; module slots and the
+//! ignition point are invisible `InteractTarget`s with small beacon sprites.
+//! The config-driven ship stack (BAG→SHIP) is a 2D sprite assembly — what you
+//! configure is what stands on the pad.
 
 use bevy::prelude::*;
+use ha_shared::flat2d::{flat_surface_to_orbital, flat_velocity_to_orbital};
 use ha_shared::{
-    assemble_module, create_launch_pad_state, ground_height_at, InteractActionKind,
-    InteractTargetKind, LaunchPadState, LAUNCH_PAD, LAUNCH_PAD_MODULE_COUNT, LAUNCH_PAD_ZONE_RADIUS,
-    LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z, CelestialBody, WorldContext,
+    assemble_module, create_launch_pad_state, CelestialBody, InteractActionKind,
+    InteractTargetKind, LaunchPadState, LAUNCH_PAD, LAUNCH_PAD_MODULE_COUNT,
+    LAUNCH_PAD_ZONE_RADIUS, LAUNCH_PAD_ZONE_X,
 };
 
-use crate::assets::AssetFactory;
-use crate::earth_world::EarthDecor;
-use crate::flight_beacon::spawn_interact_beacon;
-use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 use crate::input::{EquippedItem, HoldInteractState};
-use crate::world_travel::FlightTransition;
-use crate::rocket_flight::RocketFlight;
+use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 use crate::machines::{LocalMachine, MachineEntity, MachineWorld};
-use crate::materials::ToonMaterial;
-use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
-use crate::sim::{Player, SimState, WorldCollision, WorldLayout};
-use crate::surface_placement::{
-    sphere_surface_transform, sphere_world_pos, surface_normal_at_tangent,
-    world_pos_from_tangent, PAD_SURFACE_LIFT,
-};
+use crate::rocket_flight::RocketFlight;
+use crate::scene::{RegionId, RegionRuntime};
+use crate::sim::{Player, SimState};
 use crate::targeting::{InteractTarget, LookTarget};
+use crate::world2d::TileWorld;
 
 pub struct LaunchPadPlugin;
 
@@ -64,42 +62,35 @@ pub struct LaunchIgnitionMarker {
 }
 
 #[derive(Component)]
-struct LaunchModuleVisual {
-    pad_uid: u32,
-    module_index: u8,
-}
+struct LaunchModuleVisual;
 
-pub fn in_launch_pad_zone(x: f32, z: f32) -> bool {
-    let dx = x - LAUNCH_PAD_ZONE_X;
-    let dz = z - LAUNCH_PAD_ZONE_Z;
-    (dx * dx + dz * dz).sqrt() <= LAUNCH_PAD_ZONE_RADIUS
+/// Marker for the config-driven ship visual — respawned when the player
+/// edits the ship in BAG→SHIP (`sync_ship_config_visual`).
+#[derive(Component)]
+pub struct ShipConfigVisual;
+
+/// Pad zone on the 2D strip: `s` within radius of the reserved arc position.
+pub fn in_launch_pad_zone(x: f32, _z: f32) -> bool {
+    (x - LAUNCH_PAD_ZONE_X).abs() <= LAUNCH_PAD_ZONE_RADIUS
 }
 
 pub fn zone_has_launch_pad(pads: &LaunchPadWorld) -> bool {
-    pads.pads
-        .iter()
-        .any(|p| in_launch_pad_zone(p.x, p.z))
+    pads.pads.iter().any(|p| in_launch_pad_zone(p.x, p.z))
 }
 
-/// Pre-placed spaceport pad so the slice is visible without hammer placement grind.
+/// Pre-placed spaceport pad so the slice is visible without hammer grind.
 fn spawn_demo_launch_pad(
     mut commands: Commands,
     mut world: ResMut<MachineWorld>,
     mut pads: ResMut<LaunchPadWorld>,
-    mut factory: ResMut<AssetFactory>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut toon_mats: ResMut<Assets<ToonMaterial>>,
-    mut std_mats: ResMut<Assets<StandardMaterial>>,
+    tiles: Res<TileWorld>,
     builder: Res<crate::ship_builder::ShipBuilderState>,
-    collision: Res<WorldCollision>,
-    _layout: Res<WorldLayout>,
 ) {
     if zone_has_launch_pad(&pads) {
         return;
     }
     let x = LAUNCH_PAD_ZONE_X;
-    let z = LAUNCH_PAD_ZONE_Z;
-    let y = ground_height_at(x, z);
+    let y = tiles.ground_height_at(CelestialBody::Earth, x);
     let uid = world.next_uid;
     world.next_uid += 1;
     world.placed.push(LocalMachine {
@@ -108,100 +99,151 @@ fn spawn_demo_launch_pad(
         body: CelestialBody::Earth,
         x,
         y,
-        z,
+        z: 0.0,
         output_accumulator: 0.0,
         stored_output: 0,
         producing_flash: 0.0,
     });
-    spawn_launch_pad(
-        &mut commands,
-        &mut factory,
-        &mut meshes,
-        &mut toon_mats,
-        &mut std_mats,
-        uid,
-        x,
-        y,
-        z,
-        &mut pads,
-    );
-    preassemble_demo_ship(
-        &mut commands,
-        &mut meshes,
-        &mut std_mats,
-        uid,
-        x,
-        y,
-        z,
-        &mut pads,
-        &builder.config,
-    );
-    eprintln!("ha-launch: demo pad at ({x}, {z}) — ship ready for launch");
-}
-
-fn module_slot_tangent(x: f32, z: f32) -> [((f32, f32, f32), u8); 3] {
-    let lift = PAD_SURFACE_LIFT + 0.55;
-    [
-        ((x - 8.0, z + 8.0, lift), 0u8),
-        ((x + 8.0, z + 8.0, lift), 1u8),
-        ((x, z - 8.0, lift), 2u8),
-    ]
-}
-
-/// Marker for the config-driven ship visual — respawned when the player
-/// edits the ship in BAG→SHIP (`sync_ship_config_visual`).
-#[derive(Component)]
-pub struct ShipConfigVisual;
-
-/// Demo pad ships pre-assembled so the Tierra → orbit loop is always testable.
-fn preassemble_demo_ship(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    std_mats: &mut Assets<StandardMaterial>,
-    uid: u32,
-    x: f32,
-    _y: f32,
-    z: f32,
-    pads: &mut LaunchPadWorld,
-    config: &ha_shared::ShipConfig,
-) {
+    spawn_launch_pad(&mut commands, uid, x, y, &mut pads);
+    // Demo ship pre-assembled so the Tierra → orbit loop is always testable.
     if let Some(pad) = pads.pads.iter_mut().find(|p| p.uid == uid) {
         pad.assembled_modules = LAUNCH_PAD_MODULE_COUNT;
         pad.ready = true;
     }
-    spawn_config_ship_visual(commands, meshes, std_mats, uid, x, z, config);
+    spawn_config_ship_visual(&mut commands, uid, x, y, &builder.config);
+    eprintln!("ha-launch: demo pad at s={x} — ship ready for launch");
 }
 
-fn spawn_config_ship_visual(
+/// Pad platform + interact markers + beacons (2D).
+pub fn spawn_launch_pad(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    std_mats: &mut Assets<StandardMaterial>,
     uid: u32,
     x: f32,
-    z: f32,
-    config: &ha_shared::ShipConfig,
+    y: f32,
+    pads: &mut LaunchPadWorld,
 ) {
-    let ship_mat = std_mats.add(crate::materials::unlit_srgb([0.72, 0.74, 0.78]));
-    let ship_tf = sphere_surface_transform(CelestialBody::Earth, x, z, PAD_SURFACE_LIFT, 0.0);
+    pads.pads.push(create_launch_pad_state(uid, x, y, 0.0));
+
+    commands
+        .spawn((
+            LaunchPadRoot { uid },
+            MachineEntity { uid },
+            Sprite::from_color(Color::srgb(0.58, 0.61, 0.66), Vec2::new(14.0, 0.8)),
+            Transform::from_xyz(x, y + 0.4, 0.8),
+            Name::new(format!("LaunchPad_{uid}")),
+        ))
+        .with_children(|p| {
+            // Support legs.
+            for dx in [-6.0, 6.0] {
+                p.spawn((
+                    Sprite::from_color(Color::srgb(0.42, 0.44, 0.48), Vec2::new(0.6, 1.2)),
+                    Transform::from_xyz(dx, -0.9, 0.0),
+                ));
+            }
+        });
+
+    // Module slots (hull / tank / engine) along the pad.
+    for (dx, i) in [(-5.0, 0u8), (5.0, 1u8), (-2.5, 2u8)] {
+        commands.spawn((
+            Transform::from_xyz(x + dx, y + 1.6, 0.9),
+            InteractTarget {
+                kind: InteractTargetKind::LaunchModule,
+                id: i as u32,
+            },
+            LaunchModuleMarker {
+                pad_uid: uid,
+                module_index: i,
+            },
+            Sprite::from_color(Color::srgba(0.9, 0.8, 0.3, 0.35), Vec2::new(1.4, 1.4)),
+            Name::new(format!("LaunchModule_{uid}_{i}")),
+        ));
+    }
+
+    // Ignition point above the pad centre.
     commands.spawn((
-        Mesh3d(meshes.add(crate::assets::build_config_ship_mesh(config))),
-        MeshMaterial3d(ship_mat),
-        ship_tf,
-        EarthDecor,
-        ShipConfigVisual,
-        Name::new(format!("ShipPrefab_{uid}")),
+        Transform::from_xyz(x, y + 3.2, 0.9),
+        InteractTarget {
+            kind: InteractTargetKind::LaunchIgnition,
+            id: uid,
+        },
+        LaunchIgnitionMarker { pad_uid: uid },
+        Sprite::from_color(Color::srgba(1.0, 0.55, 0.12, 0.55), Vec2::new(1.0, 1.0)),
+        Name::new(format!("LaunchIgnition_{uid}")),
+    ));
+
+    // PROBE CONSOLE — send nav probes without leaving Earth.
+    commands.spawn((
+        Transform::from_xyz(x + 8.5, y + 1.0, 0.9),
+        InteractTarget {
+            kind: InteractTargetKind::ProbeConsole,
+            id: uid,
+        },
+        Sprite::from_color(Color::srgb(1.0, 0.62, 0.18), Vec2::new(0.9, 1.4)),
+        Name::new(format!("ProbeConsolePad_{uid}")),
     ));
 }
 
-/// BAG→SHIP edits rebuild the pad ship on the spot — the SFS payoff: what
-/// you configure is what stands on the pad (still one merged draw).
+/// 2D ship stack from the ship-builder config: engines, tanks, fins, nose.
+fn spawn_config_ship_visual(
+    commands: &mut Commands,
+    uid: u32,
+    x: f32,
+    ground_y: f32,
+    config: &ha_shared::ShipConfig,
+) {
+    let tank_h = 1.4;
+    let hull_h = 2.2;
+    let base_y = ground_y + 1.0;
+    commands
+        .spawn((
+            ShipConfigVisual,
+            Sprite::from_color(Color::srgb(0.72, 0.74, 0.78), Vec2::new(1.8, hull_h)),
+            Transform::from_xyz(x, base_y + hull_h * 0.5 + config.tanks.max(1) as f32 * tank_h, 1.2),
+            Name::new(format!("ShipPrefab_{uid}")),
+        ))
+        .with_children(|p| {
+            // Fuel tanks stacked below the hull.
+            for t in 0..config.tanks.max(1) {
+                p.spawn((
+                    Sprite::from_color(Color::srgb(0.85, 0.87, 0.9), Vec2::new(1.6, tank_h - 0.1)),
+                    Transform::from_xyz(0.0, -hull_h * 0.5 - tank_h * (t as f32 + 0.5), 0.0),
+                ));
+            }
+            let stack_bottom = -hull_h * 0.5 - config.tanks.max(1) as f32 * tank_h;
+            // Engine bells.
+            let n = config.engines.max(1) as i32;
+            for e in 0..n {
+                let off = (e as f32 - (n as f32 - 1.0) * 0.5) * 0.7;
+                p.spawn((
+                    Sprite::from_color(Color::srgb(0.88, 0.35, 0.2), Vec2::new(0.55, 0.8)),
+                    Transform::from_xyz(off, stack_bottom - 0.4, 0.05),
+                ));
+            }
+            // Fins.
+            for f in 0..config.fins.min(4) {
+                let side = if f % 2 == 0 { -1.0 } else { 1.0 };
+                p.spawn((
+                    Sprite::from_color(Color::srgb(0.6, 0.62, 0.68), Vec2::new(0.7, 1.2)),
+                    Transform::from_xyz(side * 1.2, stack_bottom + 0.7, -0.05),
+                ));
+            }
+            // Nose cone.
+            if config.nose > 0 {
+                p.spawn((
+                    Sprite::from_color(Color::srgb(0.92, 0.48, 0.12), Vec2::new(1.2, 1.0)),
+                    Transform::from_xyz(0.0, hull_h * 0.5 + 0.5, 0.05),
+                ));
+            }
+        });
+}
+
+/// BAG→SHIP edits rebuild the pad ship on the spot — the SFS payoff.
 pub(crate) fn sync_ship_config_visual(
     builder: Res<crate::ship_builder::ShipBuilderState>,
     pads: Res<LaunchPadWorld>,
+    tiles: Res<TileWorld>,
     old: Query<Entity, With<ShipConfigVisual>>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut std_mats: ResMut<Assets<StandardMaterial>>,
 ) {
     if !builder.is_changed() || builder.is_added() {
         return;
@@ -212,146 +254,26 @@ pub(crate) fn sync_ship_config_visual(
     for e in &old {
         commands.entity(e).despawn_recursive();
     }
-    spawn_config_ship_visual(
-        &mut commands,
-        &mut meshes,
-        &mut std_mats,
-        pad.uid,
-        pad.x,
-        pad.z,
-        &builder.config,
-    );
+    let ground = tiles.ground_height_at(CelestialBody::Earth, pad.x);
+    spawn_config_ship_visual(&mut commands, pad.uid, pad.x, ground, &builder.config);
 }
 
-/// One merged mesh via AssetFactory + invisible ECS markers for hold-interact (zero extra draws).
-pub fn spawn_launch_pad(
+/// Assembled module visual — small colored crate beside the slot.
+fn spawn_starship_module_visual(
     commands: &mut Commands,
-    factory: &mut AssetFactory,
-    meshes: &mut Assets<Mesh>,
-    toon_mats: &mut Assets<ToonMaterial>,
-    std_mats: &mut Assets<StandardMaterial>,
-    uid: u32,
-    x: f32,
-    y: f32,
-    z: f32,
-    pads: &mut LaunchPadWorld,
-) {
-    pads.pads.push(create_launch_pad_state(uid, x, y, z));
-
-    let asset = factory.require(LAUNCH_PAD.asset_kind, meshes, toon_mats, std_mats);
-    let pad_mat = std_mats.add(crate::materials::unlit_srgb([0.58, 0.61, 0.66]));
-    let pad_tf = sphere_surface_transform(CelestialBody::Earth, x, z, PAD_SURFACE_LIFT, 0.0);
-
-    commands.spawn((
-        Mesh3d(asset.mesh.clone()),
-        MeshMaterial3d(pad_mat),
-        pad_tf,
-        EarthDecor,
-        MachineEntity { uid },
-        LaunchPadRoot { uid },
-        Name::new(format!("LaunchPad_{uid}")),
-    ));
-
-    let module_world = module_slot_tangent(x, z);
-    for ((tx, tz, lift), i) in module_world {
-        let pos = sphere_world_pos(CelestialBody::Earth, tx, tz, lift);
-        commands.spawn((
-            Transform::from_translation(pos),
-            InteractTarget {
-                kind: InteractTargetKind::LaunchModule,
-                id: i as u32,
-            },
-            LaunchModuleMarker {
-                pad_uid: uid,
-                module_index: i,
-            },
-            Visibility::Hidden,
-            Name::new(format!("LaunchModule_{uid}_{i}")),
-        ));
-    }
-
-    let ignition_pos = sphere_world_pos(CelestialBody::Earth, x, z, PAD_SURFACE_LIFT + 2.8);
-    commands.spawn((
-        Transform::from_translation(ignition_pos),
-        InteractTarget {
-            kind: InteractTargetKind::LaunchIgnition,
-            id: uid,
-        },
-        LaunchIgnitionMarker { pad_uid: uid },
-        Name::new(format!("LaunchIgnition_{uid}")),
-    ));
-    spawn_interact_beacon(
-        commands,
-        meshes,
-        std_mats,
-        ignition_pos + Vec3::Y * 0.2,
-        LinearRgba::new(1.0, 0.55, 0.12, 1.0),
-        2.6,
-        (),
-    );
-
-    // PROBE CONSOLE — ground-side twin of the dock console (same agency
-    // network): send nav probes without leaving Earth.
-    let probe_pos = sphere_world_pos(CelestialBody::Earth, x + 4.5, z - 4.5, PAD_SURFACE_LIFT + 0.4);
-    commands.spawn((
-        Transform::from_translation(probe_pos),
-        InteractTarget {
-            kind: InteractTargetKind::ProbeConsole,
-            id: uid,
-        },
-        Name::new(format!("ProbeConsolePad_{uid}")),
-    ));
-    spawn_interact_beacon(
-        commands,
-        meshes,
-        std_mats,
-        probe_pos + Vec3::Y * 0.2,
-        LinearRgba::new(1.0, 0.62, 0.18, 1.0),
-        1.8,
-        (),
-    );
-}
-
-/// Starship prefab module mesh — hull / fuel tank / engine (visible after assembly).
-pub fn spawn_starship_module_visual(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    std_mats: &mut Assets<StandardMaterial>,
-    pad_uid: u32,
     module_index: u8,
     pos: Vec3,
 ) {
-    let (mesh, rgb, y_off) = match module_index {
-        0 => (
-            Mesh::from(Cuboid::new(1.4, 2.8, 1.4)),
-            [0.55, 0.58, 0.62],
-            1.4,
-        ),
-        1 => (
-            Mesh::from(Capsule3d::new(0.65, 1.6)),
-            [0.92, 0.48, 0.12],
-            1.1,
-        ),
-        _ => (
-            Mesh::from(Cylinder::new(0.55, 1.5)),
-            [0.88, 0.22, 0.14],
-            0.9,
-        ),
+    let rgb = match module_index {
+        0 => Color::srgb(0.55, 0.58, 0.62),
+        1 => Color::srgb(0.92, 0.48, 0.12),
+        _ => Color::srgb(0.88, 0.22, 0.14),
     };
-    let mat = std_mats.add(crate::materials::unlit_srgb(rgb));
-    let center = Vec3::from_array(ha_shared::planet_gameplay_center(CelestialBody::Earth));
-    let up = (pos - center).normalize_or_zero();
     commands.spawn((
-        Mesh3d(meshes.add(mesh)),
-        MeshMaterial3d(mat),
-        Transform::from_translation(pos + up * y_off)
-            .with_rotation(Quat::from_rotation_arc(Vec3::Y, up)),
-        EarthDecor,
-        LaunchModuleVisual {
-            pad_uid,
-            module_index,
-        },
-        Name::new(format!("ShipModule_{pad_uid}_{module_index}")),
+        Sprite::from_color(rgb, Vec2::new(1.2, 1.2)),
+        Transform::from_translation(pos.truncate().extend(1.1)),
+        LaunchModuleVisual,
+        Name::new(format!("ShipModule_{module_index}")),
     ));
 }
 
@@ -361,15 +283,12 @@ pub(crate) fn try_assemble_on_hold(
     target: Res<LookTarget>,
     equipped: Res<EquippedItem>,
     region: Res<RegionRuntime>,
-    transition: Res<FlightTransition>,
     mut pads: ResMut<LaunchPadWorld>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
     modules: Query<(&LaunchModuleMarker, &GlobalTransform)>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut std_mats: ResMut<Assets<StandardMaterial>>,
 ) {
-    if !hold.completed || hold.placing_machine || transition.blocks_travel() {
+    if !hold.completed || hold.placing_machine {
         return;
     }
     if !matches!(region.active, RegionId::Overworld { .. }) {
@@ -404,14 +323,7 @@ pub(crate) fn try_assemble_on_hold(
     };
     if assemble_module(pad, module_index, &mut inv) {
         persist.mark_immediate();
-        spawn_starship_module_visual(
-            &mut commands,
-            &mut meshes,
-            &mut std_mats,
-            pad_uid,
-            module_index,
-            pos,
-        );
+        spawn_starship_module_visual(&mut commands, module_index, pos);
         eprintln!(
             "ha-launch: starship module {} on pad {} ({}/3)",
             module_index, pad_uid, pad.assembled_modules
@@ -424,22 +336,14 @@ pub(crate) fn try_ignite_on_hold(
     target: Res<LookTarget>,
     equipped: Res<EquippedItem>,
     region: Res<RegionRuntime>,
-    transition: Res<crate::world_travel::FlightTransition>,
     pads: Res<LaunchPadWorld>,
     mut flight: ResMut<RocketFlight>,
-    intent: Res<crate::input::MovementIntent>,
-    mut moon: ResMut<crate::moon_world::MoonWorldState>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
     clock: Res<crate::solar_system_clock::SolarSystemClock>,
     ignition: Query<&LaunchIgnitionMarker>,
     player: Query<&SimState, With<Player>>,
 ) {
-    if !hold.completed
-        || hold.placing_machine
-        || flight.active
-        || transition.blocks_travel()
-    {
-        if hold.completed {
+    if !hold.completed || hold.placing_machine || flight.active {
+        if hold.completed && flight.active {
             hold.completed = false;
         }
         return;
@@ -476,31 +380,25 @@ pub(crate) fn try_ignite_on_hold(
     let Ok(sim) = player.get_single() else {
         return;
     };
-    let _ = (clock, &mut world_ctx, &mut moon);
-    let tx = sim.body.x;
-    let tz = sim.body.z;
-    let pos = world_pos_from_tangent(CelestialBody::Earth, tx, tz, 1.8);
-    let up = surface_normal_at_tangent(CelestialBody::Earth, tx, tz);
 
-    // SFS ascent: launch as flight on Earth's gameplay shell (same coherent
-    // path Luna/planets use). `tick_rocket_flight` remaps gameplay→orbital
-    // once you clear the atmosphere, so you fly UP and out into continuous
-    // orbital space — no scripted transit, no walk hub. Point at the Moon and
-    // keep burning to get there.
+    // SFS ascent in 2D: ignite as a flight on the world plane; the render
+    // stays in the surface frame until escape altitude, then the orbital
+    // view takes over — continuous, no cutscene (B8).
+    let t = clock.t;
+    flight.clock_secs = t;
+    let s = sim.body.x;
+    let pos = flat_surface_to_orbital(CelestialBody::Earth, s, sim.body.y + 2.0, t);
+    let vel = flat_velocity_to_orbital(CelestialBody::Earth, s, 0.0, 18.0);
     flight.surface_flight = Some(CelestialBody::Earth);
-    flight.begin_at(pos);
+    flight.surface_ref_s = s;
+    flight.begin_at(Vec3::from_array(pos));
     // The Earth pad is the ONLY refuel point — the agency tops the tank here.
     flight.fuel = flight.capacity();
-    flight.vel = up * 18.0;
-    flight.pitch = 0.22;
+    flight.vel = Vec3::from_array(vel);
     eprintln!("ha-launch: rocket ignition from pad — tank full");
 }
 
-/// Creative fly-to-space: when creative flight carries the player above the
-/// Derive mass/fuel stats from the assembled pad modules. Pad slots today:
-/// 0 = hull, 1 = fuel tank, 2 = engine (`spawn_starship_module_visual`).
-/// Mirrors onto `RocketFlight` (fuel_max/burn_factor) — the flight tick sits
-/// at Bevy's system-param limit and can't take the loadout as a Res.
+/// Derive mass/fuel stats from the assembled pad modules + BAG→SHIP extras.
 pub(crate) fn sync_ship_loadout(
     pads: Res<LaunchPadWorld>,
     builder: Res<crate::ship_builder::ShipBuilderState>,
@@ -522,7 +420,6 @@ pub(crate) fn sync_ship_loadout(
         return;
     }
     if assembled < PAD_MODULE_IDS.len() {
-        // Pad still under construction — partial baseline, no extras yet.
         let modules = &PAD_MODULE_IDS[..assembled];
         let mass = ha_shared::ship_mass_t(modules);
         let tanks = modules.iter().filter(|m| **m == "fuel_tank").count() as u32;
@@ -534,7 +431,6 @@ pub(crate) fn sync_ship_loadout(
         loadout.fin_align_rate = 0.0;
         loadout.safe_landing_bonus = 0.0;
     } else {
-        // Complete baseline + the player's ship-builder extras (BAG → SHIP).
         let stats = ha_shared::ship_config_stats(builder.config);
         loadout.mass_t = stats.mass_t;
         loadout.burn_factor = stats.burn_factor;

@@ -2,16 +2,9 @@ use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::prelude::*;
 
 use crate::debug::PerfOverlayVisible;
-use crate::celestial_cleanup::CelestialCleanup;
-use crate::world_travel::FlightTransition;
-use crate::rocket_flight::RocketFlight;
-use crate::space_travel::space_dock_origin;
-use ha_shared::{
-    planet_gameplay_world_pos, planet_ground_y_at, CelestialBody, WorldContext,
-    LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z,
-};
-use crate::moon_world::MoonWorldState;
-use crate::scene::{LaunchAtmosphere, RegionId, RegionRuntime, WorldContextRuntime};
+use crate::rocket_flight::{orbital_start_above_pad, RocketFlight};
+use ha_shared::CelestialBody;
+use crate::scene::{teleport_to_body, LaunchAtmosphere, RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::game_ui::{self, apply_top_center, apply_center, GameUiRoot, MENU_BUTTON_WIDTH};
 use crate::input::calibration::InputCalibration;
@@ -710,17 +703,12 @@ fn editor_button_system(
     mut state: ResMut<UiEditorState>,
     mut config: ResMut<UiLayoutConfig>,
     mut perf_visible: ResMut<PerfOverlayVisible>,
-    #[cfg(debug_assertions)] mut asset_dev: ResMut<crate::asset_dev::AssetDevState>,
     mut region: ResMut<RegionRuntime>,
     mut world_ctx: ResMut<WorldContextRuntime>,
-    mut moon: ResMut<MoonWorldState>,
+    mut planet: ResMut<crate::world2d::ActivePlanet>,
     mut launch_atmo: ResMut<LaunchAtmosphere>,
     mut flight: ResMut<RocketFlight>,
-    mut transition: ResMut<FlightTransition>,
-    mut cleanup: ResMut<CelestialCleanup>,
-    layout: Res<crate::sim::WorldLayout>,
-    collision: Res<crate::sim::WorldCollision>,
-    mut player: Query<(&mut Transform, &mut SimState, &mut PlayerVisual), With<Player>>,
+    mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
     mut buttons: Query<(&Interaction, &UiEditorCommand, &mut BackgroundColor), Changed<Interaction>>,
 ) {
     for (interaction, command, mut bg) in &mut buttons {
@@ -745,95 +733,49 @@ fn editor_button_system(
                 }
                 UiEditorCommand::GoLuna => {
                     flight.end_surface();
-                    flight.active = false;
-                    cleanup.despawn_moon = false;
-                    cleanup.despawn_planet = false;
-                    region.active = RegionId::Luna;
-                    world_ctx.active = WorldContext::Luna;
-                    moon.needs_spawn = true;
-                    moon.spawn_after_frames = 0;
                     launch_atmo.active = false;
                     launch_atmo.blend = 0.0;
-                    const SPAWN_TX: f32 = 0.0;
-                    const SPAWN_TZ: f32 = 0.0;
-                    if let Ok((mut tf, mut sim, mut visual)) = player.get_single_mut() {
-                        let ground =
-                            planet_ground_y_at(CelestialBody::Moon, SPAWN_TX, SPAWN_TZ);
-                        sim.body.x = SPAWN_TX;
-                        sim.body.z = SPAWN_TZ;
-                        sim.body.y = ground;
-                        sim.body.vx = 0.0;
-                        sim.body.vy = 0.0;
-                        sim.body.vz = 0.0;
-                        visual.from_x = SPAWN_TX;
-                        visual.from_z = SPAWN_TZ;
-                        visual.from_y = ground;
-                        visual.to_x = SPAWN_TX;
-                        visual.to_z = SPAWN_TZ;
-                        visual.to_y = ground;
-                        let lift = sim.body.radius * 1.1;
-                        let wp = planet_gameplay_world_pos(
+                    if let Ok((mut sim, mut visual)) = player.get_single_mut() {
+                        teleport_to_body(
                             CelestialBody::Moon,
-                            SPAWN_TX,
-                            SPAWN_TZ,
-                            lift,
+                            &mut region,
+                            &mut world_ctx,
+                            &mut planet,
+                            &mut sim,
+                            &mut visual,
                         );
-                        tf.translation = Vec3::from_array(wp);
-                        let dir = ha_shared::luna_dir_from_tangent(SPAWN_TX, SPAWN_TZ);
-                        let normal = Vec3::new(dir[0], dir[1], dir[2]).normalize_or_zero();
-                        tf.rotation =
-                            Quat::from_rotation_arc(Vec3::Y, normal)
-                                * Quat::from_rotation_y(sim.body.rot);
                     }
-                    transition.begin("Dev → Luna surface");
                     state.menu_open = false;
                     state.settings_open = false;
                     state.enabled = false;
-                    eprintln!("ha-luna: dev teleport → surface txz=({SPAWN_TX},{SPAWN_TZ})");
+                    eprintln!("ha-luna: dev teleport → Luna strip");
                 }
                 UiEditorCommand::GoSpace => {
-                    let dock = space_dock_origin();
-                    flight.begin_coast_toward(dock, Vec3::ZERO, ha_shared::CelestialBody::Earth);
+                    flight.begin_coast_toward(
+                        orbital_start_above_pad(),
+                        Vec3::ZERO,
+                        CelestialBody::Earth,
+                    );
                     region.active = RegionId::Space;
                     world_ctx.active = ha_shared::WorldContext::Space;
-                    cleanup.despawn_moon = false;
                     launch_atmo.active = false;
-                    transition.begin("Dev → órbita");
                     state.menu_open = false;
                     state.settings_open = false;
                     state.enabled = false;
                 }
                 UiEditorCommand::GoEarth => {
                     flight.end_surface();
-                    flight.active = false;
-                    cleanup.despawn_moon = true;
-                    transition.begin("Dev → Earth pad");
                     launch_atmo.active = false;
                     launch_atmo.blend = 0.0;
-                    region.active = RegionId::Overworld { gx: 0, gz: 0 };
-                    world_ctx.active = WorldContext::Overworld;
-                    if let Ok((mut tf, mut sim, mut visual)) = player.get_single_mut() {
-                        let feet = crate::sim::earth_surface_y(LAUNCH_PAD_ZONE_X, LAUNCH_PAD_ZONE_Z);
-                        let placed = crate::surface_placement::player_sphere_transform(
-                            ha_shared::CelestialBody::Earth,
-                            LAUNCH_PAD_ZONE_X,
-                            LAUNCH_PAD_ZONE_Z,
-                            feet,
-                            sim.body.radius,
-                            sim.body.rot,
+                    if let Ok((mut sim, mut visual)) = player.get_single_mut() {
+                        teleport_to_body(
+                            CelestialBody::Earth,
+                            &mut region,
+                            &mut world_ctx,
+                            &mut planet,
+                            &mut sim,
+                            &mut visual,
                         );
-                        tf.translation = placed.translation;
-                        tf.rotation = placed.rotation;
-                        sim.body.x = LAUNCH_PAD_ZONE_X;
-                        sim.body.y = feet;
-                        sim.body.z = LAUNCH_PAD_ZONE_Z;
-                        sim.body.vy = 0.0;
-                        visual.from_x = sim.body.x;
-                        visual.from_z = sim.body.z;
-                        visual.from_y = feet;
-                        visual.to_x = sim.body.x;
-                        visual.to_z = sim.body.z;
-                        visual.to_y = feet;
                     }
                     state.menu_open = false;
                     state.settings_open = false;
@@ -893,11 +835,7 @@ fn editor_button_system(
                 UiEditorCommand::Save => save_ui_layout(&config),
                 #[cfg(debug_assertions)]
                 UiEditorCommand::OpenAssets => {
-                    asset_dev.panel_open = !asset_dev.panel_open;
-                    if asset_dev.panel_open {
-                        state.settings_open = false;
-                        state.enabled = false;
-                    }
+                    // Asset dev viewer retired with the 3D asset factory.
                 }
             }
         }

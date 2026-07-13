@@ -11,11 +11,23 @@ use super::actions::{self, TouchActions};
 use super::calibration::CAMERA_LOOK_SMOOTH_RATE;
 use super::CameraLookIntent;
 use crate::camera::{FP_MAX_PITCH, FP_MIN_PITCH};
-use crate::building_world::BuildModeActive;
 use crate::machines::PendingMachinePlacement;
 use crate::targeting::LookTarget;
 use crate::game_ui::UiGameplayBlock;
 use crate::ui_editor::{UiEditorState, UiLayoutConfig};
+
+/// Build-mode toggle (modular pieces) — legacy switch kept for the HUD.
+#[derive(Resource, Default)]
+pub struct BuildModeActive {
+    pub active: bool,
+}
+
+/// World-space pointer for 2D targeting: the active look-zone touch position
+/// (screen px). Desktop targeting falls back to the window cursor.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct LookPointer {
+    pub pos: Option<Vec2>,
+}
 
 #[derive(Resource, Default, Clone, Copy, Debug)]
 pub struct HoldInteractState {
@@ -74,6 +86,8 @@ impl Plugin for LookInteractPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LookGestureRuntime>()
             .init_resource::<SmoothedLookDelta>()
+            .init_resource::<BuildModeActive>()
+            .init_resource::<LookPointer>()
             .init_resource::<HoldInteractState>()
             .init_resource::<AbilityTapPulse>()
             .init_resource::<AbilityCooldown>()
@@ -122,6 +136,7 @@ fn look_gesture_system(
     mut touches: EventReader<TouchInput>,
     mut runtime: ResMut<LookGestureRuntime>,
     mut look_delta: ResMut<SmoothedLookDelta>,
+    mut pointer: ResMut<LookPointer>,
     mut hold: ResMut<HoldInteractState>,
     mut cooldown: ResMut<AbilityCooldown>,
     mut tap: ResMut<AbilityTapPulse>,
@@ -144,6 +159,7 @@ fn look_gesture_system(
                     continue;
                 }
                 runtime.pointer_id = Some(ev.id);
+                pointer.pos = Some(pos);
                 runtime.anchor_pos = pos;
                 runtime.last_pos = pos;
                 runtime.start_ms = now_ms;
@@ -166,6 +182,7 @@ fn look_gesture_system(
                 }
                 let delta = pos - runtime.last_pos;
                 runtime.last_pos = pos;
+                pointer.pos = Some(pos);
                 let from_anchor = pos - runtime.anchor_pos;
                 let drift_limit = if hold.flight_hold {
                     GESTURE_FLIGHT_MOVE_CANCEL_PX
@@ -199,6 +216,7 @@ fn look_gesture_system(
                     cooldown.remaining_ms = cooldown.total_ms;
                 }
                 runtime.pointer_id = None;
+                pointer.pos = None;
                 runtime.hold_started = false;
             }
         }
@@ -322,6 +340,7 @@ pub(crate) fn tick_hold_interact(
     }
     let target_valid = target.entity.is_some()
         || target.block_cell.is_some()
+        || target.flora_cell.is_some()
         || hold.placing_machine
         || hold.placing_build
         || hold.eating

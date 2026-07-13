@@ -25,11 +25,11 @@ use ha_shared::{
     LAUNCH_PAD_MODULE_COUNT,
 };
 use crate::ui_theme::{self, UiButtonState, UiButtonTone};
-use crate::ghibli_atmosphere::PlayerLanternControl;
+use crate::sky2d::PlayerLanternControl;
 use crate::platform;
 
 mod icons;
-mod item_icons;
+pub mod item_icons;
 pub mod inventory_ui;
 mod survival_bars;
 
@@ -118,7 +118,7 @@ impl Plugin for PixelHudPlugin {
                         .after(crate::machines::try_place_on_hold)
                         .after(crate::launch_pad::try_assemble_on_hold)
                         .after(crate::launch_pad::try_ignite_on_hold)
-                        .after(crate::space_travel::try_lunar_return_to_space),
+                        ,
                 ),
             );
     }
@@ -1282,21 +1282,12 @@ fn nearest_launch_module_slot<'a>(
     pads: &'a LaunchPadWorld,
     hit: Vec3,
 ) -> Option<(&'a ha_shared::LaunchPadState, u8)> {
-    let offsets = [
-        (0u8, -8.0_f32, 8.0_f32),
-        (1u8, 8.0_f32, 8.0_f32),
-        (2u8, 0.0_f32, -8.0_f32),
-    ];
-    let slot_lift = crate::surface_placement::PAD_SURFACE_LIFT + 0.55;
+    // 2D pad slots: offsets along the strip (see launch_pad::spawn_launch_pad).
+    let offsets = [(0u8, -5.0_f32), (1u8, 5.0_f32), (2u8, -2.5_f32)];
     let mut best: Option<(&ha_shared::LaunchPadState, u8, f32)> = None;
     for pad in &pads.pads {
-        for (idx, ox, oz) in offsets {
-            let slot = crate::surface_placement::sphere_world_pos(
-                ha_shared::CelestialBody::Earth,
-                pad.x + ox,
-                pad.z + oz,
-                slot_lift,
-            );
+        for (idx, ox) in offsets {
+            let slot = Vec3::new(pad.x + ox, pad.y + 1.6, 0.0);
             let d = hit.distance(slot);
             if d > 2.5 {
                 continue;

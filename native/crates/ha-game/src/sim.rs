@@ -1,22 +1,23 @@
-//! Local player sim @ 20 Hz — sphere surface locomotion (SFS worlds).
+//! Local player sim @ 20 Hz — flat-2D slice locomotion (Terraria-style strip
+//! around each body; biblia §1 continuity in 2D).
 
 use bevy::prelude::*;
+use ha_shared::flat2d::{step_flat_creative_fly, step_flat_movement, PLAYER_HEIGHT};
 use ha_shared::{
-    capsule_center_above_feet, collision_obstacles, generate_world, ground_height_for_locomotion,
-    parkour_button_hint, step_surface_movement, CelestialBody, InputState, ParkourButtonHint,
-    WorldContext,
+    collision_obstacles, generate_world, parkour_button_hint, CelestialBody, InputState,
+    ParkourButtonHint, WorldContext,
 };
 
-use crate::game_time::fixed_delta_secs;
 use crate::game_time::configure_game_clock;
+use crate::game_time::fixed_delta_secs;
 use crate::input::{EquippedItem, HoldInteractState, MovementIntent, TouchActions};
-use crate::jetpack_transit::{JetpackTransit, JETPACK_ITEM};
 use crate::rocket_flight::RocketFlight;
-use crate::planet_world::ActivePlanet;
 use crate::scene::WorldContextRuntime;
+use crate::world2d::{active_surface_body, ActivePlanet, TileWorld};
 
-/// Underground mission floor when cave interiors return.
+/// Legacy anchor kept for compat (old cave interior origin).
 pub const CAVE_INTERIOR_ORIGIN: Vec3 = Vec3::new(0.0, -22.0, 0.0);
+pub const JETPACK_ITEM: &str = "jetpack";
 
 #[derive(Component)]
 pub struct Player;
@@ -40,10 +41,6 @@ impl Plugin for SimPlugin {
 
 #[derive(Resource, Clone)]
 pub struct WorldLayout(pub ha_shared::GeneratedWorld);
-
-pub fn earth_surface_y(tx: f32, tz: f32) -> f32 {
-    ground_height_for_locomotion(tx, tz, 0.35)
-}
 
 #[derive(Component)]
 pub struct SimState {
@@ -69,34 +66,25 @@ pub struct PlayerVisual {
     pub radius: f32,
 }
 
-fn surface_body(ctx: &WorldContext, planet: &ActivePlanet) -> CelestialBody {
-    match ctx {
-        WorldContext::Luna => CelestialBody::Moon,
-        WorldContext::Planet => planet.body.unwrap_or(CelestialBody::Mars),
-        _ => CelestialBody::Earth,
-    }
-}
-
 fn tick_sim(
     time: Res<Time<Fixed>>,
     intent: Res<MovementIntent>,
     actions: Res<TouchActions>,
     hold: Res<HoldInteractState>,
     equipped: Res<EquippedItem>,
-    transit: Res<JetpackTransit>,
     flight: Res<RocketFlight>,
     world_ctx: Res<WorldContextRuntime>,
     planet_ctx: Res<ActivePlanet>,
-    placed_blocks: Res<crate::block_world::PlacedBlocks>,
+    tiles: Res<TileWorld>,
     editor: Res<crate::ui_editor::UiEditorState>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
-    if transit.active || flight.blocks_walking() {
+    if flight.blocks_walking() {
         return;
     }
     let dt = fixed_delta_secs(&time);
     let gravity_scale = ha_shared::gravity_scale_for_context(world_ctx.active);
-    let body_surface = surface_body(&world_ctx.active, &planet_ctx);
+    let body_surface = active_surface_body(&world_ctx, &planet_ctx);
 
     for (mut sim, mut visual) in &mut query {
         visual.from_x = visual.to_x;
@@ -112,14 +100,6 @@ fn tick_sim(
             && (!hold.active || hold.flight_hold);
         sim.prev_action = action_now;
 
-        let parkour_action = if climb_mode && actions.jump {
-            1
-        } else if action_now {
-            1
-        } else {
-            0
-        };
-
         let input = InputState {
             seq: 0,
             move_x: intent.move_x,
@@ -128,60 +108,30 @@ fn tick_sim(
             aim_z: intent.aim_z,
             abilities: actions.abilities,
             sprint: if intent.sprint { 1 } else { 0 },
-            action: parkour_action,
+            action: if action_now { 1 } else { 0 },
         };
 
         match world_ctx.active {
-            WorldContext::Mission => {
-                sim.body.x = sim.body.x.clamp(-12.0, 12.0);
-                sim.body.z = sim.body.z.clamp(-12.0, 12.0);
-                let floor = CAVE_INTERIOR_ORIGIN.y + 1.1;
-                if sim.body.y < floor {
-                    sim.body.y = floor;
-                    sim.body.vy = 0.0;
-                }
-            }
             WorldContext::Space => {
-                // Walk zone centred on the dock — the old ±6 around the world
-                // origin was ~130 m away from the SpaceDecor spawned at
-                // `space_dock_origin()` (28, 128, -28).
-                let dock = crate::space_travel::space_dock_origin();
-                sim.body.x = sim.body.x.clamp(dock.x - 6.0, dock.x + 6.0);
-                sim.body.z = sim.body.z.clamp(dock.z - 6.0, dock.z + 6.0);
-                let floor = dock.y + 0.12;
-                if sim.body.y < floor {
-                    sim.body.y = floor;
-                    sim.body.vy = 0.0;
-                }
+                // In vacuum outside a rocket there is nothing to walk on —
+                // the rocket flight owns movement (context only reachable
+                // mid-flight).
             }
-            WorldContext::Luna | WorldContext::Planet | WorldContext::Overworld
-                if editor.creative =>
-            {
-                // Creative fly: JUMP ascends, sprint descends, no gravity —
-                // fly straight up to reach space without building a rocket.
-                ha_shared::step_surface_creative_fly(
-                    body_surface,
-                    &mut sim.body,
-                    &input,
-                    dt,
-                    actions.jump,
-                    intent.sprint,
-                );
+            _ if editor.creative => {
+                step_flat_creative_fly(&mut sim.body, &input, dt, actions.jump, intent.sprint);
             }
-            WorldContext::Luna | WorldContext::Planet | WorldContext::Overworld => {
-                ha_shared::step_surface_movement_with_blocks(
+            _ => {
+                let solid = |i: i64, j: i32| tiles.solid_at(body_surface, i, j);
+                step_flat_movement(
                     body_surface,
                     &mut sim.body,
                     &input,
                     dt,
                     jump_pressed,
                     gravity_scale,
-                    placed_blocks.for_body(body_surface),
+                    &solid,
                 );
-                // Jetpack is a universal movement tool — usable on ANY walkable
-                // body (Tierra, Luna, planetas), not just the overworld. Same
-                // hop-and-sustain feel everywhere; the lower gravity on airless
-                // bodies just makes each burn carry farther.
+                // Jetpack is a universal movement tool — usable on ANY body.
                 if equipped.item_id == JETPACK_ITEM {
                     if jump_pressed && sim.body.coyote_sec > 0.0 {
                         sim.body.vy = sim.body.vy.max(9.5);
@@ -192,9 +142,10 @@ fn tick_sim(
                 }
             }
         }
+        sim.body.z = 0.0;
 
         visual.to_x = sim.body.x;
-        visual.to_z = sim.body.z;
+        visual.to_z = 0.0;
         visual.to_y = sim.body.y;
         visual.to_rot = sim.body.rot;
         visual.radius = sim.body.radius;
@@ -203,61 +154,31 @@ fn tick_sim(
 
 fn interpolate_player_visual(
     time: Res<Time<Fixed>>,
-    world_ctx: Res<WorldContextRuntime>,
-    planet_ctx: Res<ActivePlanet>,
     flight: Res<RocketFlight>,
-    origin: Res<crate::floating_origin::FloatingOrigin>,
-    mut query: Query<(&PlayerVisual, &mut Transform), With<Player>>,
+    mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
     let t = time.overstep_fraction() as f32;
     if flight.active && flight.phase != ha_shared::FlightPhase::Surface {
-        let (pos, rot) = crate::rocket_flight::flight_world_transform(&flight, &origin);
-        for (_, mut transform) in &mut query {
-            transform.translation = pos;
-            transform.rotation = rot;
+        // In flight the rocket sprite is the avatar; hide the walker.
+        for (_, _, mut vis) in &mut query {
+            *vis = Visibility::Hidden;
         }
         return;
     }
 
-    let on_sphere = matches!(
-        world_ctx.active,
-        WorldContext::Overworld | WorldContext::Luna | WorldContext::Planet
-    );
-    let sphere_body = surface_body(&world_ctx.active, &planet_ctx);
-
-    for (visual, mut transform) in &mut query {
+    for (visual, mut transform, mut vis) in &mut query {
+        *vis = Visibility::Visible;
         let x = visual.from_x.lerp(visual.to_x, t);
-        let z = visual.from_z.lerp(visual.to_z, t);
         let y = visual.from_y.lerp(visual.to_y, t);
-        let rot = lerp_angle(visual.from_rot, visual.to_rot, t);
-
-        if on_sphere {
-            let r = ha_shared::body_walk_radius(sphere_body);
-            let dir = ha_shared::planet_dir_from_tangent(sphere_body, x, z);
-            let disp = ha_shared::planet_displacement_at_dir(sphere_body, dir);
-            let center = Vec3::from_array(ha_shared::planet_gameplay_center(sphere_body));
-            let normal = Vec3::new(dir[0], dir[1], dir[2]).normalize_or_zero();
-            let surf = center + normal * (r + disp);
-            let ground = ha_shared::planet_ground_y_at(sphere_body, x, z);
-            let hop = (y - ground).max(0.0);
-            transform.translation = surf + normal * (visual.radius * 1.1 + hop);
-            let align = Quat::from_rotation_arc(Vec3::Y, normal);
-            transform.rotation = align * Quat::from_rotation_y(rot);
-        } else {
-            let center_y = capsule_center_above_feet(visual.radius);
-            transform.translation = Vec3::new(x, y + center_y, z);
-            transform.rotation = Quat::from_rotation_y(rot);
-        }
+        transform.translation = Vec3::new(x, y + PLAYER_HEIGHT * 0.5, 2.0);
+        // rot encodes facing: flip the sprite for -s.
+        let facing_left = visual.to_rot.abs() > std::f32::consts::FRAC_PI_2;
+        transform.rotation = Quat::IDENTITY;
+        transform.scale = Vec3::new(if facing_left { -1.0 } else { 1.0 }, 1.0, 1.0);
     }
 }
 
-fn lerp_angle(from: f32, to: f32, t: f32) -> f32 {
-    let mut delta = to - from;
-    while delta > std::f32::consts::PI {
-        delta -= std::f32::consts::TAU;
-    }
-    while delta < -std::f32::consts::PI {
-        delta += std::f32::consts::TAU;
-    }
-    from + delta * t
+/// Ground height (m) on Earth at arc position `s` — natural terrain only.
+pub fn earth_surface_y(tx: f32, _tz: f32) -> f32 {
+    ha_shared::flat2d::ground_height_m(CelestialBody::Earth, tx)
 }

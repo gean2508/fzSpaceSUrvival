@@ -1,12 +1,12 @@
 # Agencia Espacial Survival — AI Guidelines
 
-Survival + space exploration: **Colyseus server** + **native Bevy client** + shared deterministic sim.  
+Survival + space exploration: **Colyseus server** + **native Bevy client (2D)** + shared deterministic sim.  
 Product vision: `native/docs/SPACE_SURVIVAL_VISION.md` · context bible: `labiblia.md`.
 
 ## Status
 
 Server MVP: authoritative netcode, survival waves, Postgres, auth, `/updates`.
-**Game client:** `native/` (Rust/Bevy ECS) — React/R3F/Expo **removed**.
+**Game client:** `native/` (Rust/Bevy ECS, **2D**: superficie Terraria + vuelo SFS — rama `rewrite-2d`; el 3D esférico vive solo en el historial de `main`). React/R3F/Expo **removed**.
 
 ## Structure
 
@@ -35,4 +35,4 @@ npm run test:native       # ha-shared Rust tests
 3. `VITE_SERVER_HOST` / `HA_SERVER_HOST` for LAN — never hardcode IPs.
 4. Landing stays minimal — no R3F, no game engine in `client/`.
 5. User flow: `npm run play` → URL on phone → download APK → install → play.
-6. **Direction:** Tierra (current island) → prefab ships (arcade flight, not KSP) → off-world bases → colonists. No orbital physics; 30+ FPS before space features.
+6. **Direction:** juego 2D (Terraria en superficie + Space Flight Simulator en vuelo/planetas) conservando TODO el contenido (survival, máquinas, base lunar, colonos, ship builder). Tierra → naves prefab → off-world → colonos. No orbital physics; objetivo 60 FPS en el Redmi. NO reintroducir render 3D (biblia §1 anti-regresión).

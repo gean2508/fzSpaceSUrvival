@@ -114,7 +114,7 @@ pub fn desktop_hold_interact(
     target: Res<crate::targeting::LookTarget>,
     equipped: Res<super::EquippedItem>,
     pending: Res<crate::machines::PendingMachinePlacement>,
-    build_mode: Res<crate::building_world::BuildModeActive>,
+    build_mode: Res<crate::input::BuildModeActive>,
     mut hold: ResMut<super::HoldInteractState>,
 ) {
     if editor.enabled || editor.menu_open || gameplay_block.blocked || !capture.active {

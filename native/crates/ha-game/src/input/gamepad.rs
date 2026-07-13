@@ -130,7 +130,7 @@ pub(super) fn gamepad_hold_interact(
     target: Res<crate::targeting::LookTarget>,
     equipped: Res<super::EquippedItem>,
     pending: Res<crate::machines::PendingMachinePlacement>,
-    build_mode: Res<crate::building_world::BuildModeActive>,
+    build_mode: Res<crate::input::BuildModeActive>,
     flight: Res<crate::rocket_flight::RocketFlight>,
     mut hold: ResMut<super::HoldInteractState>,
 ) {

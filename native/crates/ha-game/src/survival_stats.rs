@@ -18,7 +18,7 @@ use crate::hud::inventory_ui::{
 };
 use crate::input::{EquippedItem, HoldInteractState};
 use crate::inventory_persist::{persist_dir, InventoryPersistState, PlayerInventory};
-use crate::planet_world::ActivePlanet;
+use crate::world2d::ActivePlanet;
 use crate::platform::is_app_paused;
 use crate::rocket_flight::RocketFlight;
 use crate::scene::WorldContextRuntime;

@@ -3,14 +3,8 @@
 use bevy::prelude::*;
 
 use crate::game_ui::GameUiRoot;
-use crate::moon_world::MoonWorldState;
-use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
-use crate::sim::{Player, SimState};
-use crate::view_target::ViewTarget;
 use crate::world_persist::{VesselPersistState, VesselRegistryRes};
-use ha_shared::{
-    ModuleKind, VesselId, VesselRegistry, VesselSimMode, WorldContext,
-};
+use ha_shared::{ModuleKind, VesselId, VesselRegistry, VesselSimMode};
 
 pub struct TelemetryPlugin;
 
@@ -124,7 +118,6 @@ fn sync_telemetry_panel(
     mut commands: Commands,
     ui: Res<TelemetryUiState>,
     reg: Res<VesselRegistryRes>,
-    view: Res<ViewTarget>,
     root: Query<Entity, With<GameUiRoot>>,
     existing: Query<Entity, With<TelemetryPanelRoot>>,
 ) {
@@ -250,7 +243,7 @@ fn sync_telemetry_panel(
 
         p.spawn((
             TelemetryStatusText,
-            Text::new(status_line(&reg, &ui, &view)),
+            Text::new(status_line(&reg, &ui)),
             TextFont {
                 font_size: 12.0,
                 ..default()
@@ -279,7 +272,7 @@ fn sync_telemetry_panel(
             ));
         });
 
-        if view.is_remote() {
+        if false {
             p.spawn((
                 TelemetryReturnButton,
                 Button,
@@ -306,27 +299,23 @@ fn sync_telemetry_panel(
 fn update_telemetry_status_text(
     ui: Res<TelemetryUiState>,
     reg: Res<VesselRegistryRes>,
-    view: Res<ViewTarget>,
     mut text_q: Query<&mut Text, With<TelemetryStatusText>>,
 ) {
     if !ui.open {
         return;
     }
-    let line = status_line(&reg, &ui, &view);
+    let line = status_line(&reg, &ui);
     for mut text in &mut text_q {
         **text = line.clone();
     }
 }
 
-fn status_line(reg: &VesselRegistry, ui: &TelemetryUiState, view: &ViewTarget) -> String {
+fn status_line(reg: &VesselRegistry, ui: &TelemetryUiState) -> String {
     let Some(v) = reg.get(ui.selected) else {
         return String::new();
     };
-    let cam = if view.is_remote() {
-        "CAM: REMOTE LUNA"
-    } else {
-        "CAM: LOCAL"
-    };
+    // Remote camera view is pending in the 2D client — always local for now.
+    let cam = "CAM: LOCAL";
     format!(
         "{} | {} | SOL {:.0}% | {}",
         cam,
@@ -338,13 +327,8 @@ fn status_line(reg: &VesselRegistry, ui: &TelemetryUiState, view: &ViewTarget) -
 
 fn remote_camera_controls(
     mut ui: ResMut<TelemetryUiState>,
-    mut view: ResMut<ViewTarget>,
-    mut region: ResMut<RegionRuntime>,
-    mut world_ctx: ResMut<WorldContextRuntime>,
-    mut moon: ResMut<MoonWorldState>,
     mut persist: ResMut<VesselPersistState>,
     mut reg: ResMut<VesselRegistryRes>,
-    player: Query<&SimState, With<Player>>,
     close_q: Query<
         &Interaction,
         (Changed<Interaction>, With<TelemetryCloseButton>),
@@ -376,40 +360,15 @@ fn remote_camera_controls(
         if *interaction == Interaction::Pressed {
             reg.ensure(VesselId::LunaOutpost, ha_shared::CelestialBody::Moon);
             reg.park_surface(VesselId::LunaOutpost, ha_shared::CelestialBody::Moon, 0.0, -18.0);
-            view.set_remote_luna(0.0, -18.0);
-            region.active = RegionId::Luna;
-            world_ctx.active = WorldContext::Luna;
-            moon.needs_spawn = true;
-            moon.spawn_after_frames = 0;
             ui.open = false;
             persist.mark_immediate();
-            eprintln!("ha-telemetry: remote camera → Luna");
+            // 2D: remote body camera is pending — vessel is parked/monitored only.
+            eprintln!("ha-telemetry: remote camera pending in 2D client");
         }
     }
     for interaction in &ret_q {
         if *interaction == Interaction::Pressed {
-            view.set_player();
-            match world_ctx.active {
-                WorldContext::Overworld => {
-                    region.active = RegionId::Overworld { gx: 0, gz: 0 };
-                }
-                WorldContext::Luna => {
-                    region.active = RegionId::Luna;
-                    moon.needs_spawn = true;
-                }
-                WorldContext::Planet => {
-                    if let Ok(sim) = player.get_single() {
-                        let _ = sim;
-                    }
-                }
-                WorldContext::Space => {
-                    region.active = RegionId::Space;
-                }
-                WorldContext::Mission => {
-                    region.active = RegionId::Overworld { gx: 0, gz: 0 };
-                }
-            }
-            eprintln!("ha-telemetry: return to player camera");
+            eprintln!("ha-telemetry: camera already follows the player in 2D");
         }
     }
 }

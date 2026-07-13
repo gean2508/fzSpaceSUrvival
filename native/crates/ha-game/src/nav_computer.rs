@@ -17,7 +17,7 @@ use crate::inventory_persist::{persist_dir, InventoryPersistState, PlayerInvento
 use crate::platform::is_app_paused;
 use crate::scene::{RegionId, RegionRuntime};
 use crate::solar_system_clock::SolarSystemClock;
-use crate::space_travel::orbital_start_above_pad;
+use crate::rocket_flight::orbital_start_above_pad;
 use crate::targeting::LookTarget;
 
 pub struct NavComputerPlugin;

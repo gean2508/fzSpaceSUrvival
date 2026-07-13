@@ -16,6 +16,7 @@ pub use joystick::{CameraLookIntent, InputPlugin, MovementIntent};
 pub use layout::{TouchBlockRects, TouchLayout};
 pub use desktop_input::DesktopMouseCapture;
 pub use look_interact::{
-    AbilityCooldown, AbilityTapPulse, EquippedItem, HoldInteractState, LookInteractPlugin,
+    AbilityCooldown, AbilityTapPulse, BuildModeActive, EquippedItem, HoldInteractState,
+    LookInteractPlugin, LookPointer,
 };
 pub(crate) use look_interact::tick_hold_interact;

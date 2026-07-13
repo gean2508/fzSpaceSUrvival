@@ -1,403 +1,139 @@
+//! 2D follow camera — surface view (Terraria zoom) and SFS-style flight zoom.
+
 use bevy::prelude::*;
-use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
-use bevy::render::camera::ClearColorConfig;
+use bevy::render::camera::ScalingMode;
 
-use crate::floating_origin::FloatingOrigin;
-use crate::input::CameraLookIntent;
-use crate::rocket_flight::{flight_world_transform, RocketFlight};
-use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
-use crate::view_target::ViewTarget;
-use crate::materials::OutlineShell;
-use crate::sim::{Player, SimState};
-use ha_shared::FlightPhase;
+use crate::rocket_flight::RocketFlight;
+use crate::scene::{RegionId, RegionRuntime};
+use crate::sim::Player;
 
-use crate::debug::{span_record, span_start, CpuSpanSlot, CpuSpanStats};
-use crate::surface_placement::on_sphere_context;
+/// Marker for the single in-game camera.
+#[derive(Component)]
+pub struct GameCamera;
+
+/// Legacy first/third-person pitch clamps — kept for input compat (unused in 2D).
+pub const FP_MIN_PITCH: f32 = -1.35;
+pub const FP_MAX_PITCH: f32 = 1.35;
+
+/// Viewport height (world metres) while walking on a surface.
+const SURFACE_VIEW_H: f32 = 30.0;
+/// Max viewport height (m) at high flight zoom-out (planets become circles).
+const FLIGHT_VIEW_H_MAX: f32 = 9_000.0;
+
+/// Facing direction on the 2D strip: rot 0 → +s, rot PI → -s.
+pub fn facing_sign(rot: f32) -> f32 {
+    if rot.abs() > std::f32::consts::FRAC_PI_2 {
+        -1.0
+    } else {
+        1.0
+    }
+}
+
+/// Legacy shim: flat aim from the look intent — fixed +s in 2D (aim is
+/// pointer-driven now, see `targeting.rs`).
+pub fn look_forward_flat(_look: &crate::input::CameraLookIntent) -> Vec2 {
+    Vec2::new(1.0, 0.0)
+}
+
+/// Legacy shim: in 2D the stick maps straight to the strip (no camera yaw).
+pub fn camera_relative_move(mx: f32, _mz: f32, _yaw: f32) -> (f32, f32) {
+    (mx, 0.0)
+}
+
+/// Gamepad view-cycle plumbing (no-op in 2D, kept so bindings stay stable).
+#[derive(Resource, Default)]
+pub struct CameraCycleRequest(pub bool);
+
+#[derive(Event)]
+pub struct CameraShakeEvent {
+    pub trauma: f32,
+}
+
+#[derive(Resource, Default)]
+pub struct CameraTrauma(pub f32);
 
 pub struct FollowCameraPlugin;
 
 impl Plugin for FollowCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraTrauma>()
-            .init_resource::<CameraViewMode>()
-            .init_resource::<CameraCycleRequest>()
+        app.init_resource::<CameraCycleRequest>()
+            .init_resource::<CameraTrauma>()
             .add_event::<CameraShakeEvent>()
-            .add_systems(Update, absorb_shake_events)
-            .add_systems(Update, decay_camera_trauma)
             .add_systems(Startup, spawn_camera)
-            .add_systems(
-                Update,
-                (
-                    cycle_camera_view_mode,
-                    sync_player_mesh_for_view,
-                    lock_game_camera_post,
-                    follow_player_camera,
-                )
-                    .chain(),
-            );
+            .add_systems(Update, (absorb_shake_events, follow_player_camera).chain());
     }
-}
-
-/// Minecraft-style F5 cycle — debug whether the navy overlay is camera/clear vs world.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CameraViewMode(pub CameraPerspective);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CameraPerspective {
-    FirstPerson,
-    /// Over-the-shoulder — see terrain + player capsule.
-    ThirdPersonBack,
-    /// Selfie — camera in front looking at the player (debug).
-    ThirdPersonFront,
-}
-
-impl Default for CameraViewMode {
-    fn default() -> Self {
-        Self(CameraPerspective::FirstPerson)
-    }
-}
-
-impl CameraViewMode {
-    pub fn label(self) -> &'static str {
-        match self.0 {
-            CameraPerspective::FirstPerson => "1st person",
-            CameraPerspective::ThirdPersonBack => "3rd back",
-            CameraPerspective::ThirdPersonFront => "3rd front",
-        }
-    }
-
-    fn cycle(self) -> Self {
-        Self(match self.0 {
-            CameraPerspective::FirstPerson => CameraPerspective::ThirdPersonBack,
-            CameraPerspective::ThirdPersonBack => CameraPerspective::ThirdPersonFront,
-            CameraPerspective::ThirdPersonFront => CameraPerspective::FirstPerson,
-        })
-    }
-}
-
-const TP_DISTANCE: f32 = 4.8;
-const TP_EYE_LIFT: f32 = 0.55;
-const TP_CAM_LIFT: f32 = 1.15;
-/// Nudge FP eye forward so we never sit inside the inverted-hull outline shell.
-const FP_EYE_FORWARD: f32 = 0.12;
-
-#[derive(Component)]
-pub(crate) struct GameCamera;
-
-/// Minecraft-style vertical look clamp (~±89°).
-pub const FP_MIN_PITCH: f32 = -std::f32::consts::FRAC_PI_2 + 0.05;
-pub const FP_MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.05;
-pub const FP_FOV_DEG: f32 = 72.0;
-use ha_shared::{capsule_center_above_feet, eye_height_above_feet, WorldContext};
-
-/// Clip distances — Android overworld was 220 m (moon/earth globes sit 300–800 m out).
-pub fn camera_far_for_region(region: &RegionId) -> f32 {
-    match region {
-        RegionId::Space | RegionId::Transit => 1_400.0,
-        RegionId::Luna | RegionId::Planet(_) => 900.0,
-        RegionId::Cave(_) => 200.0,
-        RegionId::Overworld { .. } => {
-            // Must exceed the sky stack: SkySun 380 m, Ghibli dome 420 m —
-            // 360 m clipped the sun disc and the dome on device.
-            #[cfg(target_os = "android")]
-            {
-                470.0
-            }
-            #[cfg(not(target_os = "android"))]
-            {
-                560.0
-            }
-        }
-    }
-}
-
-pub fn camera_near() -> f32 {
-    0.05
-}
-
-#[derive(Event, Clone, Copy)]
-pub struct CameraShakeEvent {
-    pub intensity: f32,
-}
-
-#[derive(Resource)]
-struct CameraTrauma {
-    value: f32,
-    decay_per_sec: f32,
-    max_rot_deg: f32,
-}
-
-impl Default for CameraTrauma {
-    fn default() -> Self {
-        Self {
-            value: 0.0,
-            decay_per_sec: 1.35,
-            max_rot_deg: 1.8,
-        }
-    }
-}
-
-/// World-space view direction from yaw + pitch (Bevy camera looks down local -Z).
-pub fn look_forward(look: &CameraLookIntent) -> Vec3 {
-    let rot = Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch);
-    rot * Vec3::NEG_Z
-}
-
-/// Look rotation aligned to the local surface normal — on sphere worlds yaw spins
-/// around `up` and pitch tilts against it, so the horizon stays level anywhere
-/// on the planet. With `up == Vec3::Y` this reduces to the flat-world rotation.
-pub fn surface_look_rotation(up: Vec3, look: &CameraLookIntent) -> Quat {
-    Quat::from_rotation_arc(Vec3::Y, up.normalize_or_zero())
-        * Quat::from_rotation_y(look.yaw)
-        * Quat::from_rotation_x(look.pitch)
-}
-
-/// View direction for targeting rays — must match `follow_player_camera`.
-pub fn surface_look_forward(up: Vec3, look: &CameraLookIntent) -> Vec3 {
-    surface_look_rotation(up, look) * Vec3::NEG_Z
-}
-
-/// Horizontal forward for movement / body facing (ignores pitch).
-pub fn look_forward_flat(look: &CameraLookIntent) -> Vec2 {
-    Vec2::new(look.yaw.sin(), look.yaw.cos())
-}
-
-/// Transform stick input (strafe X, forward Z) into world XZ using camera yaw.
-pub fn camera_relative_move(move_x: f32, move_z: f32, yaw: f32) -> (f32, f32) {
-    let fwd = look_forward_flat(&CameraLookIntent { yaw, pitch: 0.0 });
-    let right = Vec2::new(fwd.y, -fwd.x);
-    let wx = right.x * move_x + fwd.x * move_z;
-    let wz = right.y * move_x + fwd.y * move_z;
-    (wx, wz)
 }
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((
-        Camera3d::default(),
-        // TonyMcMapface LUT compiles ~1s after boot on NVK and blanks unlit meshes (hdr off).
-        Tonemapping::None,
-        DebandDither::Disabled,
-        Camera {
-            order: 0,
-            is_active: true,
-            hdr: false,
-            clear_color: ClearColorConfig::Custom(Color::srgb(
-                ha_shared::Ps1Retro::SKY_ZENITH[0],
-                ha_shared::Ps1Retro::SKY_ZENITH[1],
-                ha_shared::Ps1Retro::SKY_ZENITH[2],
-            )),
-            ..default()
-        },
-        Projection::Perspective(PerspectiveProjection {
-            fov: FP_FOV_DEG.to_radians(),
-            near: camera_near(),
-            far: camera_far_for_region(&RegionId::Overworld { gx: 0, gz: 0 }),
-            ..default()
-        }),
-        Transform::from_xyz(0.0, eye_height_above_feet(), 0.0),
-        Msaa::Off,
         GameCamera,
-        Name::new("FirstPersonCamera"),
+        Camera2d,
+        OrthographicProjection {
+            scaling_mode: ScalingMode::FixedVertical {
+                viewport_height: SURFACE_VIEW_H,
+            },
+            near: -1000.0,
+            far: 1000.0,
+            ..OrthographicProjection::default_2d()
+        },
+        Transform::from_xyz(0.0, 0.0, 100.0),
     ));
 }
 
-/// Bevy 0.15 auto-inserts TonyMcMapface — keep post off for unlit procedural art.
-fn lock_game_camera_post(mut cam: Query<(&mut Tonemapping, &mut DebandDither), With<GameCamera>>) {
-    for (mut tonemap, mut deband) in &mut cam {
-        *tonemap = Tonemapping::None;
-        *deband = DebandDither::Disabled;
-    }
-}
-
-/// Mobile CAM button raises this; desktop uses F5. Consumed each frame.
-#[derive(Resource, Default)]
-pub struct CameraCycleRequest(pub bool);
-
-fn cycle_camera_view_mode(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut request: ResMut<CameraCycleRequest>,
-    mut mode: ResMut<CameraViewMode>,
-    clear: Res<ClearColor>,
-) {
-    let pressed = keys.just_pressed(KeyCode::F5) || request.0;
-    request.0 = false;
-    if pressed {
-        *mode = mode.cycle();
-        let c = clear.0.to_srgba();
-        eprintln!(
-            "ha-cam: view={} clear=({:.2},{:.2},{:.2})",
-            mode.label(),
-            c.red,
-            c.green,
-            c.blue
-        );
-    }
-}
-
-/// Single owner of the local player mesh visibility: hidden in 1st person
-/// (inverted-hull outline filled the viewport) and in remote view; always
-/// visible while flying — the capsule doubles as the rocket avatar the
-/// chase camera looks at.
-fn sync_player_mesh_for_view(
-    view: Res<CameraViewMode>,
-    flight: Res<RocketFlight>,
-    view_target: Res<ViewTarget>,
-    mut body: Query<&mut Visibility, (With<Player>, With<Mesh3d>, Without<OutlineShell>)>,
-    mut outline: Query<&mut Visibility, With<OutlineShell>>,
-) {
-    let in_flight = flight.active && flight.phase != FlightPhase::Surface;
-    let show_body = if view_target.is_remote() {
-        false
-    } else if in_flight {
-        true
-    } else {
-        !matches!(view.0, CameraPerspective::FirstPerson)
-    };
-    let vis = if show_body {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    for mut v in &mut body {
-        *v = vis;
-    }
-    for mut v in &mut outline {
-        *v = vis;
-    }
-}
-
-fn follow_player_camera(
-    time: Res<Time>,
-    view_mode: Res<CameraViewMode>,
-    trauma: Res<CameraTrauma>,
-    look: Res<CameraLookIntent>,
-    flight: Res<RocketFlight>,
-    origin: Res<FloatingOrigin>,
-    view_target: Res<ViewTarget>,
-    region: Res<RegionRuntime>,
-    world_ctx: Res<WorldContextRuntime>,
-    player: Query<(&SimState, &Transform), (With<Player>, Without<GameCamera>)>,
-    mut cam: Query<
-        (&mut Transform, &mut Projection),
-        (With<GameCamera>, Without<Player>),
-    >,
-    mut span: ResMut<CpuSpanStats>,
-) {
-    let t0 = span_start();
-    let Ok((mut transform, mut projection)) = cam.get_single_mut() else {
-        span_record(&mut span, CpuSpanSlot::Camera, t0);
-        return;
-    };
-
-    if view_target.is_remote() {
-        let eye = origin.to_render(view_target.observer_world);
-        let up = if let crate::view_target::ViewMode::RemoteCamera { body, tx, tz, .. } =
-            &view_target.mode
-        {
-            crate::surface_placement::surface_normal_at_tangent(*body, *tx, *tz)
-        } else {
-            Vec3::Y
-        };
-        let rot = surface_look_rotation(up, &look);
-        transform.translation = eye;
-        transform.rotation = rot;
-        if let Projection::Perspective(ref mut persp) = *projection {
-            persp.far = camera_far_for_region(&RegionId::Luna);
-        }
-        span_record(&mut span, CpuSpanSlot::Camera, t0);
-        return;
-    }
-
-    if flight.active && flight.phase != FlightPhase::Surface {
-        let (pos, rot) = flight_world_transform(&flight, &origin);
-        let back = rot * Vec3::new(0.0, 0.65, 2.2);
-        transform.translation = pos + back;
-        transform.rotation = rot;
-        if let Projection::Perspective(ref mut persp) = *projection {
-            persp.far = 180_000.0;
-            // near 0.05 over a 180 km far plane starves GLES3 depth precision
-            // → distant bodies z-fight. Chase cam sits 2.2 m out; 0.5 is safe.
-            persp.near = 0.5;
-        }
-        span_record(&mut span, CpuSpanSlot::Camera, t0);
-        return;
-    }
-
-    if let Projection::Perspective(ref mut persp) = *projection {
-        persp.far = camera_far_for_region(&region.active);
-        persp.near = camera_near();
-    }
-
-    let Ok((sim, player_transform)) = player.get_single() else {
-        span_record(&mut span, CpuSpanSlot::Camera, t0);
-        return;
-    };
-
-    let on_sphere = on_sphere_context(world_ctx.active);
-    let eye_lift = eye_height_above_feet() - capsule_center_above_feet(sim.body.radius);
-    let (player_eye, surface_up) = if on_sphere {
-        let up = player_transform.rotation * Vec3::Y;
-        (player_transform.translation + up * eye_lift, up)
-    } else {
-        let eye_y = sim.body.y + eye_height_above_feet();
-        (
-            Vec3::new(sim.body.x, eye_y, sim.body.z),
-            Vec3::Y,
-        )
-    };
-    let look_at = player_eye + surface_up * TP_EYE_LIFT;
-
-    let mut rot = surface_look_rotation(surface_up, &look);
-    let forward = rot * Vec3::NEG_Z;
-
-    match view_mode.0 {
-        CameraPerspective::FirstPerson => {
-            transform.translation = player_eye + forward * FP_EYE_FORWARD;
-        }
-        CameraPerspective::ThirdPersonBack => {
-            let cam_pos = player_eye - forward * TP_DISTANCE + surface_up * TP_CAM_LIFT;
-            transform.translation = cam_pos;
-            transform.look_at(look_at, surface_up);
-            span_record(&mut span, CpuSpanSlot::Camera, t0);
-            return;
-        }
-        CameraPerspective::ThirdPersonFront => {
-            let cam_pos = player_eye + forward * TP_DISTANCE + surface_up * TP_CAM_LIFT;
-            transform.translation = cam_pos;
-            transform.look_at(look_at, surface_up);
-            span_record(&mut span, CpuSpanSlot::Camera, t0);
-            return;
-        }
-    }
-
-    let shake_pow = trauma.value * trauma.value * trauma.value;
-    if shake_pow > 0.0001 {
-        let s = time.elapsed_secs();
-        let n1 = (s * 47.0).sin() * 0.7 + (s * 23.0).cos() * 0.3;
-        let n2 = (s * 39.0 + 1.7).sin() * 0.65 + (s * 19.0 + 0.8).cos() * 0.35;
-        let rot_rad = (trauma.max_rot_deg.to_radians()) * shake_pow;
-        rot *= Quat::from_rotation_z(n1 * rot_rad);
-        rot *= Quat::from_rotation_x(n2 * rot_rad * 0.55);
-    }
-
-    transform.rotation = rot;
-    span_record(&mut span, CpuSpanSlot::Camera, t0);
-}
-
 fn absorb_shake_events(
+    time: Res<Time>,
     mut events: EventReader<CameraShakeEvent>,
     mut trauma: ResMut<CameraTrauma>,
-    mut span: ResMut<CpuSpanStats>,
 ) {
-    let t0 = span_start();
-    for ev in events.read() {
-        trauma.value = (trauma.value + ev.intensity.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+    for e in events.read() {
+        trauma.0 = (trauma.0 + e.trauma).min(1.0);
     }
-    span_record(&mut span, CpuSpanSlot::Camera, t0);
+    trauma.0 = (trauma.0 - time.delta_secs() * 1.8).max(0.0);
 }
 
-fn decay_camera_trauma(time: Res<Time>, mut trauma: ResMut<CameraTrauma>, mut span: ResMut<CpuSpanStats>) {
-    let t0 = span_start();
-    trauma.value = (trauma.value - trauma.decay_per_sec * time.delta_secs()).max(0.0);
-    span_record(&mut span, CpuSpanSlot::Camera, t0);
+#[allow(clippy::type_complexity)]
+fn follow_player_camera(
+    time: Res<Time>,
+    flight: Res<RocketFlight>,
+    region: Res<RegionRuntime>,
+    trauma: Res<CameraTrauma>,
+    player: Query<&Transform, (With<Player>, Without<GameCamera>)>,
+    mut camera: Query<(&mut Transform, &mut OrthographicProjection), With<GameCamera>>,
+) {
+    let Ok((mut cam_tf, mut proj)) = camera.get_single_mut() else {
+        return;
+    };
+
+    let in_flight = flight.active && flight.phase != ha_shared::FlightPhase::Surface;
+    let (target, view_h) = if in_flight || matches!(region.active, RegionId::Space) {
+        // Flight: chase the rocket, zoom out with altitude (SFS feel).
+        let alt = flight.altitude_m().max(0.0);
+        let h = (SURFACE_VIEW_H + alt * 2.2).clamp(SURFACE_VIEW_H, FLIGHT_VIEW_H_MAX);
+        (flight.render_pos_2d(), h)
+    } else {
+        let Ok(p) = player.get_single() else {
+            return;
+        };
+        (p.translation.truncate() + Vec2::new(0.0, 3.0), SURFACE_VIEW_H)
+    };
+
+    let blend = (time.delta_secs() * 6.0).clamp(0.0, 1.0);
+    let current = cam_tf.translation.truncate();
+    let mut next = current.lerp(target, blend);
+
+    if trauma.0 > 0.0 {
+        let t = time.elapsed_secs() * 40.0;
+        let amp = trauma.0 * trauma.0 * 0.6;
+        next += Vec2::new((t * 1.3).sin(), (t * 1.7).cos()) * amp;
+    }
+    cam_tf.translation = next.extend(100.0);
+
+    let current_h = match proj.scaling_mode {
+        ScalingMode::FixedVertical { viewport_height } => viewport_height,
+        _ => SURFACE_VIEW_H,
+    };
+    let next_h = current_h + (view_h - current_h) * (time.delta_secs() * 3.0).clamp(0.0, 1.0);
+    proj.scaling_mode = ScalingMode::FixedVertical {
+        viewport_height: next_h,
+    };
 }

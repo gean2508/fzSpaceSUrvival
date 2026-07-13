@@ -98,7 +98,7 @@ impl Plugin for InputPlugin {
                     desktop_input::desktop_mouse_look,
                     desktop_input::desktop_hold_interact
                         .after(desktop_input::desktop_mouse_capture_toggle)
-                        .after(crate::block_world::sync_block_target),
+                        ,
                     desktop_input::desktop_cursor_grab,
                 ),
             );
@@ -126,7 +126,7 @@ impl Plugin for InputPlugin {
             Update,
             (
                 super::gamepad::gamepad_hold_interact
-                    .after(crate::block_world::sync_block_target),
+                    ,
                 super::gamepad::gamepad_menu_buttons,
             ),
         );

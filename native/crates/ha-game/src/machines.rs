@@ -17,19 +17,16 @@ use serde::{Deserialize, Serialize};
 use crate::game_time::fixed_delta_secs;
 use crate::launch_pad::{in_launch_pad_zone, spawn_launch_pad, zone_has_launch_pad, LaunchPadWorld};
 
-use crate::assets::AssetFactory;
-use crate::camera::look_forward_flat;
-use crate::input::{CameraLookIntent, EquippedItem, HoldInteractState};
+use crate::camera::facing_sign;
+use crate::hud::item_icons::ItemIconCache;
+use crate::input::{EquippedItem, HoldInteractState};
 use crate::inventory_persist::{persist_dir, InventoryPersistState, PlayerInventory};
-use crate::materials::ToonMaterial;
-use crate::planet_world::ActivePlanet;
 use crate::platform::is_app_paused;
 use crate::render::particles::spawn_harvest_particles;
 use crate::rocket_flight::RocketFlight;
 use crate::scene::{RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, SimState};
-use crate::surface_patch::active_landable_body;
-use crate::surface_placement::{sphere_surface_transform, sphere_world_pos, MACHINE_SURFACE_LIFT};
+use crate::world2d::{active_landable_body, ActivePlanet, TileWorld};
 use ha_shared::CelestialBody;
 
 pub struct MachinesPlugin;
@@ -113,12 +110,8 @@ impl PlacementCtx<'_> {
     }
 }
 
-fn ground_y_on(body: CelestialBody, tx: f32, tz: f32) -> f32 {
-    if body == CelestialBody::Earth {
-        ha_shared::ground_height_at(tx, tz)
-    } else {
-        ha_shared::planet_ground_y_at(body, tx, tz)
-    }
+fn ground_y_on(tiles: &TileWorld, body: CelestialBody, s: f32) -> f32 {
+    tiles.ground_height_at(body, s)
 }
 
 /// Machine ↔ body gates: extractors need what they extract to exist there.
@@ -138,19 +131,17 @@ fn machine_allowed_on(machine_id: &str, body: CelestialBody) -> bool {
 pub(crate) fn try_place_on_hold(
     mut hold: ResMut<HoldInteractState>,
     equipped: Res<EquippedItem>,
-    look: Res<CameraLookIntent>,
     pending: Res<PendingMachinePlacement>,
     ctx: PlacementCtx,
+    tiles: Res<TileWorld>,
     player: Query<(&Transform, &SimState), With<Player>>,
     mut world: ResMut<MachineWorld>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
     mut commands: Commands,
     pool: Res<crate::render::particles::HarvestParticlePool>,
-    mut factory: ResMut<AssetFactory>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ToonMaterial>>,
-    mut std_mats: ResMut<Assets<StandardMaterial>>,
+    mut icons: ResMut<ItemIconCache>,
+    mut images: ResMut<Assets<Image>>,
     mut launch_pads: ResMut<LaunchPadWorld>,
 ) {
     // Consume only holds started as machine placement (cf. building_world.rs guard).
@@ -179,10 +170,9 @@ pub(crate) fn try_place_on_hold(
     let Ok((_tf, sim)) = player.get_single() else {
         return;
     };
-    let fwd = look_forward_flat(&look);
-    let tx = sim.body.x + fwd.x * 2.2;
-    let tz = sim.body.z + fwd.y * 2.2;
-    let y = ground_y_on(body, tx, tz);
+    let tx = sim.body.x + facing_sign(sim.body.rot) * 2.4;
+    let tz = 0.0;
+    let y = ground_y_on(&tiles, body, tx);
 
     if machine_id == LAUNCH_PAD.id && !in_launch_pad_zone(tx, tz) {
         eprintln!("ha-launch: launch pad must be placed in the reserved zone");
@@ -211,39 +201,24 @@ pub(crate) fn try_place_on_hold(
     world.dirty = true;
 
     if machine_id == LAUNCH_PAD.id {
-        spawn_launch_pad(
-            &mut commands,
-            &mut factory,
-            &mut meshes,
-            &mut materials,
-            &mut std_mats,
-            uid,
-            tx,
-            y,
-            tz,
-            &mut launch_pads,
-        );
+        spawn_launch_pad(&mut commands, uid, tx, y, &mut launch_pads);
     } else {
         spawn_machine_visual(
             &mut commands,
-            &mut factory,
-            &mut meshes,
-            &mut materials,
-            &mut std_mats,
-            def.asset_kind,
+            &mut icons,
+            &mut images,
+            def.id,
             body,
             uid,
             tx,
-            tz,
-            look.yaw,
+            y,
         );
     }
 
-    let particle_pos = sphere_world_pos(body, tx, tz, MACHINE_SURFACE_LIFT + 0.15);
     spawn_harvest_particles(
         &mut commands,
         &pool,
-        particle_pos,
+        Vec3::new(tx, y + 0.6, 0.0),
         uid as usize,
     );
 }
@@ -251,39 +226,32 @@ pub(crate) fn try_place_on_hold(
 #[allow(clippy::too_many_arguments)]
 fn spawn_machine_visual(
     commands: &mut Commands,
-    factory: &mut AssetFactory,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ToonMaterial>,
-    std_mats: &mut Assets<StandardMaterial>,
-    asset_kind: &str,
+    icons: &mut ItemIconCache,
+    images: &mut Assets<Image>,
+    machine_id: &str,
     body: CelestialBody,
     uid: u32,
     tx: f32,
-    tz: f32,
-    yaw: f32,
+    ground_y: f32,
 ) {
-    let asset = factory.require(asset_kind, meshes, materials, std_mats);
-    let place_tf = sphere_surface_transform(body, tx, tz, MACHINE_SURFACE_LIFT, yaw);
-    let mut entity = commands.spawn((
-        Mesh3d(asset.mesh.clone()),
-        place_tf,
-        MachineEntity { uid },
-        Name::new(format!("Machine_{uid}")),
-    ));
-    // Per-body decor marker so celestial_cleanup despawns on leave (B6);
-    // `sync_machine_visuals` respawns from `MachineWorld` on return.
-    match body {
-        CelestialBody::Earth => {
-            entity.insert(crate::earth_world::EarthDecor);
-        }
-        CelestialBody::Moon => {
-            entity.insert(crate::moon_world::MoonDecor);
-        }
-        _ => {
-            entity.insert(crate::planet_world::PlanetDecor);
-        }
-    }
-    asset.material.insert_on(&mut entity);
+    // 2D machine sprite: procedural item icon over a base plate.
+    let icon = icons.get(machine_id, images);
+    let mut sprite = Sprite::from_image(icon);
+    sprite.custom_size = Some(Vec2::splat(1.8));
+    let _ = body;
+    commands
+        .spawn((
+            sprite,
+            Transform::from_xyz(tx, ground_y + 0.95, 1.0),
+            MachineEntity { uid },
+            Name::new(format!("Machine_{uid}")),
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Sprite::from_color(Color::srgb(0.30, 0.32, 0.36), Vec2::new(1.9, 0.25)),
+                Transform::from_xyz(0.0, -1.0, -0.05),
+            ));
+        });
 }
 
 /// Respawn visuals for persisted machines on the active body (few machines —
@@ -291,34 +259,41 @@ fn spawn_machine_visual(
 fn sync_machine_visuals(
     ctx: PlacementCtx,
     world: Res<MachineWorld>,
-    existing: Query<&MachineEntity>,
+    tiles: Res<TileWorld>,
+    existing: Query<(Entity, &MachineEntity)>,
     mut commands: Commands,
-    mut factory: ResMut<AssetFactory>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ToonMaterial>>,
-    mut std_mats: ResMut<Assets<StandardMaterial>>,
+    mut icons: ResMut<ItemIconCache>,
+    mut images: ResMut<Assets<Image>>,
 ) {
-    let Some(body) = ctx.body() else {
+    let body = ctx.body();
+    let by_uid: HashMap<u32, &LocalMachine> =
+        world.placed.iter().map(|m| (m.uid, m)).collect();
+    let mut spawned: HashSet<u32> = HashSet::new();
+    // B6: despawn machine sprites that belong to another body (or are gone).
+    for (e, me) in &existing {
+        let keep = body.is_some() && by_uid.get(&me.uid).map(|m| Some(m.body) == body).unwrap_or(false);
+        if keep {
+            spawned.insert(me.uid);
+        } else {
+            commands.entity(e).despawn_recursive();
+        }
+    }
+    let Some(body) = body else {
         return;
     };
-    let spawned: HashSet<u32> = existing.iter().map(|e| e.uid).collect();
     for m in world.on_body(body) {
         if m.machine_id == LAUNCH_PAD.id || spawned.contains(&m.uid) {
             continue;
         }
-        let def = require_machine(m.machine_id);
         spawn_machine_visual(
             &mut commands,
-            &mut factory,
-            &mut meshes,
-            &mut materials,
-            &mut std_mats,
-            def.asset_kind,
+            &mut icons,
+            &mut images,
+            m.machine_id,
             body,
             m.uid,
             m.x,
-            m.z,
-            0.0,
+            ground_y_on(&tiles, body, m.x),
         );
     }
 }
@@ -330,8 +305,7 @@ fn tick_machines(
     mut world: ResMut<MachineWorld>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
-    mut materials: ResMut<Assets<ToonMaterial>>,
-    mut meshes: Query<(&MachineEntity, &MeshMaterial3d<ToonMaterial>)>,
+    mut sprites: Query<(&MachineEntity, &mut Sprite)>,
 ) {
     let dt = fixed_delta_secs(&time);
     let player_body = ctx.body();
@@ -388,16 +362,13 @@ fn tick_machines(
     }
 
     let by_uid: HashMap<u32, &LocalMachine> = world.placed.iter().map(|m| (m.uid, m)).collect();
-    for (entity, mat_handle) in &mut meshes {
+    for (entity, mut sprite) in &mut sprites {
         let Some(m) = by_uid.get(&entity.uid) else {
             continue;
         };
-        if m.producing_flash <= 0.0 {
-            continue;
-        }
-        if let Some(mat) = materials.get_mut(&mat_handle.0) {
-            mat.emissive_glow = Vec4::new(0.35, 1.1, 0.45, 1.0) * m.producing_flash;
-        }
+        // Green production flash tint on the machine sprite.
+        let f = m.producing_flash.clamp(0.0, 1.0);
+        sprite.color = Color::srgb(1.0 - 0.2 * f, 1.0 + 0.0 * f, 1.0 - 0.2 * f);
     }
 }
 
