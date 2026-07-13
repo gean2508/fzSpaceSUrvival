@@ -6,7 +6,6 @@
 //! configure is what stands on the pad.
 
 use bevy::prelude::*;
-use ha_shared::flat2d::{flat_surface_to_orbital, flat_velocity_to_orbital};
 use ha_shared::{
     assemble_module, create_launch_pad_state, CelestialBody, InteractActionKind,
     InteractTargetKind, LaunchPadState, LAUNCH_PAD, LAUNCH_PAD_MODULE_COUNT,
@@ -389,24 +388,20 @@ pub(crate) fn try_ignite_on_hold(
         return;
     }
     hold.completed = false;
-    let Ok(sim) = player.get_single() else {
+    if player.get_single().is_err() {
         return;
-    };
+    }
 
-    // SFS ascent in 2D: ignite as a flight on the world plane; the render
-    // stays in the surface frame until escape altitude, then the orbital
-    // view takes over — continuous, no cutscene (B8).
+    // SFS ascent in 2D top-down: ignite into the orbital plane straight up off
+    // Earth; the camera zooms out — continuous, no cutscene (B8).
     let t = clock.t;
     flight.clock_secs = t;
-    let s = sim.body.x;
-    let pos = flat_surface_to_orbital(CelestialBody::Earth, s, sim.body.y + 2.0, t);
-    let vel = flat_velocity_to_orbital(CelestialBody::Earth, s, 0.0, 18.0);
+    let (pos, vel) = crate::rocket_flight::launch_pos_vel(CelestialBody::Earth, t, 18.0);
     flight.surface_flight = Some(CelestialBody::Earth);
-    flight.surface_ref_s = s;
-    flight.begin_at(Vec3::from_array(pos));
+    flight.begin_at(pos);
     // The Earth pad is the ONLY refuel point — the agency tops the tank here.
     flight.fuel = flight.capacity();
-    flight.vel = Vec3::from_array(vel);
+    flight.vel = vel;
     eprintln!("ha-launch: rocket ignition from pad — tank full");
 }
 

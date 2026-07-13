@@ -137,6 +137,41 @@ fn smoke_drive(world: &mut World) {
                     if z < 0 { "PASS" } else { "FAIL" }
                 );
                 shot(world, "ha-verify-topdown-cave.png");
+                // Back to surface, then ignite a rocket to test space (Fase 4).
+                world.resource_mut::<TileWorld>().z = 0;
+                {
+                    let clk = world.resource::<crate::solar_system_clock::SolarSystemClock>().t;
+                    let (pos, vel) = crate::rocket_flight::launch_pos_vel(
+                        ha_shared::CelestialBody::Earth,
+                        clk,
+                        60.0,
+                    );
+                    let mut flight = world.resource_mut::<crate::rocket_flight::RocketFlight>();
+                    flight.clock_secs = clk;
+                    flight.surface_flight = Some(ha_shared::CelestialBody::Earth);
+                    flight.begin_at(pos);
+                    flight.fuel = flight.capacity();
+                    flight.vel = vel;
+                }
+                world.resource_mut::<SmokeState>().phase = 4;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
+        }
+        4 => {
+            // Hold thrust; after a few seconds we should be in Space (orbital).
+            press(world, KeyCode::Space);
+            if dt > 4.0 {
+                let in_space = matches!(
+                    world.resource::<crate::scene::RegionRuntime>().active,
+                    crate::scene::RegionId::Space
+                );
+                let alt = world.resource::<crate::rocket_flight::RocketFlight>().altitude_m();
+                eprintln!(
+                    "ha-verify: space-flight {} (region_space={in_space}, alt={alt:.0})",
+                    if in_space { "PASS" } else { "FAIL" }
+                );
+                release_all(world);
+                shot(world, "ha-verify-topdown-space.png");
                 eprintln!("ha-verify: SMOKE done");
                 world.resource_mut::<SmokeState>().done = true;
             }

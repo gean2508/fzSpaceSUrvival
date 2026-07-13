@@ -6,16 +6,23 @@
 
 use bevy::prelude::*;
 
-use ha_shared::flat2d::{
-    flat_surface_to_orbital, flat_velocity_to_orbital, orbital_to_flat_surface, wrap_delta_m,
-};
 use ha_shared::flight_physics::{PARACHUTE_DRAG, ROCKET_ROT_SPEED};
+use ha_shared::solar_ephemeris::body_center_at;
 use ha_shared::{
-    body_atmo_top, body_landable, dominant_body_at, gravity_accel_at_time, CelestialBody,
-    FlightPhase, PARACHUTE_DEPLOY_ALT_M, ROCKET_CRUISE_MAX_V, ROCKET_FUEL_BURN_PER_S,
-    ROCKET_FUEL_MAX, ROCKET_MAX_V, ROCKET_RETRO_FUEL_BURN_PER_S, ROCKET_RETRO_THRUST_M_S2,
-    ROCKET_THRUST_M_S2, SAFE_LANDING_V,
+    altitude_above_body_at, body_atmo_top, body_landable, body_radius, dominant_body_at,
+    gravity_accel_at_time, CelestialBody, FlightPhase, PARACHUTE_DEPLOY_ALT_M, ROCKET_CRUISE_MAX_V,
+    ROCKET_FUEL_BURN_PER_S, ROCKET_FUEL_MAX, ROCKET_MAX_V, ROCKET_RETRO_FUEL_BURN_PER_S,
+    ROCKET_RETRO_THRUST_M_S2, ROCKET_THRUST_M_S2, SAFE_LANDING_V,
 };
+
+/// Outward radial direction (in the XZ plane) at a given angle from a body
+/// centre. Screen-up (−z) is angle −π/2; the rocket launches straight up.
+fn radial_dir(angle: f32) -> Vec3 {
+    Vec3::new(angle.cos(), 0.0, angle.sin())
+}
+
+/// Default launch heading: straight up on screen (−z).
+const LAUNCH_ANGLE: f32 = -std::f32::consts::FRAC_PI_2;
 
 use crate::input::{MovementIntent, TouchActions};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
@@ -43,14 +50,19 @@ pub fn escape_alt(body: CelestialBody) -> f32 {
     (body_atmo_top(body).max(90.0)) * 1.8
 }
 
-/// Orbital insertion point above the Earth pad (nav-computer probes).
+/// Orbital insertion point above Earth (nav-computer probes).
 pub fn orbital_start_above_pad() -> Vec3 {
-    Vec3::from_array(flat_surface_to_orbital(
-        CelestialBody::Earth,
-        0.0,
-        escape_alt(CelestialBody::Earth) + 120.0,
-        0.0,
-    ))
+    let c = Vec3::from_array(body_center_at(CelestialBody::Earth, 0.0));
+    let r = body_radius(CelestialBody::Earth) + escape_alt(CelestialBody::Earth) + 120.0;
+    c + radial_dir(LAUNCH_ANGLE) * r
+}
+
+/// Launch a rocket straight up off a body's surface into the orbital plane.
+pub fn launch_pos_vel(body: CelestialBody, t: f32, speed: f32) -> (Vec3, Vec3) {
+    let c = Vec3::from_array(body_center_at(body, t));
+    let dir = radial_dir(LAUNCH_ANGLE);
+    let pos = c + dir * (body_radius(body) + 2.0);
+    (pos, dir * speed)
 }
 
 /// Mass/fuel stats derived from the assembled pad modules — a LAYER over the
@@ -124,9 +136,9 @@ impl RocketFlight {
         self.body = self
             .surface_flight
             .unwrap_or_else(|| dominant_body_at(pos.to_array(), self.clock_secs));
-        // Nose starts pointing radially out of the current body.
-        let (s, _) = orbital_to_flat_surface(self.body, pos.to_array(), self.clock_secs);
-        self.yaw = ha_shared::flat2d::arc_to_angle(self.body, s);
+        // Nose starts pointing radially out of the current body (XZ angle).
+        let c = body_center_at(self.body, self.clock_secs);
+        self.yaw = (pos.z - c[2]).atan2(pos.x - c[0]);
         eprintln!(
             "ha-flight: rocket ignition {:?} at ({:.0},{:.0})",
             self.body, pos.x, pos.z
@@ -203,8 +215,7 @@ impl RocketFlight {
     }
 
     pub fn altitude(&self) -> f32 {
-        let (_, h) = orbital_to_flat_surface(self.body, self.pos.to_array(), self.clock_secs);
-        h
+        altitude_above_body_at(self.pos.to_array(), self.body, self.clock_secs)
     }
 
     pub fn altitude_m(&self) -> f32 {
@@ -219,51 +230,21 @@ impl RocketFlight {
         self.altitude() > body_atmo_top(self.body)
     }
 
-    /// True while render happens on the surface strip (below escape altitude).
-    pub fn surface_frame_render(&self) -> bool {
-        self.altitude() < escape_alt(self.body)
-    }
-
-    /// 2D render position: surface strip (s,h) below escape altitude,
-    /// orbital plane (x,-z) above it.
+    /// Top-down: flight always renders on the orbital plane `(x, -z)`; the
+    /// surface↔space transition is a camera zoom, not a render-frame swap.
     pub fn render_pos_2d(&self) -> Vec2 {
-        let (s, h) = orbital_to_flat_surface(self.body, self.pos.to_array(), self.clock_secs);
-        if self.surface_frame_render() {
-            let c = ha_shared::flat2d::body_circumference_m(self.body);
-            let s_render =
-                self.surface_ref_s + wrap_delta_m(self.surface_ref_s.rem_euclid(c), s, c);
-            Vec2::new(s_render, h)
-        } else {
-            Vec2::new(self.pos.x, -self.pos.z)
-        }
+        Vec2::new(self.pos.x, -self.pos.z)
     }
 
-    /// Nose angle for the 2D sprite in the current render frame.
+    /// Nose angle for the 2D sprite: heading yaw in the world plane → screen.
     pub fn render_rot_2d(&self) -> f32 {
-        if self.surface_frame_render() {
-            // Angle relative to local "up" (radial direction).
-            let (s, _) = orbital_to_flat_surface(self.body, self.pos.to_array(), self.clock_secs);
-            let radial = ha_shared::flat2d::arc_to_angle(self.body, s);
-            angle_delta(self.yaw, radial)
-        } else {
-            // Orbital frame: world (x,-z); heading yaw maps to atan2(-z, x).
-            -self.yaw + std::f32::consts::FRAC_PI_2
-        }
+        -self.yaw + std::f32::consts::FRAC_PI_2
     }
 }
 
-fn angle_delta(a: f32, b: f32) -> f32 {
-    let mut d = a - b;
-    while d > std::f32::consts::PI {
-        d -= std::f32::consts::TAU;
-    }
-    while d < -std::f32::consts::PI {
-        d += std::f32::consts::TAU;
-    }
-    d
-}
 
 /// One fixed-step of 2D flight physics.
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 pub fn tick_rocket_flight(
     time: Res<Time<Fixed>>,
@@ -272,6 +253,9 @@ pub fn tick_rocket_flight(
     actions: Res<TouchActions>,
     loadout: Res<ShipLoadout>,
     mut flight: ResMut<RocketFlight>,
+    mut region: ResMut<RegionRuntime>,
+    mut ctx: ResMut<WorldContextRuntime>,
+    mut planet: ResMut<ActivePlanet>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     let dt = crate::game_time::fixed_delta_secs(&time);
@@ -288,11 +272,6 @@ pub fn tick_rocket_flight(
 
     if !flight.active || flight.phase == FlightPhase::Surface {
         return;
-    }
-
-    // Keep the render-window reference near the walker (pad) position.
-    if let Ok((sim, _)) = player.get_single() {
-        flight.surface_ref_s = sim.body.x;
     }
 
     // Steering: move_x rotates the nose; manual input disengages autopilot.
@@ -369,38 +348,58 @@ pub fn tick_rocket_flight(
         flight.surface_flight = None;
     }
 
-    // Touchdown on a landable body.
-    let (s, h) = orbital_to_flat_surface(flight.body, flight.pos.to_array(), t);
-    let ground_h = ha_shared::flat2d::ground_height_m(flight.body, s);
-    if body_landable(flight.body) && h <= ground_h + 0.4 {
-        let (_, vh) = ha_shared::flat2d::orbital_velocity_to_flat(
-            flight.body,
-            s,
-            flight.vel.to_array(),
-        );
-        let safe_v = SAFE_LANDING_V + flight.safe_v_bonus + if flight.parachute_open { 8.0 } else { 0.0 };
-        let hard = -vh > safe_v;
+    // Touchdown: the rocket reaches the body's surface radius → zoom into a
+    // top-down surface patch. Radial descent speed gates a hard landing.
+    if body_landable(flight.body) && flight.altitude() <= 0.4 {
+        let c = Vec3::from_array(body_center_at(flight.body, t));
+        let radial = (flight.pos - c).normalize_or_zero();
+        let descent_v = -flight.vel.dot(radial);
+        let safe_v =
+            SAFE_LANDING_V + flight.safe_v_bonus + if flight.parachute_open { 8.0 } else { 0.0 };
+        let hard = descent_v > safe_v;
         if let Ok((mut sim, mut visual)) = player.get_single_mut() {
-            let c = ha_shared::flat2d::body_circumference_m(flight.body);
-            let s_render = flight.surface_ref_s
-                + wrap_delta_m(flight.surface_ref_s.rem_euclid(c), s, c);
-            sim.body.x = s_render;
-            sim.body.y = ground_h;
+            // Top-down: land on a walkable surface cell (patch, not a longitude).
+            let (sx, sz) = crate::scene::walkable_spawn(flight.body, 0.0, 6.0);
+            sim.body.x = sx;
+            sim.body.z = sz;
+            sim.body.y = 0.0;
             sim.body.vx = 0.0;
+            sim.body.vz = 0.0;
             sim.body.vy = 0.0;
-            visual.from_x = s_render;
-            visual.to_x = s_render;
-            visual.from_y = ground_h;
-            visual.to_y = ground_h;
+            visual.from_x = sx;
+            visual.to_x = sx;
+            visual.from_z = sz;
+            visual.to_z = sz;
             if hard {
                 sim.hp = (sim.hp - 25.0).max(1.0);
             }
         }
+        // Enter the landed body's surface (top-down patch).
+        set_surface_region(flight.body, &mut region, &mut ctx, &mut planet);
         eprintln!(
-            "ha-flight: touchdown on {:?} at s={:.0} h={:.0} (hard={})",
-            flight.body, s, ground_h, hard
+            "ha-flight: touchdown on {:?} (hard={hard}, descent_v={descent_v:.0})",
+            flight.body
         );
         flight.end_surface();
+    }
+}
+
+fn set_surface_region(
+    body: CelestialBody,
+    region: &mut RegionRuntime,
+    ctx: &mut WorldContextRuntime,
+    planet: &mut ActivePlanet,
+) {
+    use ha_shared::WorldContext;
+    let (r, c) = match body {
+        CelestialBody::Earth => (RegionId::Overworld { gx: 0, gz: 0 }, WorldContext::Overworld),
+        CelestialBody::Moon => (RegionId::Luna, WorldContext::Luna),
+        other => (RegionId::Planet(other), WorldContext::Planet),
+    };
+    region.active = r;
+    ctx.active = c;
+    if !matches!(body, CelestialBody::Earth | CelestialBody::Moon) {
+        planet.body = Some(body);
     }
 }
 
@@ -436,14 +435,12 @@ fn try_surface_launch(
         RegionId::Planet(b) if body_landable(b) => b,
         _ => return,
     };
-    let Ok(sim) = player.get_single() else {
+    if player.get_single().is_err() {
         return;
-    };
+    }
     flight.clock_secs = clock.t;
-    flight.surface_ref_s = sim.body.x;
-    let pos = flat_surface_to_orbital(body, sim.body.x, sim.body.y + 2.0, clock.t);
-    let vel = flat_velocity_to_orbital(body, sim.body.x, 0.0, 42.0);
-    flight.begin_surface_gameplay(body, Vec3::from_array(pos), Vec3::from_array(vel));
+    let (pos, vel) = launch_pos_vel(body, clock.t, 42.0);
+    flight.begin_surface_gameplay(body, pos, vel);
 }
 
 /// Keep RegionId/WorldContext in sync with the flight frame (B8: the ONLY
@@ -452,34 +449,18 @@ fn sync_flight_world_state(
     flight: Res<RocketFlight>,
     mut region: ResMut<RegionRuntime>,
     mut ctx: ResMut<WorldContextRuntime>,
-    mut planet: ResMut<ActivePlanet>,
 ) {
     use ha_shared::WorldContext;
+    // While flying (not on a surface) the view is the orbital plane = Space.
+    // Touchdown sets the surface region directly (see `set_surface_region`).
     if !flight.active || flight.phase == FlightPhase::Surface {
         return;
     }
-    if flight.surface_frame_render() && body_landable(flight.body) {
-        let (target_region, target_ctx) = match flight.body {
-            CelestialBody::Earth => (RegionId::Overworld { gx: 0, gz: 0 }, WorldContext::Overworld),
-            CelestialBody::Moon => (RegionId::Luna, WorldContext::Luna),
-            other => (RegionId::Planet(other), WorldContext::Planet),
-        };
-        if region.active != target_region {
-            region.active = target_region;
-        }
-        if ctx.active != target_ctx {
-            ctx.active = target_ctx;
-        }
-        if !matches!(flight.body, CelestialBody::Earth | CelestialBody::Moon) {
-            planet.body = Some(flight.body);
-        }
-    } else {
-        if region.active != RegionId::Space {
-            region.active = RegionId::Space;
-        }
-        if ctx.active != WorldContext::Space {
-            ctx.active = WorldContext::Space;
-        }
+    if region.active != RegionId::Space {
+        region.active = RegionId::Space;
+    }
+    if ctx.active != WorldContext::Space {
+        ctx.active = WorldContext::Space;
     }
 }
 

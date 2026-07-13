@@ -17,7 +17,7 @@
   Modern UI. Se cargan por la capa drop-in ya existente (`art2d.rs` +
   `assets/art/`, `npm run sync:art`). Ver `assets/art/README.md`.
 - **Rama:** `main` (el usuario decidió trabajar directo en main).
-- **ÚLTIMO CHECKPOINT:** `Fases 1-3 COMPLETAS (núcleo + render top-down + z-levels de cuevas, todo verificado con capturas). Próximo: Fase 4 (espacio: superficie top-down ↔ órbita SFS con zoom).`
+- **ÚLTIMO CHECKPOINT:** `Fases 1-4 COMPLETAS (núcleo + render + z-levels + espacio/órbita SFS, todo verificado con capturas). Próximo: Fase 5 (adaptar contenido a (x,z): máquinas/pad/colonos, ocultar bajo tierra, re-portar autodrive completo de 11 sistemas).`
 
 ---
 
@@ -145,10 +145,19 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
    **descend PASS (z=-1)** + captura de cueva.
 - **Pendiente Fase 5:** pad/máquinas se cuelan bajo tierra (ocultar si z≠0).
 
-### FASE 4 — Espacio: superficie top-down ↔ órbita SFS ⬜
-- ⬜ Lanzamiento: zoom-out de grilla a plano orbital.
-- ⬜ Aterrizaje: zoom-in a grilla top-down del cuerpo destino.
-- ⬜ Verificar ignition/space/moon con autodrive adaptado.
+### FASE 4 — Espacio: superficie top-down ↔ órbita SFS ✅
+- ✅ `rocket_flight.rs` reescrito a puro plano orbital (sin remaps de tira):
+   `render_pos_2d = (x,-z)` siempre, `altitude` = dist al centro − radio,
+   `render_rot_2d` orbital. Física (thrust/gravedad/SOI/drag/paracaídas) sigue
+   en el plano solar. `launch_pos_vel` (despegue radial hacia arriba).
+- ✅ Lanzamiento: ignite → aparece en el plano orbital sobre el planeta,
+   cámara hace zoom-out (ya escalaba con altitud); el planeta se ve como
+   círculo real (`orbital2d`). Aterrizaje: al tocar el radio de superficie →
+   `set_surface_region` + jugador en celda caminable (`walkable_spawn`).
+- ✅ `launch_pad.rs` ignición + `try_surface_launch` (relanzar off-world) usan
+   `launch_pos_vel`. `sync_flight_world_state` = Space mientras vuela.
+- ✅ Verificado: **space-flight PASS** (región Space, alt 254m, Tierra como
+   círculo) + loop despegar→órbita→aterrizar. Captura `topdown-space`.
 
 ### FASE 5 — Adaptar contenido a la grilla 2D ⬜
 - ⬜ Árboles/rocas/mineral/máquinas/pad/colonos sobre (x,z).
