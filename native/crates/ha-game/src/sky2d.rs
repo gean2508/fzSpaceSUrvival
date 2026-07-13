@@ -109,6 +109,7 @@ fn sync_sky(
     region: Res<RegionRuntime>,
     launch: Res<LaunchAtmosphere>,
     lantern: Res<PlayerLanternControl>,
+    tiles: Res<crate::world2d::TileWorld>,
     mut clear: ResMut<ClearColor>,
     player: Query<&SimState, With<Player>>,
     camera: Query<&OrthographicProjection, With<GameCamera>>,
@@ -154,8 +155,18 @@ fn sync_sky(
     let rgb = sky.lerp(void, space_f);
     *clear = ClearColor(Color::srgb(rgb.x, rgb.y, rgb.z));
 
+    // Underground (Z-Level < 0): near-black cave, lantern cuts the dark.
+    let underground = tiles.z < 0;
+    if underground {
+        let cave = Vec3::new(0.03, 0.03, 0.05);
+        *clear = ClearColor(Color::srgb(cave.x, cave.y, cave.z));
+    }
+
     // Night dimmer over the world (skipped in void where it's already dark).
     let mut night_alpha = (1.0 - day) * 0.55 * (1.0 - space_f);
+    if underground {
+        night_alpha = 0.82;
+    }
     if lantern.lit {
         night_alpha *= 0.45;
     }

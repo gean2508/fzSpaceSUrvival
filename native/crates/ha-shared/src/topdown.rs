@@ -177,6 +177,10 @@ fn cave_open(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
 
 /// The natural (un-edited) tile at a grid cell of a given z_level.
 pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
+    // Portals + a 1-ring around them are always open so you never arrive stuck.
+    if portal_here(body, z, tx, tz).is_some() || portal_adjacent(body, z, tx, tz) {
+        return if z == 0 { Tile::Dirt } else { Tile::CaveFloor };
+    }
     if z == 0 {
         return surface_tile(body, tx, tz);
     }
@@ -191,6 +195,76 @@ pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
             _ => Tile::Stone,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Z-Level portals (mine entrance / ladders) — deterministic vertical shafts
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Portal {
+    /// Hole down to floor `z-1`.
+    Descend,
+    /// Ladder up to floor `z+1`.
+    Ascend,
+}
+
+/// Anchor cell of the surface mine entrance (findable, near the origin/pad).
+fn mine_entrance(body: CelestialBody) -> (i64, i64) {
+    let seed = body_terrain_seed(body);
+    let ox = 6 + (hash2(seed, 1, 1) % 6) as i64;
+    let oz = 4 + (hash2(seed, 2, 2) % 6) as i64;
+    (ox, oz)
+}
+
+/// The "go down" hole on floor `z` (surface 0 → deepest+1). Deterministic;
+/// each floor's hole is a short walk from the ladder you arrived at.
+pub fn descend_portal(body: CelestialBody, z: i32) -> (i64, i64) {
+    let mut cell = mine_entrance(body);
+    let seed = body_terrain_seed(body) ^ 0x5afe_0001u32;
+    // Walk the shaft downward, offsetting a few tiles per floor.
+    let mut f = 0;
+    while f > z {
+        f -= 1;
+        let h = hash2(seed, f as i64, 77);
+        let dx = (h % 13) as i64 - 6;
+        let dz = ((h >> 8) % 13) as i64 - 6;
+        cell = (cell.0 + dx, cell.1 + dz);
+    }
+    cell
+}
+
+/// The "go up" ladder on floor `z` (only floors below the surface). Placed
+/// where you arrive from `z+1` — i.e. the descend hole of the floor above.
+pub fn ascend_portal(body: CelestialBody, z: i32) -> Option<(i64, i64)> {
+    if z >= 0 {
+        return None;
+    }
+    Some(descend_portal(body, z + 1))
+}
+
+/// Portal at this exact cell, if any.
+pub fn portal_here(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Portal> {
+    if z > MIN_Z_LEVEL && descend_portal(body, z) == (tx, tz) {
+        return Some(Portal::Descend);
+    }
+    if let Some(a) = ascend_portal(body, z) {
+        if a == (tx, tz) {
+            return Some(Portal::Ascend);
+        }
+    }
+    None
+}
+
+fn portal_adjacent(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
+    for dx in -1..=1 {
+        for dz in -1..=1 {
+            if (dx != 0 || dz != 0) && portal_here(body, z, tx + dx, tz + dz).is_some() {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn solid_at(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
@@ -407,6 +481,38 @@ mod tests {
         }
         assert!(b.x < 105.0, "player must not pass into solid tiles, x={}", b.x);
         assert!(b.x > 103.0, "player should reach near the wall, x={}", b.x);
+    }
+
+    #[test]
+    fn portals_round_trip_between_floors() {
+        let body = CelestialBody::Earth;
+        // The ladder up on floor z is exactly the hole down on floor z+1
+        // (a coherent vertical shaft): descend then ascend returns you.
+        for z in -6..0 {
+            assert_eq!(
+                ascend_portal(body, z),
+                Some(descend_portal(body, z + 1)),
+                "floor {z}: ladder up must match the hole above"
+            );
+        }
+        // Surface has a descend hole but no ascend ladder.
+        assert!(ascend_portal(body, 0).is_none());
+        assert!(matches!(
+            portal_here(body, 0, descend_portal(body, 0).0, descend_portal(body, 0).1),
+            Some(Portal::Descend)
+        ));
+    }
+
+    #[test]
+    fn portal_cells_are_walkable() {
+        let body = CelestialBody::Earth;
+        for z in [-1, -3, -6] {
+            let (px, pz) = descend_portal(body, z);
+            assert!(
+                !solid_at(body, z, px, pz),
+                "descend portal on floor {z} must be walkable"
+            );
+        }
     }
 
     #[test]

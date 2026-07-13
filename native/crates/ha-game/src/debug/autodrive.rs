@@ -10,7 +10,8 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
-use crate::sim::{Player, SimState};
+use crate::sim::{Player, PlayerVisual, SimState};
+use crate::world2d::TileWorld;
 
 pub struct AutoDrivePlugin;
 
@@ -103,7 +104,39 @@ fn smoke_drive(world: &mut World) {
             press(world, KeyCode::KeyS);
             if dt > 2.5 {
                 release_all(world);
-                shot(world, "ha-verify-topdown-final.png");
+                shot(world, "ha-verify-topdown-walk2.png");
+                // Teleport onto the mine entrance to test the Z-Level descent.
+                let (px, pz) = ha_shared::topdown::descend_portal(
+                    ha_shared::CelestialBody::Earth,
+                    0,
+                );
+                let wx = px as f32 + 0.5;
+                let wz = pz as f32 + 0.5;
+                {
+                    let mut q = world
+                        .query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+                    if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
+                        sim.body.x = wx;
+                        sim.body.z = wz;
+                        vis.from_x = wx;
+                        vis.to_x = wx;
+                        vis.from_z = wz;
+                        vis.to_z = wz;
+                    }
+                }
+                world.resource_mut::<SmokeState>().phase = 3;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
+        }
+        3 => {
+            // The layer_transition should have dropped us to z=-1.
+            if dt > 1.5 {
+                let z = world.resource::<TileWorld>().z;
+                eprintln!(
+                    "ha-verify: descend {} (z={z})",
+                    if z < 0 { "PASS" } else { "FAIL" }
+                );
+                shot(world, "ha-verify-topdown-cave.png");
                 eprintln!("ha-verify: SMOKE done");
                 world.resource_mut::<SmokeState>().done = true;
             }

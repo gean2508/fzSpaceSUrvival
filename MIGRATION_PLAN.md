@@ -17,7 +17,7 @@
   Modern UI. Se cargan por la capa drop-in ya existente (`art2d.rs` +
   `assets/art/`, `npm run sync:art`). Ver `assets/art/README.md`.
 - **Rama:** `main` (el usuario decidió trabajar directo en main).
-- **ÚLTIMO CHECKPOINT:** `Fase 2 COMPLETA (render top-down + cámara única + walk 8-dir verificado con captura). Próximo: Fase 5 (adaptar máquinas/pad/colonos a (x,z) + re-portar autodrive completo) y Fase 3 (z-levels) / Fase 6 (assets LimeZu).`
+- **ÚLTIMO CHECKPOINT:** `Fases 1-3 COMPLETAS (núcleo + render top-down + z-levels de cuevas, todo verificado con capturas). Próximo: Fase 4 (espacio: superficie top-down ↔ órbita SFS con zoom).`
 
 ---
 
@@ -130,10 +130,20 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
    (sprites reales = Fase 6), máquinas/pad aún con colocación de tira (Fase 5),
    autodrive completo (11 sistemas) re-portar a top-down (Fase 5).
 
-### FASE 3 — Z-Levels: superficie ↔ subsuelo ⬜
-- ⬜ Portales escalera/taladro, grillas por piso, transición discreta.
-- ⬜ Contenido de cueva (vetas por profundidad, oscuridad/linterna).
-- ⬜ Persistencia con eje z; verificar descenso/ascenso.
+### FASE 3 — Z-Levels: superficie ↔ subsuelo ✅
+- ✅ Portales deterministas (shaft vertical): `descend_portal`/`ascend_portal`
+   en `topdown.rs` (entrada de mina en superficie, escaleras por piso). Round-
+   trip verificado con tests (bajar+subir vuelve al mismo cell). Celdas de
+   portal siempre caminables (carve 1-ring).
+- ✅ Transición discreta `layer_transition` (world2d): pisar el portal cambia
+   `TileWorld.z` (mismo x,z, solo la capa), latcheado (rearma al salir del
+   portal). Sprites de portal (hoyo/escalera).
+- ✅ Contenido de cueva: vetas más densas y con gemas en profundidad
+   (`deposit_at` con z<0), oscuridad subterránea en `sky2d` (near-black +
+   overlay 0.82, la linterna la corta). Decor despawnea al cambiar de capa.
+- ✅ Persistencia con eje z `(body,z,tx,tz)`. Verificado con smoke-test:
+   **descend PASS (z=-1)** + captura de cueva.
+- **Pendiente Fase 5:** pad/máquinas se cuelan bajo tierra (ocultar si z≠0).
 
 ### FASE 4 — Espacio: superficie top-down ↔ órbita SFS ⬜
 - ⬜ Lanzamiento: zoom-out de grilla a plano orbital.

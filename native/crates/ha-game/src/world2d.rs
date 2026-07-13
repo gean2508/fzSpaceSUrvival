@@ -17,7 +17,9 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use serde::{Deserialize, Serialize};
 
-use ha_shared::topdown::{deposit_at, topdown_tile, Deposit, Tile, TILE_M};
+use ha_shared::topdown::{
+    deposit_at, portal_here, topdown_tile, Deposit, Portal, Tile, MIN_Z_LEVEL, TILE_M,
+};
 use ha_shared::{CelestialBody, InteractTargetKind, WorldContext};
 
 use crate::art2d::ArtLibrary;
@@ -25,7 +27,7 @@ use crate::harvest::{FloraHarvest, TreeInstance};
 use crate::inventory_persist::persist_dir;
 use crate::platform::is_app_paused;
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
-use crate::sim::Player;
+use crate::sim::{Player, SimState};
 use crate::targeting::InteractTarget;
 
 /// Tiles per chunk side (a chunk is CHUNK×CHUNK cells).
@@ -266,6 +268,7 @@ pub struct TileChunk {
 pub struct SurfaceDecor {
     pub cx: i64,
     pub cz: i64,
+    pub z: i32,
 }
 
 #[derive(Resource, Default)]
@@ -284,6 +287,7 @@ impl Plugin for World2dPlugin {
                 (
                     apply_tile_hold.before(crate::hud::update_interact_hud),
                     try_place_tile_on_hold.before(crate::hud::update_interact_hud),
+                    layer_transition,
                     stream_tile_chunks,
                     rebuild_dirty_chunks,
                     debounced_tiles_save,
@@ -364,6 +368,50 @@ fn try_place_tile_on_hold(
     }
 }
 
+/// Z-Level transition: standing on a portal cell drops/climbs one floor
+/// (a coherent vertical shaft, so `(x,z)` stays — only the layer changes).
+/// Latched: re-arms only after the player steps off the portal (so you don't
+/// fall through every floor at once). Discrete frame change, never a cutscene.
+fn layer_transition(
+    region: Res<RegionRuntime>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut tiles: ResMut<TileWorld>,
+    mut armed: Local<bool>,
+    mut started: Local<bool>,
+    player: Query<&SimState, With<Player>>,
+) {
+    if !*started {
+        *armed = true;
+        *started = true;
+    }
+    if surface_region_active(&region).is_none() {
+        return;
+    }
+    let Ok(sim) = player.get_single() else {
+        return;
+    };
+    let body = active_surface_body(&ctx, &planet);
+    let tx = (sim.body.x / TILE_M).floor() as i64;
+    let tz = (sim.body.z / TILE_M).floor() as i64;
+    match portal_here(body, tiles.z, tx, tz) {
+        Some(portal) if *armed => {
+            let new_z = match portal {
+                Portal::Descend => (tiles.z - 1).max(MIN_Z_LEVEL),
+                Portal::Ascend => tiles.z + 1,
+            };
+            if new_z != tiles.z {
+                tiles.z = new_z;
+                tiles.version = tiles.version.wrapping_add(1);
+                *armed = false;
+                eprintln!("ha-layer: → z={new_z} ({:?})", portal);
+            }
+        }
+        Some(_) => {}
+        None => *armed = true,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn stream_tile_chunks(
     mut commands: Commands,
@@ -413,7 +461,10 @@ fn stream_tile_chunks(
         }
     }
     for (e, d) in &decor {
-        if (d.cx - pcx).abs() > CHUNK_RANGE + 1 || (d.cz - pcz).abs() > CHUNK_RANGE + 1 {
+        if d.z != z
+            || (d.cx - pcx).abs() > CHUNK_RANGE + 1
+            || (d.cz - pcz).abs() > CHUNK_RANGE + 1
+        {
             commands.entity(e).despawn_recursive();
         }
     }
@@ -537,6 +588,23 @@ fn spawn_chunk_decor(
             let r = render_xy(wx, wz);
             let sort = sort_z(wz);
 
+            // Z-Level portals (mine entrance / ladders).
+            if let Some(portal) = portal_here(body, z, tx, tz) {
+                let (color, size) = match portal {
+                    Portal::Descend => (Color::srgb(0.05, 0.04, 0.06), Vec2::new(1.6, 1.6)),
+                    Portal::Ascend => (Color::srgb(0.55, 0.40, 0.20), Vec2::new(1.2, 1.6)),
+                };
+                let key = match portal {
+                    Portal::Descend => "decor/mine_hole",
+                    Portal::Ascend => "decor/ladder",
+                };
+                commands.spawn((
+                    SurfaceDecor { cx, cz, z },
+                    art.sprite_or_color(key, color, size),
+                    Transform::from_xyz(r.x, r.y, sort - 0.5),
+                ));
+            }
+
             // Surface decor only on the surface layer.
             if z == 0 {
                 if let Some(decor) = surface_decor_at(body, tx, tz) {
@@ -565,7 +633,7 @@ fn spawn_chunk_decor(
                                         )
                                     });
                                 commands.spawn((
-                                    SurfaceDecor { cx, cz },
+                                    SurfaceDecor { cx, cz, z },
                                     InteractTarget {
                                         kind: InteractTargetKind::Tree,
                                         id,
@@ -588,7 +656,7 @@ fn spawn_chunk_decor(
                                     Sprite::from_color(rock_color(body), Vec2::new(1.2, 0.9))
                                 });
                             commands.spawn((
-                                SurfaceDecor { cx, cz },
+                                SurfaceDecor { cx, cz, z },
                                 InteractTarget {
                                     kind: InteractTargetKind::Rock,
                                     id,
@@ -612,7 +680,7 @@ fn spawn_chunk_decor(
                     _ => "decor/ore_iron",
                 };
                 commands.spawn((
-                    SurfaceDecor { cx, cz },
+                    SurfaceDecor { cx, cz, z },
                     InteractTarget { kind, id },
                     art.sprite_or_color(key, color, size),
                     Transform::from_xyz(r.x, r.y, sort),
