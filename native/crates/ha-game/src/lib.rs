@@ -1,6 +1,7 @@
 //! Starship — native ECS client (Bevy + ha-shared). 2D SFS-style solar system
 //! + Terraria-style diggable surfaces (rewrite-2d).
 
+mod art2d;
 mod boot_ui;
 mod game_menu;
 mod game_time;
@@ -41,6 +42,7 @@ use bevy::render::{
     RenderPlugin,
 };
 use ha_shared::Ps1Retro;
+use art2d::Art2dPlugin;
 use camera::FollowCameraPlugin;
 use world_persist::WorldPersistPlugin;
 use telemetry::TelemetryPlugin;
@@ -156,6 +158,7 @@ fn run_app_inner() {
         })
         .add_plugins((
             PlatformPlugin,
+            Art2dPlugin,
             WorldPersistPlugin,
             SolarSystemClockPlugin,
             IconFactoryPlugin,

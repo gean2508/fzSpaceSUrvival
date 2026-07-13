@@ -487,6 +487,7 @@ struct FlightRocketFlame;
 fn sync_rocket_visual(
     mut commands: Commands,
     flight: Res<RocketFlight>,
+    art: Res<crate::art2d::ArtLibrary>,
     mut rocket: Query<(Entity, &mut Transform), With<FlightRocketVisual>>,
     mut flame: Query<&mut Visibility, With<FlightRocketFlame>>,
 ) {
@@ -515,18 +516,30 @@ fn sync_rocket_visual(
         }
         return;
     }
+    // Drop-in pack art (assets/art/ship/rocket.png) or procedural stack.
+    let pack_art = art.get("ship/rocket");
+    let body_sprite = match pack_art.clone() {
+        Some(image) => {
+            let mut s = Sprite::from_image(image);
+            s.custom_size = Some(Vec2::new(2.2, 6.0));
+            s
+        }
+        None => Sprite::from_color(Color::srgb(0.82, 0.84, 0.88), Vec2::new(1.6, 4.6)),
+    };
     commands
         .spawn((
             FlightRocketVisual,
-            Sprite::from_color(Color::srgb(0.82, 0.84, 0.88), Vec2::new(1.6, 4.6)),
+            body_sprite,
             Transform::from_translation(pos.extend(3.0)),
         ))
         .with_children(|p| {
-            // Nose cone.
-            p.spawn((
-                Sprite::from_color(Color::srgb(0.85, 0.45, 0.2), Vec2::new(1.2, 1.0)),
-                Transform::from_xyz(0.0, 2.6, 0.05),
-            ));
+            if pack_art.is_none() {
+                // Nose cone (only for the procedural stack).
+                p.spawn((
+                    Sprite::from_color(Color::srgb(0.85, 0.45, 0.2), Vec2::new(1.2, 1.0)),
+                    Transform::from_xyz(0.0, 2.6, 0.05),
+                ));
+            }
             // Engine flame.
             p.spawn((
                 FlightRocketFlame,

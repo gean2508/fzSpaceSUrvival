@@ -17,6 +17,12 @@ pub struct ItemIconCache {
 }
 
 impl ItemIconCache {
+    /// Seed a drop-in PNG icon (assets/art/items/<id>.png) so every consumer
+    /// gets the pack art instead of the procedural raster.
+    pub fn preload(&mut self, item_id: &str, handle: Handle<Image>) {
+        self.cache.insert(item_id.to_string(), handle);
+    }
+
     pub fn get(&mut self, item_id: &str, images: &mut Assets<Image>) -> Handle<Image> {
         if let Some(hit) = self.cache.get(item_id) {
             return hit.clone();

@@ -18,6 +18,7 @@ use ha_shared::flat2d::{
 };
 use ha_shared::{CelestialBody, InteractTargetKind, WorldContext};
 
+use crate::art2d::ArtLibrary;
 use crate::harvest::{FloraHarvest, TreeInstance};
 use crate::inventory_persist::persist_dir;
 use crate::platform::is_app_paused;
@@ -396,6 +397,7 @@ fn stream_tile_chunks(
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     tiles: Res<TileWorld>,
+    art: Res<ArtLibrary>,
     mat: Res<ChunkMaterial>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut flora: ResMut<FloraHarvest>,
@@ -451,7 +453,16 @@ fn stream_tile_chunks(
             MeshMaterial2d(mat.0.clone()),
             Transform::from_xyz(0.0, 0.0, 0.0),
         ));
-        spawn_chunk_decor(&mut commands, &tiles, &mut flora, body, k);
+        spawn_chunk_decor(&mut commands, &tiles, &mut flora, &art, body, k);
+    }
+}
+
+/// Body-specific art key suffix (falls back to the generic key).
+fn body_art_suffix(body: CelestialBody) -> &'static str {
+    match body {
+        CelestialBody::Earth => "",
+        CelestialBody::Moon => "_moon",
+        _ => "_mars",
     }
 }
 
@@ -535,9 +546,11 @@ fn spawn_chunk_decor(
     commands: &mut Commands,
     tiles: &TileWorld,
     flora: &mut FloraHarvest,
+    art: &ArtLibrary,
     body: CelestialBody,
     k: i64,
 ) {
+    let suffix = body_art_suffix(body);
     let c = body_circumference_tiles(body);
     let wrapped_k = wrap_tile(k * CHUNK_TILES, c) as i32 / CHUNK_TILES as i32;
     let mut trees: Vec<TreeInstance> = Vec::new();
@@ -552,46 +565,78 @@ fn spawn_chunk_decor(
             match decor {
                 DecorKind::Tree => {
                     if !flora.is_removed(body, wrapped_k, 0, col) {
-                        let trunk_top = ground_y + 2.6;
                         trees.push(TreeInstance {
                             cx: wrapped_k,
                             cz: 0,
                             id: col,
                             world: Vec3::new(x, ground_y + 1.4, 0.0),
                         });
-                        commands
-                            .spawn((
+                        // Drop-in pack art: one tree sprite. Fallback: trunk + canopy quads.
+                        if let Some(image) =
+                            art.get_first(&[&format!("decor/tree{suffix}"), "decor/tree"])
+                        {
+                            let mut sprite = Sprite::from_image(image);
+                            sprite.custom_size = Some(Vec2::new(3.6, 4.6));
+                            commands.spawn((
                                 SurfaceDecor { k },
                                 InteractTarget {
                                     kind: InteractTargetKind::Tree,
                                     id: col,
                                 },
                                 crate::render::particles::HarvestReactive,
-                                Sprite::from_color(
-                                    Color::srgb(0.42, 0.30, 0.18),
-                                    Vec2::new(0.6, 2.6),
-                                ),
-                                Transform::from_xyz(x, ground_y + 1.3, 0.4),
-                            ))
-                            .with_children(|p| {
-                                p.spawn((
+                                sprite,
+                                Transform::from_xyz(x, ground_y + 2.3, 0.4),
+                            ));
+                        } else {
+                            let trunk_top = ground_y + 2.6;
+                            commands
+                                .spawn((
+                                    SurfaceDecor { k },
+                                    InteractTarget {
+                                        kind: InteractTargetKind::Tree,
+                                        id: col,
+                                    },
+                                    crate::render::particles::HarvestReactive,
                                     Sprite::from_color(
-                                        Color::srgb(0.30, 0.55, 0.25),
-                                        Vec2::new(3.2, 2.8),
+                                        Color::srgb(0.42, 0.30, 0.18),
+                                        Vec2::new(0.6, 2.6),
                                     ),
-                                    Transform::from_xyz(0.0, trunk_top - ground_y - 1.3 + 0.9, 0.01),
-                                ));
-                            });
+                                    Transform::from_xyz(x, ground_y + 1.3, 0.4),
+                                ))
+                                .with_children(|p| {
+                                    p.spawn((
+                                        Sprite::from_color(
+                                            Color::srgb(0.30, 0.55, 0.25),
+                                            Vec2::new(3.2, 2.8),
+                                        ),
+                                        Transform::from_xyz(
+                                            0.0,
+                                            trunk_top - ground_y - 1.3 + 0.9,
+                                            0.01,
+                                        ),
+                                    ));
+                                });
+                        }
                     }
                 }
                 DecorKind::Rock => {
+                    let sprite = match art
+                        .get_first(&[&format!("decor/rock{suffix}"), "decor/rock"])
+                    {
+                        Some(image) => {
+                            let mut s = Sprite::from_image(image);
+                            s.custom_size = Some(Vec2::new(1.5, 1.0));
+                            s
+                        }
+                        None => Sprite::from_color(rock_color(body), Vec2::new(1.5, 1.0)),
+                    };
                     commands.spawn((
                         SurfaceDecor { k },
                         InteractTarget {
                             kind: InteractTargetKind::Rock,
                             id: col,
                         },
-                        Sprite::from_color(rock_color(body), Vec2::new(1.5, 1.0)),
+                        sprite,
                         Transform::from_xyz(x, ground_y + 0.5, 0.4),
                     ));
                 }
@@ -600,13 +645,19 @@ fn spawn_chunk_decor(
 
         if let Some(dep) = embedded_deposit_at(body, col) {
             let (color, size) = deposit_style(dep.kind);
+            let key = match dep.kind {
+                InteractTargetKind::GemRed => "decor/gem_red",
+                InteractTargetKind::GemBlue => "decor/gem_blue",
+                InteractTargetKind::OreGold => "decor/ore_gold",
+                _ => "decor/ore_iron",
+            };
             commands.spawn((
                 SurfaceDecor { k },
                 InteractTarget {
                     kind: dep.kind,
                     id: col,
                 },
-                Sprite::from_color(color, size),
+                art.sprite_or_color(key, color, size),
                 Transform::from_xyz(
                     i as f32 * TILE_M + 0.5,
                     dep.row as f32 * TILE_M + 0.5,

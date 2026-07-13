@@ -23,6 +23,7 @@
     "sync:downloads": "node scripts/sync-landing-downloads.mjs",
     "verify:apk": "node scripts/verify-apk-pipeline.mjs",
     "verify": "node scripts/verify-all.mjs",
+    "sync:art": "node scripts/sync-art.mjs",
     "test": "npm test -w @hunger-arena/shared",
     "test:native": "make -C native test",
     "phone:install": "bash scripts/device-ready.sh",

@@ -78,25 +78,40 @@ impl Plugin for ScenePlugin {
     }
 }
 
-fn spawn_player(mut commands: Commands) {
+fn spawn_player(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
     let spawn_s = EARTH_PAD_S + 12.0;
     let mut body = ha_shared::MovementBody::new(5.2, 0.35);
     body.x = spawn_s;
     body.y = ground_height_m(CelestialBody::Earth, spawn_s) + 0.1;
 
+    let sim = SimState {
+        body,
+        hp: 100.0,
+        max_hp: 100.0,
+        survival: ha_shared::SurvivalStats::default(),
+        prev_action: false,
+        prev_jump: false,
+    };
+
+    // Drop-in pack sprite (assets/art/player/astronaut.png) or the
+    // procedural astronaut (torso + helmet + visor quads).
+    if let Some(image) = art.get("player/astronaut") {
+        let mut sprite = Sprite::from_image(image);
+        sprite.custom_size = Some(Vec2::new(1.2, 1.85));
+        commands.spawn((
+            Player,
+            sim,
+            PlayerVisual::default(),
+            sprite,
+            Transform::from_xyz(spawn_s, 4.0, 2.0),
+        ));
+        return;
+    }
     commands
         .spawn((
             Player,
-            SimState {
-                body,
-                hp: 100.0,
-                max_hp: 100.0,
-                survival: ha_shared::SurvivalStats::default(),
-                prev_action: false,
-                prev_jump: false,
-            },
+            sim,
             PlayerVisual::default(),
-            // Astronaut suit: torso sprite + helmet child.
             Sprite::from_color(Color::srgb(0.92, 0.55, 0.25), Vec2::new(0.8, 1.7)),
             Transform::from_xyz(spawn_s, 4.0, 2.0),
         ))

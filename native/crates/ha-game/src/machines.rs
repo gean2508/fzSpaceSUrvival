@@ -142,6 +142,7 @@ pub(crate) fn try_place_on_hold(
     pool: Res<crate::render::particles::HarvestParticlePool>,
     mut icons: ResMut<ItemIconCache>,
     mut images: ResMut<Assets<Image>>,
+    art: Res<crate::art2d::ArtLibrary>,
     mut launch_pads: ResMut<LaunchPadWorld>,
 ) {
     // Consume only holds started as machine placement (cf. building_world.rs guard).
@@ -207,6 +208,7 @@ pub(crate) fn try_place_on_hold(
             &mut commands,
             &mut icons,
             &mut images,
+            &art,
             def.id,
             body,
             uid,
@@ -228,15 +230,19 @@ fn spawn_machine_visual(
     commands: &mut Commands,
     icons: &mut ItemIconCache,
     images: &mut Assets<Image>,
+    art: &crate::art2d::ArtLibrary,
     machine_id: &str,
     body: CelestialBody,
     uid: u32,
     tx: f32,
     ground_y: f32,
 ) {
-    // 2D machine sprite: procedural item icon over a base plate.
-    let icon = icons.get(machine_id, images);
-    let mut sprite = Sprite::from_image(icon);
+    // Drop-in pack art first (machines/<id>.png), then the item icon (which
+    // itself may be pack art via items/<id>.png), then procedural raster.
+    let image = art
+        .get(&format!("machines/{machine_id}"))
+        .unwrap_or_else(|| icons.get(machine_id, images));
+    let mut sprite = Sprite::from_image(image);
     sprite.custom_size = Some(Vec2::splat(1.8));
     let _ = body;
     commands
@@ -264,6 +270,7 @@ fn sync_machine_visuals(
     mut commands: Commands,
     mut icons: ResMut<ItemIconCache>,
     mut images: ResMut<Assets<Image>>,
+    art: Res<crate::art2d::ArtLibrary>,
 ) {
     let body = ctx.body();
     let by_uid: HashMap<u32, &LocalMachine> =
@@ -289,6 +296,7 @@ fn sync_machine_visuals(
             &mut commands,
             &mut icons,
             &mut images,
+            &art,
             m.machine_id,
             body,
             m.uid,
