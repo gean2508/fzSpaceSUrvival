@@ -71,10 +71,11 @@ impl Default for UiLayoutConfig {
     fn default() -> Self {
         Self {
             move_stick: UiSlot::new(0.14, 0.78, 1.18),
-            // Bottom-right cluster within reach of the right thumb (was
-            // jump at x=0.48 — screen centre, unreachable one-handed).
-            use_button: UiSlot::new(0.76, 0.82, 1.0),
-            jump_button: UiSlot::new(0.92, 0.80, 1.0),
+            // The bottom-right corner is now the aim stick, so USE/JUMP arc
+            // ABOVE it — within the right thumb's reach when it lifts off the
+            // stick, clear of both the stick and the centre hotbar.
+            use_button: UiSlot::new(0.72, 0.60, 1.0),
+            jump_button: UiSlot::new(0.88, 0.50, 1.0),
             calibration: InputCalibration::default(),
         }
     }

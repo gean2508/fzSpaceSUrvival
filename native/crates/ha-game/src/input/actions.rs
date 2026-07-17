@@ -90,8 +90,7 @@ pub(crate) struct ActionTouchState {
 pub struct ActionButtonsSpawned(bool);
 
 pub fn spawn_action_ui(mut commands: Commands) {
-    #[cfg(not(target_os = "android"))]
-    {
+    if !crate::platform::uses_touch_gameplay_ui() {
         return;
     }
     commands.spawn((
