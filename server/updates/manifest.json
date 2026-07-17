@@ -1,13 +1,13 @@
 {
-  "publishedAt": "2026-07-12T05:17:48.017Z",
+  "publishedAt": "2026-07-17T16:44:02.403Z",
   "android": {
-    "version": "1.0.149",
+    "version": "1.0.151",
     "url": "http://192.168.1.5:2567/updates/artifacts/hunger-arena.apk",
-    "sha256": "10e822c8dfd344286f5834fe007a072a711c29a98ef108a28e8054946f7bfe6a",
-    "sizeBytes": 79491635,
+    "sha256": "c7f3648c2ac59bfca9c212f7d8c7238a7dbc83ef7a340b52c4672143aff43de0",
+    "sizeBytes": 76111057,
     "mandatory": true,
     "notes": "Publicado desde app-debug.apk",
-    "versionCode": 149
+    "versionCode": 151
   },
   "desktop": {
     "version": "1.0.100",
