@@ -120,8 +120,8 @@ Validar: `npm run validate:arch`.
 | **Regiones + jugador** (RegionId/WorldContext, spawn, teleports MENU) | `ha-game/scene.rs` (`teleport_to_body`) |
 | **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
 | **Cámara 2D** (follow + zoom continuo superficie↔órbita, shake) | `ha-game/camera.rs` |
-| **Targeting 2D** (puntero touch/cursor + fallback de proximidad; tiles block_cell/place_cell) | `ha-game/targeting.rs`, `input/look_interact.rs` (`LookPointer`) |
-| **Mapa del sistema** (navegación, MENU fullscreen + botones TIERRA/LUNA/ESPACIO/CREATIVO) | `ha-game/game_menu.rs` |
+| **Targeting 2D** (mira libre `AimCursor` movida por el stick derecho/mouse; tiles block_cell/place_cell; resalte de celda `CursorHighlight`) | `ha-game/targeting.rs`, `input/joystick.rs` (`AimCursor`, `AIM_MAX_REACH`), `input/desktop_input.rs` (`desktop_aim_cursor`), `world2d.rs` (`CursorHighlight`), `input/look_interact.rs` (USE→hold) |
+| **Mapa del sistema / menú unificado** (MENU fullscreen: minimapa DINÁMICO — terreno top-down en superficie, orbital en espacio — + TODOS los controles en un solo panel: viaje TIERRA/LUNA/ESPACIO, CREATIVO/PERF, editor UI, calibración) | `ha-game/game_menu.rs` (`OrbitalLayer`/`TerrainLayer`, `update_terrain_minimap`), `ui_editor.rs` |
 | **Navegación/sondas** (mapear cuerpos, gate de autopilot) | `ha-game/nav_computer.rs`, `ha-shared/nav_data.rs` |
 | **Máquinas + inventario** (sprites por ícono procedural, por-cuerpo, banking off-body) | `ha-game/machines.rs`, `inventory_persist.rs`; sim `packages/shared/src/sim/machines.ts` |
 | **Survival stats** (hambre/sed/O₂, comer, respawn amable) | sim `packages/shared/src/sim/survivalStats.ts` → espejo `ha-shared/survival.rs`; cliente `ha-game/survival_stats.rs`, barras `hud/survival_bars.rs` (ver §12) |
@@ -129,7 +129,7 @@ Validar: `npm run validate:arch`.
 | **Colonos v1** (Acto V: habitat → enviar colonos, boost taladros) | sim `colony.ts` → espejo `ha-shared/colony.rs`; cliente `ha-game/colony.rs` (`colony.json`, botones COLONO/VÍVERES en el mapa gated por antena, cuestan manzanas); boost ×1.5 a los primeros N taladros lunares en `machines.rs::tick_machines`; estado en línea BASE LUNA |
 | **Base lunar** (Acto II: taladro regolito, antena, monitoreo) | máquinas por CUERPO (`ha-game/machines.rs`: gates `machine_allowed_on`, `machines.json`, respawn `sync_machine_visuals` B6); off-body banquean `stored_output` (se cobra al volver); campamento = O₂ tether en `survival_stats.rs`; antena → línea "BASE LUNA" en mapa orbital (`game_menu.rs::update_luna_base_monitor`) |
 | **Gamepad** (stick izq mover+sprint; A salto/thrust, RT acción/romper, LT colocar/comer/retro, Start mapa, B cerrar, D-pad bag/hotbar) | `input/gamepad.rs` — alimenta los MISMOS intents que touch/teclado; prioridad touch > pad > teclado |
-| **HUD / UI / editor** | `ha-game/hud.rs`, `ui_editor.rs`, `ui/icon_factory.rs`, `hud/item_icons.rs`, `ui_theme.rs` |
+| **HUD / UI / editor** (twin-stick: izq mover, der mira; USE/JUMP en arco arriba del stick der; editor de UI fusionado en el menú) | `ha-game/hud.rs`, `ui_editor.rs`, `input/actions.rs` (botones USE/JUMP), `input/joystick.rs` (sticks), `ui/icon_factory.rs`, `hud/item_icons.rs`, `ui_theme.rs` |
 | **Partículas 2D + squash** (harvest juice) | `ha-game/render/particles.rs` |
 | **Assets 2D drop-in** (PNG packs sobre arte procedural; `sync:art` genera el manifest) | `ha-game/art2d.rs`, `assets/art/` (+README), `scripts/sync-art.mjs` |
 | **Debug/perf + verificación** (perf HUD, screenshots, autodrive end-to-end) | `ha-game/debug/perf.rs` (MENU→PERF / F3 / F12 screenshot), `debug/autodrive.rs` (`HA_AUTODRIVE=1`), `cpu_span.rs` (ha-span), `crash.rs` |
@@ -266,6 +266,32 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - **Relanzamiento espurio del cohete al colocar bloque en la Luna:** un hold activo pone `actions.action=true`; al completar el hold de place, ese `action` queda residual un frame con `hold.active` ya false y el target con `place_cell` (no `block_cell`) → `try_surface_launch` no encontraba guarda y encendía el lander. Fix: la guarda ahora incluye `target.place_cell.is_some()` y `hold.completed`.
 - **Input bloqueado en vuelo (B8):** `sync_ui_gameplay_block` marcaba `blocked` cuando `flight.blocks_walking()`, matando thrust/steering. Fix: sólo UI real (bag/editor) bloquea; el vuelo nunca.
 - **Pad no re-aparecía al volver a la Tierra (B6):** las entidades del pad no se despawneaban off-Earth. Fix: marker `PadDecor` + `sync_pad_visuals` (despawn fuera de Tierra, respawn del pad+nave al volver).
+
+### §13-quater — Rework de UI hacia el sistema de construcción (17 jul 2026)
+
+Preparación para el futuro sistema de construcción (mezcla con máquinas). Detalle
+por fase en `MIGRATION_PLAN.md` (Fases 8-11, todas ✅ y verificadas con capturas).
+
+- **Twin-stick (Fase 8):** stick IZQUIERDO = mover, DERECHO = mira libre. La cruz
+  ahora es un `AimCursor` (world x,z) que el stick integra por velocidad y se
+  clampa a `AIM_MAX_REACH` del jugador (`input/joystick.rs`). En desktop la mueve
+  el mouse (`desktop_aim_cursor`). El targeting lee el cursor (entidad + celda).
+- **Resalte de celda (Fase 8):** `CursorHighlight` en `world2d.rs` — corchetes
+  amarillos en las esquinas de la celda bajo la mira. **Es la base del sistema de
+  construcción** (feedback de "acá va a caer la pieza").
+- **USE dispara el hold (Fase 8):** la zona derecha ya es el stick, así que el
+  botón USE conduce el hold-interact (`use_button_hold_interact` en look_interact).
+- **Menú unificado (Fase 9):** UN solo panel (`game_menu.rs`) con TODO: mapa,
+  viaje, modos y los controles del editor (antes abrían panel aparte). EDITAR UI
+  vuelve el mismo menú see-through (`sync_menu_edit_mode`) para arrastrar los
+  controles; calibración = sub-diálogo desde AJUSTES. Sin menú anidado.
+- **USE/JUMP reubicados (Fase 10):** en arco ARRIBA del stick derecho (use
+  0.72,0.60 · jump 0.88,0.50). Bug corregido: `spawn_action_ui` estaba compilado
+  solo-Android → no salían en desktop; ahora usa `uses_touch_gameplay_ui()`.
+- **Minimapa dinámico (Fase 11):** el mapa del menú cambia según región —
+  superficie = minimapa top-down del terreno (grilla 24×24 muestreando tiles en
+  tiempo real, título = nombre del cuerpo, marcador del jugador); espacio = vista
+  orbital de siempre. `OrbitalLayer`/`TerrainLayer` + `update_terrain_minimap`.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

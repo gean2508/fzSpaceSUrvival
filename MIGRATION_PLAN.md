@@ -12,8 +12,9 @@
 > **Pedido del usuario.** Rework de UI para preparar un sistema de construcción
 > (mezcla con máquinas). Fases 8-11 abajo. La migración top-down (Fases 1-7) ya
 > está COMPLETA y publicada (v1.0.151). `main` debe seguir compilando.
-> **CHECKPOINT: Fase 8 COMPLETA (mira libre + resalte, verificado). Próximo:
-> Fase 9 (menú unificado sin menú anidado).**
+> **CHECKPOINT: Fases 8-11 COMPLETAS y verificadas (mira libre + resalte de
+> celda, menú unificado, USE/JUMP reubicados, minimapa dinámico terreno/orbital).
+> Próximo: Fase 12 (biblia + graphify + publicar APK .152 para probar).**
 
 Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
 
@@ -32,25 +33,33 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
   sistema de construcción. Verificado con captura.
 - Test: `HA_FORCE_TOUCH=1` fuerza la UI táctil en desktop para probarla.
 
-### FASE 9 — Menú unificado (sin menú anidado) ⬜
-- ⬜ Fusionar el menú del editor (`ui_editor.rs`) DENTRO del menú del juego
-  (`game_menu.rs`): un solo panel. Hoy "EDITAR UI"/"SETTINGS" abren paneles
-  separados (menú dentro del menú) — el usuario quiere UNO solo.
-- ⬜ Conservar TODAS las funciones (perf, creativo, teleports, editar UI
-  escala/mover, calibración, assets) como secciones/toggles del mismo panel.
+### FASE 9 — Menú unificado (sin menú anidado) ✅
+- ✅ Fusionado el menú del editor DENTRO de `game_menu.rs`: un solo panel con
+  TODO (mapa, viaje TIERRA/LUNA/ESPACIO, CREATIVO/PERF, y los controles del
+  editor EDITAR UI/MOVER/USE/JUMP/escala −+/RESET/GUARDAR/AJUSTES + CERRAR).
+- ✅ `sync_menu_edit_mode`: al activar EDITAR UI el MISMO menú se vuelve
+  see-through (mapa oculto, fondo transparente, `FocusPolicy::Pass`) para ver y
+  arrastrar los controles — no un 2º panel. Calibración queda como sub-diálogo
+  desde AJUSTES. Eliminado `spawn_editor_menu_panel`. Verificado con captura.
 
-### FASE 10 — Botones de acción reorganizados ⬜
-- ⬜ Reacomodar USE/JUMP/etc. para dejar lugar al stick derecho; conservar
-  funciones, mejorar layout.
+### FASE 10 — Botones de acción reorganizados ✅
+- ✅ USE/JUMP reubicados en arco ARRIBA del stick de mira (use 0.72,0.60 · jump
+  0.88,0.50) — el stick derecho ocupa la esquina inferior-derecha donde antes
+  estaban. Alcanzables por el pulgar derecho, sin solapar stick ni hotbar.
+- ✅ Bug corregido: `spawn_action_ui` estaba compilado solo-Android → los
+  botones no aparecían en desktop+HA_FORCE_TOUCH. Ahora usa `uses_touch_gameplay_ui()`.
 
-### FASE 11 — Minimapa dinámico en el menú ⬜
-- ⬜ Tierra/planeta → minimapa del **terreno top-down** en tiempo real (grilla
-  del cuerpo activo + posición del jugador).
-- ⬜ Espacio → posiciones de planetas en tiempo real (reusar/mejorar la vista
-  orbital existente en `game_menu.rs`).
+### FASE 11 — Minimapa dinámico en el menú ✅
+- ✅ Superficie (Tierra/Luna/planeta) → minimapa top-down del terreno: grilla
+  24×24 muestreando tiles (color por tile; árboles/rocas oscurecen su celda) en
+  tiempo real alrededor del jugador; título = nombre del cuerpo; marcador
+  magenta al centro; pantalla-arriba = −z. Cavar (TileWorld.z<0) muestra la cueva.
+- ✅ Espacio → vista orbital de siempre (Sol/órbitas/planetas/nave). El viewport
+  se parte en `OrbitalLayer`/`TerrainLayer` y `update_terrain_minimap` alterna
+  visibilidad + recolorea sólo con el menú abierto. Verificado con 2 capturas.
 
 **Al terminar:** actualizar biblia + `graphify update` + `npm run ship:android`
-(nuevo APK para probar). Arreglar bugs que aparezcan.
+(nuevo APK para probar). Arreglar bugs que aparezcan. → **Fase 12 en curso.**
 
 ---
 
