@@ -81,6 +81,9 @@ struct MinimapCell(usize);
 /// The map title text — swapped between "MAPA ORBITAL" and the body name.
 #[derive(Component)]
 struct MapTitle;
+/// The UI-editing toolbar (element selectors + scale) — shown only in edit mode.
+#[derive(Component)]
+struct EditToolbar;
 /// Remote camp monitor line — fed from `MachineWorld` while the menu is open.
 #[derive(Component)]
 struct LunaBaseMonitor;
@@ -108,26 +111,32 @@ fn sync_game_menu(
 /// so the on-screen controls + their drag handles are visible/editable — no
 /// second panel. Exits back to the normal opaque map menu.
 #[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity)]
 fn sync_menu_edit_mode(
     editor: Res<UiEditorState>,
     mut roots: Query<(&mut BackgroundColor, &mut FocusPolicy), With<GameMenuRoot>>,
-    mut map: Query<&mut Visibility, With<MapViewport>>,
+    mut sets: ParamSet<(
+        Query<&mut Visibility, With<MapViewport>>,
+        Query<&mut Visibility, With<EditToolbar>>,
+    )>,
 ) {
     let Ok((mut bg, mut fp)) = roots.get_single_mut() else {
         return;
     };
-    if editor.enabled {
+    let (map_vis, toolbar_vis) = if editor.enabled {
         *bg = BackgroundColor(Color::NONE);
         *fp = FocusPolicy::Pass;
-        for mut v in &mut map {
-            *v = Visibility::Hidden;
-        }
+        (Visibility::Hidden, Visibility::Inherited)
     } else {
         *bg = BackgroundColor(PANEL_BG);
         *fp = FocusPolicy::Block;
-        for mut v in &mut map {
-            *v = Visibility::Inherited;
-        }
+        (Visibility::Inherited, Visibility::Hidden)
+    };
+    for mut v in &mut sets.p0() {
+        *v = map_vis;
+    }
+    for mut v in &mut sets.p1() {
+        *v = toolbar_vis;
     }
 }
 
@@ -349,8 +358,10 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 menu_button(row, "VÍVERES (3🍎)", ColonyButton(ColonyAction::SendSupplies));
             });
 
-            // UNIFIED menu — one panel for everything (no nested editor menu).
-            // Viaje + modos.
+            // ── Menú principal: SOLO funciones de menú (viaje, modos, opciones).
+            // Los controles del jugador (mover/saltar/usar) viven en el HUD, no
+            // acá; los selectores del editor salen a la barra de edición (abajo),
+            // visible sólo en "EDITAR UI".
             menu_row(root, |bar| {
                 use crate::ui_editor::UiEditorCommand as C;
                 menu_button(bar, "TIERRA", C::GoEarth);
@@ -359,21 +370,46 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 menu_button(bar, "CREATIVO", C::ToggleCreative);
                 menu_button(bar, "PERF", C::TogglePerf);
             });
-            // Editar UI (antes era un panel aparte) + ajustes — todo aquí.
             menu_row(root, |bar| {
                 use crate::ui_editor::UiEditorCommand as C;
                 menu_button(bar, "EDITAR UI", C::Toggle);
-                menu_button(bar, "MOVER", C::SelectMove);
-                menu_button(bar, "USE", C::SelectUse);
-                menu_button(bar, "JUMP", C::SelectJump);
-                menu_button(bar, "−", C::ScaleDown);
-                menu_button(bar, "+", C::ScaleUp);
-                menu_button(bar, "RESET", C::Reset);
-                menu_button(bar, "GUARDAR", C::Save);
                 menu_button(bar, "AJUSTES", C::OpenSettings);
+                menu_button(bar, "CERRAR", C::CloseMenu);
             });
-            menu_row(root, |bar| {
-                menu_button(bar, "CERRAR", crate::ui_editor::UiEditorCommand::CloseMenu);
+
+            // ── Barra de EDICIÓN de UI (oculta salvo en modo EDITAR UI). Estos
+            // botones eligen QUÉ control reposicionar y su escala — no controlan
+            // al jugador. Se muestran/ocultan en `sync_menu_edit_mode`.
+            root.spawn((
+                Node {
+                    margin: UiRect::top(Val::Px(8.0)),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    row_gap: Val::Px(6.0),
+                    ..default()
+                },
+                Visibility::Hidden,
+                EditToolbar,
+            ))
+            .with_children(|col| {
+                col.spawn((
+                    Text::new("EDITAR UI — elegí un control y movelo/escalalo:"),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    },
+                    TextColor(NEON_CYAN),
+                ));
+                menu_row(col, |bar| {
+                    use crate::ui_editor::UiEditorCommand as C;
+                    menu_button(bar, "◧ Stick", C::SelectMove);
+                    menu_button(bar, "◧ Usar", C::SelectUse);
+                    menu_button(bar, "◧ Saltar", C::SelectJump);
+                    menu_button(bar, "−", C::ScaleDown);
+                    menu_button(bar, "+", C::ScaleUp);
+                    menu_button(bar, "RESET", C::Reset);
+                    menu_button(bar, "GUARDAR", C::Save);
+                });
             });
         })
         .id()
