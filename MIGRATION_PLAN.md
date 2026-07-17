@@ -21,6 +21,63 @@
 
 Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
 
+---
+
+## ⭐⭐ SEGUNDA OLA — Sistema de construcción + correcciones (17 jul 2026)
+
+> **Pedido del usuario (2ª tanda).** (1) Sacar del menú del juego los botones que
+> controlan al JUGADOR (USE/JUMP eran selectores del editor, confunden). (2)
+> Asegurar que la hotbar/inventario funcione: seleccionar un ítem lo pone "en
+> mano" y su función real anda. (3) Implementar el **sistema de construcción**
+> completo (mezcla con máquinas; base = `CursorHighlight`). (4) Acceso remoto:
+> buildear el APK con la IP Tailscale (Redmi ya en la tailnet).
+> Proceso: plan → implementar todo → biblia+graphify → publicar APK.
+> **CHECKPOINT 2ª OLA: escribiendo plan (Fases 13-17). Nada implementado aún.**
+
+### FASE 13 — Menú limpio (controles de jugador/editor fuera del menú) ⬜
+- ⬜ El menú principal deja SOLO funciones de menú: mapa, viaje (TIERRA/LUNA/
+  ESPACIO), CREATIVO/PERF, EDITAR UI, AJUSTES, CERRAR, colonos.
+- ⬜ Los selectores del editor (MOVER/USE/JUMP = qué control reposicionar, escala
+  ±, RESET, GUARDAR) salen del menú principal y aparecen SOLO al entrar en
+  "EDITAR UI" (barra de edición contextual sobre el menú see-through). Relabel
+  para que no se confundan con los botones de gameplay (p. ej. "◧ Stick/Usar/Saltar").
+
+### FASE 14 — Hotbar + inventario: selección → en mano → uso ⬜
+- ⬜ Verificar/arreglar: tocar/clic un slot de hotbar lo SELECCIONA + equipa
+  (`select_hotbar_slot` → `EquippedItem`), con resalte visible del slot activo.
+- ⬜ El ítem en mano dispara su función correcta: herramienta (mina/tala), bloque
+  (coloca tile), comida (come), martillo (máquina/construcción). Reproducir el
+  camino real (autodrive/capturas) y corregir cualquier desconexión.
+- ⬜ Selección persiste entre frames (no la pisa `equip_from_hotbar_selection`).
+
+### FASE 15 — Construcción: catálogo de piezas + costos (`ha-shared`) ⬜
+- ⬜ `topdown.rs`/nuevo `build.rs` en ha-shared: piezas de construcción
+  deterministas con costo (madera/piedra), tile que colocan y categoría. Reusar
+  `Tile::WoodFloor`/`Wall`; agregar las que falten (p. ej. `WoodWall`,
+  `StoneBrick`, `Door` caminable, `Fence`) actualizando `solid()`/`dug_item()`/
+  `color()`. Espejo TS si aplica + `UPDATE_CATALOG_PARITY=1 npm test`.
+
+### FASE 16 — Construcción: modo build + paleta + ghost + colocar/quitar (`ha-game`) ⬜
+- ⬜ Encender el scaffold muerto: `BuildModeActive.active` se togglea (botón BUILD
+  en hotbar/HUD). En modo build el martillo coloca la PIEZA seleccionada (no
+  máquina).
+- ⬜ **Paleta de piezas:** UI para elegir la pieza actual (mirror del patrón de
+  máquinas `PendingMachinePlacement`).
+- ⬜ **Ghost preview:** en la celda resaltada (`CursorHighlight`), sprite/quad
+  translúcido de la pieza a colocar (verde=válido, rojo=ocupado/sin recursos).
+- ⬜ **Colocar:** USE (hold) coloca la pieza, consume recursos, snap a la grilla.
+  Conectar el consumidor de `placing_build` (hoy no coloca nada).
+- ⬜ **Quitar:** apuntar una pieza colocada + acción la remueve (refund parcial).
+
+### FASE 17 — Verificar + biblia + graphify + publicar .153 (acceso remoto) ⬜
+- ⬜ Autodrive/capturas de cada sistema nuevo; tests ambos lados verdes.
+- ⬜ Biblia (§4 filas + nota fechada) + `graphify update`.
+- ⬜ **Publicar con Tailscale:** `node scripts/ship-native-android.mjs --host
+  100.83.97.54` → APK apunta al server por la IP tailscale (funciona desde
+  fuera de la LAN con Tailscale ON en el Redmi, ya instalado). Server debe correr.
+
+---
+
 ### FASE 8 — Joystick derecho (mira libre) + resalte de celda ✅
 - ✅ `look_stick` (derecho) en `DualJoystickState` (espejo del izquierdo, ancla
   a la derecha); `touch_look_stick` lo maneja en la zona derecha. Solo móvil
