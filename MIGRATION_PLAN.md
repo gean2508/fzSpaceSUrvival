@@ -12,9 +12,12 @@
 > **Pedido del usuario.** Rework de UI para preparar un sistema de construcción
 > (mezcla con máquinas). Fases 8-11 abajo. La migración top-down (Fases 1-7) ya
 > está COMPLETA y publicada (v1.0.151). `main` debe seguir compilando.
-> **CHECKPOINT: Fases 8-11 COMPLETAS y verificadas (mira libre + resalte de
-> celda, menú unificado, USE/JUMP reubicados, minimapa dinámico terreno/orbital).
-> Próximo: Fase 12 (biblia + graphify + publicar APK .152 para probar).**
+> **CHECKPOINT: Fases 8-12 COMPLETAS. UI hacia construcción lista y PUBLICADA
+> (APK v1.0.152): mira libre + resalte de celda, menú unificado, USE/JUMP
+> reubicados, minimapa dinámico terreno/orbital. Biblia §13-quater + graphify
+> actualizados; tests nativos 92 + shared 101 verdes. Próximo: probar en el
+> Redmi (ver memoria pruebas-perf) y arrancar el sistema de construcción real
+> (usar `CursorHighlight` como base del "acá va la pieza").**
 
 Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
 
