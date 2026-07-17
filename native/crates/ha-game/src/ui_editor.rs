@@ -309,57 +309,6 @@ fn ensure_editor_ui(
     });
 }
 
-fn spawn_editor_menu_panel(commands: &mut Commands, root: Entity) -> Entity {
-    let mut panel_entity = Entity::PLACEHOLDER;
-    commands.entity(root).with_children(|parent| {
-        panel_entity = parent
-            .spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: Val::Px(EDITOR_PANEL_W),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(5.0),
-                    padding: UiRect::all(Val::Px(6.0)),
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BorderColor(ui_theme::button_border(UiButtonTone::Primary)),
-                BackgroundColor(ui_theme::panel_bg(0.66)),
-                UiEditorPanel,
-                Name::new("UiEditorPanel"),
-            ))
-            .with_children(|panel| {
-                spawn_editor_button(panel, "CLOSE", UiEditorCommand::CloseMenu);
-                spawn_editor_button(panel, "SETTINGS", UiEditorCommand::OpenSettings);
-                spawn_editor_button(panel, "PERF", UiEditorCommand::TogglePerf);
-                spawn_editor_button(panel, "CREATIVE", UiEditorCommand::ToggleCreative);
-                spawn_editor_button(panel, "GO MOON", UiEditorCommand::GoLuna);
-                spawn_editor_button(panel, "GO SPACE", UiEditorCommand::GoSpace);
-                spawn_editor_button(panel, "GO EARTH", UiEditorCommand::GoEarth);
-                spawn_editor_button(panel, "EDIT UI", UiEditorCommand::Toggle);
-                spawn_editor_button(panel, "MOVE", UiEditorCommand::SelectMove);
-                spawn_editor_button(panel, "USE", UiEditorCommand::SelectUse);
-                spawn_editor_button(panel, "JUMP", UiEditorCommand::SelectJump);
-                spawn_editor_button(panel, "-", UiEditorCommand::ScaleDown);
-                spawn_editor_button(panel, "+", UiEditorCommand::ScaleUp);
-                spawn_editor_button(panel, "RESET", UiEditorCommand::Reset);
-                spawn_editor_button(panel, "SAVE", UiEditorCommand::Save);
-                #[cfg(debug_assertions)]
-                spawn_editor_button(panel, "ASSETS", UiEditorCommand::OpenAssets);
-                panel.spawn((
-                    Text::new("UI: OFF"),
-                    TextFont {
-                        font_size: 11.0,
-                        ..default()
-                    },
-                    TextColor(ui_theme::text_primary()),
-                    UiEditorLabel,
-                ));
-            })
-            .id();
-    });
-    panel_entity
-}
 
 fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
     let mut panel_entity = Entity::PLACEHOLDER;
@@ -418,20 +367,12 @@ fn sync_editor_panels(
     root: Query<Entity, With<GameUiRoot>>,
     mut panels: ResMut<EditorPanelsState>,
 ) {
-    // Old vertical panel only in edit-UI mode now; MENU opens the GTA V menu.
-    let need_editor = state.enabled;
-    let need_settings = state.menu_open && state.settings_open;
-
-    if !need_editor {
-        if let Some(entity) = panels.menu_panel.take() {
-            commands.entity(entity).despawn_recursive();
-        }
-    } else if panels.menu_panel.is_none() {
-        let Ok(root) = root.get_single() else {
-            return;
-        };
-        panels.menu_panel = Some(spawn_editor_menu_panel(&mut commands, root));
+    // The editor menu is UNIFIED into `game_menu.rs` (one menu). We no longer
+    // spawn a separate editor panel — edit-UI mode just toggles drag handles.
+    if let Some(entity) = panels.menu_panel.take() {
+        commands.entity(entity).despawn_recursive();
     }
+    let need_settings = state.menu_open && state.settings_open;
 
     if !need_settings {
         if let Some(entity) = panels.settings_panel.take() {

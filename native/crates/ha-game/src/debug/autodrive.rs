@@ -153,11 +153,22 @@ fn smoke_drive(world: &mut World) {
             }
             let x = player_x(world);
             shot(world, "ha-verify-topdown-boot.png");
+            // Open the unified menu for a capture.
+            world.resource_mut::<crate::ui_editor::UiEditorState>().menu_open = true;
             let mut s = world.resource_mut::<SmokeState>();
             s.start_x = x;
-            s.phase = 1;
+            s.phase = 20;
             s.entered = now;
             eprintln!("ha-verify: boot (player x={x:.1})");
+        }
+        20 => {
+            if dt > 1.0 {
+                shot(world, "ha-verify-topdown-menu.png");
+                eprintln!("ha-verify: menu captured");
+                world.resource_mut::<crate::ui_editor::UiEditorState>().menu_open = false;
+                world.resource_mut::<SmokeState>().phase = 1;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
         }
         1 => {
             // Walk east (D) for ~3 s, then check we moved.

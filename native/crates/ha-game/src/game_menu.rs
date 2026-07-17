@@ -36,7 +36,13 @@ impl Plugin for GameMenuPlugin {
         app.init_resource::<GameMenuState>()
             .add_systems(
                 Update,
-                (sync_game_menu, update_map_markers, update_luna_base_monitor).chain(),
+                (
+                    sync_game_menu,
+                    sync_menu_edit_mode.after(sync_game_menu),
+                    update_map_markers,
+                    update_luna_base_monitor,
+                )
+                    .chain(),
             );
     }
 }
@@ -65,8 +71,9 @@ fn sync_game_menu(
     mut state: ResMut<GameMenuState>,
     mut commands: Commands,
 ) {
-    // Show only when the menu is open and NOT in the edit-UI sub-mode.
-    let want = editor.menu_open && !editor.enabled && !editor.settings_open;
+    // ONE menu: shown whenever open. Edit-UI mode keeps it (goes see-through
+    // via `sync_menu_edit_mode`); only the CALIBRATION sub-dialog replaces it.
+    let want = editor.menu_open && !editor.settings_open;
     if want && !state.spawned {
         state.root = Some(spawn_menu(&mut commands));
         state.spawned = true;
@@ -75,6 +82,33 @@ fn sync_game_menu(
             commands.entity(root).despawn_recursive();
         }
         state.spawned = false;
+    }
+}
+
+/// Edit-UI mode: the SAME menu goes see-through (map hidden, background clear)
+/// so the on-screen controls + their drag handles are visible/editable — no
+/// second panel. Exits back to the normal opaque map menu.
+#[allow(clippy::type_complexity)]
+fn sync_menu_edit_mode(
+    editor: Res<UiEditorState>,
+    mut roots: Query<(&mut BackgroundColor, &mut FocusPolicy), With<GameMenuRoot>>,
+    mut map: Query<&mut Visibility, With<MapViewport>>,
+) {
+    let Ok((mut bg, mut fp)) = roots.get_single_mut() else {
+        return;
+    };
+    if editor.enabled {
+        *bg = BackgroundColor(Color::NONE);
+        *fp = FocusPolicy::Pass;
+        for mut v in &mut map {
+            *v = Visibility::Hidden;
+        }
+    } else {
+        *bg = BackgroundColor(PANEL_BG);
+        *fp = FocusPolicy::Block;
+        for mut v in &mut map {
+            *v = Visibility::Inherited;
+        }
     }
 }
 
@@ -235,30 +269,48 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 menu_button(row, "VÍVERES (3🍎)", ColonyButton(ColonyAction::SendSupplies));
             });
 
-            // Big-button bar (reuses the dev UiEditorCommands via editor_button_system).
-            root.spawn((
-                Node {
-                    margin: UiRect::top(Val::Px(10.0)),
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    justify_content: JustifyContent::Center,
-                    column_gap: Val::Px(10.0),
-                    row_gap: Val::Px(8.0),
-                    ..default()
-                },
-            ))
-            .with_children(|bar| {
+            // UNIFIED menu — one panel for everything (no nested editor menu).
+            // Viaje + modos.
+            menu_row(root, |bar| {
                 use crate::ui_editor::UiEditorCommand as C;
-                menu_button(bar, "CERRAR", C::CloseMenu);
-                menu_button(bar, "CREATIVO", C::ToggleCreative);
-                menu_button(bar, "PERF", C::TogglePerf);
                 menu_button(bar, "TIERRA", C::GoEarth);
                 menu_button(bar, "LUNA", C::GoLuna);
                 menu_button(bar, "ESPACIO", C::GoSpace);
+                menu_button(bar, "CREATIVO", C::ToggleCreative);
+                menu_button(bar, "PERF", C::TogglePerf);
+            });
+            // Editar UI (antes era un panel aparte) + ajustes — todo aquí.
+            menu_row(root, |bar| {
+                use crate::ui_editor::UiEditorCommand as C;
                 menu_button(bar, "EDITAR UI", C::Toggle);
+                menu_button(bar, "MOVER", C::SelectMove);
+                menu_button(bar, "USE", C::SelectUse);
+                menu_button(bar, "JUMP", C::SelectJump);
+                menu_button(bar, "−", C::ScaleDown);
+                menu_button(bar, "+", C::ScaleUp);
+                menu_button(bar, "RESET", C::Reset);
+                menu_button(bar, "GUARDAR", C::Save);
+                menu_button(bar, "AJUSTES", C::OpenSettings);
+            });
+            menu_row(root, |bar| {
+                menu_button(bar, "CERRAR", crate::ui_editor::UiEditorCommand::CloseMenu);
             });
         })
         .id()
+}
+
+fn menu_row(parent: &mut ChildBuilder, build: impl FnOnce(&mut ChildBuilder)) {
+    parent
+        .spawn(Node {
+            margin: UiRect::top(Val::Px(8.0)),
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            justify_content: JustifyContent::Center,
+            column_gap: Val::Px(8.0),
+            row_gap: Val::Px(8.0),
+            ..default()
+        })
+        .with_children(build);
 }
 
 fn menu_button(parent: &mut ChildBuilder, label: &str, cmd: impl Bundle) {
