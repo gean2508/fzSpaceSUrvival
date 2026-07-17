@@ -12,7 +12,7 @@ pub use calibration::{
     DEFAULT_RENDER_SCALE, DEFAULT_STICK_CURVE_EXPONENT, CAMERA_LOOK_SMOOTH_RATE,
 };
 pub use actions::{layout_action_buttons, CraftIntent, TouchActions};
-pub use joystick::{CameraLookIntent, InputPlugin, MovementIntent};
+pub use joystick::{AimCursor, CameraLookIntent, InputPlugin, MovementIntent, AIM_MAX_REACH};
 pub use layout::{TouchBlockRects, TouchLayout};
 pub use desktop_input::DesktopMouseCapture;
 pub use look_interact::{

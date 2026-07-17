@@ -95,7 +95,7 @@ impl Plugin for LookInteractPlugin {
             .add_systems(
                 Update,
                 (
-                    look_gesture_system,
+                    use_button_hold_interact,
                     apply_smoothed_look,
                     actions::highlight_action_buttons,
                 )
@@ -105,6 +105,95 @@ impl Plugin for LookInteractPlugin {
                     }),
             )
             .add_systems(FixedUpdate, (tick_hold_interact, tick_ability_cooldown));
+    }
+}
+
+/// Top-down interaction: holding the USE button acts on the tile/object under
+/// the aim cursor (mine/chop/pickup, place block, place machine, eat) — context
+/// -driven, one action per press. Replaces the old right-side drag-hold gesture
+/// (that zone is now the aim joystick). Advances via `tick_hold_interact`.
+#[allow(clippy::too_many_arguments)]
+fn use_button_hold_interact(
+    time: Res<Time>,
+    actions: Res<super::TouchActions>,
+    target: Res<crate::targeting::LookTarget>,
+    equipped: Res<EquippedItem>,
+    pending: Res<crate::machines::PendingMachinePlacement>,
+    build_mode: Res<BuildModeActive>,
+    mut hold: ResMut<HoldInteractState>,
+    mut started: Local<bool>,
+    mut held_ms: Local<f32>,
+) {
+    // Desktop keeps its mouse path (`desktop_hold_interact`).
+    if !crate::platform::uses_touch_gameplay_ui() {
+        return;
+    }
+    if !actions.action {
+        // Released: cancel an in-progress hold and re-arm for the next press.
+        if hold.active && !hold.completed {
+            hold.cancelled = true;
+            hold.active = false;
+            hold.progress_ms = 0;
+        }
+        *started = false;
+        *held_ms = 0.0;
+        return;
+    }
+    *held_ms += time.delta_secs() * 1000.0;
+    if *started || hold.active || hold.completed {
+        return;
+    }
+    let held = *held_ms;
+    let block_place =
+        ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some();
+    if block_place {
+        *started = true;
+        *hold = HoldInteractState {
+            active: true,
+            duration_ms: 300,
+            placing_block: true,
+            ..default()
+        };
+    } else if let Some(kind) = target.kind {
+        if let Some(rule) = resolve_interaction(Some(equipped.item_id.as_str()), kind) {
+            if rule.kind != InteractActionKind::None && rule.duration_ms > 0 {
+                *started = true;
+                *hold = HoldInteractState {
+                    active: true,
+                    duration_ms: rule.duration_ms,
+                    flight_hold: is_flight_hold_target(kind),
+                    locked_kind: Some(kind),
+                    ..default()
+                };
+            }
+        }
+    } else if ha_shared::food_restore(&equipped.item_id).is_some() {
+        *started = true;
+        *hold = HoldInteractState {
+            active: true,
+            duration_ms: 1100,
+            eating: true,
+            ..default()
+        };
+    } else if equipped.item_id == "hammer" && held >= GESTURE_MACHINE_HOLD_DELAY_MS as f32 {
+        *started = true;
+        if build_mode.active {
+            *hold = HoldInteractState {
+                active: true,
+                duration_ms: 1200,
+                placing_build: true,
+                ..default()
+            };
+        } else {
+            let def = ha_shared::require_machine(pending.machine_id);
+            *hold = HoldInteractState {
+                active: true,
+                duration_ms: def.place_duration_ms,
+                placing_machine: true,
+                placing_stone: pending.machine_id == ha_shared::STONE_EXTRACTOR.id,
+                ..default()
+            };
+        }
     }
 }
 

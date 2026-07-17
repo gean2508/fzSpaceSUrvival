@@ -275,7 +275,10 @@ impl Plugin for World2dPlugin {
         app.init_resource::<TileWorld>()
             .init_resource::<ActivePlanet>()
             .init_resource::<ChunkMaterial>()
-            .add_systems(Startup, (load_tiles_on_startup, init_chunk_material))
+            .add_systems(
+                Startup,
+                (load_tiles_on_startup, init_chunk_material, spawn_cursor_highlight),
+            )
             .add_systems(
                 Update,
                 (
@@ -284,10 +287,66 @@ impl Plugin for World2dPlugin {
                     layer_transition,
                     stream_tile_chunks,
                     rebuild_dirty_chunks,
+                    sync_cursor_highlight,
                     debounced_tiles_save,
                 ),
             );
     }
+}
+
+/// Yellow corner-bracket highlight on the grid cell under the aim cursor —
+/// so you know where the reticle is detecting (base of the building system).
+#[derive(Component)]
+struct CursorHighlight;
+
+fn spawn_cursor_highlight(mut commands: Commands) {
+    let yellow = Color::srgb(1.0, 0.9, 0.15);
+    // Four L-shaped corner brackets on a 1×1 tile (corners at ±0.5).
+    commands
+        .spawn((
+            CursorHighlight,
+            Transform::from_xyz(0.0, 0.0, 6.0),
+            Visibility::Hidden,
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+        ))
+        .with_children(|p| {
+            let arm = 0.28;
+            let thick = 0.09;
+            for (cx, cz) in [(-1.0, 1.0), (1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)] {
+                let corner = Vec2::new(cx * 0.5, cz * 0.5);
+                // Horizontal arm (pointing inward).
+                p.spawn((
+                    Sprite::from_color(yellow, Vec2::new(arm, thick)),
+                    Transform::from_xyz(corner.x - cx * arm * 0.5, corner.y, 0.0),
+                ));
+                // Vertical arm.
+                p.spawn((
+                    Sprite::from_color(yellow, Vec2::new(thick, arm)),
+                    Transform::from_xyz(corner.x, corner.y - cz * arm * 0.5, 0.0),
+                ));
+            }
+        });
+}
+
+fn sync_cursor_highlight(
+    cursor: Res<crate::input::AimCursor>,
+    region: Res<RegionRuntime>,
+    mut hl: Query<(&mut Transform, &mut Visibility), With<CursorHighlight>>,
+) {
+    let Ok((mut tf, mut vis)) = hl.get_single_mut() else {
+        return;
+    };
+    if surface_region_active(&region).is_none() || !cursor.initialized {
+        *vis = Visibility::Hidden;
+        return;
+    }
+    *vis = Visibility::Visible;
+    // Snap to the cell centre under the cursor.
+    let tx = cursor.world.x.floor();
+    let tz = cursor.world.y.floor();
+    let r = render_xy(tx + 0.5, tz + 0.5);
+    tf.translation = Vec3::new(r.x, r.y, 6.0);
 }
 
 fn init_chunk_material(

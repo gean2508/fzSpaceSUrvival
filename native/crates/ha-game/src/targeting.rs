@@ -91,14 +91,12 @@ fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool 
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn update_look_target(
-    pointer: Res<LookPointer>,
+    cursor: Res<crate::input::AimCursor>,
     region: Res<RegionRuntime>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     tiles: Res<TileWorld>,
     equipped: Res<EquippedItem>,
-    window: Query<&Window, With<PrimaryWindow>>,
-    camera: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
     player: Query<(&Transform, &SimState), With<Player>>,
     targets: Query<(Entity, &GlobalTransform, &InteractTarget)>,
     mut current: ResMut<LookTarget>,
@@ -113,18 +111,9 @@ fn update_look_target(
     let body = active_surface_body(&ctx, &planet);
     let origin = player_tf.translation.truncate();
 
-    // Pointer world position: touch look-gesture first, desktop cursor second.
-    let pointer_world: Option<Vec2> = {
-        let screen = pointer.pos.or_else(|| {
-            window.get_single().ok().and_then(|w| w.cursor_position())
-        });
-        screen.and_then(|p| {
-            camera
-                .get_single()
-                .ok()
-                .and_then(|(cam, tf)| cam.viewport_to_world_2d(tf, p).ok())
-        })
-    };
+    // Free aim cursor: world ground `(x, z)`. `pick` is its screen position.
+    let cursor_world = cursor.world;
+    let pick = render_xy(cursor_world.x, cursor_world.y);
 
     let mut best: Option<(Entity, InteractTargetKind, f32, Vec2, u32)> = None;
     let mut consider = |entity: Entity, kind: InteractTargetKind, center: Vec2, id: u32, d: f32| {
@@ -140,20 +129,12 @@ fn update_look_target(
         }
     };
 
-    if let Some(point) = pointer_world {
-        // Pointer pick: closest sprite under the finger/cursor.
-        for (entity, gtf, target) in &targets {
-            let center = gtf.translation().truncate();
-            let d = center.distance(point);
-            if d <= POINT_PICK_RADIUS {
-                consider(entity, target.kind, center, target.id, d);
-            }
-        }
-    } else {
-        // Proximity auto-target (top-down): nearest interactable within reach.
-        for (entity, gtf, target) in &targets {
-            let center = gtf.translation().truncate();
-            consider(entity, target.kind, center, target.id, origin.distance(center));
+    // Pick the interactable closest to the aim cursor (within its footprint).
+    for (entity, gtf, target) in &targets {
+        let center = gtf.translation().truncate();
+        let d = center.distance(pick);
+        if d <= POINT_PICK_RADIUS {
+            consider(entity, target.kind, center, target.id, d);
         }
     }
 
@@ -180,16 +161,12 @@ fn update_look_target(
         return;
     }
 
-    // Aim world point: pointer if present, else the cell the player faces.
-    let aim = pointer_world.unwrap_or_else(|| {
-        let fx = sim.body.rot.cos();
-        let fz = sim.body.rot.sin();
-        render_xy(sim.body.x + fx * 1.2, sim.body.z + fz * 1.2)
-    });
+    // Tile under the aim cursor (world ground coords → grid cell).
+    let aim = pick;
+    let _ = sim;
     if origin.distance(aim) <= TILE_REACH {
-        // Screen (x, -z) → grid (tx, tz).
-        let tx = (aim.x / TILE_M).floor() as i64;
-        let tz = (-aim.y / TILE_M).floor() as i64;
+        let tx = (cursor_world.x / TILE_M).floor() as i64;
+        let tz = (cursor_world.y / TILE_M).floor() as i64;
         if tiles.solid_at(body, tx, tz) {
             let t = tiles.tile_at(body, tx, tz);
             if t != ha_shared::topdown::Tile::Bedrock

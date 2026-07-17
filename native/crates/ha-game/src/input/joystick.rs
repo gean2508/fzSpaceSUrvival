@@ -57,7 +57,30 @@ struct JoystickSide {
 #[derive(Resource, Default)]
 struct DualJoystickState {
     move_stick: JoystickSide,
+    look_stick: JoystickSide,
 }
+
+/// Free aim cursor (top-down): world ground position `(x, z)` the right stick
+/// moves. Targeting + the cell highlight read this; it persists when released
+/// and follows the player within `AIM_MAX_REACH`. Base of the building system.
+#[derive(Resource)]
+pub struct AimCursor {
+    pub world: Vec2,
+    pub initialized: bool,
+}
+
+impl Default for AimCursor {
+    fn default() -> Self {
+        Self {
+            world: Vec2::ZERO,
+            initialized: false,
+        }
+    }
+}
+
+/// Cursor travel speed (m/s) and how far it can sit from the player.
+const AIM_SPEED: f32 = 11.0;
+pub const AIM_MAX_REACH: f32 = 5.2;
 
 const DEADZONE: f32 = 0.07; // legacy fallback; runtime uses adaptive_deadzone_norm
 const INPUT_SMOOTH_RATE: f32 = 42.0;
@@ -74,6 +97,7 @@ impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MovementIntent>()
             .init_resource::<CameraLookIntent>()
+            .init_resource::<AimCursor>()
             .init_resource::<RawMovementIntent>()
             .init_resource::<super::gamepad::GamepadActive>()
             .init_resource::<super::gamepad::GamepadHotbarIndex>()
@@ -99,6 +123,7 @@ impl Plugin for InputPlugin {
                     desktop_input::desktop_hold_interact
                         .after(desktop_input::desktop_mouse_capture_toggle)
                         ,
+                    desktop_input::desktop_aim_cursor,
                     desktop_input::desktop_cursor_grab,
                 ),
             );
@@ -117,7 +142,9 @@ impl Plugin for InputPlugin {
                     keyboard_input,
                     super::gamepad::gamepad_input,
                     touch_move_stick.after(actions::poll_action_buttons_held),
+                    touch_look_stick.after(actions::poll_action_buttons_held),
                     smooth_movement_intent,
+                    update_aim_cursor,
                     update_joystick_ui,
                 )
                     .chain(),
@@ -140,7 +167,10 @@ fn sync_stick_anchors(
 ) {
     let slot = config.slot(UiEditable::MoveStick);
     let size = Vec2::splat(layout.radius * 2.0 * slot.scale);
-    state.move_stick.anchor = config.center(&layout, UiEditable::MoveStick, size);
+    let move_anchor = config.center(&layout, UiEditable::MoveStick, size);
+    state.move_stick.anchor = move_anchor;
+    // Look stick mirrors the move stick to the right edge.
+    state.look_stick.anchor = Vec2::new(layout.width - move_anchor.x, move_anchor.y);
 }
 
 fn apply_deadzone(v: Vec2, deadzone_norm: f32) -> Vec2 {
@@ -317,9 +347,88 @@ fn touch_move_stick(
     raw.aim_z = camera_aim.y;
 }
 
+/// Right joystick: any touch on the right (look) zone, off the action buttons,
+/// drives the aim cursor. Fixed anchor at the lower-right (mirror of move).
+fn touch_look_stick(
+    layout: Res<TouchLayout>,
+    blocks: Res<TouchBlockRects>,
+    button_rects: Res<actions::ActionButtonRects>,
+    editor: Res<UiEditorState>,
+    gameplay_block: Res<UiGameplayBlock>,
+    mut touches: EventReader<TouchInput>,
+    mut state: ResMut<DualJoystickState>,
+) {
+    if !crate::platform::uses_touch_gameplay_ui() {
+        return;
+    }
+    if editor.enabled || editor.menu_open || gameplay_block.blocked {
+        return;
+    }
+    for ev in touches.read() {
+        let pos = ev.position;
+        match ev.phase {
+            TouchPhase::Started => {
+                if actions::touch_hits_action_button(pos, &button_rects) {
+                    continue;
+                }
+                if layout::touch_in_look_zone(pos, &layout)
+                    && !layout::touch_blocked(pos, &blocks.0)
+                    && !state.look_stick.active
+                {
+                    state.look_stick.active = true;
+                    state.look_stick.pointer_id = Some(ev.id);
+                    state.look_stick.current = pos;
+                }
+            }
+            TouchPhase::Moved => {
+                if state.look_stick.active && state.look_stick.pointer_id == Some(ev.id) {
+                    state.look_stick.current = pos;
+                }
+            }
+            TouchPhase::Ended | TouchPhase::Canceled => {
+                if state.look_stick.pointer_id == Some(ev.id) {
+                    state.look_stick.active = false;
+                    state.look_stick.pointer_id = None;
+                    state.look_stick.current = state.look_stick.anchor;
+                }
+            }
+        }
+    }
+}
+
+/// Integrate the right stick into the free aim cursor (world ground coords),
+/// clamped within `AIM_MAX_REACH` of the player. Persists when released.
+fn update_aim_cursor(
+    time: Res<Time>,
+    layout: Res<TouchLayout>,
+    config: Res<UiLayoutConfig>,
+    state: Res<DualJoystickState>,
+    mut cursor: ResMut<AimCursor>,
+    player: Query<&crate::sim::SimState, With<crate::sim::Player>>,
+) {
+    let Ok(sim) = player.get_single() else {
+        return;
+    };
+    let p = Vec2::new(sim.body.x, sim.body.z);
+    if !cursor.initialized {
+        cursor.world = p + Vec2::new(0.0, -2.0);
+        cursor.initialized = true;
+    }
+    let r = (layout.radius * config.slot(UiEditable::MoveStick).scale).max(1.0);
+    let v = stick_vector(&state.look_stick, r, config.calibration.stick_curve_exponent);
+    if v.length() > 0.01 {
+        // Screen dirs: x = east, y (down) = +z (south).
+        cursor.world += Vec2::new(v.x, v.y) * AIM_SPEED * time.delta_secs();
+    }
+    let d = cursor.world - p;
+    let dist = d.length();
+    if dist > AIM_MAX_REACH {
+        cursor.world = p + d / dist * AIM_MAX_REACH;
+    }
+}
+
 fn smooth_movement_intent(
     time: Res<Time<Virtual>>,
-    config: Res<UiLayoutConfig>,
     look: Res<CameraLookIntent>,
     raw: Res<RawMovementIntent>,
     mut intent: ResMut<MovementIntent>,
@@ -339,42 +448,47 @@ struct JoystickKnob;
 #[derive(Component)]
 struct JoystickBase;
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 struct MoveStick;
 
-fn spawn_move_stick(commands: &mut Commands) {
-    let mut entity = commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            display: Display::Flex,
-            border: UiRect::all(Val::Px(3.2)),
-            ..default()
-        },
-        BorderColor(ui_theme::joystick_border(false)),
-        BackgroundColor(ui_theme::joystick_base()),
-        BorderRadius::MAX,
-        JoystickBase,
-    ));
-    entity.insert(MoveStick);
-    entity.with_children(|p| {
-        p.spawn((
+#[derive(Component, Clone, Copy)]
+struct LookStick;
+
+fn spawn_stick<M: Component + Copy>(commands: &mut Commands, marker: M) {
+    commands
+        .spawn((
             Node {
                 position_type: PositionType::Absolute,
+                display: Display::Flex,
+                border: UiRect::all(Val::Px(3.2)),
                 ..default()
             },
-            BackgroundColor(ui_theme::joystick_knob()),
+            BorderColor(ui_theme::joystick_border(false)),
+            BackgroundColor(ui_theme::joystick_base()),
             BorderRadius::MAX,
-            JoystickKnob,
-            MoveStick,
-        ));
-    });
+            JoystickBase,
+            marker,
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    ..default()
+                },
+                BackgroundColor(ui_theme::joystick_knob()),
+                BorderRadius::MAX,
+                JoystickKnob,
+                marker,
+            ));
+        });
 }
 
 fn spawn_joystick_ui(mut commands: Commands) {
     if !crate::platform::uses_touch_gameplay_ui() {
         return;
     }
-    spawn_move_stick(&mut commands);
+    spawn_stick(&mut commands, MoveStick);
+    spawn_stick(&mut commands, LookStick);
 }
 
 fn update_joystick_ui(
@@ -397,6 +511,14 @@ fn update_joystick_ui(
             Without<JoystickBase>,
         ),
     >,
+    mut look_bases: Query<
+        (&mut Node, &mut BorderColor),
+        (With<JoystickBase>, With<LookStick>, Without<JoystickKnob>, Without<MoveStick>),
+    >,
+    mut look_knobs: Query<
+        &mut Node,
+        (With<JoystickKnob>, With<LookStick>, Without<JoystickBase>, Without<MoveStick>),
+    >,
 ) {
     if !crate::platform::uses_touch_gameplay_ui() {
         return;
@@ -407,18 +529,16 @@ fn update_joystick_ui(
     let win_h = layout.height;
 
     for (mut node, mut border) in &mut move_bases {
-        paint_base(
-            &state.move_stick,
-            r,
-            win_h,
-            &layout,
-            true,
-            &mut node,
-            &mut border,
-        );
+        paint_base(&state.move_stick, r, win_h, &layout, true, &mut node, &mut border);
     }
     for mut node in &mut move_knobs {
         paint_knob(&state.move_stick, r, knob_r, &mut node);
+    }
+    for (mut node, mut border) in &mut look_bases {
+        paint_base(&state.look_stick, r, win_h, &layout, false, &mut node, &mut border);
+    }
+    for mut node in &mut look_knobs {
+        paint_knob(&state.look_stick, r, knob_r, &mut node);
     }
 }
 

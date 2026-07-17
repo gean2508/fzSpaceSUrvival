@@ -187,6 +187,43 @@ pub fn desktop_hold_interact(
     }
 }
 
+/// Desktop: the mouse drives the free aim cursor (top-down), clamped to reach.
+/// Mirrors the right joystick on mobile so targeting/highlight work with a mouse.
+pub fn desktop_aim_cursor(
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&Camera, &GlobalTransform), With<crate::camera::GameCamera>>,
+    player: Query<&crate::sim::SimState, With<crate::sim::Player>>,
+    mut cursor: ResMut<super::AimCursor>,
+) {
+    // When the touch UI is forced on desktop, the right stick owns the cursor.
+    if std::env::var("HA_FORCE_TOUCH").is_ok() {
+        return;
+    }
+    let Ok(win) = window.get_single() else {
+        return;
+    };
+    let Some(sp) = win.cursor_position() else {
+        return;
+    };
+    let Ok((cam, tf)) = camera.get_single() else {
+        return;
+    };
+    let Ok(render) = cam.viewport_to_world_2d(tf, sp) else {
+        return;
+    };
+    // Screen (x, -z) → world (x, z).
+    let mut world = Vec2::new(render.x, -render.y);
+    if let Ok(sim) = player.get_single() {
+        let p = Vec2::new(sim.body.x, sim.body.z);
+        let d = world - p;
+        if d.length() > super::AIM_MAX_REACH {
+            world = p + d.normalize() * super::AIM_MAX_REACH;
+        }
+    }
+    cursor.world = world;
+    cursor.initialized = true;
+}
+
 pub fn desktop_cursor_grab(
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,

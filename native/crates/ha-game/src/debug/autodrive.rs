@@ -139,6 +139,18 @@ fn smoke_drive(world: &mut World) {
 
     match phase {
         0 => {
+            // Place the aim cursor a couple tiles from the player so the
+            // yellow cell highlight is visible in the boot shot.
+            let (px, pz) = {
+                let mut q = world.query_filtered::<&SimState, With<Player>>();
+                let s = q.single(world);
+                (s.body.x, s.body.z)
+            };
+            {
+                let mut c = world.resource_mut::<crate::input::AimCursor>();
+                c.world = bevy::prelude::Vec2::new(px + 2.5, pz - 1.5);
+                c.initialized = true;
+            }
             let x = player_x(world);
             shot(world, "ha-verify-topdown-boot.png");
             let mut s = world.resource_mut::<SmokeState>();

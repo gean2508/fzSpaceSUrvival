@@ -7,6 +7,53 @@
 
 ---
 
+## ⭐ TRABAJO ACTUAL — UI hacia el sistema de construcción (17 jul 2026)
+
+> **Pedido del usuario.** Rework de UI para preparar un sistema de construcción
+> (mezcla con máquinas). Fases 8-11 abajo. La migración top-down (Fases 1-7) ya
+> está COMPLETA y publicada (v1.0.151). `main` debe seguir compilando.
+> **CHECKPOINT: Fase 8 COMPLETA (mira libre + resalte, verificado). Próximo:
+> Fase 9 (menú unificado sin menú anidado).**
+
+Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
+
+### FASE 8 — Joystick derecho (mira libre) + resalte de celda ✅
+- ✅ `look_stick` (derecho) en `DualJoystickState` (espejo del izquierdo, ancla
+  a la derecha); `touch_look_stick` lo maneja en la zona derecha. Solo móvil
+  (`uses_touch_gameplay_ui`). Desktop = **mouse + teclado** (sin joysticks).
+- ✅ **Cursor de mira libre** (`AimCursor`, world x,z): el stick lo integra por
+  velocidad, clamp a `AIM_MAX_REACH` del jugador, persiste al soltar
+  (`update_aim_cursor`). Desktop: `desktop_aim_cursor` lo mueve con el mouse.
+- ✅ Targeting lee `AimCursor` (pick de entidad + celda de tile). Reemplazó el
+  gesto de arrastre: `use_button_hold_interact` — el botón USE mantenido dispara
+  el hold sobre lo que apunta el cursor (mina/tala/coloca/máquina/come).
+- ✅ **Resalte de celda:** `CursorHighlight` en `world2d.rs` — corchetes amarillos
+  en L en las 4 esquinas del tile bajo el cursor (snap a grilla). Base del
+  sistema de construcción. Verificado con captura.
+- Test: `HA_FORCE_TOUCH=1` fuerza la UI táctil en desktop para probarla.
+
+### FASE 9 — Menú unificado (sin menú anidado) ⬜
+- ⬜ Fusionar el menú del editor (`ui_editor.rs`) DENTRO del menú del juego
+  (`game_menu.rs`): un solo panel. Hoy "EDITAR UI"/"SETTINGS" abren paneles
+  separados (menú dentro del menú) — el usuario quiere UNO solo.
+- ⬜ Conservar TODAS las funciones (perf, creativo, teleports, editar UI
+  escala/mover, calibración, assets) como secciones/toggles del mismo panel.
+
+### FASE 10 — Botones de acción reorganizados ⬜
+- ⬜ Reacomodar USE/JUMP/etc. para dejar lugar al stick derecho; conservar
+  funciones, mejorar layout.
+
+### FASE 11 — Minimapa dinámico en el menú ⬜
+- ⬜ Tierra/planeta → minimapa del **terreno top-down** en tiempo real (grilla
+  del cuerpo activo + posición del jugador).
+- ⬜ Espacio → posiciones de planetas en tiempo real (reusar/mejorar la vista
+  orbital existente en `game_menu.rs`).
+
+**Al terminar:** actualizar biblia + `graphify update` + `npm run ship:android`
+(nuevo APK para probar). Arreglar bugs que aparezcan.
+
+---
+
 ## 0. Estado global
 
 - **Objetivo:** migrar de vista lateral (Terraria-style, side-scroller) a

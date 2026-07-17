@@ -51,7 +51,8 @@ pub fn is_app_paused() -> bool {
 /// Touch sticks + on-screen USE/JUMP — Android only; desktop uses keyboard/mouse.
 #[inline]
 pub fn uses_touch_gameplay_ui() -> bool {
-    cfg!(target_os = "android")
+    // Desktop testing of the touch UI: HA_FORCE_TOUCH=1.
+    cfg!(target_os = "android") || std::env::var("HA_FORCE_TOUCH").is_ok()
 }
 
 /// Idle HUD hint when no interact target is active.
