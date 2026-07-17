@@ -141,8 +141,14 @@ impl Plugin for InputPlugin {
                     actions::update_jump_button_label,
                     keyboard_input,
                     super::gamepad::gamepad_input,
-                    touch_move_stick.after(actions::poll_action_buttons_held),
-                    touch_look_stick.after(actions::poll_action_buttons_held),
+                    // MUST run after the hotbar (and editor) rects are appended
+                    // to `TouchBlockRects`, or the sticks steal hotbar taps.
+                    touch_move_stick
+                        .after(actions::poll_action_buttons_held)
+                        .after(crate::hud::append_hud_touch_blocks),
+                    touch_look_stick
+                        .after(actions::poll_action_buttons_held)
+                        .after(crate::hud::append_hud_touch_blocks),
                     smooth_movement_intent,
                     update_aim_cursor,
                     update_joystick_ui,

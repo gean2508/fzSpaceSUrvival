@@ -145,7 +145,7 @@ struct ModalLayerRoot;
 struct StatusPromptRoot;
 
 #[derive(Resource, Default)]
-struct HudTouchBlocks(pub Vec<[f32; 4]>);
+pub(crate) struct HudTouchBlocks(pub Vec<[f32; 4]>);
 
 #[derive(Component)]
 struct BagPanelCloseButton;
@@ -2383,7 +2383,10 @@ fn sync_ui_gameplay_block(
     block.blocked = bag.open || editor.menu_open || editor.enabled;
 }
 
-fn append_hud_touch_blocks(
+/// Public so the touch-stick systems can order themselves AFTER it — otherwise
+/// the sticks may read `TouchBlockRects` before the hotbar band is appended and
+/// steal taps meant for the hotbar (item never gets equipped). See `InputPlugin`.
+pub(crate) fn append_hud_touch_blocks(
     layout: Res<TouchLayout>,
     bag: Res<BagPanelState>,
     hud_blocks: Res<HudTouchBlocks>,

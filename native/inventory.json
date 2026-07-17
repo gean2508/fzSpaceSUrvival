@@ -1,22 +1,22 @@
 {
   "items": {
-    "wood_pickaxe": 1,
-    "shield_wood": 1,
-    "gem_red": 16,
-    "iron_ingot": 64,
     "probe": 1,
-    "wood_axe": 1,
-    "stone": 76,
-    "pickaxe": 1,
-    "gold_ingot": 32,
-    "stone_axe": 1,
-    "sticks": 128,
-    "lantern": 1,
-    "dirt": 64,
-    "stone_pickaxe": 2,
-    "hammer": 1,
+    "gem_red": 16,
     "jetpack": 4,
+    "stone_axe": 1,
+    "stone_pickaxe": 2,
+    "wood_axe": 1,
+    "shield_wood": 1,
+    "sticks": 128,
+    "wood": 128,
+    "wood_pickaxe": 1,
     "gem_blue": 16,
-    "wood": 128
+    "lantern": 1,
+    "gold_ingot": 32,
+    "dirt": 64,
+    "stone": 80,
+    "pickaxe": 1,
+    "hammer": 1,
+    "iron_ingot": 64
   }
 }
