@@ -25,7 +25,6 @@ pub mod rng;
 pub mod types;
 pub mod ui;
 pub mod cosmic_scale;
-pub mod flat2d;
 pub mod topdown;
 pub mod flight_physics;
 pub mod luna_locomotion;

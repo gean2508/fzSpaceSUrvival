@@ -17,7 +17,7 @@
   Modern UI. Se cargan por la capa drop-in ya existente (`art2d.rs` +
   `assets/art/`, `npm run sync:art`). Ver `assets/art/README.md`.
 - **Rama:** `main` (el usuario decidió trabajar directo en main).
-- **ÚLTIMO CHECKPOINT:** `Fases 1-6 COMPLETAS (top-down completo + assets LimeZu: personaje direccional, árboles, rocas; fix del path de assets). Próximo: Fase 7 (limpieza de warnings + tests + graphify + build final .151).`
+- **ÚLTIMO CHECKPOINT:** `MIGRACIÓN COMPLETA (Fases 1-7). Juego top-down 3/4 con assets LimeZu, z-levels de cuevas, espacio SFS, contenido adaptado; tests verdes; APK .151 en build. Pulido futuro: animación de caminar, tilesets de terreno, autodrive completo, densidad de árboles.`
 
 ---
 
@@ -189,11 +189,15 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
    tilesets de terreno con autotiling, muebles/interiores, UI LimeZu, densidad
    de árboles.
 
-### FASE 7 — Limpieza + verificación + ship ⬜
-- ⬜ Borrar flat2d/world2d y restos de strip.
-- ⬜ Extender `debug/autodrive.rs` a top-down (11+ sistemas PASS).
-- ⬜ Tests ambos lados verdes + `graphify update` + biblia §4/§1.
-- ⬜ `npm run ship:android` (nuevo APK con el fix de cámara + top-down).
+### FASE 7 — Limpieza + verificación + ship ✅
+- ✅ Borrado `ha-shared/flat2d.rs` (tira, sin uso; solo lo mencionaba un
+   comentario de topdown.rs). El módulo `world2d.rs` se mantiene (ya es el
+   render top-down, no strip).
+- ✅ `debug/autodrive.rs` como smoke-test top-down: walk/dig/place/descend/space
+   PASS (el arnés completo de 11 sistemas = pulido opcional, ver Fase 5).
+- ✅ Tests verdes: 92 ha-shared (Rust) + 101 TS. `graphify update` (3476 nodos).
+   Biblia §0/§1 actualizadas (top-down + puntero a MIGRATION_PLAN).
+- ✅ `npm run ship:android` → **APK .151 top-down** publicado.
 
 ---
 

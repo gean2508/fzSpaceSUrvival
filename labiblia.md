@@ -10,12 +10,12 @@
 |-------|-------|
 | **Producto** | **Starship** (Agencia Espacial Survival). Repo interno `hunger-arena`; package Android `com.hungerarena.app`. |
 | **Género** | Survival + construir base/laboratorio + automatizar recolección → naves prefab → off-world → colonos. |
-| **Referencias** | **Space Flight Simulator (2D)** para vuelo/planetas + **Terraria** para superficie/cavado; **cero** física orbital real (siempre arcade). |
+| **Referencias** | **Top-Down 3/4 (Stardew/LimeZu Modern)** en superficie + **Space Flight Simulator (2D)** para vuelo/planetas; **cero** física orbital real (siempre arcade). |
 | **Home base** | **Tierra** (seed **42**). |
 | **Plataformas** | Android APK (arm64) + Linux AppImage (Bevy) · landing web · servidor Colyseus. |
 | **Stack** | Colyseus · **Rust/Bevy 0.15 en 2D** (Sprites + Mesh2d, sin pipeline 3D activo) · Postgres+Drizzle · npm + Cargo workspaces. |
 | **Sim** | Determinista TS (`packages/shared`); servidor **input-only**; `ha-shared` porta constantes a Rust. |
-| **Estética** | 2D flat-color (paleta PS1/Ghibli), tiles con sombreado por-celda. UI in-game: Borderlands (bordes ink + amarillo). Landing: synthwave. |
+| **Estética** | **2D top-down 3/4 con assets LimeZu Modern** (Exteriors/Interiors/UI). Personaje direccional, árboles/rocas/tiles LimeZu; fallback procedural donde falten. UI in-game: Borderlands. Landing: synthwave. |
 | **Versión** | ver `native/version.json` (no hardcodear). |
 
 ### Regla de migración (INVIOLABLE — actualizada 12 jul 2026, rewrite-2d)
@@ -26,7 +26,23 @@ Clases scout/warrior/mage, habilidades, oleadas survival, AI hostiles — perman
 
 ---
 
-## §1 ⭐ MODELO VIGENTE — 2D "UN SOLO UNIVERSO" (Terraria + SFS, 12 jul 2026)
+## §1 ⭐ MODELO VIGENTE — TOP-DOWN 3/4 (13 jul 2026)
+
+> **CAMBIO MAYOR (13 jul):** el juego migró de vista lateral (side-scroller/
+> Terraria) a **top-down 3/4 (Stardew/LimeZu)**. Detalle completo, fases y
+> reglas de Z-Levels en **`MIGRATION_PLAN.md`** (raíz). Núcleo:
+> `ha-shared/topdown.rs`; render `ha-game/world2d.rs` (grilla 2D, y-sorting,
+> `render_xy(x,z)=(x,-z)`). Suelo = plano XZ (unifica con la vista orbital SFS,
+> que ya era top-down). El texto histórico de §1 abajo (tira/arco `s`) quedó
+> **SUPERADO** — se conserva por contexto pero el modelo vigente es top-down:
+> - Superficie = grilla 2D de tiles `(tx,tz)` por cuerpo; movimiento 8-dir sin
+>   gravedad; cavar/colocar por celda. Cuevas = **Z-Levels** discretos (z<0) por
+>   portales (entrada de mina/escaleras); oscuridad + vetas densas abajo.
+> - Espacio = mismo plano XZ visto desde arriba (planetas = círculos reales,
+>   `orbital2d`). Despegar/aterrizar = **zoom** de cámara (no cambio de coords).
+> - Assets LimeZu vía capa drop-in (`art2d.rs`, `assets/art/`, `sync:art`).
+
+### (Histórico — modelo de tira, SUPERADO por top-down)
 
 **Esto es el corazón del diseño. Léelo antes de tocar mundo/vuelo/cielo/planetas.**
 
