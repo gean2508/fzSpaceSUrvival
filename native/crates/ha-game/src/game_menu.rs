@@ -7,13 +7,19 @@
 //! reuses the existing dev `UiEditorCommand`s (no logic duplication).
 
 use bevy::prelude::*;
-use bevy::ui::{FocusPolicy, Overflow};
+use bevy::ui::{FocusPolicy, Overflow, RepeatedGridTrack};
 use ha_shared::{body_center_at, body_def, CelestialBody};
 
 use crate::rocket_flight::RocketFlight;
 use crate::scene::RegionId;
+use crate::sim::{Player, SimState};
 use crate::solar_system_clock::SolarSystemClock;
 use crate::ui_editor::UiEditorState;
+
+/// Terrain minimap: NxN cells, each sampling one world tile every STEP units,
+/// centred on the player. Cheap enough for the menu (recoloured only while open).
+const MINI_N: usize = 24;
+const MINI_STEP: f32 = 2.0;
 
 const NEON_CYAN: Color = Color::srgb(0.16, 0.94, 1.0);
 const NEON_MAGENTA: Color = Color::srgb(1.0, 0.18, 0.62);
@@ -40,6 +46,7 @@ impl Plugin for GameMenuPlugin {
                     sync_game_menu,
                     sync_menu_edit_mode.after(sync_game_menu),
                     update_map_markers,
+                    update_terrain_minimap,
                     update_luna_base_monitor,
                 )
                     .chain(),
@@ -62,6 +69,18 @@ struct MapViewport;
 struct MapBody(CelestialBody);
 #[derive(Component)]
 struct MapShipMarker;
+/// Wraps the orbital dots/rings/sun/ship — shown in Space, hidden on a surface.
+#[derive(Component)]
+struct OrbitalLayer;
+/// Wraps the terrain minimap grid — shown on a surface, hidden in Space.
+#[derive(Component)]
+struct TerrainLayer;
+/// One terrain minimap cell; `.0` is its flat index (row * MINI_N + col).
+#[derive(Component)]
+struct MinimapCell(usize);
+/// The map title text — swapped between "MAPA ORBITAL" and the body name.
+#[derive(Component)]
+struct MapTitle;
 /// Remote camp monitor line — fed from `MachineWorld` while the menu is open.
 #[derive(Component)]
 struct LunaBaseMonitor;
@@ -141,6 +160,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                     ..default()
                 },
                 TextColor(NEON_CYAN),
+                MapTitle,
             ));
 
             // Square map viewport (keeps the top-down projection undistorted).
@@ -168,67 +188,127 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 MapViewport,
             ))
             .with_children(|map| {
-                // Orbit rings + body dots (positions set by update_map_markers).
-                for &body in CelestialBody::all() {
-                    if body == CelestialBody::Sun {
-                        continue;
+                // ── Orbital layer (shown in Space): rings + body dots + ship.
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    OrbitalLayer,
+                ))
+                .with_children(|orb| {
+                    // Orbit rings + body dots (positions set by update_map_markers).
+                    for &body in CelestialBody::all() {
+                        if body == CelestialBody::Sun {
+                            continue;
+                        }
+                        let rgb = body_def(body).color;
+                        let color = Color::srgb(rgb[0], rgb[1], rgb[2]);
+                        // Orbit ring (thin bordered circle centred on the Sun).
+                        orb.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            BorderColor(color.with_alpha(0.20)),
+                            BorderRadius::all(Val::Percent(50.0)),
+                            MapOrbitRing(body),
+                        ));
+                        // Body dot. Negative margin = half its size so the percent
+                        // position (its top-left) lands the dot's CENTRE on the point.
+                        orb.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: Val::Px(9.0),
+                                height: Val::Px(9.0),
+                                margin: UiRect::all(Val::Px(-4.5)),
+                                ..default()
+                            },
+                            BackgroundColor(color),
+                            BorderRadius::all(Val::Percent(50.0)),
+                            MapBody(body),
+                        ));
                     }
-                    let rgb = body_def(body).color;
-                    let color = Color::srgb(rgb[0], rgb[1], rgb[2]);
-                    // Orbit ring (thin bordered circle centred on the Sun).
-                    map.spawn((
+                    // Sun at centre.
+                    orb.spawn((
                         Node {
                             position_type: PositionType::Absolute,
-                            border: UiRect::all(Val::Px(1.0)),
+                            width: Val::Px(16.0),
+                            height: Val::Px(16.0),
+                            margin: UiRect::all(Val::Px(-8.0)),
                             ..default()
                         },
-                        BorderColor(color.with_alpha(0.20)),
+                        BackgroundColor(Color::srgb(1.0, 0.86, 0.35)),
                         BorderRadius::all(Val::Percent(50.0)),
-                        MapOrbitRing(body),
+                        MapBody(CelestialBody::Sun),
                     ));
-                    // Body dot. Negative margin = half its size so the percent
-                    // position (its top-left) lands the dot's CENTRE on the point.
-                    map.spawn((
+                    // Your ship marker (magenta).
+                    orb.spawn((
                         Node {
                             position_type: PositionType::Absolute,
-                            width: Val::Px(9.0),
-                            height: Val::Px(9.0),
-                            margin: UiRect::all(Val::Px(-4.5)),
+                            width: Val::Px(10.0),
+                            height: Val::Px(10.0),
+                            border: UiRect::all(Val::Px(2.0)),
+                            margin: UiRect::all(Val::Px(-5.0)),
                             ..default()
                         },
-                        BackgroundColor(color),
+                        BorderColor(Color::WHITE),
+                        BackgroundColor(NEON_MAGENTA),
                         BorderRadius::all(Val::Percent(50.0)),
-                        MapBody(body),
+                        MapShipMarker,
                     ));
-                }
-                // Sun at centre.
+                });
+
+                // ── Terrain layer (shown on a surface): NxN grid of tile cells,
+                // recoloured each frame from the tiles around the player.
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
-                        width: Val::Px(16.0),
-                        height: Val::Px(16.0),
-                        margin: UiRect::all(Val::Px(-8.0)),
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        display: Display::Grid,
+                        grid_template_columns: vec![RepeatedGridTrack::flex(
+                            MINI_N as u16,
+                            1.0,
+                        )],
+                        grid_template_rows: vec![RepeatedGridTrack::flex(MINI_N as u16, 1.0)],
                         ..default()
                     },
-                    BackgroundColor(Color::srgb(1.0, 0.86, 0.35)),
-                    BorderRadius::all(Val::Percent(50.0)),
-                    MapBody(CelestialBody::Sun),
-                ));
-                // Your ship marker (magenta).
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Px(10.0),
-                        height: Val::Px(10.0),
-                        border: UiRect::all(Val::Px(2.0)),
-                        margin: UiRect::all(Val::Px(-5.0)),
-                        ..default()
-                    },
-                    BorderColor(Color::WHITE),
-                    BackgroundColor(NEON_MAGENTA),
-                    BorderRadius::all(Val::Percent(50.0)),
-                    MapShipMarker,
-                ));
+                    Visibility::Hidden,
+                    TerrainLayer,
+                ))
+                .with_children(|grid| {
+                    for i in 0..MINI_N * MINI_N {
+                        grid.spawn((
+                            Node::default(),
+                            BackgroundColor(Color::srgb(0.02, 0.03, 0.06)),
+                            MinimapCell(i),
+                        ));
+                    }
+                    // Player marker: absolute overlay at the grid centre.
+                    grid.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Percent(50.0),
+                            top: Val::Percent(50.0),
+                            width: Val::Px(11.0),
+                            height: Val::Px(11.0),
+                            border: UiRect::all(Val::Px(2.0)),
+                            margin: UiRect::all(Val::Px(-5.5)),
+                            ..default()
+                        },
+                        BorderColor(Color::WHITE),
+                        BackgroundColor(NEON_MAGENTA),
+                        BorderRadius::all(Val::Percent(50.0)),
+                    ));
+                });
             });
 
             root.spawn((
@@ -407,6 +487,89 @@ fn update_map_markers(
         let (px, pz) = map_percent(ship_world, sun);
         node.left = Val::Percent(px);
         node.top = Val::Percent(pz);
+    }
+}
+
+/// The surface body you're standing on, or None when in Space/Transit (the
+/// orbital map). Digging only changes the tile layer (`TileWorld.z`), not the
+/// region, so a cave still reports its body — the minimap shows that depth.
+fn surface_body(region: &RegionId) -> Option<CelestialBody> {
+    match region {
+        RegionId::Overworld { .. } => Some(CelestialBody::Earth),
+        RegionId::Luna => Some(CelestialBody::Moon),
+        RegionId::Planet(b) => Some(*b),
+        _ => None,
+    }
+}
+
+fn body_menu_name(b: CelestialBody) -> String {
+    match b {
+        CelestialBody::Earth => "TIERRA".to_string(),
+        CelestialBody::Moon => "LUNA".to_string(),
+        other => body_def(other).label.to_string(),
+    }
+}
+
+/// Swaps the map between the orbital view (Space) and a top-down terrain
+/// minimap (any surface), and — on a surface — recolours the grid from the
+/// tiles around the player. Screen-up = −z, matching the main game view.
+#[allow(clippy::type_complexity)]
+fn update_terrain_minimap(
+    menu: Res<GameMenuState>,
+    region: Res<crate::scene::RegionRuntime>,
+    tiles: Res<crate::world2d::TileWorld>,
+    player: Query<&SimState, With<Player>>,
+    mut sets: ParamSet<(
+        Query<&mut Visibility, With<OrbitalLayer>>,
+        Query<&mut Visibility, With<TerrainLayer>>,
+        Query<(&MinimapCell, &mut BackgroundColor)>,
+        Query<&mut Text, With<MapTitle>>,
+    )>,
+) {
+    if !menu.spawned {
+        return;
+    }
+    let body = surface_body(&region.active);
+    let surface = body.is_some();
+
+    for mut v in &mut sets.p0() {
+        *v = if surface { Visibility::Hidden } else { Visibility::Inherited };
+    }
+    for mut v in &mut sets.p1() {
+        *v = if surface { Visibility::Inherited } else { Visibility::Hidden };
+    }
+    let title = match body {
+        None => "MAPA ORBITAL".to_string(),
+        Some(b) => body_menu_name(b),
+    };
+    if let Ok(mut t) = sets.p3().get_single_mut() {
+        if t.0 != title {
+            t.0 = title;
+        }
+    }
+
+    let Some(body) = body else {
+        return;
+    };
+    let (px, pz) = player
+        .get_single()
+        .map(|s| (s.body.x, s.body.z))
+        .unwrap_or((0.0, 0.0));
+    let cx = px.floor() as i64;
+    let cz = pz.floor() as i64;
+    let half = MINI_N as f32 * 0.5;
+    let surface_layer = tiles.z == 0;
+    for (cell, mut bg) in &mut sets.p2() {
+        let col = (cell.0 % MINI_N) as f32;
+        let row = (cell.0 / MINI_N) as f32;
+        let tx = cx + ((col - half) * MINI_STEP).round() as i64;
+        let tz = cz + ((row - half) * MINI_STEP).round() as i64;
+        let mut rgb = tiles.tile_at(body, tx, tz).color();
+        // Trees/rocks darken their cell so clearings read lighter (surface only).
+        if surface_layer && crate::world2d::surface_decor_at(body, tx, tz).is_some() {
+            rgb = [rgb[0] * 0.6, rgb[1] * 0.6, rgb[2] * 0.6];
+        }
+        *bg = BackgroundColor(Color::srgb(rgb[0], rgb[1], rgb[2]));
     }
 }
 

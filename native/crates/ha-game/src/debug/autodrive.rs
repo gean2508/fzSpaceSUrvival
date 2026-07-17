@@ -311,6 +311,16 @@ fn smoke_drive(world: &mut World) {
                 );
                 release_all(world);
                 shot(world, "ha-verify-topdown-space.png");
+                // Open the menu in Space to confirm the orbital map still shows.
+                world.resource_mut::<crate::ui_editor::UiEditorState>().menu_open = true;
+                world.resource_mut::<SmokeState>().phase = 21;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
+        }
+        21 => {
+            if dt > 1.0 {
+                shot(world, "ha-verify-topdown-space-menu.png");
+                eprintln!("ha-verify: space menu captured");
                 eprintln!("ha-verify: SMOKE done");
                 world.resource_mut::<SmokeState>().done = true;
             }
