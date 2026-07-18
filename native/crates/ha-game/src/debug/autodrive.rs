@@ -254,10 +254,23 @@ fn smoke_drive(world: &mut World) {
                 c.world = bevy::prelude::Vec2::new(tx as f32 + 0.5, tz as f32 + 0.5);
                 c.initialized = true;
             }
-            if dt > 0.6 && dt < 0.8 {
+            // Open the bag's CONSTRUIR tab for a capture, then close it.
+            if dt < 0.5 {
+                let mut bag = world.resource_mut::<crate::hud::BagPanelState>();
+                bag.open = true;
+                bag.tab = crate::hud::BagTab::Build;
+            }
+            if dt > 0.3 && dt < 0.5 {
+                shot(world, "ha-verify-bag-build.png");
+            }
+            if dt >= 0.5 {
+                world.resource_mut::<crate::hud::BagPanelState>().open = false;
+            }
+            if dt > 0.9 && dt < 1.1 {
                 shot(world, "ha-verify-topdown-build.png");
             }
-            {
+            // Place only after the captures, so the ghost shows on empty ground.
+            if dt > 1.2 {
                 let mut h = world.resource_mut::<HoldInteractState>();
                 h.active = false;
                 h.completed = true;
@@ -267,7 +280,7 @@ fn smoke_drive(world: &mut World) {
                 .resource::<TileWorld>()
                 .tile_at(ha_shared::CelestialBody::Earth, tx, tz)
                 == ha_shared::topdown::Tile::WoodFloor;
-            if built && dt > 1.0 || dt > 4.0 {
+            if built && dt > 1.3 || dt > 4.0 {
                 eprintln!("ha-verify: build {}", if built { "PASS" } else { "FAIL" });
                 unlock(world);
                 world.resource_mut::<crate::input::BuildModeActive>().active = false;

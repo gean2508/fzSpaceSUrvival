@@ -157,6 +157,8 @@ pub(crate) enum BagTab {
     Craft,
     /// Ship builder — part counters + live stats (`ship_builder.rs`).
     Ship,
+    /// Construction — pick a build piece; entering build mode (`build.rs`).
+    Build,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -169,6 +171,14 @@ struct BagInventorySection;
 
 #[derive(Component)]
 struct BagCraftSection;
+
+/// Container for the CONSTRUIR tab's build-piece list (owned display toggle).
+#[derive(Component)]
+pub(crate) struct BagBuildSection;
+
+/// A build-piece pick button inside the CONSTRUIR tab; `.0` = `BUILD_PIECES` idx.
+#[derive(Component)]
+pub(crate) struct BagBuildPieceButton(pub usize);
 
 #[derive(Component)]
 struct CraftRecipeButton {
@@ -1456,6 +1466,7 @@ fn spawn_bag_panel(
                             .with_children(|tabs| {
                                 spawn_bag_tab_button(tabs, "INVENTORY", BagTab::Inventory, heart);
                                 spawn_bag_tab_button(tabs, "CRAFT", BagTab::Craft, heart);
+                                spawn_bag_tab_button(tabs, "CONSTRUIR", BagTab::Build, heart);
                                 spawn_bag_tab_button(tabs, "SHIP", BagTab::Ship, heart);
                             });
 
@@ -1586,6 +1597,39 @@ fn spawn_bag_panel(
                                     machine_cost_label(&ha_shared::HABITAT),
                                     heart,
                                 );
+                            });
+
+                        // CONSTRUIR — build-piece palette (owned by build.rs).
+                        panel
+                            .spawn((
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    flex_grow: 1.0,
+                                    flex_direction: FlexDirection::Column,
+                                    row_gap: Val::Px((heart * 0.28).clamp(4.0, 8.0)),
+                                    display: if tab == BagTab::Build {
+                                        Display::Flex
+                                    } else {
+                                        Display::None
+                                    },
+                                    overflow: Overflow::scroll_y(),
+                                    ..default()
+                                },
+                                BagBuildSection,
+                                ScrollPosition::default(),
+                            ))
+                            .with_children(|section| {
+                                section.spawn((
+                                    Text::new("Elegi una pieza: entra modo construir. Coloca con USE. Cavar la quita."),
+                                    TextFont {
+                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
+                                        ..default()
+                                    },
+                                    TextColor(ui_theme::text_muted()),
+                                ));
+                                for (idx, piece) in ha_shared::topdown::BUILD_PIECES.iter().enumerate() {
+                                    spawn_build_piece_button(section, idx, piece, heart);
+                                }
                             });
 
                         crate::ship_builder::spawn_ship_section(
@@ -1800,6 +1844,50 @@ fn spawn_machine_select_button(
             },
         ));
     });
+}
+
+/// One build-piece row in the CONSTRUIR tab (label + cost). Selecting it enters
+/// build mode (handled by `build::build_tab_select`).
+fn spawn_build_piece_button(
+    panel: &mut ChildBuilder,
+    idx: usize,
+    piece: &ha_shared::topdown::BuildPiece,
+    heart: f32,
+) {
+    panel
+        .spawn((
+            Button,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px((heart * 1.0).clamp(20.0, 34.0)),
+                border: UiRect::all(Val::Px(2.0)),
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                padding: UiRect::axes(Val::Px(8.0), Val::Px(0.0)),
+                ..default()
+            },
+            BorderColor(ui_theme::button_border(UiButtonTone::Craft)),
+            BackgroundColor(ui_theme::button_bg(UiButtonTone::Craft, UiButtonState::Normal)),
+            BagBuildPieceButton(idx),
+        ))
+        .with_children(|btn| {
+            btn.spawn((
+                Text::new(piece.label),
+                TextFont {
+                    font_size: (heart * 0.58).clamp(11.0, 17.0),
+                    ..default()
+                },
+                TextColor(ui_theme::text_primary()),
+            ));
+            btn.spawn((
+                Text::new(format!("{} x {}", piece.cost_qty, piece.cost_item)),
+                TextFont {
+                    font_size: (heart * 0.52).clamp(10.0, 15.0),
+                    ..default()
+                },
+                TextColor(ui_theme::text_muted()),
+            ));
+        });
 }
 
 /// Gamepad D-pad (or any other device) asks for a hotbar slot; consumed here.
@@ -2696,10 +2784,13 @@ fn equip_from_hotbar_selection(
 fn equip_from_hotbar_click(
     mut ui: ResMut<InventoryUiState>,
     mut equipped: ResMut<EquippedItem>,
+    mut build_mode: ResMut<crate::input::BuildModeActive>,
     slots: Query<(&Interaction, &HotbarItemSlot), Changed<Interaction>>,
 ) {
     for (interaction, slot) in &slots {
         if *interaction == Interaction::Pressed {
+            // Picking a hotbar item leaves build mode so USE acts on the item.
+            build_mode.active = false;
             select_hotbar_slot(&mut ui, &mut equipped, slot.index);
         }
     }
