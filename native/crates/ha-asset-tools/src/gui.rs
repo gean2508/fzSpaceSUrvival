@@ -21,7 +21,9 @@ const STD_POSES: &[&str] = &[
 
 pub fn run_gui() -> ExitCode {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1240.0, 820.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1440.0, 900.0])
+            .with_min_inner_size([900.0, 560.0]),
         ..Default::default()
     };
     let res = eframe::run_native(
@@ -275,6 +277,15 @@ impl EditorApp {
                 });
                 return;
             };
+            // TODO el contenido va en un scroll: si la ventana es chica o hay
+            // mucho contenido (poses, canvas), nada queda inalcanzable/desbordado.
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            self.central_detail_content(ctx, ui, i);
+            });
+        });
+    }
+
+    fn central_detail_content(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, i: usize) {
             let slot = self.slots[i];
             ui.heading(slot.key);
 
@@ -296,7 +307,7 @@ impl EditorApp {
                     ui.label(egui::RichText::new("actual (juego)").weak());
                     match self.tex.as_ref() {
                         Some((_, tex)) => {
-                            let sz = preview_size(tex, 128.0);
+                            let sz = preview_size(tex, 220.0);
                             ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), sz)));
                         }
                         None => { ui.label(egui::RichText::new("— procedural —").weak()); }
@@ -307,7 +318,7 @@ impl EditorApp {
                     ui.label(egui::RichText::new("candidato").weak());
                     match self.src_tex.as_ref() {
                         Some((_, tex)) => {
-                            let sz = preview_size(tex, 128.0);
+                            let sz = preview_size(tex, 220.0);
                             ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), sz)));
                         }
                         None => { ui.label(egui::RichText::new("(elegí un PNG abajo)").weak()); }
@@ -326,7 +337,9 @@ impl EditorApp {
                 });
 
                 // ── Slicer: recortar la hoja en regiones / poses / animación ──
-                egui::CollapsingHeader::new("✂ Recortar hoja (grilla + arrastre)").show(ui, |ui| {
+                egui::CollapsingHeader::new("✂ Recortar hoja (grilla + arrastre)")
+                    .default_open(true)
+                    .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("celda px");
                         ui.add(egui::DragValue::new(&mut self.sheet_grid).range(4..=256));
@@ -437,8 +450,6 @@ impl EditorApp {
                     self.status = format!("slot {} eliminado", slot.key);
                 }
             });
-
-        });
     }
 
     /// Panel derecho dedicado a elegir el PNG fuente. Lista **virtualizada**
