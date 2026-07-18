@@ -697,16 +697,38 @@ impl EditorApp {
         }
     }
 
-    /// Copia la hoja fuente al árbol del juego como `art/<key>.png` (sin tocar el
-    /// binding). Devuelve la ruta relativa a registrar en el manifest.
-    fn ensure_sheet_copied(&mut self, slot: SlotDef, src: &Path) -> Option<String> {
-        let rel = format!("art/{}.png", slot.key);
+    /// Copia la hoja fuente al árbol del juego bajo `art/atlas/<nombre>_<hash>.png`
+    /// — **content-addressed**: si otro slot ya recortó de este MISMO atlas
+    /// (mismos bytes), reusa el archivo en vez de duplicarlo. Esto es lo que
+    /// hace viable tener un atlas de UI enorme (corazones, barras, botones,
+    /// portraits…) y recortar decenas de piezas de él sin inflar el APK con
+    /// una copia completa por cada pieza. Devuelve la ruta relativa a
+    /// registrar en el manifest (compartida entre todos los slots que usen
+    /// este mismo atlas).
+    fn ensure_sheet_copied(&mut self, _slot: SlotDef, src: &Path) -> Option<String> {
+        let bytes = match std::fs::read(src) {
+            Ok(b) => b,
+            Err(e) => {
+                self.status = format!("no pude leer la hoja fuente: {e}");
+                return None;
+            }
+        };
+        let hash = fnv1a32(&bytes);
+        let stem = src.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "atlas".to_string());
+        let rel = format!("art/atlas/{}_{hash:08x}.png", sanitize_filename(&stem));
         let dest = PathBuf::from(&self.game_assets).join(&rel);
-        if let Some(parent) = dest.parent() {
-            let _ = std::fs::create_dir_all(parent);
+        if dest.exists() {
+            self.status = format!("atlas ya copiado, reusado: {rel}");
+            return Some(rel);
         }
-        match std::fs::copy(src, &dest) {
-            Ok(_) => Some(rel),
+        if let Some(parent) = dest.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                self.status = format!("no pude crear {}: {e}", parent.display());
+                return None;
+            }
+        }
+        match std::fs::write(&dest, &bytes) {
+            Ok(()) => Some(rel),
             Err(e) => {
                 self.status = format!("no pude copiar la hoja: {e}");
                 None
@@ -928,6 +950,29 @@ fn preview_size(tex: &egui::TextureHandle, max_px: f32) -> egui::Vec2 {
 
 /// Los slots derivados en runtime necesitan `&'static str` y se crean pocas
 /// veces (abrir manifest / añadir slot), así que filtrar la cadena es aceptable.
+/// FNV-1a de 32 bits sobre los bytes del PNG fuente — hash de contenido para
+/// el dedupe de atlas (mismo archivo → mismo destino, sin dependencias extra).
+fn fnv1a32(bytes: &[u8]) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for &b in bytes {
+        h ^= b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
+}
+
+fn sanitize_filename(s: &str) -> String {
+    let out: String = s
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+        .collect();
+    if out.is_empty() {
+        "atlas".to_string()
+    } else {
+        out
+    }
+}
+
 fn leak(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
 }
