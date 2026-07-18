@@ -3,6 +3,7 @@
 
 mod art2d;
 mod boot_ui;
+mod build;
 mod game_menu;
 mod game_time;
 mod sky2d;
@@ -203,6 +204,7 @@ fn run_app_inner() {
             PixelHudPlugin,
             BootUiPlugin,
             GameMenuPlugin,
+            build::BuildPlugin,
             ParticlesPlugin,
             PerfDebugPlugin,
             CpuSpanPlugin,

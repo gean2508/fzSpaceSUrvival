@@ -229,11 +229,48 @@ fn smoke_drive(world: &mut World) {
             if placed {
                 eprintln!("ha-verify: place PASS");
                 unlock(world);
-                world.resource_mut::<SmokeState>().phase = 2;
+                world.resource_mut::<SmokeState>().phase = 12;
                 world.resource_mut::<SmokeState>().entered = now;
             } else if dt > 4.0 {
                 eprintln!("ha-verify: place FAIL");
                 unlock(world);
+                world.resource_mut::<SmokeState>().phase = 12;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
+        }
+        12 => {
+            // Build system: place a wood floor via the real build-hold consumer.
+            world.resource_mut::<crate::input::BuildModeActive>().active = true;
+            world.resource_mut::<crate::build::SelectedBuildPiece>().0 = 0;
+            if world.resource::<PlayerInventory>().qty("wood") < 3 {
+                world.resource_mut::<PlayerInventory>().add("wood", 5);
+            }
+            let (bx, bz) = player_cell(world);
+            let (tx, tz) = (bx + 1, bz + 2);
+            lock_place_target(world, tx, tz);
+            // Point the aim cursor at the build cell so highlight + ghost align.
+            {
+                let mut c = world.resource_mut::<crate::input::AimCursor>();
+                c.world = bevy::prelude::Vec2::new(tx as f32 + 0.5, tz as f32 + 0.5);
+                c.initialized = true;
+            }
+            if dt > 0.6 && dt < 0.8 {
+                shot(world, "ha-verify-topdown-build.png");
+            }
+            {
+                let mut h = world.resource_mut::<HoldInteractState>();
+                h.active = false;
+                h.completed = true;
+                h.placing_build = true;
+            }
+            let built = world
+                .resource::<TileWorld>()
+                .tile_at(ha_shared::CelestialBody::Earth, tx, tz)
+                == ha_shared::topdown::Tile::WoodFloor;
+            if built && dt > 1.0 || dt > 4.0 {
+                eprintln!("ha-verify: build {}", if built { "PASS" } else { "FAIL" });
+                unlock(world);
+                world.resource_mut::<crate::input::BuildModeActive>().active = false;
                 world.resource_mut::<SmokeState>().phase = 2;
                 world.resource_mut::<SmokeState>().entered = now;
             }

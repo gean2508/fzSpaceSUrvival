@@ -144,9 +144,19 @@ fn use_button_hold_interact(
         return;
     }
     let held = *held_ms;
+    // BUILD mode: aiming at an empty cell places the selected piece (any tool).
+    let build_place = build_mode.active && target.place_cell.is_some();
     let block_place =
         ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some();
-    if block_place {
+    if build_place {
+        *started = true;
+        *hold = HoldInteractState {
+            active: true,
+            duration_ms: 500,
+            placing_build: true,
+            ..default()
+        };
+    } else if block_place {
         *started = true;
         *hold = HoldInteractState {
             active: true,
@@ -175,25 +185,20 @@ fn use_button_hold_interact(
             eating: true,
             ..default()
         };
-    } else if equipped.item_id == "hammer" && held >= GESTURE_MACHINE_HOLD_DELAY_MS as f32 {
+    } else if equipped.item_id == "hammer"
+        && !build_mode.active
+        && held >= GESTURE_MACHINE_HOLD_DELAY_MS as f32
+    {
+        // Hammer (outside build mode) places the pending machine.
         *started = true;
-        if build_mode.active {
-            *hold = HoldInteractState {
-                active: true,
-                duration_ms: 1200,
-                placing_build: true,
-                ..default()
-            };
-        } else {
-            let def = ha_shared::require_machine(pending.machine_id);
-            *hold = HoldInteractState {
-                active: true,
-                duration_ms: def.place_duration_ms,
-                placing_machine: true,
-                placing_stone: pending.machine_id == ha_shared::STONE_EXTRACTOR.id,
-                ..default()
-            };
-        }
+        let def = ha_shared::require_machine(pending.machine_id);
+        *hold = HoldInteractState {
+            active: true,
+            duration_ms: def.place_duration_ms,
+            placing_machine: true,
+            placing_stone: pending.machine_id == ha_shared::STONE_EXTRACTOR.id,
+            ..default()
+        };
     }
 }
 

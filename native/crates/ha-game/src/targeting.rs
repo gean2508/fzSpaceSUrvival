@@ -97,6 +97,7 @@ fn update_look_target(
     planet: Res<ActivePlanet>,
     tiles: Res<TileWorld>,
     equipped: Res<EquippedItem>,
+    build_mode: Res<crate::input::BuildModeActive>,
     player: Query<(&Transform, &SimState), With<Player>>,
     targets: Query<(Entity, &GlobalTransform, &InteractTarget)>,
     mut current: ResMut<LookTarget>,
@@ -184,10 +185,12 @@ fn update_look_target(
                 };
                 return;
             }
-        } else if ha_shared::is_block_item(&equipped.item_id)
+        } else if build_mode.active
+            || ha_shared::is_block_item(&equipped.item_id)
             || crate::world2d::tile_for_block_item(&equipped.item_id).is_some()
         {
-            // Empty cell adjacent to something solid → placement slot.
+            // Empty cell → placement slot. Block items need a solid neighbour;
+            // BUILD mode places anywhere (floors on open ground), any tool.
             let adjacent_solid = tiles.solid_at(body, tx - 1, tz)
                 || tiles.solid_at(body, tx + 1, tz)
                 || tiles.solid_at(body, tx, tz - 1)
@@ -195,7 +198,7 @@ fn update_look_target(
             let px = (sim.body.x / TILE_M).floor() as i64;
             let pz = (sim.body.z / TILE_M).floor() as i64;
             let overlaps_player = tx == px && tz == pz;
-            if adjacent_solid && !overlaps_player {
+            if (build_mode.active || adjacent_solid) && !overlaps_player {
                 *current = LookTarget {
                     entity: None,
                     kind: None,

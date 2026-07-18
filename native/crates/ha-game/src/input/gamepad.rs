@@ -163,7 +163,11 @@ pub(super) fn gamepad_hold_interact(
         hold.locked_kind = None;
 
         if place_pressed {
-            if ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some() {
+            if build_mode.active && target.place_cell.is_some() {
+                hold.active = true;
+                hold.duration_ms = 500;
+                hold.placing_build = true;
+            } else if ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some() {
                 hold.active = true;
                 hold.duration_ms = 300;
                 hold.placing_block = true;
@@ -173,17 +177,14 @@ pub(super) fn gamepad_hold_interact(
                 hold.active = true;
                 hold.duration_ms = 1100;
                 hold.eating = true;
-            } else if equipped.item_id == "hammer" && target.kind.is_none() {
-                if build_mode.active {
-                    hold.active = true;
-                    hold.duration_ms = 1200;
-                    hold.placing_build = true;
-                } else {
-                    let def = ha_shared::require_machine(pending.machine_id);
-                    hold.active = true;
-                    hold.duration_ms = def.place_duration_ms;
-                    hold.placing_machine = true;
-                }
+            } else if equipped.item_id == "hammer"
+                && !build_mode.active
+                && target.kind.is_none()
+            {
+                let def = ha_shared::require_machine(pending.machine_id);
+                hold.active = true;
+                hold.duration_ms = def.place_duration_ms;
+                hold.placing_machine = true;
             }
         } else if break_pressed {
             if let Some(kind) = target.kind {
