@@ -55,6 +55,18 @@ struct Pose { rect: CellRect, anim: Option<ArtAnim> } // rect estático o tira a
 `CellRect` en celdas (no px) para que el arrastre en la grilla sea directo. El
 editor guarda; el juego resuelve celda→px con `grid`.
 
+## Progreso
+
+- ✅ Fase A (previews acotados + lado a lado + tooltip fps)
+- ✅ Fase B (canvas con grilla + zoom)
+- ✅ Fase C (selección por arrastre snap → CellRect; guardar recorte)
+- ✅ Fase D (poses: guardar como pose nombrada/estándar + CRUD) — falta consumo
+  del jugador en motor (mapear poses → sistema direccional, ver Fase F).
+- ✅ Fase E (animación por rango + preview reproducido)
+- ◑ Fase F (motor: rect + strip ✅; **poses del jugador pendientes**)
+- ☐ Fase G (mapear/CRUD de assets nuevos — parcial vía slots CRUD)
+- ☐ Fase H (UI hearts/hotbar/botones + tiles/agua + docs + APK)
+
 ## Fases
 
 ### Fase A — Fix UX de previews (rápido)
