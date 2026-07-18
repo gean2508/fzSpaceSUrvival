@@ -11,7 +11,13 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use ha_assets::{game_slots, list_pngs, ArtAnim, ArtManifest, SlotDef};
+use ha_assets::{game_slots, list_pngs, ArtAnim, ArtManifest, CellRect, Pose, SlotDef};
+
+/// Poses direccionales estándar sugeridas para personajes (podés crear más).
+const STD_POSES: &[&str] = &[
+    "idle_down", "idle_up", "idle_left", "idle_right",
+    "walk_down", "walk_up", "walk_left", "walk_right",
+];
 
 pub fn run_gui() -> ExitCode {
     let options = eframe::NativeOptions {
@@ -64,6 +70,16 @@ struct EditorApp {
     tex: Option<(String, egui::TextureHandle)>,       // binding actual (como se ve en el juego)
     selected_png: Option<PathBuf>,                    // PNG fuente elegido (candidato)
     src_tex: Option<(String, egui::TextureHandle)>,   // preview del candidato
+
+    // slicer (canvas de hoja)
+    sheet_grid: u32,                  // celda px de la hoja candidata (default 32)
+    sheet_zoom: f32,
+    sel_rect: Option<CellRect>,       // selección actual en celdas
+    drag_start_cell: Option<(u32, u32)>,
+    pose_name: String,                // nombre para "guardar como pose"
+    anim_preview_frame: usize,        // frame en curso del preview reproducido
+    anim_preview_t: f32,              // acumulador de tiempo del preview
+
     status: String,
 }
 
@@ -91,6 +107,13 @@ impl EditorApp {
             tex: None,
             selected_png: None,
             src_tex: None,
+            sheet_grid: 32,
+            sheet_zoom: 3.0,
+            sel_rect: None,
+            drag_start_cell: None,
+            pose_name: String::new(),
+            anim_preview_frame: 0,
+            anim_preview_t: 0.0,
             status: String::new(),
         };
         app.load_manifest();
@@ -294,10 +317,94 @@ impl EditorApp {
                 let name = png.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 ui.horizontal(|ui| {
                     ui.label(format!("candidato: {name}"));
-                    if ui.button("✔ Asignar al slot").clicked() {
+                    if ui.button("✔ Asignar PNG entero").clicked() {
                         self.bind_png(ctx, slot, &png);
                         self.selected_png = None;
                         self.src_tex = None;
+                    }
+                });
+
+                // ── Slicer: recortar la hoja en regiones / poses / animación ──
+                egui::CollapsingHeader::new("✂ Recortar hoja (grilla + arrastre)").show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("celda px");
+                        ui.add(egui::DragValue::new(&mut self.sheet_grid).range(4..=256));
+                        ui.label("zoom");
+                        ui.add(egui::DragValue::new(&mut self.sheet_zoom).range(0.5..=12.0).speed(0.1));
+                        if let Some(sr) = self.sel_rect {
+                            ui.label(format!("sel: col{} row{} · {}×{} ({} celdas)", sr.col, sr.row, sr.w, sr.h, sr.cells()));
+                        }
+                    });
+                    self.sheet_canvas(ui);
+                    if let Some(sr) = self.sel_rect {
+                        if sr.cells() > 1 {
+                            self.anim_strip_preview(ui, sr);
+                        }
+                    }
+
+                    let grid = (self.sheet_grid.max(1), self.sheet_grid.max(1));
+                    if let Some(sr) = self.sel_rect {
+                        ui.horizontal(|ui| {
+                            if ui.button("Guardar recorte estático").clicked() {
+                                if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
+                                    self.manifest.set_rect(slot.key, rel, grid, sr);
+                                    self.tex = self.preview_bound(ctx, slot.key);
+                                    self.status = format!("{}: recorte {}×{}", slot.key, sr.w, sr.h);
+                                }
+                            }
+                            if ui.button("Guardar como animación (strip)")
+                                .on_hover_text("los frames salen del rango de celdas; fps abajo")
+                                .clicked()
+                            {
+                                if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
+                                    self.manifest.set_strip(slot.key, rel, grid, sr, self.anim_fps.max(0.1));
+                                    self.tex = self.preview_bound(ctx, slot.key);
+                                    self.status = format!("{}: animación {} frames", slot.key, sr.cells());
+                                }
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("pose:");
+                            ui.add(egui::TextEdit::singleline(&mut self.pose_name).desired_width(120.0).hint_text("idle_down…"));
+                            egui::ComboBox::from_id_salt("stdpose").selected_text("estándar").show_ui(ui, |ui| {
+                                for p in STD_POSES {
+                                    if ui.selectable_label(false, *p).clicked() {
+                                        self.pose_name = p.to_string();
+                                    }
+                                }
+                            });
+                            let animated = self.anim_on;
+                            if ui.button("Guardar como pose").clicked() && !self.pose_name.trim().is_empty() {
+                                if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
+                                    let anim = animated.then_some(ArtAnim { frames: sr.cells().max(1), fps: self.anim_fps.max(0.1) });
+                                    let name = self.pose_name.trim().to_string();
+                                    self.manifest.set_pose(slot.key, rel, grid, &name, Pose { rect: sr, anim });
+                                    self.status = format!("{}: pose {name}", slot.key);
+                                }
+                            }
+                        });
+                    }
+
+                    // Poses ya guardadas (con borrar).
+                    let poses: Vec<String> = self
+                        .manifest
+                        .poses(slot.key)
+                        .map(|m| m.keys().cloned().collect())
+                        .unwrap_or_default();
+                    if !poses.is_empty() {
+                        ui.label(egui::RichText::new("poses guardadas:").weak());
+                        let mut remove: Option<String> = None;
+                        for pn in &poses {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("• {pn}"));
+                                if ui.small_button("✖").clicked() {
+                                    remove = Some(pn.clone());
+                                }
+                            });
+                        }
+                        if let Some(pn) = remove {
+                            self.manifest.remove_pose(slot.key, &pn);
+                        }
                     }
                 });
             }
@@ -439,6 +546,122 @@ impl EditorApp {
             self.manifest.set(key, png, anim);
             self.status = format!("anim de {key} aplicada");
         }
+    }
+
+    /// Copia la hoja fuente al árbol del juego como `art/<key>.png` (sin tocar el
+    /// binding). Devuelve la ruta relativa a registrar en el manifest.
+    fn ensure_sheet_copied(&mut self, slot: SlotDef, src: &Path) -> Option<String> {
+        let rel = format!("art/{}.png", slot.key);
+        let dest = PathBuf::from(&self.game_assets).join(&rel);
+        if let Some(parent) = dest.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::copy(src, &dest) {
+            Ok(_) => Some(rel),
+            Err(e) => {
+                self.status = format!("no pude copiar la hoja: {e}");
+                None
+            }
+        }
+    }
+
+    /// Preview que REPRODUCE la animación del rango `sr` (1:1 con el juego):
+    /// cicla las celdas del rango a `anim_fps`.
+    fn anim_strip_preview(&mut self, ui: &mut egui::Ui, sr: CellRect) {
+        let Some((_, tex)) = self.src_tex.clone() else {
+            return;
+        };
+        let img = tex.size_vec2();
+        let grid = self.sheet_grid.max(1) as f32;
+        let frames = sr.cells().max(1);
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        self.anim_preview_t += dt * self.anim_fps.max(0.1);
+        if self.anim_preview_t >= 1.0 {
+            let steps = self.anim_preview_t.floor() as usize;
+            self.anim_preview_frame = (self.anim_preview_frame + steps) % frames as usize;
+            self.anim_preview_t = self.anim_preview_t.fract();
+        }
+        let f = (self.anim_preview_frame as u32) % frames;
+        let fc = sr.col + (f % sr.w.max(1));
+        let fr = sr.row + (f / sr.w.max(1));
+        let uv = egui::Rect::from_min_max(
+            egui::pos2(fc as f32 * grid / img.x, fr as f32 * grid / img.y),
+            egui::pos2((fc as f32 + 1.0) * grid / img.x, (fr as f32 + 1.0) * grid / img.y),
+        );
+        ui.horizontal(|ui| {
+            ui.label("▶ preview animado:");
+            ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), egui::vec2(96.0, 96.0))).uv(uv));
+            ui.label(format!("{} frames @ {:.0} fps", frames, self.anim_fps));
+        });
+        ui.ctx().request_repaint(); // sigue animando
+    }
+
+    /// Canvas de la hoja candidata: dibuja el PNG con grilla y deja seleccionar
+    /// un rango de celdas arrastrando (snap a la grilla) → `self.sel_rect`.
+    fn sheet_canvas(&mut self, ui: &mut egui::Ui) {
+        let Some((_, tex)) = self.src_tex.clone() else {
+            ui.label(egui::RichText::new("elegí un PNG abajo para recortarlo").weak());
+            return;
+        };
+        let img_px = tex.size_vec2();
+        let grid = self.sheet_grid.max(1) as f32;
+        let cols = (img_px.x / grid).ceil().max(1.0) as u32;
+        let rows = (img_px.y / grid).ceil().max(1.0) as u32;
+        let zoom = self.sheet_zoom.max(0.25);
+        let cell_px = grid * zoom;
+        let disp = egui::vec2(cols as f32 * cell_px, rows as f32 * cell_px);
+
+        egui::ScrollArea::both().id_salt("canvas").max_height(360.0).show(ui, |ui| {
+            let (rect, resp) = ui.allocate_exact_size(disp, egui::Sense::click_and_drag());
+            let painter = ui.painter_at(rect);
+            painter.image(
+                tex.id(),
+                rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+            let gs = egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(120, 210, 255, 70));
+            for c in 0..=cols {
+                let x = rect.min.x + c as f32 * cell_px;
+                painter.line_segment([egui::pos2(x, rect.min.y), egui::pos2(x, rect.max.y)], gs);
+            }
+            for r in 0..=rows {
+                let y = rect.min.y + r as f32 * cell_px;
+                painter.line_segment([egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y)], gs);
+            }
+            let cell_of = |p: egui::Pos2| -> (u32, u32) {
+                let cx = ((p.x - rect.min.x) / cell_px).floor().clamp(0.0, (cols - 1) as f32) as u32;
+                let cy = ((p.y - rect.min.y) / cell_px).floor().clamp(0.0, (rows - 1) as f32) as u32;
+                (cx, cy)
+            };
+            if resp.drag_started() {
+                if let Some(p) = resp.interact_pointer_pos() {
+                    self.drag_start_cell = Some(cell_of(p));
+                }
+            }
+            if resp.dragged() || resp.drag_stopped() {
+                if let (Some((sx, sy)), Some(p)) = (self.drag_start_cell, resp.interact_pointer_pos()) {
+                    let (ex, ey) = cell_of(p);
+                    let col = sx.min(ex);
+                    let row = sy.min(ey);
+                    self.sel_rect = Some(CellRect { col, row, w: sx.max(ex) - col + 1, h: sy.max(ey) - row + 1 });
+                }
+            }
+            if resp.clicked() {
+                if let Some(p) = resp.interact_pointer_pos() {
+                    let (c, r) = cell_of(p);
+                    self.sel_rect = Some(CellRect { col: c, row: r, w: 1, h: 1 });
+                }
+            }
+            if let Some(sr) = self.sel_rect {
+                let sel = egui::Rect::from_min_size(
+                    egui::pos2(rect.min.x + sr.col as f32 * cell_px, rect.min.y + sr.row as f32 * cell_px),
+                    egui::vec2(sr.w as f32 * cell_px, sr.h as f32 * cell_px),
+                );
+                painter.rect_filled(sel, 0.0, egui::Color32::from_rgba_unmultiplied(255, 220, 60, 40));
+                painter.rect_stroke(sel, 0.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 220, 60)));
+            }
+        });
     }
 
     fn save_manifest(&mut self) {

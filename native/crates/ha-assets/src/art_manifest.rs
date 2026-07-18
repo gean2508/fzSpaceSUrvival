@@ -188,6 +188,14 @@ impl ArtManifest {
     pub fn get(&self, key: &str) -> Option<&ArtValue> {
         self.sprites.get(key)
     }
+
+    /// Poses guardadas de un slot (si es una entrada completa con poses).
+    pub fn poses(&self, key: &str) -> Option<&std::collections::BTreeMap<String, Pose>> {
+        match self.sprites.get(key) {
+            Some(ArtValue::Full(e)) => e.poses.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
