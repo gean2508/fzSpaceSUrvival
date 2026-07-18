@@ -63,9 +63,29 @@ editor guarda; el juego resuelve celda→px con `grid`.
 - ✅ Fase D (poses: guardar como pose nombrada/estándar + CRUD) — falta consumo
   del jugador en motor (mapear poses → sistema direccional, ver Fase F).
 - ✅ Fase E (animación por rango + preview reproducido)
-- ◑ Fase F (motor: rect + strip ✅; **poses del jugador pendientes**)
-- ☐ Fase G (mapear/CRUD de assets nuevos — parcial vía slots CRUD)
+- ✅ Fase F (motor: rect + strip + **poses del jugador, con mirror + fallback**)
+- ◑ Fase G (mapear/CRUD de assets nuevos — parcial vía slots CRUD)
 - ☐ Fase H (UI hearts/hotbar/botones + tiles/agua + docs + APK)
+
+### Nota — variantes de tile/autotile (agua, bordes, esquinas) — 2026-07-18
+
+El usuario aclaró que hay assets que ocupan **varios cuadraditos** con piezas
+distintas (agua sola, agua+tierra por cada lado, agua+arena, esquinas convexas
+Y cóncavas, algunas animadas). El mecanismo de **poses** (BTreeMap por slot, ya
+existente para F–E) YA soporta esto sin cambios de datos: cada variante es una
+pose más del mismo slot (`tiles/water` → `water_center`, `water_edge_n`,
+`water_corner_ne`, `water_innercorner_ne`… cada una con su propio `anim`
+opcional). Lo que faltaba era la UX: se agregó un **picker de tile/autotile**
+(grilla 3×3 + campo "material" + toggle esquina cóncava) al lado de la cruz de
+dirección, que arma el nombre y reutiliza "Guardar como pose" — ya shippeado.
+
+**Gap real, explícito:** el terreno (`world2d.rs`) hoy es **Mesh2d con vertex
+color por celda** (`Tile::color()`), NO sprites — no hay UVs de textura por
+tile todavía. Que el juego DIBUJE estas variantes (elegir la pieza correcta
+según los vecinos de cada celda, bitmask de 4/8 vecinos) es una reescritura de
+mesh+shader, no una extensión chica de `art2d.rs` como el jugador. Autoría
+(editor) ✅ lista; consumo en terreno queda explícitamente en Fase H, a
+verificar en pantalla antes de tocar el shader — no se improvisa a ciegas.
 
 ## Fases
 

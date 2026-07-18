@@ -73,6 +73,8 @@ struct EditorApp {
     sel_rect: Option<CellRect>,       // selección actual en celdas
     drag_start_cell: Option<(u32, u32)>,
     pose_name: String,                // nombre para "guardar como pose"
+    tile_material: String,            // prefijo de material para el picker de tiles (water, water_sand…)
+    tile_inner_corner: bool,          // esquina cóncava (interior) vs convexa
     anim_preview_frame: usize,        // frame en curso del preview reproducido
     anim_preview_t: f32,              // acumulador de tiempo del preview
 
@@ -108,6 +110,8 @@ impl EditorApp {
             sel_rect: None,
             drag_start_cell: None,
             pose_name: String::new(),
+            tile_material: String::new(),
+            tile_inner_corner: false,
             anim_preview_frame: 0,
             anim_preview_t: 0.0,
             status: String::new(),
@@ -462,6 +466,42 @@ impl EditorApp {
                                 }
                             }
                         });
+                        // Variantes de tile/autotile: assets que ocupan VARIOS
+                        // cuadraditos (agua sola, agua+tierra por lado, agua+arena,
+                        // esquinas de tierra, y sus versiones animadas). Cada
+                        // variante es OTRA pose del mismo slot — no pisa a las demás.
+                        egui::CollapsingHeader::new("🧩 variantes de tile / autotile (agua, bordes, esquinas…)")
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                ui.label(egui::RichText::new(
+                                    "Recortá en el canvas de arriba la celda de esta variante, elegí \
+                                     la forma acá, y Guardar como pose. Repetí para cada pieza \
+                                     (centro, cada borde, cada esquina) — todas quedan guardadas juntas."
+                                ).weak());
+                                ui.horizontal(|ui| {
+                                    ui.label("material:");
+                                    ui.add(egui::TextEdit::singleline(&mut self.tile_material).desired_width(110.0).hint_text("water, water_sand…"));
+                                    ui.checkbox(&mut self.tile_inner_corner, "esquina cóncava (interior)");
+                                });
+                                egui::Grid::new("tile_shapes").spacing([4.0, 4.0]).show(ui, |ui| {
+                                    for row in TILE_DIRS.chunks(3) {
+                                        for &(id, arrow) in row {
+                                            let shape = tile_shape_name(id, self.tile_inner_corner);
+                                            let full = if self.tile_material.trim().is_empty() {
+                                                shape
+                                            } else {
+                                                format!("{}_{}", self.tile_material.trim(), shape)
+                                            };
+                                            let active = self.pose_name == full;
+                                            if ui.selectable_label(active, arrow).on_hover_text(&full).clicked() {
+                                                self.pose_name = full;
+                                            }
+                                        }
+                                        ui.end_row();
+                                    }
+                                });
+                            });
+
                         let animated = self.anim_on;
                         if ui.button("Guardar como pose").clicked() && !self.pose_name.trim().is_empty() {
                             if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
@@ -801,6 +841,25 @@ impl EditorApp {
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         EditorApp::ui(self, ctx);
+    }
+}
+
+/// Grilla 3×3 del picker de tiles/autotile — el layout visual replica la
+/// posición de la tierra/vecino respecto al agua (centro = agua sola).
+const TILE_DIRS: [(&str, &str); 9] = [
+    ("nw", "↖"), ("n", "↑"), ("ne", "↗"),
+    ("w", "←"), ("c", "●"), ("e", "→"),
+    ("sw", "↙"), ("s", "↓"), ("se", "↘"),
+];
+
+/// Nombre de forma para el picker de tiles: centro/borde/esquina (convexa o,
+/// con `inner`, cóncava — para el caso "agua envuelve una esquina de tierra").
+fn tile_shape_name(id: &str, inner: bool) -> String {
+    match id {
+        "c" => "center".to_string(),
+        "n" | "s" | "e" | "w" => format!("edge_{id}"),
+        _ if inner => format!("innercorner_{id}"),
+        _ => format!("corner_{id}"),
     }
 }
 
