@@ -212,6 +212,29 @@ impl Manifest {
         Ok(m)
     }
 
+    /// F6 — funde `overlay` encima (los mods GANAN): sheets/assets/brushes con
+    /// la misma clave se reemplazan; los nuevos se agregan.
+    pub fn overlay(&mut self, overlay: &Manifest) {
+        for (k, v) in &overlay.sheets {
+            self.sheets.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &overlay.assets {
+            self.assets.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &overlay.brushes {
+            self.brushes.insert(k.clone(), v.clone());
+        }
+    }
+
+    /// Aplica una pila de overlays en orden de prioridad ASCENDENTE (el último
+    /// gana). `base` es la fuente `base/`; los mods se pasan de menor a mayor.
+    pub fn stacked(mut base: Manifest, overlays: impl IntoIterator<Item = Manifest>) -> Manifest {
+        for o in overlays {
+            base.overlay(&o);
+        }
+        base
+    }
+
     /// Serializa a RON legible (con nombres de struct, como en la doc/ejemplos)
     /// y ordenado (BTreeMap) → diffs mínimos.
     pub fn to_ron_string(&self) -> Result<String, ManifestError> {

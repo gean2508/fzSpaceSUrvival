@@ -9,6 +9,7 @@
 
 pub mod catalog;
 pub mod manifest;
+pub mod registry;
 
 #[cfg(feature = "scan")]
 pub mod scan;
@@ -18,6 +19,7 @@ pub use manifest::{
     AnchorKind, Anim, AnimLayout, Asset, Brush, Flags, Footprint, Hitbox, Manifest, ManifestError,
     Pivot, Rect, Sheet, Source, YSort, CURRENT_MANIFEST_VERSION,
 };
+pub use registry::{AssetRegistry, PxRect, ValidationIssue};
 
 #[cfg(feature = "scan")]
 pub use scan::{scan_limezu_directory, ScanOptions, ScanReport};
