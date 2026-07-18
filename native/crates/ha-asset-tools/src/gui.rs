@@ -1,34 +1,25 @@
 //! F3 — editor de assets standalone (egui). Programa de DESARROLLO: corre solo,
-//! NUNCA junto al juego. Sirve para seccionar/etiquetar los sprites (del juego o
-//! de un mod) sobre el `manifest.ron`, previsualizarlos y regenerar el catálogo.
+//! NUNCA junto al juego.
 //!
-//! Flujo: apuntás a la carpeta de arte → Escanear (genera esqueleto) →
-//! seleccionás un asset → ajustás ID/footprint/pivote/hitbox/flags/tags →
-//! Guardar manifest → Generar CATÁLOGO. La IA nunca toca píxeles: sólo lee IDs.
+//! Modelo (lo que pediste): la lista de la izquierda son los **slots que el
+//! juego usa** (`game_slots()`): árbol, roca, agua, ítems, máquinas, jugador…
+//! Elegís un slot → elegís un PNG del arte fuente (LimeZu singles) → se **copia**
+//! al árbol de assets del juego y se registra en `manifest.json`. Marcás si es
+//! animado (agua/personajes: tira de N frames a F fps). Guardás → el juego se
+//! reskinea en el próximo build. "Catálogo" regenera `CATALOGO.md` para Claude.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use ha_assets::{
-    generate_catalog, scan_limezu_directory, AnchorKind, Anim, AnimLayout, Asset, Flags, Footprint,
-    Hitbox, Manifest, Pivot, ScanOptions, Sheet, YSort,
-};
-
-const ANCHORS: [(&str, AnchorKind); 5] = [
-    ("BottomCenter", AnchorKind::BottomCenter),
-    ("Center", AnchorKind::Center),
-    ("TopLeft", AnchorKind::TopLeft),
-    ("TopCenter", AnchorKind::TopCenter),
-    ("BottomLeft", AnchorKind::BottomLeft),
-];
+use ha_assets::{game_slots, list_pngs, ArtAnim, ArtManifest, SlotDef};
 
 pub fn run_gui() -> ExitCode {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1180.0, 760.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1240.0, 820.0]),
         ..Default::default()
     };
     let res = eframe::run_native(
-        "ha-asset-tools — editor de assets (dev)",
+        "ha-asset-tools — editor de assets del juego (dev)",
         options,
         Box::new(|_cc| Ok(Box::new(EditorApp::new()))),
     );
@@ -41,318 +32,347 @@ pub fn run_gui() -> ExitCode {
     }
 }
 
-#[derive(Default)]
 struct EditorApp {
-    manifest: Manifest,
-    root: String,
-    manifest_path: String,
+    slots: Vec<SlotDef>,
+    manifest: ArtManifest,
+    /// Carpeta con los PNG fuente (LimeZu singles ya purgados).
+    art_root: String,
+    /// `manifest.json` del juego (destino).
+    game_manifest: String,
+    /// Raíz de assets del juego; los PNG elegidos se copian bajo `art/<key>.png`.
+    game_assets: String,
+    /// Ruta del `CATALOGO.md`.
     catalog_path: String,
-    prefix: String,
-    grid: u32,
-    filter: String,
-    selected: Option<String>,
-    edit: Option<EditBuf>,
+
+    slot_filter: String,
+    png_filter: String,
+    selected: Option<usize>,
+    pngs: Vec<PathBuf>,
+
+    /// Claves de los slots nativos del juego (no borrables desde el CRUD).
+    core_keys: std::collections::BTreeSet<String>,
+    /// Buffer del CRUD "añadir slot".
+    new_slot_key: String,
+
+    // buffers de animación del slot seleccionado
+    anim_on: bool,
+    anim_frames: u32,
+    anim_fps: f32,
+
+    // caches de textura (key = ruta absoluta)
     tex: Option<(String, egui::TextureHandle)>,
     status: String,
 }
 
-struct EditBuf {
-    id: String,
-    fw: u32,
-    fh: u32,
-    pivot_anchor: usize,
-    ysort_row: u32,
-    solid: bool,
-    harvestable: bool,
-    billboard: bool,
-    has_hitbox: bool,
-    hb: [f32; 4],
-    tags: String,
-    anim: bool,
-    anim_frames: u32,
-    anim_fps: f32,
-}
-
-impl EditBuf {
-    fn from_asset(id: &str, a: &Asset) -> Self {
-        let pivot_anchor = match a.pivot {
-            Pivot::Anchor(k) => ANCHORS.iter().position(|(_, kk)| *kk == k).unwrap_or(0),
-            Pivot::Px { .. } => 0,
-        };
-        let ysort_row = match a.ysort {
-            YSort::Row(r) => r,
-            YSort::Offset(_) => 0,
-        };
-        let (has_hitbox, hb) = match a.hitbox {
-            Some(Hitbox::Aabb { x, y, w, h }) => (true, [x, y, w, h]),
-            None => (false, [0.0, 0.0, a.footprint.w as f32, 1.0]),
-        };
-        let (anim, anim_frames, anim_fps) = match a.anim {
-            Some(Anim { frames, fps, .. }) => (true, frames, fps),
-            None => (false, 4, 6.0),
-        };
-        Self {
-            id: id.to_string(),
-            fw: a.footprint.w,
-            fh: a.footprint.h,
-            pivot_anchor,
-            ysort_row,
-            solid: a.flags.solid,
-            harvestable: a.flags.harvestable,
-            billboard: a.flags.billboard,
-            has_hitbox,
-            hb,
-            tags: a.tags.join(", "),
-            anim,
-            anim_frames,
-            anim_fps,
-        }
-    }
-
-    /// Aplica los campos sobre el asset (conserva sheet/rect/ppu del original).
-    fn apply_to(&self, a: &mut Asset) {
-        a.footprint = Footprint { w: self.fw.max(1), h: self.fh.max(1) };
-        a.pivot = Pivot::Anchor(ANCHORS[self.pivot_anchor].1);
-        a.ysort = YSort::Row(self.ysort_row);
-        a.flags = Flags { solid: self.solid, harvestable: self.harvestable, billboard: self.billboard };
-        a.hitbox = self.has_hitbox.then_some(Hitbox::Aabb {
-            x: self.hb[0],
-            y: self.hb[1],
-            w: self.hb[2],
-            h: self.hb[3],
-        });
-        a.anim = self.anim.then_some(Anim {
-            frames: self.anim_frames.max(1),
-            fps: self.anim_fps.max(0.1),
-            layout: AnimLayout::RowRight,
-            loop_: true,
-        });
-        a.tags = self
-            .tags
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-    }
-}
-
 impl EditorApp {
     fn new() -> Self {
-        EditorApp {
-            grid: 32,
-            prefix: "art".to_string(),
-            manifest_path: "assets/manifest.ron".to_string(),
+        let slots = game_slots();
+        let core_keys = slots.iter().map(|s| s.key.to_string()).collect();
+        let mut app = EditorApp {
+            slots,
+            manifest: ArtManifest::default(),
+            art_root: "../PRUEBAS-CODIGOS".to_string(),
+            game_manifest: "crates/ha-game/assets/art/manifest.json".to_string(),
+            game_assets: "crates/ha-game/assets".to_string(),
             catalog_path: "assets/CATALOGO.md".to_string(),
-            ..Default::default()
+            slot_filter: String::new(),
+            png_filter: String::new(),
+            selected: None,
+            pngs: Vec::new(),
+            core_keys,
+            new_slot_key: String::new(),
+            anim_on: false,
+            anim_frames: 4,
+            anim_fps: 6.0,
+            tex: None,
+            status: String::new(),
+        };
+        app.load_manifest();
+        app
+    }
+
+    /// Asegura que exista un slot con esa clave (para claves del manifest que no
+    /// son nativas, y para el CRUD "añadir slot"). Categoría = prefijo de la clave.
+    fn ensure_slot(&mut self, key: &str) {
+        if key.is_empty() || self.slots.iter().any(|s| s.key == key) {
+            return;
         }
+        let category: &'static str = leak(key.split('/').next().unwrap_or("custom").to_string());
+        self.slots.push(SlotDef { key: leak(key.to_string()), category, animated: false });
+        self.slots.sort_by(|a, b| a.category.cmp(b.category).then(a.key.cmp(b.key)));
     }
-}
 
-impl eframe::App for EditorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    /// Cantidad de slots sin PNG asignado (arte procedural en el juego).
+    fn unbound_count(&self) -> usize {
+        self.slots.iter().filter(|s| self.manifest.get(s.key).is_none()).count()
+    }
+
+    fn ui(&mut self, ctx: &egui::Context) {
         self.top_bar(ctx);
-        self.left_list(ctx);
-        self.right_editor(ctx);
-        self.central_preview(ctx);
+        self.left_slots(ctx);
+        self.central_detail(ctx);
     }
-}
 
-impl EditorApp {
+    // ── paneles ───────────────────────────────────────────────────────────
+
     fn top_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label("Arte:");
-                ui.text_edit_singleline(&mut self.root);
-                ui.label("prefijo:");
-                ui.add(egui::TextEdit::singleline(&mut self.prefix).desired_width(90.0));
-                ui.label("grid:");
-                ui.add(egui::DragValue::new(&mut self.grid).range(4..=256));
-                if ui.button("⟳ Escanear").clicked() {
-                    self.do_scan();
+                ui.label("Arte fuente:");
+                ui.add(egui::TextEdit::singleline(&mut self.art_root).desired_width(260.0));
+                if ui.button("📂 Cargar PNGs").clicked() {
+                    self.load_pngs();
                 }
                 ui.separator();
-                ui.label("manifest:");
-                ui.text_edit_singleline(&mut self.manifest_path);
-                if ui.button("Abrir").clicked() {
-                    self.do_open();
-                }
-                if ui.button("💾 Guardar").clicked() {
-                    self.do_save();
+                if ui.button("💾 Guardar (actualiza el juego)").clicked() {
+                    self.save_manifest();
                 }
                 if ui.button("📄 Catálogo").clicked() {
-                    self.do_catalog();
+                    self.write_catalog();
+                }
+                if ui.button("↻ Recargar manifest").clicked() {
+                    self.load_manifest();
                 }
             });
+            // CRUD: añadir un slot nuevo (clave lógica, ej. ui/mi_boton).
+            ui.horizontal(|ui| {
+                ui.label("＋ nuevo slot:");
+                ui.add(egui::TextEdit::singleline(&mut self.new_slot_key).desired_width(220.0)
+                    .hint_text("categoria/nombre (ej. ui/boton_craft)"));
+                if ui.button("Añadir").clicked() {
+                    let key = self.new_slot_key.trim().to_string();
+                    if key.contains('/') {
+                        self.ensure_slot(&key);
+                        self.status = format!("slot añadido: {key}");
+                        self.new_slot_key.clear();
+                    } else {
+                        self.status = "la clave debe ser categoria/nombre".into();
+                    }
+                }
+            });
+            let bound = self.manifest.sprites.len();
+            ui.label(format!(
+                "{} slots · {} con PNG · {} SIN PNG (procedural) · {} PNGs fuente",
+                self.slots.len(),
+                bound,
+                self.unbound_count(),
+                self.pngs.len()
+            ));
             if !self.status.is_empty() {
                 ui.label(egui::RichText::new(&self.status).weak());
             }
         });
     }
 
-    fn left_list(&mut self, ctx: &egui::Context) {
-        egui::SidePanel::left("list").default_width(320.0).show(ctx, |ui| {
+    fn left_slots(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("slots").default_width(320.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("🔎");
-                ui.text_edit_singleline(&mut self.filter);
+                ui.label("🔎 slot");
+                ui.text_edit_singleline(&mut self.slot_filter);
             });
-            ui.label(format!("{} assets", self.manifest.assets.len()));
             ui.separator();
-            let filter = self.filter.to_lowercase();
-            let ids: Vec<String> = self
-                .manifest
-                .assets
-                .keys()
-                .filter(|id| filter.is_empty() || id.to_lowercase().contains(&filter))
-                .cloned()
-                .collect();
+            let filter = self.slot_filter.to_lowercase();
+            let mut clicked: Option<usize> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
-                for id in ids {
-                    let sel = self.selected.as_deref() == Some(id.as_str());
-                    if ui.selectable_label(sel, &id).clicked() {
-                        self.select(ctx, &id);
+                let mut cur_cat = "";
+                for (i, slot) in self.slots.iter().enumerate() {
+                    if !filter.is_empty() && !slot.key.to_lowercase().contains(&filter) {
+                        continue;
+                    }
+                    if slot.category != cur_cat {
+                        cur_cat = slot.category;
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new(cur_cat.to_uppercase()).strong());
+                    }
+                    let has = self.manifest.get(slot.key).is_some();
+                    let mark = if has { "● " } else { "○ " };
+                    let sel = self.selected == Some(i);
+                    if ui.selectable_label(sel, format!("{mark}{}", slot.key)).clicked() {
+                        clicked = Some(i);
                     }
                 }
             });
-        });
-    }
-
-    fn right_editor(&mut self, ctx: &egui::Context) {
-        egui::SidePanel::right("edit").default_width(320.0).show(ctx, |ui| {
-            let Some(edit) = self.edit.as_mut() else {
-                ui.label("Seleccioná un asset de la lista.");
-                return;
-            };
-            ui.heading("Editar asset");
-            ui.horizontal(|ui| {
-                ui.label("ID:");
-                ui.text_edit_singleline(&mut edit.id);
-            });
-            ui.separator();
-            ui.label("Footprint (celdas)");
-            ui.horizontal(|ui| {
-                ui.label("w");
-                ui.add(egui::DragValue::new(&mut edit.fw).range(1..=64));
-                ui.label("h");
-                ui.add(egui::DragValue::new(&mut edit.fh).range(1..=64));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Pivote");
-                egui::ComboBox::from_id_salt("pivot")
-                    .selected_text(ANCHORS[edit.pivot_anchor].0)
-                    .show_ui(ui, |ui| {
-                        for (i, (name, _)) in ANCHORS.iter().enumerate() {
-                            ui.selectable_value(&mut edit.pivot_anchor, i, *name);
-                        }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.label("Y-sort fila");
-                ui.add(egui::DragValue::new(&mut edit.ysort_row).range(0..=63));
-            });
-            ui.separator();
-            ui.checkbox(&mut edit.solid, "solid");
-            ui.checkbox(&mut edit.harvestable, "harvestable");
-            ui.checkbox(&mut edit.billboard, "billboard");
-            ui.separator();
-            ui.checkbox(&mut edit.has_hitbox, "hitbox (AABB en celdas)");
-            if edit.has_hitbox {
-                ui.horizontal(|ui| {
-                    for (lbl, idx) in [("x", 0), ("y", 1), ("w", 2), ("h", 3)] {
-                        ui.label(lbl);
-                        ui.add(egui::DragValue::new(&mut edit.hb[idx]).speed(0.1));
-                    }
-                });
-            }
-            ui.separator();
-            ui.checkbox(&mut edit.anim, "animado");
-            if edit.anim {
-                ui.horizontal(|ui| {
-                    ui.label("frames");
-                    ui.add(egui::DragValue::new(&mut edit.anim_frames).range(1..=64));
-                    ui.label("fps");
-                    ui.add(egui::DragValue::new(&mut edit.anim_fps).range(0.1..=60.0));
-                });
-            }
-            ui.separator();
-            ui.label("Tags (coma)");
-            ui.text_edit_singleline(&mut edit.tags);
-            ui.separator();
-            if ui.button("✔ Aplicar").clicked() {
-                self.apply_edit();
+            if let Some(i) = clicked {
+                self.select_slot(ctx, i);
             }
         });
     }
 
-    fn central_preview(&mut self, ctx: &egui::Context) {
+    fn central_detail(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            let Some(id) = self.selected.clone() else {
-                ui.centered_and_justified(|ui| ui.label("Editor de assets — escaneá una carpeta para empezar."));
+            let Some(i) = self.selected else {
+                ui.centered_and_justified(|ui| {
+                    ui.label("Elegí un slot del juego a la izquierda para reskinearlo.");
+                });
                 return;
             };
-            ui.heading(&id);
-            if let Some(a) = self.manifest.assets.get(&id) {
-                ui.label(format!(
-                    "sheet: {}   rect: {:?}   footprint {}×{}",
-                    a.sheet, a.rect, a.footprint.w, a.footprint.h
-                ));
+            let slot = self.slots[i];
+            ui.heading(slot.key);
+
+            // Binding actual + preview.
+            match self.manifest.get(slot.key) {
+                Some(v) => {
+                    ui.label(format!("PNG actual: {}", v.png()));
+                    if let Some(a) = v.anim() {
+                        ui.label(format!("animado: {} frames @ {} fps", a.frames, a.fps));
+                    }
+                }
+                None => {
+                    ui.label(egui::RichText::new("sin PNG (usa arte procedural en el juego)").weak());
+                }
             }
+            if let Some((_, tex)) = self.tex.as_ref() {
+                let size = tex.size_vec2() * 5.0;
+                ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), size)));
+            }
+
             ui.separator();
-            match self.tex.as_ref() {
-                Some((tid, tex)) if *tid == id => {
-                    // Escala pixel-art ×6, filtro nearest (se fijó al cargar).
-                    let size = tex.size_vec2() * 6.0;
-                    ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), size)));
+            // Animación.
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.anim_on, "animado (tira de frames)");
+                if self.anim_on {
+                    ui.label("frames");
+                    ui.add(egui::DragValue::new(&mut self.anim_frames).range(1..=64));
+                    ui.label("fps");
+                    ui.add(egui::DragValue::new(&mut self.anim_fps).range(0.1..=60.0));
                 }
-                _ => {
-                    ui.label("(sin preview — revisá la ruta de Arte)");
+                if self.manifest.get(slot.key).is_some() && ui.button("Aplicar anim").clicked() {
+                    self.apply_anim(slot.key);
                 }
+                if self.manifest.get(slot.key).is_some() && ui.button("🗑 Quitar PNG").clicked() {
+                    self.manifest.clear(slot.key);
+                    self.tex = None;
+                    self.status = format!("{} → procedural", slot.key);
+                }
+                if !self.core_keys.contains(slot.key) && ui.button("❌ Eliminar slot").clicked() {
+                    self.manifest.clear(slot.key);
+                    self.slots.retain(|x| x.key != slot.key);
+                    self.selected = None;
+                    self.tex = None;
+                    self.status = format!("slot {} eliminado", slot.key);
+                }
+            });
+
+            ui.separator();
+            ui.label(egui::RichText::new("Elegí el PNG fuente para este slot:").strong());
+            ui.horizontal(|ui| {
+                ui.label("🔎 png");
+                ui.text_edit_singleline(&mut self.png_filter);
+            });
+            if self.pngs.is_empty() {
+                ui.label(egui::RichText::new("(cargá los PNGs con el botón de arriba)").weak());
+            }
+            let pf = self.png_filter.to_lowercase();
+            let mut pick: Option<PathBuf> = None;
+            egui::ScrollArea::vertical().id_salt("pngs").show(ui, |ui| {
+                for p in &self.pngs {
+                    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    if !pf.is_empty() && !name.to_lowercase().contains(&pf) {
+                        continue;
+                    }
+                    if ui.selectable_label(false, &name).clicked() {
+                        pick = Some(p.clone());
+                    }
+                }
+            });
+            if let Some(p) = pick {
+                self.bind_png(ctx, slot, &p);
             }
         });
     }
 
-    // ── acciones ──────────────────────────────────────────────────────────
+    // ── acciones ───────────────────────────────────────────────────────────
 
-    fn do_scan(&mut self) {
-        let root = PathBuf::from(&self.root);
+    fn load_manifest(&mut self) {
+        match std::fs::read_to_string(&self.game_manifest) {
+            Ok(s) => match ArtManifest::from_json(&s) {
+                Ok(m) => {
+                    self.manifest = m;
+                    self.status = format!("manifest cargado: {} bindings", self.manifest.sprites.len());
+                }
+                Err(e) => self.status = format!("manifest ilegible: {e}"),
+            },
+            Err(_) => {
+                self.manifest = ArtManifest::default();
+                self.status = "manifest nuevo (no existía) — se creará al guardar".into();
+            }
+        }
+        // Claves del manifest que no son slots nativos → agregarlas (custom persist).
+        let keys: Vec<String> = self.manifest.sprites.keys().cloned().collect();
+        for k in keys {
+            self.ensure_slot(&k);
+        }
+    }
+
+    fn load_pngs(&mut self) {
+        let root = self.abs_art_root();
         if !root.is_dir() {
-            self.status = format!("Arte no es carpeta: {}", root.display());
+            self.status = format!("Arte fuente no es carpeta: {}", root.display());
             return;
         }
-        let opts = ScanOptions {
-            grid: (self.grid, self.grid),
-            id_prefix: self.prefix.clone(),
-            max_files: None,
-        };
-        let (m, report) = scan_limezu_directory(&root, Some(&self.manifest), &opts);
-        self.manifest = m;
-        self.status = format!(
-            "scan: +{} assets ({} leídos, {} saltados) — total {}",
-            report.added,
-            report.scanned,
-            report.skipped,
-            self.manifest.assets.len()
-        );
+        self.pngs = list_pngs(&root);
+        self.status = format!("{} PNGs fuente cargados de {}", self.pngs.len(), root.display());
     }
 
-    fn do_open(&mut self) {
-        match std::fs::read_to_string(&self.manifest_path).ok().map(|s| Manifest::from_ron_str(&s)) {
-            Some(Ok(m)) => {
-                self.manifest = m;
-                self.status = format!("abierto {} ({} assets)", self.manifest_path, self.manifest.assets.len());
+    fn select_slot(&mut self, ctx: &egui::Context, i: usize) {
+        self.selected = Some(i);
+        let slot = self.slots[i];
+        // Sincronizar buffers de animación desde el binding (o el hint del slot).
+        match self.manifest.get(slot.key).and_then(|v| v.anim()) {
+            Some(a) => {
+                self.anim_on = true;
+                self.anim_frames = a.frames;
+                self.anim_fps = a.fps;
             }
-            Some(Err(e)) => self.status = format!("parse: {e}"),
-            None => self.status = format!("no pude leer {}", self.manifest_path),
+            None => {
+                self.anim_on = slot.animated;
+                self.anim_frames = 4;
+                self.anim_fps = 6.0;
+            }
+        }
+        self.tex = self.preview_bound(ctx, slot.key);
+    }
+
+    fn bind_png(&mut self, ctx: &egui::Context, slot: SlotDef, src: &Path) {
+        // Copiar el PNG fuente al árbol del juego como art/<key>.png.
+        let rel = format!("art/{}.png", slot.key);
+        let dest = PathBuf::from(&self.game_assets).join(&rel);
+        if let Some(parent) = dest.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                self.status = format!("no pude crear {}: {e}", parent.display());
+                return;
+            }
+        }
+        if let Err(e) = std::fs::copy(src, &dest) {
+            self.status = format!("no pude copiar el PNG: {e}");
+            return;
+        }
+        let anim = self.anim_on.then_some(ArtAnim { frames: self.anim_frames.max(1), fps: self.anim_fps.max(0.1) });
+        self.manifest.set(slot.key, rel.clone(), anim);
+        self.tex = load_texture(ctx, &dest, slot.key);
+        self.status = format!("{} ← {} (copiado a {})", slot.key, src.display(), rel);
+    }
+
+    fn apply_anim(&mut self, key: &str) {
+        if let Some(v) = self.manifest.get(key) {
+            let png = v.png().to_string();
+            let anim = self.anim_on.then_some(ArtAnim { frames: self.anim_frames.max(1), fps: self.anim_fps.max(0.1) });
+            self.manifest.set(key, png, anim);
+            self.status = format!("anim de {key} aplicada");
         }
     }
 
-    fn do_save(&mut self) {
-        match self.manifest.to_ron_string() {
-            Ok(s) => {
-                if let Some(p) = PathBuf::from(&self.manifest_path).parent() {
-                    let _ = std::fs::create_dir_all(p);
+    fn save_manifest(&mut self) {
+        match self.manifest.to_json() {
+            Ok(json) => {
+                if let Some(parent) = PathBuf::from(&self.game_manifest).parent() {
+                    let _ = std::fs::create_dir_all(parent);
                 }
-                match std::fs::write(&self.manifest_path, s) {
-                    Ok(()) => self.status = format!("guardado {}", self.manifest_path),
+                match std::fs::write(&self.game_manifest, json) {
+                    Ok(()) => self.status = format!(
+                        "guardado {} — rebuildeá el juego (npm run play) para verlo",
+                        self.game_manifest
+                    ),
                     Err(e) => self.status = format!("write: {e}"),
                 }
             }
@@ -360,10 +380,15 @@ impl EditorApp {
         }
     }
 
-    fn do_catalog(&mut self) {
-        let md = generate_catalog(&self.manifest);
-        if let Some(p) = PathBuf::from(&self.catalog_path).parent() {
-            let _ = std::fs::create_dir_all(p);
+    fn write_catalog(&mut self) {
+        // Catálogo simple de los bindings actuales (para contexto de Claude).
+        let mut md = String::from("# CATÁLOGO de arte del juego (autogenerado)\n\n| slot | PNG | animado |\n|------|-----|---------|\n");
+        for (key, v) in &self.manifest.sprites {
+            let a = v.anim().map(|a| format!("{}f@{}fps", a.frames, a.fps)).unwrap_or_else(|| "no".into());
+            md.push_str(&format!("| `{}` | {} | {} |\n", key, v.png(), a));
+        }
+        if let Some(parent) = PathBuf::from(&self.catalog_path).parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
         match std::fs::write(&self.catalog_path, md) {
             Ok(()) => self.status = format!("catálogo → {}", self.catalog_path),
@@ -371,39 +396,35 @@ impl EditorApp {
         }
     }
 
-    fn select(&mut self, ctx: &egui::Context, id: &str) {
-        self.selected = Some(id.to_string());
-        if let Some(a) = self.manifest.assets.get(id) {
-            self.edit = Some(EditBuf::from_asset(id, a));
-            self.tex = self.load_preview(ctx, id, a);
-        }
+    // ── helpers ─────────────────────────────────────────────────────────────
+
+    fn abs_art_root(&self) -> PathBuf {
+        PathBuf::from(&self.art_root)
     }
 
-    fn apply_edit(&mut self) {
-        let Some(edit) = self.edit.as_ref() else { return };
-        let Some(old_id) = self.selected.clone() else { return };
-        let new_id = edit.id.trim().to_string();
-        if let Some(mut asset) = self.manifest.assets.remove(&old_id) {
-            edit.apply_to(&mut asset);
-            let key = if new_id.is_empty() { old_id.clone() } else { new_id.clone() };
-            self.manifest.assets.insert(key.clone(), asset);
-            self.selected = Some(key.clone());
-            self.status = format!("aplicado → {key}");
-        }
+    fn preview_bound(&self, ctx: &egui::Context, key: &str) -> Option<(String, egui::TextureHandle)> {
+        let v = self.manifest.get(key)?;
+        let path = PathBuf::from(&self.game_assets).join(v.png());
+        load_texture(ctx, &path, key)
     }
+}
 
-    fn load_preview(
-        &self,
-        ctx: &egui::Context,
-        id: &str,
-        asset: &Asset,
-    ) -> Option<(String, egui::TextureHandle)> {
-        let sheet: &Sheet = self.manifest.sheets.get(&asset.sheet)?;
-        let path = PathBuf::from(&self.root).join(&sheet.path);
-        let img = image::open(&path).ok()?.to_rgba8();
-        let (w, h) = img.dimensions();
-        let color = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw());
-        let tex = ctx.load_texture(id, color, egui::TextureOptions::NEAREST);
-        Some((id.to_string(), tex))
+impl eframe::App for EditorApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        EditorApp::ui(self, ctx);
     }
+}
+
+/// Los slots derivados en runtime necesitan `&'static str` y se crean pocas
+/// veces (abrir manifest / añadir slot), así que filtrar la cadena es aceptable.
+fn leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
+fn load_texture(ctx: &egui::Context, path: &Path, id: &str) -> Option<(String, egui::TextureHandle)> {
+    let img = image::open(path).ok()?.to_rgba8();
+    let (w, h) = img.dimensions();
+    let color = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw());
+    let tex = ctx.load_texture(id, color, egui::TextureOptions::NEAREST);
+    Some((id.to_string(), tex))
 }

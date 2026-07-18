@@ -115,6 +115,14 @@ pub fn scan_limezu_directory(
     (manifest, report)
 }
 
+/// Lista los PNG bajo `root` (recursivo, ordenado), sin decodificarlos — para
+/// el selector de PNGs del editor.
+pub fn list_pngs(root: &Path) -> Vec<PathBuf> {
+    let mut v = collect_pngs(root);
+    v.sort();
+    v
+}
+
 /// Recolecta `.png` recursivamente, saltando ruido conocido (paletas, viejos,
 /// generadores de personajes/retratos que no son props de juego).
 fn collect_pngs(root: &Path) -> Vec<PathBuf> {

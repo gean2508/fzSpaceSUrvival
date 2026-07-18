@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 serde = { workspace = true }
 ron = "0.8"
+serde_json = "1"
 # Sólo el escaneo (F2) necesita leer PNGs. Feature-gated para que el server (F7)
 # y ha-game no arrastren el decoder de imágenes.
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
