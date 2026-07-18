@@ -85,13 +85,26 @@ impl EditorApp {
     fn new() -> Self {
         let slots = game_slots();
         let core_keys = slots.iter().map(|s| s.key.to_string()).collect();
+        // Rutas ancladas a `CARGO_MANIFEST_DIR` (constante de COMPILACIÓN) en vez
+        // de relativas al cwd: si el binario se lanza desde un directorio distinto
+        // al esperado (doble-click, otra terminal, cargo run desde la raíz del
+        // repo…), las relativas escribían "con éxito" en un lugar que el juego
+        // nunca lee — guardabas y no pasaba nada, ni en el editor ni en el juego.
+        // Estas son absolutas y correctas siempre.
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")); // .../ha-asset-tools
+        let native_root = manifest_dir.parent().and_then(Path::parent).unwrap_or(manifest_dir); // .../native
+        let game_manifest = native_root.join("crates/ha-game/assets/art/manifest.json");
+        let game_assets = native_root.join("crates/ha-game/assets");
+        let catalog_path = native_root.join("assets/CATALOGO.md");
+        let repo_root = native_root.parent().unwrap_or(native_root);
+        let art_root = repo_root.join("PRUEBAS-CODIGOS");
         let mut app = EditorApp {
             slots,
             manifest: ArtManifest::default(),
-            art_root: "../PRUEBAS-CODIGOS".to_string(),
-            game_manifest: "crates/ha-game/assets/art/manifest.json".to_string(),
-            game_assets: "crates/ha-game/assets".to_string(),
-            catalog_path: "assets/CATALOGO.md".to_string(),
+            art_root: art_root.display().to_string(),
+            game_manifest: game_manifest.display().to_string(),
+            game_assets: game_assets.display().to_string(),
+            catalog_path: catalog_path.display().to_string(),
             slot_filter: String::new(),
             only_unbound: false,
             png_filter: String::new(),
@@ -116,7 +129,7 @@ impl EditorApp {
             anim_preview_t: 0.0,
             status: String::new(),
         };
-        app.load_manifest();
+        app.load_manifest(None);
         app
     }
 
@@ -161,15 +174,16 @@ impl EditorApp {
                 }
                 ui.separator();
                 if ui.button("💾 Guardar (actualiza el juego)").clicked() {
-                    self.save_manifest();
+                    self.save_manifest(ctx);
                 }
                 if ui.button("📄 Catálogo").clicked() {
                     self.write_catalog();
                 }
                 if ui.button("↻ Recargar manifest").clicked() {
-                    self.load_manifest();
+                    self.load_manifest(Some(ctx));
                 }
             });
+            ui.label(egui::RichText::new(format!("manifest del juego: {}", self.game_manifest)).weak().small());
             // CRUD: añadir un slot nuevo (clave lógica, ej. ui/mi_boton).
             ui.horizontal(|ui| {
                 ui.label("＋ nuevo slot:");
@@ -596,24 +610,32 @@ impl EditorApp {
 
     // ── acciones ───────────────────────────────────────────────────────────
 
-    fn load_manifest(&mut self) {
+    /// `ctx` presente (fuera del constructor) → también refresca la textura del
+    /// slot seleccionado, para que "Recargar" se vea reflejado sin reabrir nada.
+    fn load_manifest(&mut self, ctx: Option<&egui::Context>) {
         match std::fs::read_to_string(&self.game_manifest) {
             Ok(s) => match ArtManifest::from_json(&s) {
                 Ok(m) => {
                     self.manifest = m;
-                    self.status = format!("manifest cargado: {} bindings", self.manifest.sprites.len());
+                    self.status = format!("manifest cargado ({}): {} bindings", self.game_manifest, self.manifest.sprites.len());
                 }
                 Err(e) => self.status = format!("manifest ilegible: {e}"),
             },
             Err(_) => {
                 self.manifest = ArtManifest::default();
-                self.status = "manifest nuevo (no existía) — se creará al guardar".into();
+                self.status = format!("manifest nuevo (no existía en {}) — se creará al guardar", self.game_manifest);
             }
         }
         // Claves del manifest que no son slots nativos → agregarlas (custom persist).
         let keys: Vec<String> = self.manifest.sprites.keys().cloned().collect();
         for k in keys {
             self.ensure_slot(&k);
+        }
+        if let Some(ctx) = ctx {
+            if let Some(i) = self.selected {
+                let key = self.slots[i].key;
+                self.tex = self.preview_bound(ctx, key);
+            }
         }
     }
 
@@ -791,18 +813,40 @@ impl EditorApp {
         });
     }
 
-    fn save_manifest(&mut self) {
+    fn save_manifest(&mut self, ctx: &egui::Context) {
         match self.manifest.to_json() {
             Ok(json) => {
                 if let Some(parent) = PathBuf::from(&self.game_manifest).parent() {
                     let _ = std::fs::create_dir_all(parent);
                 }
-                match std::fs::write(&self.game_manifest, json) {
-                    Ok(()) => self.status = format!(
-                        "guardado {} — rebuildeá el juego (npm run play) para verlo",
-                        self.game_manifest
-                    ),
-                    Err(e) => self.status = format!("write: {e}"),
+                match std::fs::write(&self.game_manifest, &json) {
+                    Ok(()) => {
+                        // Round-trip: releo del disco lo que acabo de escribir, en
+                        // vez de confiar en el estado en memoria — así "guardado"
+                        // significa "esto es literalmente lo que hay en el archivo",
+                        // y refresco la textura del slot actual para verlo YA en
+                        // el editor (no hace falta reabrir).
+                        match std::fs::read_to_string(&self.game_manifest).ok().map(|s| ArtManifest::from_json(&s)) {
+                            Some(Ok(m)) => {
+                                self.manifest = m;
+                                if let Some(i) = self.selected {
+                                    let key = self.slots[i].key;
+                                    self.tex = self.preview_bound(ctx, key);
+                                }
+                                self.status = format!(
+                                    "✔ guardado y verificado en {} — rebuildeá el juego (./editor_assets play) para verlo ahí",
+                                    self.game_manifest
+                                );
+                            }
+                            _ => {
+                                self.status = format!(
+                                    "⚠ escribí {} pero no pude releerlo para verificar",
+                                    self.game_manifest
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => self.status = format!("✘ no pude escribir {}: {e}", self.game_manifest),
                 }
             }
             Err(e) => self.status = format!("serialize: {e}"),
