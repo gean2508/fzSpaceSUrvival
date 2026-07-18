@@ -72,7 +72,7 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
   Conectar el consumidor de `placing_build` (hoy no coloca nada).
 - ⬜ **Quitar:** apuntar una pieza colocada + acción la remueve (refund parcial).
 
-### FASE 17 — Verificar + biblia + graphify + publicar .153 (acceso remoto) ⬜
+### FASE 17 — Verificar + biblia + graphify + publicar .153 (acceso remoto) ✅
 - ⬜ Autodrive/capturas de cada sistema nuevo; tests ambos lados verdes.
 - ⬜ Biblia (§4 filas + nota fechada) + `graphify update`.
 - ⬜ **Publicar con Tailscale:** `node scripts/ship-native-android.mjs --host
