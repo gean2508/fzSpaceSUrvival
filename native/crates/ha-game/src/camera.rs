@@ -40,10 +40,6 @@ pub fn camera_relative_move(mx: f32, mz: f32, _yaw: f32) -> (f32, f32) {
     (mx, mz)
 }
 
-/// Gamepad view-cycle plumbing (no-op in 2D, kept so bindings stay stable).
-#[derive(Resource, Default)]
-pub struct CameraCycleRequest(pub bool);
-
 #[derive(Event)]
 pub struct CameraShakeEvent {
     pub trauma: f32,
@@ -56,8 +52,7 @@ pub struct FollowCameraPlugin;
 
 impl Plugin for FollowCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraCycleRequest>()
-            .init_resource::<CameraTrauma>()
+        app.init_resource::<CameraTrauma>()
             .add_event::<CameraShakeEvent>()
             .add_systems(Startup, spawn_camera)
             .add_systems(Update, (absorb_shake_events, follow_player_camera).chain());

@@ -27,7 +27,6 @@ impl Plugin for UiEditorPlugin {
                     dedupe_menu_buttons,
                     sync_editor_panels.after(dedupe_menu_buttons),
                     editor_button_system,
-                    cam_button_system,
                     creative_topup_system,
                     editor_touch_drag_system,
                     update_editor_overlay.after(sync_editor_panels),
@@ -198,9 +197,6 @@ struct UiEditorLabel;
 #[derive(Component)]
 struct UiMenuButton;
 
-#[derive(Component)]
-struct UiCamButton;
-
 #[derive(Component, Clone, Copy)]
 pub enum UiEditorCommand {
     Menu,
@@ -268,38 +264,6 @@ fn ensure_editor_ui(
             .with_children(|button| {
                 button.spawn((
                     Text::new("MENU"),
-                    TextFont {
-                        font_size: 12.0,
-                        ..default()
-                    },
-                    TextColor(ui_theme::text_primary()),
-                ));
-            });
-
-        // CAM — cycles 1st/3rd person on mobile (no keyboard F5 there).
-        parent
-            .spawn((
-                Button,
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: Val::Px(52.0),
-                    height: Val::Px(26.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BorderColor(ui_theme::button_border(UiButtonTone::Primary)),
-                BackgroundColor(ui_theme::button_bg(
-                    UiButtonTone::Primary,
-                    ui_theme::interaction_state(Interaction::None, false),
-                )),
-                UiCamButton,
-                Name::new("InGameCamButton"),
-            ))
-            .with_children(|button| {
-                button.spawn((
-                    Text::new("CAM"),
                     TextFont {
                         font_size: 12.0,
                         ..default()
@@ -621,26 +585,6 @@ fn creative_topup_system(
     }
 }
 
-/// CAM button → request a camera-perspective cycle (mobile has no F5).
-/// Separate from `editor_button_system` to stay under Bevy's 16-param limit.
-fn cam_button_system(
-    mut request: ResMut<crate::camera::CameraCycleRequest>,
-    mut buttons: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<UiCamButton>),
-    >,
-) {
-    for (interaction, mut bg) in &mut buttons {
-        if *interaction == Interaction::Pressed {
-            request.0 = true;
-        }
-        *bg = BackgroundColor(ui_theme::button_bg(
-            UiButtonTone::Primary,
-            ui_theme::interaction_state(*interaction, false),
-        ));
-    }
-}
-
 fn editor_button_system(
     mut state: ResMut<UiEditorState>,
     mut config: ResMut<UiLayoutConfig>,
@@ -839,22 +783,12 @@ fn update_editor_overlay(
     mut panel: Query<&mut Node, With<UiEditorPanel>>,
     mut settings: Query<&mut Node, (With<SettingsPanel>, Without<UiEditorPanel>)>,
     mut menu_button: Query<&mut Node, (With<UiMenuButton>, Without<UiEditorPanel>, Without<SettingsPanel>)>,
-    mut cam_button: Query<&mut Node, (With<UiCamButton>, Without<UiMenuButton>, Without<UiEditorPanel>, Without<SettingsPanel>)>,
     mut label: Query<&mut Text, With<UiEditorLabel>>,
     mut editor_blocks: ResMut<EditorTouchBlocks>,
 ) {
     let menu_top = layout.insets.top as f32 + 8.0;
     if let Ok(mut node) = menu_button.get_single_mut() {
         apply_top_center(&mut node, &layout, MENU_BUTTON_WIDTH, menu_top);
-    }
-    // CAM sits just right of MENU at the top.
-    if let Ok(mut node) = cam_button.get_single_mut() {
-        node.position_type = PositionType::Absolute;
-        node.top = Val::Px(menu_top);
-        let cam_w = 52.0;
-        let left = (layout.width * 0.5 + MENU_BUTTON_WIDTH * 0.5 + 8.0)
-            .min(layout.width - layout.insets.right as f32 - cam_w - 6.0);
-        node.left = Val::Px(left);
     }
     if let Ok(mut node) = panel.get_single_mut() {
         apply_center(&mut node, &layout, EDITOR_PANEL_W, EDITOR_PANEL_H);

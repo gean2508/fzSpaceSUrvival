@@ -5,7 +5,6 @@ pub(crate) mod gamepad;
 mod joystick;
 mod layout;
 mod look_interact;
-mod look_zone_ui;
 
 pub use calibration::{
     apply_stick_curve_vec, adaptive_deadzone_norm, apply_stick_deadzone, InputCalibration,

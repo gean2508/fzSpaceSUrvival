@@ -6,7 +6,7 @@
 //!   right stick → camera look
 //!   South (A)   → jump / retro     RT → ACTION hold (thrust / break / gather)
 //!   LT          → place / eat hold (desktop right-mouse twin) + sprint (retro)
-//!   North (Y)   → cycle 1st/3rd cam     Start → orbital map menu
+//!   Start       → orbital map menu
 //!   East (B)    → close panels     D-pad ↑ → bag   D-pad ←/→ → hotbar slot
 //!
 //! Priority: touch stick (if active) > gamepad (if deflected) > keyboard.
@@ -15,7 +15,7 @@ use bevy::prelude::*;
 
 use super::actions::{self, TouchActions};
 use super::joystick::{CameraLookIntent, RawMovementIntent};
-use crate::camera::{CameraCycleRequest, FP_MAX_PITCH, FP_MIN_PITCH};
+use crate::camera::{FP_MAX_PITCH, FP_MIN_PITCH};
 use crate::game_ui::UiGameplayBlock;
 use crate::ui_editor::UiEditorState;
 
@@ -54,7 +54,6 @@ pub(super) fn gamepad_input(
     mut look: ResMut<CameraLookIntent>,
     mut actions: ResMut<TouchActions>,
     mut buffer: ResMut<actions::ActionInputBuffer>,
-    mut cam_cycle: ResMut<CameraCycleRequest>,
 ) {
     let Some(pad) = pads.iter().next() else {
         active.0 = false;
@@ -113,11 +112,6 @@ pub(super) fn gamepad_input(
     if pad.just_pressed(GamepadButton::RightTrigger2) {
         actions.use_edge = true;
         buffer.tap_use();
-    }
-
-    // North (Y) — cycle 1st/3rd person, same request the CAM button raises.
-    if pad.just_pressed(GamepadButton::North) {
-        cam_cycle.0 = true;
     }
 }
 

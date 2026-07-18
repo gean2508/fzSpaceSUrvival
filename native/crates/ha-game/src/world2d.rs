@@ -283,7 +283,12 @@ impl Plugin for World2dPlugin {
             .init_resource::<ChunkMaterial>()
             .add_systems(
                 Startup,
-                (load_tiles_on_startup, init_chunk_material, spawn_cursor_highlight),
+                (
+                    load_tiles_on_startup,
+                    init_chunk_material,
+                    spawn_cursor_highlight,
+                    spawn_pointer_reticle,
+                ),
             )
             .add_systems(
                 Update,
@@ -294,6 +299,7 @@ impl Plugin for World2dPlugin {
                     stream_tile_chunks,
                     rebuild_dirty_chunks,
                     sync_cursor_highlight,
+                    sync_pointer_reticle,
                     debounced_tiles_save,
                 ),
             );
@@ -353,6 +359,69 @@ fn sync_cursor_highlight(
     let tz = cursor.world.y.floor();
     let r = render_xy(tx + 0.5, tz + 0.5);
     tf.translation = Vec3::new(r.x, r.y, 6.0);
+}
+
+/// Free-moving pointer reticle: a small cross drawn at the EXACT aim-cursor
+/// world position — never snapped to the grid. This is the "where is my
+/// pointer" marker the right stick drives; the yellow brackets above merely
+/// highlight whichever cell the pointer currently sits on (Terraria-style).
+#[derive(Component)]
+struct PointerReticle;
+
+#[derive(Component)]
+struct PointerReticleBar;
+
+fn spawn_pointer_reticle(mut commands: Commands) {
+    let color = crate::ui_theme::crosshair_color(false);
+    let arm = 0.34;
+    let thick = 0.07;
+    commands
+        .spawn((
+            PointerReticle,
+            Transform::from_xyz(0.0, 0.0, 6.5),
+            Visibility::Hidden,
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+        ))
+        .with_children(|p| {
+            // Horizontal + vertical bars form the cross.
+            p.spawn((
+                Sprite::from_color(color, Vec2::new(arm, thick)),
+                Transform::default(),
+                PointerReticleBar,
+            ));
+            p.spawn((
+                Sprite::from_color(color, Vec2::new(thick, arm)),
+                Transform::default(),
+                PointerReticleBar,
+            ));
+        });
+}
+
+fn sync_pointer_reticle(
+    cursor: Res<crate::input::AimCursor>,
+    region: Res<RegionRuntime>,
+    target: Res<crate::targeting::LookTarget>,
+    mut reticle: Query<(&mut Transform, &mut Visibility), With<PointerReticle>>,
+    mut bars: Query<&mut Sprite, With<PointerReticleBar>>,
+) {
+    let Ok((mut tf, mut vis)) = reticle.get_single_mut() else {
+        return;
+    };
+    if surface_region_active(&region).is_none() || !cursor.initialized {
+        *vis = Visibility::Hidden;
+        return;
+    }
+    *vis = Visibility::Visible;
+    // Exactly where the cursor is — free, no grid snap.
+    let r = render_xy(cursor.world.x, cursor.world.y);
+    tf.translation = Vec3::new(r.x, r.y, 6.5);
+
+    // Brighten when the pointer is over an interactable, like the old reticle.
+    let color = crate::ui_theme::crosshair_color(target.entity.is_some());
+    for mut sprite in &mut bars {
+        sprite.color = color;
+    }
 }
 
 fn init_chunk_material(

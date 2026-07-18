@@ -2,7 +2,6 @@ use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::prelude::*;
 use super::actions::{self, TouchActions};
 use super::layout::{self, TouchLayout, TouchBlockRects};
-use super::look_zone_ui;
 #[cfg(not(target_os = "android"))]
 use super::desktop_input;
 use crate::camera::{camera_relative_move, look_forward_flat, FP_MAX_PITCH, FP_MIN_PITCH};
@@ -110,7 +109,6 @@ impl Plugin for InputPlugin {
             .init_resource::<actions::ActionButtonRects>()
             .init_resource::<actions::ActionTouchState>()
             .init_resource::<actions::ActionButtonsSpawned>()
-            .init_resource::<look_zone_ui::FpCrosshairSpawned>()
             .add_systems(Startup, (spawn_joystick_ui, actions::spawn_action_ui));
         #[cfg(not(target_os = "android"))]
         app.init_resource::<desktop_input::DesktopMouseCapture>()
@@ -131,10 +129,7 @@ impl Plugin for InputPlugin {
             Update,
             (
                     layout::sync_touch_layout,
-                    look_zone_ui::ensure_fp_crosshair.after(crate::game_ui::sync_game_ui_root),
-                    look_zone_ui::sync_fp_crosshair,
                     sync_stick_anchors,
-                    look_zone_ui::update_fp_crosshair,
                     actions::ensure_action_buttons,
                     actions::layout_action_buttons,
                     actions::poll_action_buttons_held,

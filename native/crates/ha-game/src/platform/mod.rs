@@ -75,6 +75,44 @@ impl Plugin for PlatformPlugin {
     }
 }
 
+/// Backgrounded (`onPause`/`onStop`): freeze the sim clock AND idle the winit
+/// loop so we stop redrawing at 60 FPS. Persistence already flushes on the
+/// pause edge (see `*_persist.rs`), so a swipe-kill keeps its state.
+#[cfg(target_os = "android")]
+fn sync_lifecycle_pause(
+    mut time: ResMut<Time<Virtual>>,
+    mut winit: ResMut<bevy::winit::WinitSettings>,
+    mut last_paused: Local<Option<bool>>,
+) {
+    let paused = is_app_paused();
+    if paused {
+        if !time.is_paused() {
+            time.pause();
+        }
+    } else if time.is_paused() {
+        time.unpause();
+    }
+
+    // Only rewrite WinitSettings on the pause/resume edge.
+    if *last_paused != Some(paused) {
+        *last_paused = Some(paused);
+        *winit = if paused {
+            // Park the loop: wake only on a window/user event (a resume), not
+            // on a fixed timer — effectively zero draws while backgrounded.
+            let idle = bevy::winit::UpdateMode::reactive_low_power(
+                std::time::Duration::from_secs(3600),
+            );
+            bevy::winit::WinitSettings {
+                focused_mode: idle,
+                unfocused_mode: idle,
+            }
+        } else {
+            bevy::winit::WinitSettings::mobile()
+        };
+    }
+}
+
+#[cfg(not(target_os = "android"))]
 fn sync_lifecycle_pause(mut time: ResMut<Time<Virtual>>) {
     if is_app_paused() {
         if !time.is_paused() {

@@ -273,10 +273,13 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 Preparación para el futuro sistema de construcción (mezcla con máquinas). Detalle
 por fase en `MIGRATION_PLAN.md` (Fases 8-11, todas ✅ y verificadas con capturas).
 
-- **Twin-stick (Fase 8):** stick IZQUIERDO = mover, DERECHO = mira libre. La cruz
-  ahora es un `AimCursor` (world x,z) que el stick integra por velocidad y se
+- **Twin-stick (Fase 8):** stick IZQUIERDO = mover, DERECHO = mira libre. El
+  cursor es un `AimCursor` (world x,z) que el stick integra por velocidad y se
   clampa a `AIM_MAX_REACH` del jugador (`input/joystick.rs`). En desktop la mueve
   el mouse (`desktop_aim_cursor`). El targeting lee el cursor (entidad + celda).
+  El **retículo visible** (cruz) sigue al cursor libre en el mundo
+  (`world2d.rs::PointerReticle`, sin snap) — ver §13-sexies. La vieja cruz fija en
+  el centro (`look_zone_ui.rs`, legado FP) fue eliminada.
 - **Resalte de celda (Fase 8):** `CursorHighlight` en `world2d.rs` — corchetes
   amarillos en las esquinas de la celda bajo la mira. **Es la base del sistema de
   construcción** (feedback de "acá va a caer la pieza").
@@ -316,6 +319,33 @@ conecta al server desde fuera de la LAN sin exponer puertos.
   ghost verde/rojo en la celda apuntada (base = `CursorHighlight`), colocar con
   USE cobrando recursos. Quitar = cavar (dug_item refunda). El martillo fuera de
   build sigue colocando máquinas. Verificado: autodrive "build PASS".
+
+### §13-sexies — Batería en background, puntero libre, limpieza de cámara (18 jul 2026)
+
+Tres pedidos del usuario, aplicados sobre `rewrite-2d`:
+
+- **Batería al minimizar/cerrar:** el cliente nativo no tiene hilos, audio ni red
+  (verificado), y la persistencia YA hace flush en el flanco de pausa
+  (`*_persist.rs`, patrón `was_paused` / `is_app_paused()`), así que un cierre por
+  deslizamiento conserva el estado. Lo único que faltaba era frenar el render.
+  `platform/mod.rs::sync_lifecycle_pause` ahora, **solo en Android**, además de
+  pausar `Time<Virtual>`, reescribe `WinitSettings` en el flanco pausa/reanuda:
+  al pausar → `reactive_low_power(3600 s)` (el loop se estaciona y despierta solo
+  con un evento de ventana/usuario, o sea la reanudación); al reanudar →
+  `WinitSettings::mobile()`. Efecto: ~0 draws en segundo plano.
+- **Puntero libre (estilo Terraria):** se eliminó la **cruz fija en el centro**
+  (legado FP — `input/look_zone_ui.rs` borrado, junto con `FpCrosshair*`). El
+  puntero es ahora un retículo **en el mundo** que sigue EXACTAMENTE a `AimCursor`
+  (`world2d.rs::PointerReticle` + `sync_pointer_reticle`, sin snap a la grilla),
+  y se ilumina cuando hay `LookTarget`. Los corchetes amarillos (`CursorHighlight`)
+  siguen **resaltando la celda** apuntada (snap), que es lo correcto. El stick
+  derecho mueve el cursor libremente; la grilla solo se resalta y activa funciones.
+- **Cámara 1ª/3ª eliminada:** en 2D no hay perspectivas. Se quitó el botón `CAM`
+  (`ui_editor.rs`: `UiCamButton`, `cam_button_system`, spawn y layout), el recurso
+  muerto `CameraCycleRequest` (`camera.rs`) y el ciclo del botón North del gamepad
+  (`input/gamepad.rs`). **Se conserva** el botón "REMOTE CAM" del panel de
+  telemetría (tecla T): es monitoreo remoto de bases (feature futura, dormida), no
+  1ª/3ª persona.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 
