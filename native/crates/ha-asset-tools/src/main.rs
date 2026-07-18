@@ -13,11 +13,14 @@ use std::process::ExitCode;
 
 use ha_assets::{generate_catalog, scan_limezu_directory, Manifest, ScanOptions};
 
+mod gui;
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("scan") => cmd_scan(&args[1..]),
         Some("catalog") => cmd_catalog(&args[1..]),
+        Some("gui") => gui::run_gui(),
         Some("-h") | Some("--help") | None => {
             print_usage();
             ExitCode::SUCCESS
@@ -35,7 +38,8 @@ fn print_usage() {
         "ha-asset-tools — sistema de assets\n\n\
          COMANDOS:\n\
          \x20 scan --root <dir> --out <manifest.ron> [--prefix P] [--grid 16] [--max N] [--merge]\n\
-         \x20 catalog --manifest <manifest.ron> --out <CATALOGO.md>\n\n\
+         \x20 catalog --manifest <manifest.ron> --out <CATALOGO.md>\n\
+         \x20 gui       # editor visual standalone (dev; necesita display)\n\n\
          \x20   --root    directorio LimeZu a barrer (recursivo)\n\
          \x20   --out     archivo a escribir\n\
          \x20   --prefix  categoría para los IDs (def: art)\n\
