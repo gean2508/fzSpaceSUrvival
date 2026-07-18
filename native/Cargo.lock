@@ -2531,6 +2531,7 @@ dependencies = [
  "image",
  "ron",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2538,6 +2539,7 @@ name = "ha-game"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "ha-assets",
  "ha-shared",
  "raw-window-handle",
  "serde",

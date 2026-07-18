@@ -14,28 +14,29 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use serde::Deserialize;
 
 use crate::hud::item_icons::ItemIconCache;
+use ha_assets::{ArtAnim, ArtManifest};
 
 const MANIFEST: &str = include_str!("../assets/art/manifest.json");
-
-#[derive(Deserialize, Default)]
-struct ArtManifest {
-    #[serde(default)]
-    sprites: HashMap<String, String>,
-}
 
 /// Loaded drop-in sprites by logical key. Empty until the player ships art.
 #[derive(Resource, Default)]
 pub struct ArtLibrary {
     sprites: HashMap<String, Handle<Image>>,
+    /// Animation metadata for keys whose PNG is a frame-strip (agua, personajes).
+    anims: HashMap<String, ArtAnim>,
 }
 
 impl ArtLibrary {
     /// Sprite for a logical key ("decor/tree") if the pack ships one.
     pub fn get(&self, key: &str) -> Option<Handle<Image>> {
         self.sprites.get(key).cloned()
+    }
+
+    /// Animation for a key if its PNG is a frame-strip.
+    pub fn anim(&self, key: &str) -> Option<ArtAnim> {
+        self.anims.get(key).copied()
     }
 
     /// First key that exists from a fallback chain (most→least specific,
@@ -69,18 +70,27 @@ impl Plugin for Art2dPlugin {
 }
 
 fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>) {
-    let manifest: ArtManifest = match serde_json::from_str(MANIFEST) {
+    // Formato del editor (ha-asset-tools): compatible con el viejo `{"key":"png"}`
+    // y con el nuevo `{"key":{"png":"...","anim":{...}}}`.
+    let manifest = match ArtManifest::from_json(MANIFEST) {
         Ok(m) => m,
         Err(err) => {
             eprintln!("ha-art: manifest.json unreadable ({err}) — procedural art only");
             return;
         }
     };
-    for (key, path) in manifest.sprites {
-        art.sprites.insert(key, asset_server.load(path));
+    for (key, value) in manifest.sprites {
+        art.sprites.insert(key.clone(), asset_server.load(value.png().to_string()));
+        if let Some(anim) = value.anim() {
+            art.anims.insert(key, anim);
+        }
     }
     if !art.sprites.is_empty() {
-        eprintln!("ha-art: {} drop-in sprites loaded", art.sprites.len());
+        eprintln!(
+            "ha-art: {} drop-in sprites loaded ({} animados)",
+            art.sprites.len(),
+            art.anims.len()
+        );
     }
 }
 
