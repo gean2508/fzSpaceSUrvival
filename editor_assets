@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# editor_assets — lanzador del editor de assets (programa de DEV, corre aparte
+# del juego). Envuelve `ha-asset-tools` para que no tengas que recordar rutas.
+#
+#   ./editor_assets                       abre el editor visual (GUI)
+#   ./editor_assets scan <carpeta> [pref] escanea un pack LimeZu → manifest.ron
+#   ./editor_assets catalog               regenera CATALOGO.md desde el manifest
+#   ./editor_assets help                  esta ayuda
+#
+# Rutas por defecto (relativas a native/):
+#   manifest → native/assets/manifest.ron
+#   catálogo → native/assets/CATALOGO.md
+set -euo pipefail
+
+# Raíz del repo = carpeta de este script; el crate vive en native/.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF="$ROOT/$(basename "${BASH_SOURCE[0]}")"
+NATIVE="$ROOT/native"
+MANIFEST="assets/manifest.ron"   # relativo a native/
+CATALOGO="assets/CATALOGO.md"
+GRID=32                          # el juego es 32×32
+
+cd "$NATIVE"
+mkdir -p assets
+
+build() {
+  echo "▶ compilando ha-asset-tools (primera vez tarda por egui)…" >&2
+  cargo build -q -p ha-asset-tools
+}
+
+run() { ./target/debug/ha-asset-tools "$@"; }
+
+cmd="${1:-gui}"
+case "$cmd" in
+  gui|"")
+    build
+    echo "▶ abriendo editor… (en la barra: poné la carpeta de arte → Escanear;" >&2
+    echo "  el manifest por defecto es native/$MANIFEST)" >&2
+    run gui
+    ;;
+
+  scan)
+    src="${2:-}"
+    prefix="${3:-art}"
+    if [[ -z "$src" ]]; then
+      echo "uso: ./editor_assets scan <carpeta-de-arte> [prefijo]" >&2
+      echo "ej:  ./editor_assets scan PRUEBAS-CODIGOS/moderninteriors-win/1_Interiors/32x32 interiores" >&2
+      exit 2
+    fi
+    # Permite pasar la carpeta relativa a la raíz del repo (más natural).
+    [[ -d "$src" ]] || src="$ROOT/$src"
+    build
+    merge=""
+    [[ -f "$MANIFEST" ]] && merge="--merge"   # respeta lo ya curado
+    run scan --root "$src" --out "$MANIFEST" --prefix "$prefix" --grid "$GRID" $merge
+    echo "▶ regenerando catálogo…" >&2
+    run catalog --manifest "$MANIFEST" --out "$CATALOGO"
+    echo "✓ listo. Editá con: ./editor_assets" >&2
+    ;;
+
+  catalog)
+    build
+    run catalog --manifest "$MANIFEST" --out "$CATALOGO"
+    ;;
+
+  help|-h|--help)
+    sed -n '2,14p' "$SELF" | sed 's/^# \{0,1\}//'
+    ;;
+
+  *)
+    echo "comando desconocido: $cmd (probá: ./editor_assets help)" >&2
+    exit 2
+    ;;
+esac

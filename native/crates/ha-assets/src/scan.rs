@@ -84,22 +84,31 @@ pub fn scan_limezu_directory(
         let sheet_id = format!("sheet/{rel}");
         let asset_id = make_id(&opts.id_prefix, &path, opts.grid);
 
+        // Dos archivos pueden sanear al mismo ID lógico → el primero gana, el
+        // resto se cuenta como saltado (no como añadido).
+        if manifest.assets.contains_key(&asset_id) {
+            report.skipped += 1;
+            continue;
+        }
         manifest
             .sheets
             .entry(sheet_id.clone())
             .or_insert(Sheet { path: rel.clone(), grid: opts.grid, columns: fw });
-        manifest.assets.entry(asset_id).or_insert(Asset {
-            sheet: sheet_id,
-            footprint: Footprint { w: fw, h: fh },
-            rect: Rect::Px { x: 0, y: 0, w, h },
-            pivot: Pivot::Anchor(AnchorKind::BottomCenter),
-            ppu: gw,
-            ysort: YSort::Row(fh.saturating_sub(1)),
-            hitbox: None::<Hitbox>,
-            anim: None::<Anim>,
-            flags: Flags::default(),
-            tags: derive_tags(&opts.id_prefix, &path),
-        });
+        manifest.assets.insert(
+            asset_id,
+            Asset {
+                sheet: sheet_id,
+                footprint: Footprint { w: fw, h: fh },
+                rect: Rect::Px { x: 0, y: 0, w, h },
+                pivot: Pivot::Anchor(AnchorKind::BottomCenter),
+                ppu: gw,
+                ysort: YSort::Row(fh.saturating_sub(1)),
+                hitbox: None::<Hitbox>,
+                anim: None::<Anim>,
+                flags: Flags::default(),
+                tags: derive_tags(&opts.id_prefix, &path),
+            },
+        );
         report.added += 1;
     }
 

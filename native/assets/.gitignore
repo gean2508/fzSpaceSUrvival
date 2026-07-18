@@ -1,0 +1,7 @@
+# Artefactos del editor de assets (ha-asset-tools / ./editor_assets).
+# CATALOGO.md siempre se regenera desde manifest.ron → nunca versionar.
+CATALOGO.md
+# manifest.ron es la fuente de verdad, pero mientras se cura es un volcado
+# enorme (miles de assets sin etiquetar). Cuando quede curado y listo:
+#   git add -f native/assets/manifest.ron
+manifest.ron
