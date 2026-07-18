@@ -9,7 +9,13 @@
 
 pub mod manifest;
 
+#[cfg(feature = "scan")]
+pub mod scan;
+
 pub use manifest::{
     AnchorKind, Anim, AnimLayout, Asset, Brush, Flags, Footprint, Hitbox, Manifest, ManifestError,
     Pivot, Rect, Sheet, Source, YSort, CURRENT_MANIFEST_VERSION,
 };
+
+#[cfg(feature = "scan")]
+pub use scan::{scan_limezu_directory, ScanOptions, ScanReport};

@@ -1,0 +1,15 @@
+[package]
+name = "ha-asset-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Herramientas de dev (F2 scan; F3 egui más adelante). Nunca entra al APK: el
+# build de release apunta a ha-game, no al workspace entero.
+[[bin]]
+name = "ha-asset-tools"
+path = "src/main.rs"
+
+[dependencies]
+ha-assets = { path = "../ha-assets", features = ["scan"] }

@@ -157,7 +157,7 @@ pub enum AnimLayout {
 
 /// Flags de gameplay/render. Se extiende sin romper (serde ignora campos nuevos
 /// con default en el futuro; por ahora todos explícitos).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Flags {
     pub solid: bool,
     pub harvestable: bool,
