@@ -121,7 +121,8 @@ Validar: `npm run validate:arch`.
 | **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
 | **Cámara 2D** (follow + zoom continuo superficie↔órbita, shake) | `ha-game/camera.rs` |
 | **Targeting 2D** (mira libre `AimCursor` movida por el stick derecho/mouse; tiles block_cell/place_cell; resalte de celda `CursorHighlight`) | `ha-game/targeting.rs`, `input/joystick.rs` (`AimCursor`, `AIM_MAX_REACH`), `input/desktop_input.rs` (`desktop_aim_cursor`), `world2d.rs` (`CursorHighlight`), `input/look_interact.rs` (USE→hold) |
-| **Mapa del sistema / menú unificado** (MENU fullscreen: minimapa DINÁMICO — terreno top-down en superficie, orbital en espacio — + TODOS los controles en un solo panel: viaje TIERRA/LUNA/ESPACIO, CREATIVO/PERF, editor UI, calibración) | `ha-game/game_menu.rs` (`OrbitalLayer`/`TerrainLayer`, `update_terrain_minimap`), `ui_editor.rs` |
+| **Mapa del sistema / menú unificado** (MENU fullscreen: minimapa DINÁMICO — terreno top-down en superficie, orbital en espacio — + panel LIMPIO: viaje TIERRA/LUNA/ESPACIO, CREATIVO/PERF, EDITAR UI, AJUSTES; los selectores del editor viven en `EditToolbar`, visible solo en modo edición) | `ha-game/game_menu.rs` (`OrbitalLayer`/`TerrainLayer`, `update_terrain_minimap`, `EditToolbar`), `ui_editor.rs` |
+| **Construcción 2D** (modo build: paleta de piezas, ghost preview en la celda apuntada, colocar con USE cobrando recursos; quitar = cavar la pieza) | catálogo `ha-shared/topdown.rs` (`BUILD_PIECES`, tiles WoodWall/StoneBrick/Door), `ha-game/build.rs` (`BuildPlugin`, `SelectedBuildPiece`, `apply_build_hold`, ghost); `targeting.rs` set `place_cell` en build mode |
 | **Navegación/sondas** (mapear cuerpos, gate de autopilot) | `ha-game/nav_computer.rs`, `ha-shared/nav_data.rs` |
 | **Máquinas + inventario** (sprites por ícono procedural, por-cuerpo, banking off-body) | `ha-game/machines.rs`, `inventory_persist.rs`; sim `packages/shared/src/sim/machines.ts` |
 | **Survival stats** (hambre/sed/O₂, comer, respawn amable) | sim `packages/shared/src/sim/survivalStats.ts` → espejo `ha-shared/survival.rs`; cliente `ha-game/survival_stats.rs`, barras `hud/survival_bars.rs` (ver §12) |
@@ -292,6 +293,29 @@ por fase en `MIGRATION_PLAN.md` (Fases 8-11, todas ✅ y verificadas con captura
   superficie = minimapa top-down del terreno (grilla 24×24 muestreando tiles en
   tiempo real, título = nombre del cuerpo, marcador del jugador); espacio = vista
   orbital de siempre. `OrbitalLayer`/`TerrainLayer` + `update_terrain_minimap`.
+
+### §13-quinquies — Construcción + correcciones de UI (17 jul 2026, 2ª ola)
+
+Detalle por fase en `MIGRATION_PLAN.md` (Fases 13-17, todas ✅). Publicado en
+v1.0.153. **Acceso remoto:** APK buildeado con la IP Tailscale (`--host
+100.83.97.54`) — el Redmi ya está en la tailnet, así que con Tailscale ON
+conecta al server desde fuera de la LAN sin exponer puertos.
+
+- **Menú limpio (F13):** los selectores del editor (MOVER/USE/JUMP) confundían
+  en el menú (parecen controles del jugador). Ahora el menú principal deja solo
+  funciones de menú; los selectores pasan a `EditToolbar`, visible solo en
+  "EDITAR UI".
+- **Hotbar táctil (F14):** bug — el hotbar (abajo-centro) solapa las zonas de
+  los joysticks y los sticks robaban el tap (el ítem nunca se equipaba). Fix de
+  ORDEN: `touch_move_stick`/`touch_look_stick` corren `.after(
+  hud::append_hud_touch_blocks)`, así `TouchBlockRects` ya tiene el rect del
+  hotbar antes de que los sticks decidan. Regla: **la UI táctil sensible debe ir
+  arriba-izquierda (fuera de zonas de stick) o registrarse en TouchBlockRects.**
+- **Construcción (F15-16):** catálogo `BUILD_PIECES` (Piso/Muro madera/Muro
+  piedra/Puerta) + tiles nuevas; modo build (toggle CONSTRUIR / tecla B), paleta,
+  ghost verde/rojo en la celda apuntada (base = `CursorHighlight`), colocar con
+  USE cobrando recursos. Quitar = cavar (dug_item refunda). El martillo fuera de
+  build sigue colocando máquinas. Verificado: autodrive "build PASS".
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

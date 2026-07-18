@@ -32,9 +32,12 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
 > completo (mezcla con máquinas; base = `CursorHighlight`). (4) Acceso remoto:
 > buildear el APK con la IP Tailscale (Redmi ya en la tailnet).
 > Proceso: plan → implementar todo → biblia+graphify → publicar APK.
-> **CHECKPOINT 2ª OLA: escribiendo plan (Fases 13-17). Nada implementado aún.**
+> **CHECKPOINT 2ª OLA: Fases 13-16 COMPLETAS y verificadas (menú limpio, hotbar
+> táctil arreglada, catálogo de construcción, modo build + paleta + ghost +
+> colocar/quitar; autodrive "build PASS"). Fase 17 (publicar .153 con Tailscale)
+> en curso. Tests: shared 101 + native 92 verdes.**
 
-### FASE 13 — Menú limpio (controles de jugador/editor fuera del menú) ⬜
+### FASE 13 — Menú limpio (controles de jugador/editor fuera del menú) ✅
 - ⬜ El menú principal deja SOLO funciones de menú: mapa, viaje (TIERRA/LUNA/
   ESPACIO), CREATIVO/PERF, EDITAR UI, AJUSTES, CERRAR, colonos.
 - ⬜ Los selectores del editor (MOVER/USE/JUMP = qué control reposicionar, escala
@@ -42,7 +45,7 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
   "EDITAR UI" (barra de edición contextual sobre el menú see-through). Relabel
   para que no se confundan con los botones de gameplay (p. ej. "◧ Stick/Usar/Saltar").
 
-### FASE 14 — Hotbar + inventario: selección → en mano → uso ⬜
+### FASE 14 — Hotbar + inventario: selección → en mano → uso ✅
 - ⬜ Verificar/arreglar: tocar/clic un slot de hotbar lo SELECCIONA + equipa
   (`select_hotbar_slot` → `EquippedItem`), con resalte visible del slot activo.
 - ⬜ El ítem en mano dispara su función correcta: herramienta (mina/tala), bloque
@@ -50,14 +53,14 @@ Estados: ⬜ Pendiente · 🟨 En progreso · ✅ Completado
   camino real (autodrive/capturas) y corregir cualquier desconexión.
 - ⬜ Selección persiste entre frames (no la pisa `equip_from_hotbar_selection`).
 
-### FASE 15 — Construcción: catálogo de piezas + costos (`ha-shared`) ⬜
+### FASE 15 — Construcción: catálogo de piezas + costos (`ha-shared`) ✅
 - ⬜ `topdown.rs`/nuevo `build.rs` en ha-shared: piezas de construcción
   deterministas con costo (madera/piedra), tile que colocan y categoría. Reusar
   `Tile::WoodFloor`/`Wall`; agregar las que falten (p. ej. `WoodWall`,
   `StoneBrick`, `Door` caminable, `Fence`) actualizando `solid()`/`dug_item()`/
   `color()`. Espejo TS si aplica + `UPDATE_CATALOG_PARITY=1 npm test`.
 
-### FASE 16 — Construcción: modo build + paleta + ghost + colocar/quitar (`ha-game`) ⬜
+### FASE 16 — Construcción: modo build + paleta + ghost + colocar/quitar (`ha-game`) ✅
 - ⬜ Encender el scaffold muerto: `BuildModeActive.active` se togglea (botón BUILD
   en hotbar/HUD). En modo build el martillo coloca la PIEZA seleccionada (no
   máquina).
