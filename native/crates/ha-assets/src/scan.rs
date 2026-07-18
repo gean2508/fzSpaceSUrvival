@@ -16,7 +16,7 @@ use crate::manifest::{
 
 /// Opciones del escaneo.
 pub struct ScanOptions {
-    /// Tamaño de celda en píxeles (LimeZu = 16×16).
+    /// Tamaño de celda en píxeles. El juego es 32×32 (packs LimeZu 32x32).
     pub grid: (u32, u32),
     /// Prefijo de categoría para los IDs generados (`"exteriors"`, `"muebles"`…).
     pub id_prefix: String,
@@ -26,7 +26,7 @@ pub struct ScanOptions {
 
 impl Default for ScanOptions {
     fn default() -> Self {
-        Self { grid: (16, 16), id_prefix: "art".to_string(), max_files: None }
+        Self { grid: (32, 32), id_prefix: "art".to_string(), max_files: None }
     }
 }
 
@@ -206,7 +206,9 @@ mod tests {
         write_png(&sub.join("Condo_16x16_Roof.png"), 48, 112); // 3×7
         std::fs::write(sub.join("desktop.ini"), b"noise").unwrap(); // ignorado
 
-        let opts = ScanOptions { id_prefix: "exteriors".into(), ..Default::default() };
+        // Grid fijado en 16 para este caso (dims múltiplos de 16) — testea la
+        // mecánica footprint = dims / grid con independencia del default (32).
+        let opts = ScanOptions { grid: (16, 16), id_prefix: "exteriors".into(), max_files: None };
         let (m, report) = scan_limezu_directory(&dir, None, &opts);
 
         assert_eq!(report.scanned, 2, "dos PNGs válidos");

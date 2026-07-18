@@ -139,7 +139,7 @@ impl EditBuf {
 impl EditorApp {
     fn new() -> Self {
         EditorApp {
-            grid: 16,
+            grid: 32,
             prefix: "art".to_string(),
             manifest_path: "assets/manifest.ron".to_string(),
             catalog_path: "assets/CATALOGO.md".to_string(),

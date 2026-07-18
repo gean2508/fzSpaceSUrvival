@@ -5,7 +5,7 @@ rects, pivotes) de su *uso* en código. La IA nunca toca coordenadas de PNG: ref
 lógicos estables (`"flora/arbol_roble"`). La verdad vive en `manifest.ron`; el código Rust
 sólo conoce IDs; `CATALOGO.md` es el índice legible por humanos y por Claude.
 
-Target: Bevy 0.15 ECS puro, 2D top-down 3/4, assets LimeZu Modern (grid 16×16). Crate nuevo
+Target: Bevy 0.15 ECS puro, 2D top-down 3/4, assets LimeZu Modern (grid 32×32). Crate nuevo
 `ha-assets` (runtime) + bin `ha-asset-tools` (CLI/egui, feature `dev-tools`).
 
 ---
@@ -43,7 +43,7 @@ ceremoniales. Un solo archivo raíz; `sources` define el stack base→mods (F6).
 ```ron
 Manifest(
     manifest_version: u32,          // bump = migración; el loader rechaza versiones futuras
-    ppu: u32,                       // pixels-per-unit por defecto (16 = grid LimeZu)
+    ppu: u32,                       // pixels-per-unit por defecto (32 = grid del juego, packs LimeZu 32x32)
     sources: [ Source ],            // orden de prioridad para overlays (F6)
     sheets: { String: Sheet },      // hojas de sprites reutilizables
     assets: { String: Asset },      // ID lógico -> definición (la clave ES el AssetId)
@@ -80,7 +80,7 @@ Flags( solid: bool, harvestable: bool, billboard: bool )
 ```ron
 Manifest(
     manifest_version: 1,
-    ppu: 16,
+    ppu: 32,
     sources: [
         Source( id: "base", root: "assets/art/",  priority: 0 ),
         Source( id: "mods", root: "assets/mods/", priority: 100 ),
@@ -88,11 +88,11 @@ Manifest(
     sheets: {
         "limezu/exteriors_01": Sheet(
             path: "LimeZu/ModernExteriors/exteriors_01.png",
-            grid: (16, 16), columns: 64,
+            grid: (32, 32), columns: 64,
         ),
         "limezu/interiors_04": Sheet(
             path: "LimeZu/ModernInteriors/interiors_04.png",
-            grid: (16, 16), columns: 64,
+            grid: (32, 32), columns: 64,
         ),
     },
     assets: {
@@ -101,7 +101,7 @@ Manifest(
             footprint: Footprint( w: 3, h: 4 ),        // 3×4 celdas = 48×64 px
             rect:  Cells( col: 12, row: 8, w: 3, h: 4 ),
             pivot: Anchor(BottomCenter),               // los pies (base del tronco)
-            ppu: 16,
+            ppu: 32,
             ysort: Row(3),                             // ordena por la fila del tronco
             hitbox: Some(Aabb( x: 1.0, y: 0.0, w: 1.0, h: 0.5 )),
             anim: None,
@@ -113,7 +113,7 @@ Manifest(
             footprint: Footprint( w: 2, h: 3 ),
             rect:  Cells( col: 4, row: 20, w: 2, h: 3 ),
             pivot: Anchor(BottomCenter),
-            ppu: 16,
+            ppu: 32,
             ysort: Row(3),
             hitbox: Some(Aabb( x: 0.0, y: 0.0, w: 2.0, h: 1.0 )),
             anim: None,

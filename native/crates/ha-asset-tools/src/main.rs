@@ -37,13 +37,13 @@ fn print_usage() {
     eprintln!(
         "ha-asset-tools — sistema de assets\n\n\
          COMANDOS:\n\
-         \x20 scan --root <dir> --out <manifest.ron> [--prefix P] [--grid 16] [--max N] [--merge]\n\
+         \x20 scan --root <dir> --out <manifest.ron> [--prefix P] [--grid 32] [--max N] [--merge]\n\
          \x20 catalog --manifest <manifest.ron> --out <CATALOGO.md>\n\
          \x20 gui       # editor visual standalone (dev; necesita display)\n\n\
          \x20   --root    directorio LimeZu a barrer (recursivo)\n\
          \x20   --out     archivo a escribir\n\
          \x20   --prefix  categoría para los IDs (def: art)\n\
-         \x20   --grid    tamaño de celda px (def: 16)\n\
+         \x20   --grid    tamaño de celda px (def: 32)\n\
          \x20   --max     corta tras N archivos (prueba)\n\
          \x20   --merge   funde sobre el --out existente (respeta IDs curados)\n\
          \x20   --manifest  manifest.ron de entrada (catalog)"
@@ -85,7 +85,7 @@ fn cmd_scan(args: &[String]) -> ExitCode {
     let mut root: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
     let mut prefix = "art".to_string();
-    let mut grid: u32 = 16;
+    let mut grid: u32 = 32;
     let mut max: Option<usize> = None;
     let mut merge = false;
 
@@ -95,7 +95,7 @@ fn cmd_scan(args: &[String]) -> ExitCode {
             "--root" => { root = args.get(i + 1).map(PathBuf::from); i += 2; }
             "--out" => { out = args.get(i + 1).map(PathBuf::from); i += 2; }
             "--prefix" => { prefix = arg_or_bail(args.get(i + 1), "--prefix"); i += 2; }
-            "--grid" => { grid = arg_or_bail(args.get(i + 1), "--grid").parse().unwrap_or(16); i += 2; }
+            "--grid" => { grid = arg_or_bail(args.get(i + 1), "--grid").parse().unwrap_or(32); i += 2; }
             "--max" => { max = args.get(i + 1).and_then(|s| s.parse().ok()); i += 2; }
             "--merge" => { merge = true; i += 1; }
             other => { eprintln!("flag desconocida: {other}"); return ExitCode::FAILURE; }

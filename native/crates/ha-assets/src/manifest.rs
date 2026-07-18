@@ -35,7 +35,8 @@ impl Default for Manifest {
     fn default() -> Self {
         Self {
             manifest_version: CURRENT_MANIFEST_VERSION,
-            ppu: 16,
+            // El juego trabaja a 32×32 px por celda (packs LimeZu 32x32).
+            ppu: 32,
             sources: Vec::new(),
             sheets: BTreeMap::new(),
             assets: BTreeMap::new(),
