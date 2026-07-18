@@ -726,11 +726,14 @@ fn spawn_chunk_decor(
                     Portal::Descend => "decor/mine_hole",
                     Portal::Ascend => "decor/ladder",
                 };
-                commands.spawn((
+                let mut e = commands.spawn((
                     SurfaceDecor { cx, cz, z },
                     art.sprite_or_color(key, color, size),
                     Transform::from_xyz(r.x, r.y, sort - 0.5),
                 ));
+                if let Some(a) = art.animation(key) {
+                    e.insert(a);
+                }
             }
 
             // Surface decor only on the surface layer.
@@ -807,12 +810,15 @@ fn spawn_chunk_decor(
                     InteractTargetKind::OreGold => "decor/ore_gold",
                     _ => "decor/ore_iron",
                 };
-                commands.spawn((
+                let mut e = commands.spawn((
                     SurfaceDecor { cx, cz, z },
                     InteractTarget { kind, id },
                     art.sprite_or_color(key, color, size),
                     Transform::from_xyz(r.x, r.y, sort),
                 ));
+                if let Some(a) = art.animation(key) {
+                    e.insert(a);
+                }
             }
         }
     }

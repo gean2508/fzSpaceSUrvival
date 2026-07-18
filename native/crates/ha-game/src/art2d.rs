@@ -57,6 +57,33 @@ impl ArtLibrary {
             None => Sprite::from_color(color, size),
         }
     }
+
+    /// Componente de animación para un sprite hecho de un PNG tira-de-frames,
+    /// si `key` trae animación. Insertalo junto al sprite; los sistemas de abajo
+    /// arman el atlas y ciclan los frames.
+    pub fn animation(&self, key: &str) -> Option<ArtAnimated> {
+        self.anims.get(key).map(|a| ArtAnimated::new(*a))
+    }
+}
+
+/// Sprite animado por tira horizontal de N frames a F fps. El atlas se arma solo
+/// cuando la imagen termina de cargar (`setup_art_atlases`).
+#[derive(Component)]
+pub struct ArtAnimated {
+    frames: u32,
+    timer: Timer,
+    ready: bool,
+}
+
+impl ArtAnimated {
+    pub fn new(a: ArtAnim) -> Self {
+        let fps = a.fps.max(0.1);
+        Self {
+            frames: a.frames.max(1),
+            timer: Timer::from_seconds(1.0 / fps, TimerMode::Repeating),
+            ready: false,
+        }
+    }
 }
 
 pub struct Art2dPlugin;
@@ -65,7 +92,47 @@ impl Plugin for Art2dPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ArtLibrary>()
             .add_systems(PreStartup, load_art_manifest)
-            .add_systems(Startup, preload_item_icons);
+            .add_systems(Startup, preload_item_icons)
+            .add_systems(Update, (setup_art_atlases, tick_art_animations).chain());
+    }
+}
+
+/// Una vez que la imagen del sprite cargó, arma el `TextureAtlasLayout` (ancho de
+/// frame = ancho/frames) y engancha el atlas. Corre hasta que `ready`.
+fn setup_art_atlases(
+    images: Res<Assets<Image>>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut q: Query<(&mut Sprite, &mut ArtAnimated)>,
+) {
+    for (mut sprite, mut anim) in &mut q {
+        if anim.ready {
+            continue;
+        }
+        let Some(img) = images.get(&sprite.image) else {
+            continue; // aún cargando
+        };
+        let size = img.size();
+        let frames = anim.frames.max(1);
+        let frame_w = (size.x / frames).max(1);
+        let layout = TextureAtlasLayout::from_grid(UVec2::new(frame_w, size.y), frames, 1, None, None);
+        sprite.texture_atlas = Some(TextureAtlas { layout: layouts.add(layout), index: 0 });
+        anim.ready = true;
+    }
+}
+
+/// Avanza el frame del atlas a `fps` (wrap).
+fn tick_art_animations(time: Res<Time>, mut q: Query<(&mut Sprite, &mut ArtAnimated)>) {
+    for (mut sprite, mut anim) in &mut q {
+        if !anim.ready {
+            continue;
+        }
+        anim.timer.tick(time.delta());
+        if anim.timer.just_finished() {
+            let frames = anim.frames.max(1) as usize;
+            if let Some(atlas) = sprite.texture_atlas.as_mut() {
+                atlas.index = (atlas.index + 1) % frames;
+            }
+        }
     }
 }
 

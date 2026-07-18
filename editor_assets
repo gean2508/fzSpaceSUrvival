@@ -3,6 +3,7 @@
 # del juego). Envuelve `ha-asset-tools` para que no tengas que recordar rutas.
 #
 #   ./editor_assets                       abre el editor visual (GUI)
+#   ./editor_assets play                  recompila el juego y lo publica (npm run play)
 #   ./editor_assets scan <carpeta> [pref] escanea un pack LimeZu → manifest.ron
 #   ./editor_assets catalog               regenera CATALOGO.md desde el manifest
 #   ./editor_assets help                  esta ayuda
@@ -61,6 +62,13 @@ case "$cmd" in
   catalog)
     build
     run catalog --manifest "$MANIFEST" --out "$CATALOGO"
+    ;;
+
+  play|build-run)
+    # Recompila el juego (con los assets editados embebidos) y lo publica.
+    echo "▶ recompilando + publicando el juego (npm run play)…" >&2
+    cd "$ROOT"
+    npm run play
     ;;
 
   help|-h|--help)

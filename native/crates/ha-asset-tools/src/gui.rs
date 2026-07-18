@@ -45,6 +45,7 @@ struct EditorApp {
     catalog_path: String,
 
     slot_filter: String,
+    only_unbound: bool,
     png_filter: String,
     selected: Option<usize>,
     pngs: Vec<PathBuf>,
@@ -76,6 +77,7 @@ impl EditorApp {
             game_assets: "crates/ha-game/assets".to_string(),
             catalog_path: "assets/CATALOGO.md".to_string(),
             slot_filter: String::new(),
+            only_unbound: false,
             png_filter: String::new(),
             selected: None,
             pngs: Vec::new(),
@@ -170,13 +172,18 @@ impl EditorApp {
                 ui.label("🔎 slot");
                 ui.text_edit_singleline(&mut self.slot_filter);
             });
+            ui.checkbox(&mut self.only_unbound, "solo sin PNG (a asignar)");
             ui.separator();
             let filter = self.slot_filter.to_lowercase();
+            let only_unbound = self.only_unbound;
             let mut clicked: Option<usize> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let mut cur_cat = "";
                 for (i, slot) in self.slots.iter().enumerate() {
                     if !filter.is_empty() && !slot.key.to_lowercase().contains(&filter) {
+                        continue;
+                    }
+                    if only_unbound && self.manifest.get(slot.key).is_some() {
                         continue;
                     }
                     if slot.category != cur_cat {
