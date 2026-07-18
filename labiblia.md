@@ -113,11 +113,12 @@ Validar: `npm run validate:arch`.
 |------|----------|
 | **Cuerpos celestes** (catálogo, radios, SOI, gravedad) | `ha-shared/celestial_bodies.rs`, `cosmic_scale.rs` |
 | **Efemérides** (órbitas vivas, Tierra fija, Luna orbita Tierra) | `ha-shared/solar_ephemeris.rs` (`body_center_at`, `earth_center_at`) |
-| **Mundo 2D** (tira de tiles por cuerpo: terreno determinista, cavar/colocar, chunks Mesh2d, decor/vetas, `tiles.json`) | `ha-shared/flat2d.rs`, `ha-game/world2d.rs` |
+| **Mundo 2D** (tira de tiles por cuerpo: terreno determinista, cavar/colocar, chunks Mesh2d, decor/vetas, `tiles.json`; **8 variedades de árbol** por celda vía `pick_tree_species` — slots `decor/tree_{roble,pino,abedul,arce,sauce,palmera,arbusto,seco}`, fallback de color por especie, mismo `InteractTarget::Tree`) | `ha-shared/flat2d.rs`, `ha-game/world2d.rs` |
 | **Locomoción plana** (plataformero: gravedad por contexto, salto/coyote, wrap circunferencia, vuelo creativo) | `ha-shared/flat2d.rs` (`step_flat_movement`), `ha-game/sim.rs` |
-| **Vuelo 2D SFS** (thrust/coast/retro, fuel real, drag, paracaídas, SOI dinámica, aterrizaje, relanzamiento off-world, remap exacto superficie↔órbita) | `ha-game/rocket_flight.rs`, `ha-shared/flight_physics.rs`, `flat2d.rs` |
+| **Vuelo 2D SFS** (thrust/coast/retro, fuel real, drag, paracaídas, SOI dinámica, aterrizaje, relanzamiento off-world, remap exacto superficie↔órbita; **telemetría H/V** `vertical_speed`/`horizontal_speed` + **radar** de superficie; **autopilot hover** ~500 m grueso) | `ha-game/rocket_flight.rs`, `ha-shared/flight_physics.rs`, `flat2d.rs` |
 | **Vista orbital** (cuerpos como círculos reales + halo atmósfera + Sol) | `ha-game/orbital2d.rs` |
 | **Regiones + jugador** (RegionId/WorldContext, spawn, teleports MENU) | `ha-game/scene.rs` (`teleport_to_body`) |
+| **Interior de nave + cabina + recarga** (cuarto 2D abordable desde el pad; Z-level dedicado 64 sobre roca sólida = cuarto tallado en WoodFloor; abordar/salir = cambio región+z+teleport B8; `CockpitSeat` → `PreFlightUI` DESPEGAR/AUTOPILOTO/LEVANTARSE bloquea al walker; `FuelSource` + `RefuelEvent` en sala de máquinas = combustible gestionado) | `ha-game/ship_interior.rs` (`ShipInteriorPlugin`, `board_ship`/`leave_ship`, `CockpitState`, `RefuelEvent`), `RegionId::ShipInterior`, `TileWorld::force_tile` |
 | **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
 | **Cámara 2D** (follow + zoom continuo superficie↔órbita, shake) | `ha-game/camera.rs` |
 | **Targeting 2D** (mira libre `AimCursor` movida por el stick derecho/mouse; tiles block_cell/place_cell; resalte de celda `CursorHighlight`) | `ha-game/targeting.rs`, `input/joystick.rs` (`AimCursor`, `AIM_MAX_REACH`), `input/desktop_input.rs` (`desktop_aim_cursor`), `world2d.rs` (`CursorHighlight`), `input/look_interact.rs` (USE→hold) |
@@ -346,6 +347,56 @@ Tres pedidos del usuario, aplicados sobre `rewrite-2d`:
   (`input/gamepad.rs`). **Se conserva** el botón "REMOTE CAM" del panel de
   telemetría (tecla T): es monitoreo remoto de bases (feature futura, dormida), no
   1ª/3ª persona.
+
+### §13-septies — Bucle de nave, Fase 1: interior abordable (18 jul 2026)
+
+Base para el bucle nave (abordaje → cabina → recarga → vuelo). Reusa el mundo de
+tiles en un **Z-level dedicado positivo** (`SHIP_INTERIOR_Z = 64`): ahí el terreno
+natural es roca sólida, así que un cuarto tallado en `WoodFloor` queda **encerrado
+sin poner paredes**. Módulo `ha-game/ship_interior.rs`:
+- `RegionId::ShipInterior` (nuevo) — reconocido por `surface_region_active` para que
+  el streamer de chunks dibuje su z-level; `ctx = Mission` (gravedad 1, sin vacío/O₂).
+- **Abordar/salir = cambio de marco discreto (B8):** parándose en la celda de la nave
+  del pad `(28,6)` entra; parándose en la puerta `(305,307)` del cuarto sale. Latch
+  `armed` (igual que el `layer_transition` de la mina) evita ping-pong. Nunca bloquea
+  input ni cámara.
+- El cuarto NO se persiste: `TileWorld::force_tile` no marca `dirty` y
+  `debounced_tiles_save` filtra `z == SHIP_INTERIOR_Z`.
+
+**Fase 2 — cabina (`CockpitSeat`) + HUD de pre-vuelo (`PreFlightUI`):** parándose en
+la celda del asiento `(305,300)` el jugador se sienta (`CockpitState::seated`): se
+**bloquea el movimiento** (extendí el único escritor `sync_ui_gameplay_block` en
+`hud.rs` con `|| cockpit.seated`, sin romper la invariante de un solo escritor) y
+aparece el panel `PreFlightPanel` con lectura de combustible en vivo y 3 botones —
+**DESPEGAR** (vuelo manual), **AUTOPILOTO** (marca `flight.autopilot`, aproximación/
+hover llega en F4) y **LEVANTARSE**. Despegar reusa la ignición del pad
+(`launch_pos_vel(Earth)` + `begin_at` + `vel`); hoy llena el tanque como el pad —
+en F3 el combustible pasa a ser recurso gestionado (se llena en la sala de máquinas).
+Marcador del asiento = slot `decor/cockpit_seat` (fallback de color).
+
+**Fase 3 — estación de recarga (`FuelSource`) + bucle de combustible por eventos:**
+el combustible pasa a ser recurso gestionado — el despegue de cabina YA NO auto-llena
+el tanque (a diferencia del pad); se llena en la **sala de máquinas** del interior.
+Celda `FUEL_SOURCE_CELL (300,300)`: al acercarse (≤1.8 m) con tanque no lleno se emite
+`RefuelEvent` (Bevy `EventWriter`→`EventReader`, edge-triggered por `armed` = un
+acercamiento, una recarga); `apply_refuel` llena a capacidad. Loop intencionado:
+abordar → sala de máquinas (recargar) → cabina → DESPEGAR. Marcador = slot
+`decor/fuel_source` (fallback de color). (El pad de Tierra sigue siendo un 2º punto de
+recarga, vía su hold-USE de ignición.)
+
+**Fase 4 — telemetría de vuelo + hover del autopilot:** el HUD de vuelo
+(`build_interact_prompt` en `hud.rs`) ahora muestra **radar de superficie** (`altitude()`
+= distancia a la superficie, no al centro), **vector vertical** `↕` (velocidad radial
+subida/bajada) y **vector horizontal** `↔` (velocidad tangencial) — nuevos métodos
+`RocketFlight::vertical_speed/horizontal_speed`. **Autopilot 80% asistido** (`drive_rocket_flight`):
+al activarlo apunta la nariz radial-out y auto-empuja para sostener ~`AUTOPILOT_HOVER_ALT_M`
+(500 m) sobre la superficie / frenar caídas (reusa el mismo path de aceleración; el
+input manual lo desengancha). Altitude-hold **grueso** (bambolea alrededor del set-point):
+el intercept preciso + hover exacto se **tunean en device** (§6: nunca tunear vuelo a ciegas).
+
+- **Pendiente:** texturas del interior/marcadores (`decor/cockpit_seat`, `decor/fuel_source`)
+  = slots drop-in a asignar (LimeZu Interiors), hoy fallback de color; tuning de hover +
+  sensaciones del bucle nave en el Redmi.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

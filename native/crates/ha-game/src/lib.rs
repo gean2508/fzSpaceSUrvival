@@ -23,6 +23,7 @@ mod platform;
 mod render;
 mod rocket_flight;
 mod scene;
+mod ship_interior;
 mod nav_computer;
 mod colony;
 mod harvest;
@@ -66,6 +67,7 @@ use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
 use render::particles::ParticlesPlugin;
 use scene::ScenePlugin;
+use ship_interior::ShipInteriorPlugin;
 use sky2d::Sky2dPlugin;
 use sim::SimPlugin;
 use targeting::TargetingPlugin;
@@ -193,6 +195,7 @@ fn run_app_inner() {
             LookInteractPlugin,
             RocketFlightPlugin,
             NavComputerPlugin,
+            ShipInteriorPlugin,
             HarvestPlugin,
             SurvivalStatsPlugin,
             ShipBuilderPlugin,

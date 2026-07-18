@@ -58,6 +58,10 @@ pub fn orbital_start_above_pad() -> Vec3 {
 }
 
 /// Launch a rocket straight up off a body's surface into the orbital plane.
+/// Assisted-mode hover set-point: metres above the target body's surface the
+/// autopilot tries to hold ("hover estático a distancia segura"). Coarse today.
+const AUTOPILOT_HOVER_ALT_M: f32 = 500.0;
+
 pub fn launch_pos_vel(body: CelestialBody, t: f32, speed: f32) -> (Vec3, Vec3) {
     let c = Vec3::from_array(body_center_at(body, t));
     let dir = radial_dir(LAUNCH_ANGLE);
@@ -226,6 +230,23 @@ impl RocketFlight {
         (self.fuel / self.capacity() * 100.0).clamp(0.0, 100.0)
     }
 
+    /// Radial speed relative to the current body's surface (m/s): + climbing,
+    /// − descending. The "vertical vector" on the flight telemetry.
+    pub fn vertical_speed(&self) -> f32 {
+        let c = Vec3::from_array(body_center_at(self.body, self.clock_secs));
+        let radial = (self.pos - c).normalize_or_zero();
+        self.vel.dot(radial)
+    }
+
+    /// Tangential (lateral) speed relative to the body (m/s) — the "horizontal
+    /// vector" on the telemetry.
+    pub fn horizontal_speed(&self) -> f32 {
+        let c = Vec3::from_array(body_center_at(self.body, self.clock_secs));
+        let radial = (self.pos - c).normalize_or_zero();
+        let v_vert = self.vel.dot(radial);
+        (self.vel - radial * v_vert).length()
+    }
+
     pub fn in_vacuum(&self) -> bool {
         self.altitude() > body_atmo_top(self.body)
     }
@@ -282,8 +303,24 @@ pub fn tick_rocket_flight(
         flight.yaw += intent.move_x * ROCKET_ROT_SPEED * dt;
     }
 
-    // Thrust (hold JUMP), retro (hold sprint).
-    let thrusting = actions.jump && flight.fuel > 0.0;
+    // Autopilot hover assist (F4, 80% assisted mode): point the nose radially
+    // "up" and auto-thrust to hold ~HOVER_ALT above the surface / arrest a fall.
+    // Coarse altitude-hold (bobs around the set-point); precise intercept + exact
+    // 500 m hover is device-tuned later (§6: never tune flight blind). Manual
+    // steering above disengages autopilot.
+    let mut auto_thrust = false;
+    if flight.autopilot {
+        let c = body_center_at(flight.body, t);
+        flight.yaw = (flight.pos.z - c[2]).atan2(flight.pos.x - c[0]);
+        let alt = flight.altitude();
+        let v_vert = flight.vertical_speed();
+        auto_thrust = flight.fuel > 0.0
+            && (alt < AUTOPILOT_HOVER_ALT_M - 20.0 || v_vert < -3.0)
+            && !(alt > AUTOPILOT_HOVER_ALT_M + 20.0 && v_vert > 0.0);
+    }
+
+    // Thrust (hold JUMP or autopilot assist), retro (hold sprint).
+    let thrusting = (actions.jump || auto_thrust) && flight.fuel > 0.0;
     let retro = intent.sprint && flight.fuel > 0.0 && flight.vel.length() > 1.0;
     flight.phase = if thrusting {
         FlightPhase::Powered

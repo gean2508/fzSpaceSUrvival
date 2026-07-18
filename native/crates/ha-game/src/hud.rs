@@ -1077,6 +1077,8 @@ fn build_interact_prompt(
     if flight.active {
         let alt = flight.altitude_m();
         let spd = flight.speed();
+        let v_vert = flight.vertical_speed();
+        let v_horiz = flight.horizontal_speed();
         let fuel = flight.fuel_pct();
         let body = flight.body.label();
         let vac = if flight.in_vacuum() { "VAC" } else { "ATM" };
@@ -1091,7 +1093,7 @@ fn build_interact_prompt(
         let autonomy =
             flight.fuel / (ha_shared::flight_physics::ROCKET_FUEL_BURN_PER_S * flight.burn_rate_factor()).max(0.01);
         return format!(
-            "FLIGHT — {body} · alt {alt:.0}m · {spd:.0} m/s · fuel {fuel:.0}% · masa {:.1}t · ~{autonomy:.0}s thrust · {vac}{chute}{retro}{ap} · ACTION thrust · SHIFT/jump retro",
+            "FLIGHT — {body} · radar {alt:.0}m · ↕{v_vert:+.0} ↔{v_horiz:.0} m/s · {spd:.0} tot · fuel {fuel:.0}% · masa {:.1}t · ~{autonomy:.0}s thrust · {vac}{chute}{retro}{ap} · ACTION thrust · SHIFT/jump retro",
             loadout.mass_t
         );
     }
@@ -2464,11 +2466,13 @@ fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
 fn sync_ui_gameplay_block(
     bag: Res<BagPanelState>,
     editor: Res<crate::ui_editor::UiEditorState>,
+    cockpit: Res<crate::ship_interior::CockpitState>,
     mut block: ResMut<UiGameplayBlock>,
 ) {
     // Only REAL UI blocks gameplay input. Flight must NOT block (B8): thrust
-    // (JUMP/Space) and steering run through the same action pipeline.
-    block.blocked = bag.open || editor.menu_open || editor.enabled;
+    // (JUMP/Space) and steering run through the same action pipeline. Sitting in
+    // the cockpit (pre-flight) freezes the walker until launch/stand-up.
+    block.blocked = bag.open || editor.menu_open || editor.enabled || cockpit.seated;
 }
 
 /// Public so the touch-stick systems can order themselves AFTER it — otherwise

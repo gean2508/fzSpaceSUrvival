@@ -43,6 +43,9 @@ pub enum RegionId {
     Luna,
     Planet(CelestialBody),
     Transit,
+    /// Bounded room inside the player's ship (a carved Z-level of the Earth grid;
+    /// see `ship_interior.rs`). Walkable, safe, no flight.
+    ShipInterior,
 }
 
 #[derive(Resource, Default)]

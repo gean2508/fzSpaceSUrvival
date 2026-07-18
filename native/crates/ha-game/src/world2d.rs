@@ -188,6 +188,15 @@ impl TileWorld {
         self.dirty = true;
         true
     }
+
+    /// Overwrite a cell at the active z UNCONDITIONALLY (even over solid rock).
+    /// Used to carve the ship interior room; deliberately does NOT mark `dirty`
+    /// (interior tiles are derived on boarding, never persisted — see the
+    /// `SHIP_INTERIOR_Z` filter in `debounced_tiles_save`).
+    pub fn force_tile(&mut self, body: CelestialBody, tx: i64, tz: i64, kind: Tile) {
+        self.edits.insert((body as u8, self.z, tx, tz), kind);
+        self.version = self.version.wrapping_add(1);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +249,44 @@ pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKi
             _ => None,
         },
     }
+}
+
+/// Una especie de árbol: sólo variedad VISUAL (misma cosecha / drop de manzana).
+/// La textura la asigna el pipeline de arte como `decor/<key>.png` (drop-in +
+/// `sync:art`); hasta que exista, cae a `decor/tree` y por último a un quad de
+/// color (`fallback`) — así se ve la variedad aun sin texturas cargadas.
+struct TreeSpecies {
+    key: &'static str,
+    size: Vec2,
+    fallback: Color,
+    weight: u32,
+}
+
+/// Catálogo de especies del overworld (Tierra). Editar esta tabla = añadir/quitar
+/// variedades; las claves son los IDs lógicos que el arte debe proveer.
+const TREE_SPECIES: &[TreeSpecies] = &[
+    TreeSpecies { key: "decor/tree_roble",    size: Vec2::new(2.6, 3.4), fallback: Color::srgb(0.24, 0.50, 0.22), weight: 24 },
+    TreeSpecies { key: "decor/tree_pino",     size: Vec2::new(2.2, 3.9), fallback: Color::srgb(0.16, 0.42, 0.28), weight: 22 },
+    TreeSpecies { key: "decor/tree_abedul",   size: Vec2::new(2.0, 3.6), fallback: Color::srgb(0.48, 0.68, 0.36), weight: 15 },
+    TreeSpecies { key: "decor/tree_arce",     size: Vec2::new(2.6, 3.3), fallback: Color::srgb(0.80, 0.48, 0.16), weight: 12 },
+    TreeSpecies { key: "decor/tree_sauce",    size: Vec2::new(2.9, 3.2), fallback: Color::srgb(0.42, 0.58, 0.24), weight: 9 },
+    TreeSpecies { key: "decor/tree_palmera",  size: Vec2::new(2.4, 3.8), fallback: Color::srgb(0.30, 0.56, 0.34), weight: 6 },
+    TreeSpecies { key: "decor/tree_arbusto",  size: Vec2::new(1.8, 1.8), fallback: Color::srgb(0.31, 0.54, 0.26), weight: 7 },
+    TreeSpecies { key: "decor/tree_seco",     size: Vec2::new(2.2, 3.4), fallback: Color::srgb(0.44, 0.34, 0.22), weight: 5 },
+];
+
+/// Especie determinista por celda (estable entre recargas de chunk). Peso ↑ =
+/// más común. Usa un seed propio para no correlacionar con dónde cae un árbol.
+fn pick_tree_species(tx: i64, tz: i64) -> &'static TreeSpecies {
+    let total: u32 = TREE_SPECIES.iter().map(|s| s.weight).sum();
+    let mut roll = hash_cell(0x7bee_1eaf, tx, tz) % total.max(1);
+    for s in TREE_SPECIES {
+        if roll < s.weight {
+            return s;
+        }
+        roll -= s.weight;
+    }
+    &TREE_SPECIES[0]
 }
 
 fn deposit_target_kind(d: Deposit) -> InteractTargetKind {
@@ -433,9 +480,11 @@ fn init_chunk_material(
 
 pub fn surface_region_active(region: &RegionRuntime) -> Option<()> {
     match region.active {
-        RegionId::Overworld { .. } | RegionId::Luna | RegionId::Planet(_) | RegionId::Cave(_) => {
-            Some(())
-        }
+        RegionId::Overworld { .. }
+        | RegionId::Luna
+        | RegionId::Planet(_)
+        | RegionId::Cave(_)
+        | RegionId::ShipInterior => Some(()),
         _ => None,
     }
 }
@@ -750,19 +799,25 @@ fn spawn_chunk_decor(
                                     id,
                                     world: Vec3::new(r.x, r.y, 0.0),
                                 });
+                                let species = pick_tree_species(tx, tz);
                                 let sprite = art
-                                    .get_first(&[&format!("decor/tree{suffix}"), "decor/tree"])
+                                    .get_first(&[
+                                        &format!("{}{suffix}", species.key),
+                                        species.key,
+                                        &format!("decor/tree{suffix}"),
+                                        "decor/tree",
+                                    ])
                                     .map(|img| {
                                         let mut s = Sprite::from_image(img);
-                                        s.custom_size = Some(Vec2::new(2.4, 3.2));
+                                        s.custom_size = Some(species.size);
                                         s
                                     })
                                     .unwrap_or_else(|| {
-                                        Sprite::from_color(
-                                            Color::srgb(0.30, 0.55, 0.25),
-                                            Vec2::new(2.2, 2.6),
-                                        )
+                                        Sprite::from_color(species.fallback, species.size)
                                     });
+                                // Base al suelo: el centro sube medio alto (menos el
+                                // hundido que ya tenía el árbol de 3.2 → -0.6).
+                                let y = r.y + species.size.y * 0.5 - 0.6;
                                 commands.spawn((
                                     SurfaceDecor { cx, cz, z },
                                     InteractTarget {
@@ -771,7 +826,7 @@ fn spawn_chunk_decor(
                                     },
                                     crate::render::particles::HarvestReactive,
                                     sprite,
-                                    Transform::from_xyz(r.x, r.y + 1.0, sort),
+                                    Transform::from_xyz(r.x, y, sort),
                                 ));
                             }
                         }
@@ -886,6 +941,8 @@ fn debounced_tiles_save(time: Res<Time>, mut tiles: ResMut<TileWorld>) {
         edits: tiles
             .edits
             .iter()
+            // The ship interior is a derived room, not player edits — never persist it.
+            .filter(|((_, z, _, _), _)| *z != crate::ship_interior::SHIP_INTERIOR_Z)
             .map(|((b, z, tx, tz), t)| (*b, *z, *tx, *tz, tile_name(*t).to_string()))
             .collect(),
     };
