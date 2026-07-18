@@ -149,24 +149,103 @@ fn interpolate_player_visual(
     }
 }
 
-/// Orient the LimeZu character to the facing direction (row-0 base frames:
-/// 0 = down/front, 1 = up/back, 2 = side; flip X for west). `to_rot` holds the
-/// last movement heading, so the sprite keeps facing when idle.
-fn face_player_sprite(mut query: Query<(&PlayerVisual, &mut Sprite), With<Player>>) {
-    for (visual, mut sprite) in &mut query {
-        if sprite.texture_atlas.is_none() {
+/// Clave del slot de arte del jugador (coincide con `art/player/character.png`
+/// hardcodeado en `spawn_player` — el editor escribe sus poses ahí mismo).
+const PLAYER_ART_KEY: &str = "player/character";
+
+/// Última pose aplicada (evita reconstruir el atlas/rect todos los frames si
+/// no cambió). Vacía en el spawn.
+#[derive(Component, Default)]
+pub struct CurrentPose(String);
+
+fn pose_direction(to_rot: f32) -> &'static str {
+    let (dx, dz) = (to_rot.cos(), to_rot.sin());
+    if dz.abs() >= dx.abs() {
+        if dz > 0.0 { "down" } else { "up" }
+    } else if dx < 0.0 {
+        "left"
+    } else {
+        "right"
+    }
+}
+
+/// Orient the character sprite to the facing direction. Si el slot
+/// `player/character` trae **poses** del editor (idle/walk × 4 direcciones),
+/// las usa (con mirror left↔right si sólo se sliceó un lado). Si no hay poses
+/// definidas, cae al atlas LimeZu de 3 frames hardcodeado (row-0: 0=down,
+/// 1=up, 2=side+flip) — comportamiento previo intacto.
+fn face_player_sprite(
+    art: Res<crate::art2d::ArtLibrary>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &PlayerVisual, &mut Sprite, &mut CurrentPose), With<Player>>,
+) {
+    let use_poses = art.has_poses(PLAYER_ART_KEY);
+    for (entity, visual, mut sprite, mut current) in &mut query {
+        if !use_poses {
+            if sprite.texture_atlas.is_none() {
+                continue;
+            }
+            let (dx, dz) = (visual.to_rot.cos(), visual.to_rot.sin());
+            let (index, flip) = if dz.abs() >= dx.abs() {
+                if dz > 0.0 { (0, false) } else { (1, false) }
+            } else {
+                (2, dx < 0.0)
+            };
+            if let Some(atlas) = &mut sprite.texture_atlas {
+                atlas.index = index;
+            }
+            sprite.flip_x = flip;
             continue;
         }
-        let (dx, dz) = (visual.to_rot.cos(), visual.to_rot.sin());
-        let (index, flip) = if dz.abs() >= dx.abs() {
-            if dz > 0.0 { (0, false) } else { (1, false) }
-        } else {
-            (2, dx < 0.0)
-        };
-        if let Some(atlas) = &mut sprite.texture_atlas {
-            atlas.index = index;
+
+        let moving = (visual.to_x - visual.from_x).abs() > 1e-4 || (visual.to_z - visual.from_z).abs() > 1e-4;
+        let verb = if moving { "walk" } else { "idle" };
+        let dir = pose_direction(visual.to_rot);
+
+        let mut wanted = format!("{verb}_{dir}");
+        let mut flip = false;
+        if !art.has_pose(PLAYER_ART_KEY, &wanted) {
+            // Sólo se sliceó un lado (ej. "right") — espejar para el opuesto.
+            let mirror = match dir {
+                "left" => Some("right"),
+                "right" => Some("left"),
+                _ => None,
+            };
+            if let Some(m) = mirror {
+                let alt = format!("{verb}_{m}");
+                if art.has_pose(PLAYER_ART_KEY, &alt) {
+                    wanted = alt;
+                    flip = true;
+                }
+            }
         }
+        if !art.has_pose(PLAYER_ART_KEY, &wanted) {
+            wanted = "idle_down".to_string();
+        }
+
+        let state_key = format!("{wanted}#{flip}");
+        if current.0 == state_key {
+            continue;
+        }
+        current.0 = state_key;
         sprite.flip_x = flip;
+
+        if let Some(([x, y, w, h], anim)) = art.pose(PLAYER_ART_KEY, &wanted) {
+            match anim {
+                Some(anim) => {
+                    sprite.rect = None;
+                    commands.entity(entity).insert(anim);
+                }
+                None => {
+                    commands.entity(entity).remove::<crate::art2d::ArtAnimated>();
+                    sprite.texture_atlas = None;
+                    sprite.rect = Some(Rect::from_corners(
+                        Vec2::new(x as f32, y as f32),
+                        Vec2::new((x + w) as f32, (y + h) as f32),
+                    ));
+                }
+            }
+        }
     }
 }
 

@@ -30,6 +30,14 @@ struct StripInfo {
     fps: f32,
 }
 
+/// Un frame/rango de la hoja para una pose nombrada (idle_down, walk_left…):
+/// rect px base + animación de sub-región si la pose es una tira.
+#[derive(Clone, Copy)]
+struct PoseInfo {
+    rect_px: [u32; 4],
+    anim: Option<StripInfo>,
+}
+
 /// Loaded drop-in sprites by logical key. Empty until the player ships art.
 #[derive(Resource, Default)]
 pub struct ArtLibrary {
@@ -40,6 +48,9 @@ pub struct ArtLibrary {
     rects: HashMap<String, [u32; 4]>,
     /// Animación de sub-región (sheets con `strip`).
     strips: HashMap<String, StripInfo>,
+    /// Poses nombradas por slot (aplica a CUALQUIER atlas, no sólo el jugador):
+    /// clave del slot → nombre de pose ("idle_down", "walk_left"…) → frame.
+    poses: HashMap<String, HashMap<String, PoseInfo>>,
 }
 
 impl ArtLibrary {
@@ -85,6 +96,23 @@ impl ArtLibrary {
             return Some(ArtAnimated::from_strip(*s));
         }
         self.anims.get(key).map(|a| ArtAnimated::new(*a))
+    }
+
+    /// `true` si el slot trae poses guardadas (personaje CON direcciones, o
+    /// cualquier otro atlas con estados). Genérico — no sólo el jugador.
+    pub fn has_poses(&self, key: &str) -> bool {
+        self.poses.get(key).map(|m| !m.is_empty()).unwrap_or(false)
+    }
+
+    pub fn has_pose(&self, key: &str, name: &str) -> bool {
+        self.poses.get(key).map(|m| m.contains_key(name)).unwrap_or(false)
+    }
+
+    /// Rect px de la pose + animación lista para insertar si es una tira.
+    /// `None` si el slot/pose no existe.
+    pub fn pose(&self, key: &str, name: &str) -> Option<([u32; 4], Option<ArtAnimated>)> {
+        let p = self.poses.get(key)?.get(name)?;
+        Some((p.rect_px, p.anim.map(ArtAnimated::from_strip)))
     }
 }
 
@@ -212,6 +240,22 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
                         fps,
                     },
                 );
+            }
+            if let Some(poses) = &e.poses {
+                let mut m = HashMap::new();
+                for (name, pose) in poses {
+                    let rect_px = [pose.rect.col * gw, pose.rect.row * gh, pose.rect.w * gw, pose.rect.h * gh];
+                    let anim = pose.anim.map(|a| StripInfo {
+                        origin: UVec2::new(rect_px[0], rect_px[1]),
+                        cell: UVec2::new(gw, gh),
+                        frames: a.frames.max(1),
+                        fps: a.fps,
+                    });
+                    m.insert(name.clone(), PoseInfo { rect_px, anim });
+                }
+                if !m.is_empty() {
+                    art.poses.insert(key.clone(), m);
+                }
             }
         }
         // Animación de imagen completa sólo si no hay strip explícito.

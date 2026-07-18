@@ -150,7 +150,7 @@ fn spawn_player(
         TextureAtlas { layout, index: 0 },
     );
     sprite.custom_size = Some(Vec2::new(1.6, 3.2));
-    commands.spawn((Player, sim, visual, sprite, tf));
+    commands.spawn((Player, sim, visual, sprite, tf, crate::sim::CurrentPose::default()));
 }
 
 /// Deliberate MENU teleport (creative/dev): put the walker on a body surface.

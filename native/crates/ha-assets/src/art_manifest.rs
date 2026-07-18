@@ -94,6 +94,14 @@ impl ArtValue {
             ArtValue::Full(e) => e.anim,
         }
     }
+    /// Grilla (celda px) usada para interpretar `rect`/`strip`/`poses` de esta
+    /// entrada. Default 32×32 si no está fijada.
+    pub fn grid(&self) -> (u32, u32) {
+        match self {
+            ArtValue::Path(_) => (32, 32),
+            ArtValue::Full(e) => e.grid.unwrap_or((32, 32)),
+        }
+    }
     /// Normaliza a la forma completa (lo que escribe el editor).
     pub fn into_full(self) -> ArtEntry {
         match self {

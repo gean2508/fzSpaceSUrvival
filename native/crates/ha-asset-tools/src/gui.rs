@@ -13,12 +13,6 @@ use std::process::ExitCode;
 
 use ha_assets::{game_slots, list_pngs, ArtAnim, ArtManifest, CellRect, Pose, SlotDef};
 
-/// Poses direccionales estándar sugeridas para personajes (podés crear más).
-const STD_POSES: &[&str] = &[
-    "idle_down", "idle_up", "idle_left", "idle_right",
-    "walk_down", "walk_up", "walk_left", "walk_right",
-];
-
 pub fn run_gui() -> ExitCode {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -325,6 +319,70 @@ impl EditorApp {
                     }
                 });
             });
+            // Poses guardadas del slot — SIEMPRE visibles (no dependen de tener un
+            // candidato elegido), con thumbnail recortado del sheet ya asignado y
+            // botón para volver a cargarla en el canvas y ajustarla.
+            let saved_poses: Vec<(String, Pose)> = self
+                .manifest
+                .poses(slot.key)
+                .map(|m| m.iter().map(|(k, v)| (k.clone(), *v)).collect())
+                .unwrap_or_default();
+            if !saved_poses.is_empty() {
+                ui.separator();
+                ui.label(egui::RichText::new(format!("poses guardadas ({})", saved_poses.len())).strong());
+                let grid = self.manifest.get(slot.key).map(|v| v.grid()).unwrap_or((32, 32));
+                let mut remove: Option<String> = None;
+                let mut edit: Option<(String, Pose)> = None;
+                egui::Grid::new("poses_grid").striped(true).show(ui, |ui| {
+                    for (pn, pose) in &saved_poses {
+                        if let Some((_, tex)) = self.tex.as_ref() {
+                            let img = tex.size_vec2();
+                            let uv = egui::Rect::from_min_max(
+                                egui::pos2(
+                                    (pose.rect.col * grid.0) as f32 / img.x,
+                                    (pose.rect.row * grid.1) as f32 / img.y,
+                                ),
+                                egui::pos2(
+                                    ((pose.rect.col + pose.rect.w) * grid.0) as f32 / img.x,
+                                    ((pose.rect.row + pose.rect.h) * grid.1) as f32 / img.y,
+                                ),
+                            );
+                            ui.add(
+                                egui::Image::new(egui::load::SizedTexture::new(tex.id(), egui::vec2(48.0, 48.0)))
+                                    .uv(uv),
+                            );
+                        } else {
+                            ui.label("—");
+                        }
+                        let anim_tag = if pose.anim.is_some() { " 🎞" } else { "" };
+                        ui.label(format!("{pn}{anim_tag}"));
+                        if ui.small_button("✎ editar").clicked() {
+                            edit = Some((pn.clone(), *pose));
+                        }
+                        if ui.small_button("✖").clicked() {
+                            remove = Some(pn.clone());
+                        }
+                        ui.end_row();
+                    }
+                });
+                if let Some(pn) = remove {
+                    self.manifest.remove_pose(slot.key, &pn);
+                }
+                if let Some((pn, pose)) = edit {
+                    self.pose_name = pn;
+                    self.sel_rect = Some(pose.rect);
+                    match pose.anim {
+                        Some(a) => {
+                            self.anim_on = true;
+                            self.anim_frames = a.frames;
+                            self.anim_fps = a.fps;
+                        }
+                        None => self.anim_on = false,
+                    }
+                    self.status = "pose cargada en el canvas — ajustá el recorte y volvé a Guardar".into();
+                }
+            }
+
             if let Some(png) = self.selected_png.clone() {
                 let name = png.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 ui.horizontal(|ui| {
@@ -377,47 +435,41 @@ impl EditorApp {
                                 }
                             }
                         });
+                        // Cruz de dirección — pensado para atlas de personaje/NPC
+                        // (idle/walk × 4 direcciones), pero el nombre es libre:
+                        // sirve para CUALQUIER atlas con estados (máquina abierta/
+                        // cerrada, puerta, etc.) escribiendo el nombre a mano.
                         ui.horizontal(|ui| {
                             ui.label("pose:");
-                            ui.add(egui::TextEdit::singleline(&mut self.pose_name).desired_width(120.0).hint_text("idle_down…"));
-                            egui::ComboBox::from_id_salt("stdpose").selected_text("estándar").show_ui(ui, |ui| {
-                                for p in STD_POSES {
-                                    if ui.selectable_label(false, *p).clicked() {
-                                        self.pose_name = p.to_string();
-                                    }
+                            ui.add(egui::TextEdit::singleline(&mut self.pose_name).desired_width(110.0).hint_text("idle_down…"));
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("acción:");
+                            for verb in ["idle", "walk"] {
+                                let active = self.pose_name.starts_with(verb);
+                                if ui.selectable_label(active, verb).clicked() {
+                                    let dir = pose_dir_suffix(&self.pose_name);
+                                    self.pose_name = format!("{verb}_{dir}");
                                 }
-                            });
-                            let animated = self.anim_on;
-                            if ui.button("Guardar como pose").clicked() && !self.pose_name.trim().is_empty() {
-                                if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
-                                    let anim = animated.then_some(ArtAnim { frames: sr.cells().max(1), fps: self.anim_fps.max(0.1) });
-                                    let name = self.pose_name.trim().to_string();
-                                    self.manifest.set_pose(slot.key, rel, grid, &name, Pose { rect: sr, anim });
-                                    self.status = format!("{}: pose {name}", slot.key);
+                            }
+                            ui.separator();
+                            ui.label("dirección:");
+                            for (dir, arrow) in [("up", "↑"), ("left", "←"), ("down", "↓"), ("right", "→")] {
+                                let active = self.pose_name.ends_with(dir);
+                                if ui.selectable_label(active, arrow).clicked() {
+                                    let verb = if self.pose_name.starts_with("walk") { "walk" } else { "idle" };
+                                    self.pose_name = format!("{verb}_{dir}");
                                 }
                             }
                         });
-                    }
-
-                    // Poses ya guardadas (con borrar).
-                    let poses: Vec<String> = self
-                        .manifest
-                        .poses(slot.key)
-                        .map(|m| m.keys().cloned().collect())
-                        .unwrap_or_default();
-                    if !poses.is_empty() {
-                        ui.label(egui::RichText::new("poses guardadas:").weak());
-                        let mut remove: Option<String> = None;
-                        for pn in &poses {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("• {pn}"));
-                                if ui.small_button("✖").clicked() {
-                                    remove = Some(pn.clone());
-                                }
-                            });
-                        }
-                        if let Some(pn) = remove {
-                            self.manifest.remove_pose(slot.key, &pn);
+                        let animated = self.anim_on;
+                        if ui.button("Guardar como pose").clicked() && !self.pose_name.trim().is_empty() {
+                            if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
+                                let anim = animated.then_some(ArtAnim { frames: sr.cells().max(1), fps: self.anim_fps.max(0.1) });
+                                let name = self.pose_name.trim().to_string();
+                                self.manifest.set_pose(slot.key, rel, grid, &name, Pose { rect: sr, anim });
+                                self.status = format!("{}: pose {name}", slot.key);
+                            }
                         }
                     }
                 });
@@ -750,6 +802,17 @@ impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         EditorApp::ui(self, ctx);
     }
+}
+
+/// Dirección al final de un nombre de pose ("walk_left" → "left"); "down" si
+/// no matchea ninguna de las 4 — usado por la cruz de dirección del slicer.
+fn pose_dir_suffix(name: &str) -> &'static str {
+    for d in ["down", "up", "left", "right"] {
+        if name.ends_with(d) {
+            return d;
+        }
+    }
+    "down"
 }
 
 /// Escala la textura para que su lado mayor sea `max_px` (preserva aspecto), así
