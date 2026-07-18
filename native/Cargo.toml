@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ha-shared", "crates/ha-game"]
+members = ["crates/ha-shared", "crates/ha-assets", "crates/ha-game"]
 
 [workspace.package]
 version = "0.1.0"
