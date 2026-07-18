@@ -60,8 +60,10 @@ struct EditorApp {
     anim_frames: u32,
     anim_fps: f32,
 
-    // caches de textura (key = ruta absoluta)
-    tex: Option<(String, egui::TextureHandle)>,
+    // caches de textura
+    tex: Option<(String, egui::TextureHandle)>,       // binding actual (como se ve en el juego)
+    selected_png: Option<PathBuf>,                    // PNG fuente elegido (candidato)
+    src_tex: Option<(String, egui::TextureHandle)>,   // preview del candidato
     status: String,
 }
 
@@ -87,6 +89,8 @@ impl EditorApp {
             anim_frames: 4,
             anim_fps: 6.0,
             tex: None,
+            selected_png: None,
+            src_tex: None,
             status: String::new(),
         };
         app.load_manifest();
@@ -121,7 +125,13 @@ impl EditorApp {
         egui::TopBottomPanel::top("bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label("Arte fuente:");
-                ui.add(egui::TextEdit::singleline(&mut self.art_root).desired_width(260.0));
+                ui.add(egui::TextEdit::singleline(&mut self.art_root).desired_width(240.0));
+                if ui.button("📁 Elegir carpeta…").clicked() {
+                    if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                        self.art_root = dir.display().to_string();
+                        self.load_pngs();
+                    }
+                }
                 if ui.button("📂 Cargar PNGs").clicked() {
                     self.load_pngs();
                 }
@@ -176,27 +186,55 @@ impl EditorApp {
             ui.separator();
             let filter = self.slot_filter.to_lowercase();
             let only_unbound = self.only_unbound;
+            // Agrupar índices por categoría (respetando filtros) → árbol.
+            let mut groups: Vec<(&'static str, Vec<usize>)> = Vec::new();
+            for (i, slot) in self.slots.iter().enumerate() {
+                if !filter.is_empty() && !slot.key.to_lowercase().contains(&filter) {
+                    continue;
+                }
+                if only_unbound && self.manifest.get(slot.key).is_some() {
+                    continue;
+                }
+                match groups.last_mut() {
+                    Some((cat, v)) if *cat == slot.category => v.push(i),
+                    _ => groups.push((slot.category, vec![i])),
+                }
+            }
             let mut clicked: Option<usize> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
-                let mut cur_cat = "";
-                for (i, slot) in self.slots.iter().enumerate() {
-                    if !filter.is_empty() && !slot.key.to_lowercase().contains(&filter) {
-                        continue;
-                    }
-                    if only_unbound && self.manifest.get(slot.key).is_some() {
-                        continue;
-                    }
-                    if slot.category != cur_cat {
-                        cur_cat = slot.category;
-                        ui.add_space(4.0);
-                        ui.label(egui::RichText::new(cur_cat.to_uppercase()).strong());
-                    }
-                    let has = self.manifest.get(slot.key).is_some();
-                    let mark = if has { "● " } else { "○ " };
-                    let sel = self.selected == Some(i);
-                    if ui.selectable_label(sel, format!("{mark}{}", slot.key)).clicked() {
-                        clicked = Some(i);
-                    }
+                for (cat, idxs) in &groups {
+                    let bound = idxs
+                        .iter()
+                        .filter(|&&i| self.manifest.get(self.slots[i].key).is_some())
+                        .count();
+                    let header = egui::RichText::new(format!(
+                        "▸ {}  ({}/{})",
+                        cat.to_uppercase(),
+                        bound,
+                        idxs.len()
+                    ))
+                    .strong()
+                    .color(egui::Color32::from_rgb(120, 210, 255));
+                    egui::CollapsingHeader::new(header)
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let n = idxs.len();
+                            for (row, &i) in idxs.iter().enumerate() {
+                                let slot = self.slots[i];
+                                let leaf = slot.key.split_once('/').map(|(_, n)| n).unwrap_or(slot.key);
+                                let branch = if row + 1 == n { "└─" } else { "├─" };
+                                let has = self.manifest.get(slot.key).is_some();
+                                let dot = if has { "●" } else { "○" };
+                                let mut txt = egui::RichText::new(format!("{branch} {dot} {leaf}")).monospace();
+                                if has {
+                                    txt = txt.color(egui::Color32::from_rgb(120, 230, 140));
+                                }
+                                let sel = self.selected == Some(i);
+                                if ui.selectable_label(sel, txt).clicked() {
+                                    clicked = Some(i);
+                                }
+                            }
+                        });
                 }
             });
             if let Some(i) = clicked {
@@ -229,6 +267,7 @@ impl EditorApp {
                 }
             }
             if let Some((_, tex)) = self.tex.as_ref() {
+                ui.label(egui::RichText::new("cómo se ve en el juego:").weak());
                 let size = tex.size_vec2() * 5.0;
                 ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), size)));
             }
@@ -261,29 +300,47 @@ impl EditorApp {
             });
 
             ui.separator();
-            ui.label(egui::RichText::new("Elegí el PNG fuente para este slot:").strong());
+            // Candidato: preview del PNG elegido tal cual, y botón para asignarlo.
+            if let Some(png) = self.selected_png.clone() {
+                let name = png.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                ui.label(egui::RichText::new(format!("Candidato: {name}")).strong());
+                if let Some((_, tex)) = self.src_tex.as_ref() {
+                    let size = tex.size_vec2() * 5.0;
+                    ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), size)));
+                }
+                if ui.button("✔ Asignar al slot").clicked() {
+                    self.bind_png(ctx, slot, &png);
+                    self.selected_png = None;
+                    self.src_tex = None;
+                }
+            }
+
+            ui.separator();
+            ui.label(egui::RichText::new("Elegí un PNG fuente (click = preview):").strong());
             ui.horizontal(|ui| {
                 ui.label("🔎 png");
                 ui.text_edit_singleline(&mut self.png_filter);
             });
             if self.pngs.is_empty() {
-                ui.label(egui::RichText::new("(cargá los PNGs con el botón de arriba)").weak());
+                ui.label(egui::RichText::new("(cargá los PNGs / elegí carpeta arriba)").weak());
             }
             let pf = self.png_filter.to_lowercase();
             let mut pick: Option<PathBuf> = None;
-            egui::ScrollArea::vertical().id_salt("pngs").show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("pngs").max_height(260.0).show(ui, |ui| {
                 for p in &self.pngs {
                     let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                     if !pf.is_empty() && !name.to_lowercase().contains(&pf) {
                         continue;
                     }
-                    if ui.selectable_label(false, &name).clicked() {
+                    let sel = self.selected_png.as_deref() == Some(p.as_path());
+                    if ui.selectable_label(sel, &name).clicked() {
                         pick = Some(p.clone());
                     }
                 }
             });
             if let Some(p) = pick {
-                self.bind_png(ctx, slot, &p);
+                self.src_tex = load_texture(ctx, &p, "src_preview");
+                self.selected_png = Some(p);
             }
         });
     }
