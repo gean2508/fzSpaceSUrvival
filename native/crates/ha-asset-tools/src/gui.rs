@@ -139,6 +139,7 @@ impl EditorApp {
     fn ui(&mut self, ctx: &egui::Context) {
         self.top_bar(ctx);
         self.left_slots(ctx);
+        self.right_pngs(ctx);
         self.central_detail(ctx);
     }
 
@@ -437,29 +438,52 @@ impl EditorApp {
                 }
             });
 
-            ui.separator();
-            ui.label(egui::RichText::new("Elegí un PNG fuente (click = preview):").strong());
+        });
+    }
+
+    /// Panel derecho dedicado a elegir el PNG fuente. Lista **virtualizada**
+    /// (`show_rows`) → rinde miles de PNGs sin trabarse y siempre visible.
+    fn right_pngs(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::right("pngs").default_width(300.0).show(ctx, |ui| {
+            ui.heading("PNGs fuente");
             ui.horizontal(|ui| {
-                ui.label("🔎 png");
+                ui.label("🔎");
                 ui.text_edit_singleline(&mut self.png_filter);
             });
+            ui.label(format!("{} PNGs (click = preview)", self.pngs.len()));
+            ui.separator();
             if self.pngs.is_empty() {
-                ui.label(egui::RichText::new("(cargá los PNGs / elegí carpeta arriba)").weak());
+                ui.label(egui::RichText::new("Elegí carpeta / Cargar PNGs arriba").weak());
+                return;
             }
             let pf = self.png_filter.to_lowercase();
+            let filtered: Vec<&PathBuf> = self
+                .pngs
+                .iter()
+                .filter(|p| {
+                    pf.is_empty()
+                        || p.file_name()
+                            .map(|n| n.to_string_lossy().to_lowercase().contains(&pf))
+                            .unwrap_or(false)
+                })
+                .collect();
+            let row_h = ui.text_style_height(&egui::TextStyle::Body) + 4.0;
             let mut pick: Option<PathBuf> = None;
-            egui::ScrollArea::vertical().id_salt("pngs").max_height(260.0).show(ui, |ui| {
-                for p in &self.pngs {
-                    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                    if !pf.is_empty() && !name.to_lowercase().contains(&pf) {
-                        continue;
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(
+                ui,
+                row_h,
+                filtered.len(),
+                |ui, range| {
+                    for i in range {
+                        let p = filtered[i];
+                        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                        let sel = self.selected_png.as_deref() == Some(p.as_path());
+                        if ui.selectable_label(sel, name).clicked() {
+                            pick = Some((*p).clone());
+                        }
                     }
-                    let sel = self.selected_png.as_deref() == Some(p.as_path());
-                    if ui.selectable_label(sel, &name).clicked() {
-                        pick = Some(p.clone());
-                    }
-                }
-            });
+                },
+            );
             if let Some(p) = pick {
                 self.src_tex = load_texture(ctx, &p, "src_preview");
                 self.selected_png = Some(p);
