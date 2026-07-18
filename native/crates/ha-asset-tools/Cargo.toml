@@ -19,4 +19,6 @@ egui = "0.29"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # Selector de carpeta nativo. Backend xdg-portal (COSMIC/Pop!_OS lo tiene) — sin
 # dependencia de libs GTK de desarrollo.
-rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
+# async-std (no tokio): el diálogo síncrono se autogestiona sin necesitar un
+# runtime Tokio ambiente (con "tokio" panicteaba "no reactor running").
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }

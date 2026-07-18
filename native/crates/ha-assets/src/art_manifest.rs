@@ -18,12 +18,58 @@ pub struct ArtAnim {
     pub fps: f32,
 }
 
-/// Entrada completa (formato nuevo).
+/// Rectángulo en **celdas** dentro de una hoja (no píxeles): el editor lo elige
+/// arrastrando en la grilla; el juego lo resuelve a px con `grid`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CellRect {
+    pub col: u32,
+    pub row: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl CellRect {
+    /// Cantidad de celdas del rango (usado como frames de una animación fila).
+    pub fn cells(&self) -> u32 {
+        self.w.max(1) * self.h.max(1)
+    }
+}
+
+/// Una pose direccional/nombrada de un personaje (idle_down, run_left, sit…):
+/// un recorte estático, o una tira animada si trae `anim`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Pose {
+    pub rect: CellRect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anim: Option<ArtAnim>,
+}
+
+/// Entrada completa (formato nuevo). Todos los campos nuevos son opcionales →
+/// el juego viejo y las entradas simples siguen funcionando.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtEntry {
     pub png: String,
+    /// Tamaño de celda px de esta hoja (default 32 si falta).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<(u32, u32)>,
+    /// Recorte estático del sprite dentro de la hoja (si es un sheet).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rect: Option<CellRect>,
+    /// Animación de una tira (frames en fila). Con `strip`, frames = celdas.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anim: Option<ArtAnim>,
+    /// Rango de celdas que forma la animación (1 fila).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strip: Option<CellRect>,
+    /// Poses direccionales/nombradas (personajes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poses: Option<std::collections::BTreeMap<String, Pose>>,
+}
+
+impl ArtEntry {
+    pub fn new(png: String) -> Self {
+        Self { png, grid: None, rect: None, anim: None, strip: None, poses: None }
+    }
 }
 
 /// Valor de una clave: string suelto (viejo) u objeto (nuevo). `untagged` prueba
@@ -51,7 +97,7 @@ impl ArtValue {
     /// Normaliza a la forma completa (lo que escribe el editor).
     pub fn into_full(self) -> ArtEntry {
         match self {
-            ArtValue::Path(png) => ArtEntry { png, anim: None },
+            ArtValue::Path(png) => ArtEntry::new(png),
             ArtValue::Full(e) => e,
         }
     }
@@ -75,8 +121,63 @@ impl ArtManifest {
     }
 
     /// Asigna/actualiza un slot con PNG + animación opcional (forma completa).
+    /// Conserva rect/strip/poses/grid si el slot ya existía con el mismo PNG.
     pub fn set(&mut self, key: &str, png: String, anim: Option<ArtAnim>) {
-        self.sprites.insert(key.to_string(), ArtValue::Full(ArtEntry { png, anim }));
+        let e = self.full_mut(key, png);
+        e.anim = anim;
+    }
+
+    /// Devuelve la entrada completa del slot (creándola/normalizándola). Si el
+    /// PNG cambió, resetea los recortes (eran de otra hoja).
+    pub fn full_mut(&mut self, key: &str, png: String) -> &mut ArtEntry {
+        let slot = self
+            .sprites
+            .entry(key.to_string())
+            .or_insert_with(|| ArtValue::Full(ArtEntry::new(png.clone())));
+        // Normalizar a Full.
+        if let ArtValue::Path(p) = slot {
+            *slot = ArtValue::Full(ArtEntry::new(std::mem::take(p)));
+        }
+        let ArtValue::Full(entry) = slot else { unreachable!() };
+        if entry.png != png {
+            *entry = ArtEntry::new(png);
+        }
+        entry
+    }
+
+    /// Marca un recorte estático (rect en celdas) para el slot.
+    pub fn set_rect(&mut self, key: &str, png: String, grid: (u32, u32), rect: CellRect) {
+        let e = self.full_mut(key, png);
+        e.grid = Some(grid);
+        e.rect = Some(rect);
+        e.strip = None; // rect estático y strip son excluyentes
+    }
+
+    /// Marca una tira de animación (rango de celdas en 1 fila) a `fps`.
+    pub fn set_strip(&mut self, key: &str, png: String, grid: (u32, u32), strip: CellRect, fps: f32) {
+        let e = self.full_mut(key, png);
+        e.grid = Some(grid);
+        e.strip = Some(strip);
+        e.anim = Some(ArtAnim { frames: strip.cells().max(1), fps });
+        e.rect = None;
+    }
+
+    /// Agrega/actualiza una pose direccional/nombrada.
+    pub fn set_pose(&mut self, key: &str, png: String, grid: (u32, u32), name: &str, pose: Pose) {
+        let e = self.full_mut(key, png);
+        e.grid = Some(grid);
+        e.poses.get_or_insert_with(Default::default).insert(name.to_string(), pose);
+    }
+
+    pub fn remove_pose(&mut self, key: &str, name: &str) {
+        if let Some(ArtValue::Full(e)) = self.sprites.get_mut(key) {
+            if let Some(p) = e.poses.as_mut() {
+                p.remove(name);
+                if p.is_empty() {
+                    e.poses = None;
+                }
+            }
+        }
     }
 
     /// Quita el binding de un slot (vuelve a procedural en el juego).
