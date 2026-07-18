@@ -455,41 +455,54 @@ struct MoveStick;
 #[derive(Component, Clone, Copy)]
 struct LookStick;
 
-fn spawn_stick<M: Component + Copy>(commands: &mut Commands, marker: M) {
-    commands
-        .spawn((
+fn spawn_stick<M: Component + Copy>(
+    commands: &mut Commands,
+    marker: M,
+    base_img: Option<Handle<Image>>,
+    knob_img: Option<Handle<Image>>,
+) {
+    let mut base = commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            display: Display::Flex,
+            border: UiRect::all(Val::Px(3.2)),
+            ..default()
+        },
+        BorderColor(ui_theme::joystick_border(false)),
+        BackgroundColor(ui_theme::joystick_base()),
+        BorderRadius::MAX,
+        JoystickBase,
+        marker,
+    ));
+    // Reskin UI: si el pack trae `ui/joystick_base`, se muestra en vez del color.
+    if let Some(img) = base_img {
+        base.insert(ImageNode::new(img));
+    }
+    base.with_children(|p| {
+        let mut knob = p.spawn((
             Node {
                 position_type: PositionType::Absolute,
-                display: Display::Flex,
-                border: UiRect::all(Val::Px(3.2)),
                 ..default()
             },
-            BorderColor(ui_theme::joystick_border(false)),
-            BackgroundColor(ui_theme::joystick_base()),
+            BackgroundColor(ui_theme::joystick_knob()),
             BorderRadius::MAX,
-            JoystickBase,
+            JoystickKnob,
             marker,
-        ))
-        .with_children(|p| {
-            p.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    ..default()
-                },
-                BackgroundColor(ui_theme::joystick_knob()),
-                BorderRadius::MAX,
-                JoystickKnob,
-                marker,
-            ));
-        });
+        ));
+        if let Some(img) = knob_img {
+            knob.insert(ImageNode::new(img));
+        }
+    });
 }
 
-fn spawn_joystick_ui(mut commands: Commands) {
+fn spawn_joystick_ui(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
     if !crate::platform::uses_touch_gameplay_ui() {
         return;
     }
-    spawn_stick(&mut commands, MoveStick);
-    spawn_stick(&mut commands, LookStick);
+    let base = art.get("ui/joystick_base");
+    let knob = art.get("ui/joystick_knob");
+    spawn_stick(&mut commands, MoveStick, base.clone(), knob.clone());
+    spawn_stick(&mut commands, LookStick, base, knob);
 }
 
 fn update_joystick_ui(
