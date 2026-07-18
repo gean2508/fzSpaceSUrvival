@@ -266,10 +266,40 @@ impl EditorApp {
                     ui.label(egui::RichText::new("sin PNG (usa arte procedural en el juego)").weak());
                 }
             }
-            if let Some((_, tex)) = self.tex.as_ref() {
-                ui.label(egui::RichText::new("cómo se ve en el juego:").weak());
-                let size = tex.size_vec2() * 5.0;
-                ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), size)));
+            // Previews lado a lado, acotados (la lista de abajo mantiene scroll).
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("actual (juego)").weak());
+                    match self.tex.as_ref() {
+                        Some((_, tex)) => {
+                            let sz = preview_size(tex, 128.0);
+                            ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), sz)));
+                        }
+                        None => { ui.label(egui::RichText::new("— procedural —").weak()); }
+                    }
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("candidato").weak());
+                    match self.src_tex.as_ref() {
+                        Some((_, tex)) => {
+                            let sz = preview_size(tex, 128.0);
+                            ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), sz)));
+                        }
+                        None => { ui.label(egui::RichText::new("(elegí un PNG abajo)").weak()); }
+                    }
+                });
+            });
+            if let Some(png) = self.selected_png.clone() {
+                let name = png.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                ui.horizontal(|ui| {
+                    ui.label(format!("candidato: {name}"));
+                    if ui.button("✔ Asignar al slot").clicked() {
+                        self.bind_png(ctx, slot, &png);
+                        self.selected_png = None;
+                        self.src_tex = None;
+                    }
+                });
             }
 
             ui.separator();
@@ -279,8 +309,9 @@ impl EditorApp {
                 if self.anim_on {
                     ui.label("frames");
                     ui.add(egui::DragValue::new(&mut self.anim_frames).range(1..=64));
-                    ui.label("fps");
-                    ui.add(egui::DragValue::new(&mut self.anim_fps).range(0.1..=60.0));
+                    ui.label("fps").on_hover_text("cuadros por segundo — velocidad de la animación");
+                    ui.add(egui::DragValue::new(&mut self.anim_fps).range(0.1..=60.0))
+                        .on_hover_text("cuadros por segundo — más alto = más rápido");
                 }
                 if self.manifest.get(slot.key).is_some() && ui.button("Aplicar anim").clicked() {
                     self.apply_anim(slot.key);
@@ -298,22 +329,6 @@ impl EditorApp {
                     self.status = format!("slot {} eliminado", slot.key);
                 }
             });
-
-            ui.separator();
-            // Candidato: preview del PNG elegido tal cual, y botón para asignarlo.
-            if let Some(png) = self.selected_png.clone() {
-                let name = png.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                ui.label(egui::RichText::new(format!("Candidato: {name}")).strong());
-                if let Some((_, tex)) = self.src_tex.as_ref() {
-                    let size = tex.size_vec2() * 5.0;
-                    ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), size)));
-                }
-                if ui.button("✔ Asignar al slot").clicked() {
-                    self.bind_png(ctx, slot, &png);
-                    self.selected_png = None;
-                    self.src_tex = None;
-                }
-            }
 
             ui.separator();
             ui.label(egui::RichText::new("Elegí un PNG fuente (click = preview):").strong());
@@ -477,6 +492,14 @@ impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         EditorApp::ui(self, ctx);
     }
+}
+
+/// Escala la textura para que su lado mayor sea `max_px` (preserva aspecto), así
+/// un preview nunca se come toda el área y la lista de abajo mantiene scroll.
+fn preview_size(tex: &egui::TextureHandle, max_px: f32) -> egui::Vec2 {
+    let s = tex.size_vec2();
+    let m = s.x.max(s.y).max(1.0);
+    s * (max_px / m)
 }
 
 /// Los slots derivados en runtime necesitan `&'static str` y se crean pocas
