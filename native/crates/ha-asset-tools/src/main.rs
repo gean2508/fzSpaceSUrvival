@@ -11,12 +11,13 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use ha_assets::{scan_limezu_directory, Manifest, ScanOptions};
+use ha_assets::{generate_catalog, scan_limezu_directory, Manifest, ScanOptions};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("scan") => cmd_scan(&args[1..]),
+        Some("catalog") => cmd_catalog(&args[1..]),
         Some("-h") | Some("--help") | None => {
             print_usage();
             ExitCode::SUCCESS
@@ -33,14 +34,47 @@ fn print_usage() {
     eprintln!(
         "ha-asset-tools — sistema de assets\n\n\
          COMANDOS:\n\
-         \x20 scan --root <dir> --out <manifest.ron> [--prefix P] [--grid 16] [--max N] [--merge]\n\n\
+         \x20 scan --root <dir> --out <manifest.ron> [--prefix P] [--grid 16] [--max N] [--merge]\n\
+         \x20 catalog --manifest <manifest.ron> --out <CATALOGO.md>\n\n\
          \x20   --root    directorio LimeZu a barrer (recursivo)\n\
-         \x20   --out     manifest.ron a escribir\n\
+         \x20   --out     archivo a escribir\n\
          \x20   --prefix  categoría para los IDs (def: art)\n\
          \x20   --grid    tamaño de celda px (def: 16)\n\
          \x20   --max     corta tras N archivos (prueba)\n\
-         \x20   --merge   funde sobre el --out existente (respeta IDs curados)"
+         \x20   --merge   funde sobre el --out existente (respeta IDs curados)\n\
+         \x20   --manifest  manifest.ron de entrada (catalog)"
     );
+}
+
+fn cmd_catalog(args: &[String]) -> ExitCode {
+    let mut manifest_path: Option<PathBuf> = None;
+    let mut out: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--manifest" => { manifest_path = args.get(i + 1).map(PathBuf::from); i += 2; }
+            "--out" => { out = args.get(i + 1).map(PathBuf::from); i += 2; }
+            other => { eprintln!("flag desconocida: {other}"); return ExitCode::FAILURE; }
+        }
+    }
+    let Some(manifest_path) = manifest_path else { eprintln!("falta --manifest"); return ExitCode::FAILURE; };
+    let Some(out) = out else { eprintln!("falta --out"); return ExitCode::FAILURE; };
+
+    let manifest = match std::fs::read_to_string(&manifest_path).ok().map(|s| Manifest::from_ron_str(&s)) {
+        Some(Ok(m)) => m,
+        Some(Err(e)) => { eprintln!("parse {}: {e}", manifest_path.display()); return ExitCode::FAILURE; }
+        None => { eprintln!("no pude leer {}", manifest_path.display()); return ExitCode::FAILURE; }
+    };
+    let md = generate_catalog(&manifest);
+    if let Some(parent) = out.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(e) = std::fs::write(&out, md) {
+        eprintln!("no pude escribir {}: {e}", out.display());
+        return ExitCode::FAILURE;
+    }
+    eprintln!("✓ catalog: {} assets → {}", manifest.assets.len(), out.display());
+    ExitCode::SUCCESS
 }
 
 fn cmd_scan(args: &[String]) -> ExitCode {

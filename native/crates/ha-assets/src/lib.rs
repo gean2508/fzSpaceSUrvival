@@ -7,11 +7,13 @@
 //! F1 (este archivo): spec del formato + structs serde + round-trip.
 //! F2+: `scan`, `catalog`, `registry` se apoyan en estos tipos.
 
+pub mod catalog;
 pub mod manifest;
 
 #[cfg(feature = "scan")]
 pub mod scan;
 
+pub use catalog::generate_catalog;
 pub use manifest::{
     AnchorKind, Anim, AnimLayout, Asset, Brush, Flags, Footprint, Hitbox, Manifest, ManifestError,
     Pivot, Rect, Sheet, Source, YSort, CURRENT_MANIFEST_VERSION,

@@ -14,7 +14,7 @@ Server MVP: authoritative netcode, survival waves, Postgres, auth, `/updates`.
 shared/   → deterministic GameSimulation (TS)
 server/   → SurvivalRoom, auth, Drizzle
 client/   → landing download panel only
-native/   → ha-shared (ported sim constants) + ha-game (Bevy)
+native/   → ha-shared (sim constants) + ha-assets (manifest.ron/catálogo) + ha-game (Bevy)
 ```
 
 ## Commands
@@ -36,3 +36,4 @@ npm run test:native       # ha-shared Rust tests
 4. Landing stays minimal — no R3F, no game engine in `client/`.
 5. User flow: `npm run play` → URL on phone → download APK → install → play.
 6. **Direction:** juego 2D (Terraria en superficie + Space Flight Simulator en vuelo/planetas) conservando TODO el contenido (survival, máquinas, base lunar, colonos, ship builder). Tierra → naves prefab → off-world → colonos. No orbital physics; objetivo 60 FPS en el Redmi. NO reintroducir render 3D (biblia §1 anti-regresión).
+7. **Assets (sistema data-driven — ver `ASSET_SYSTEM_ARCHITECTURE.md`):** antes de spawnear o referenciar CUALQUIER asset visual (sprites, decoración, muebles, flora, NPCs), leé `native/assets/CATALOGO.md`. Todo asset se referencia por su ID lógico: `AssetSlot { slot_id: "...", asset_id: Some("categoria/id_logico") }`. Los IDs válidos están en la tabla del CATÁLOGO. **NUNCA inventes rects, offsets ni pivotes** — eso vive en `native/assets/manifest.ron` (fuente de verdad), no en el código. Regenerar catálogo tras cada scan/curado: `cargo run -p ha-asset-tools -- catalog --manifest native/assets/manifest.ron --out native/assets/CATALOGO.md`.
