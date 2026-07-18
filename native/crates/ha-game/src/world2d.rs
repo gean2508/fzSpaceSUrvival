@@ -101,6 +101,9 @@ fn tile_name(t: Tile) -> &'static str {
         Tile::CaveFloor => "cave_floor",
         Tile::WoodFloor => "wood_floor",
         Tile::Wall => "wall",
+        Tile::WoodWall => "wood_wall",
+        Tile::StoneBrick => "stone_brick",
+        Tile::Door => "door",
     }
 }
 
@@ -118,6 +121,9 @@ fn tile_from_name(name: &str) -> Tile {
         "cave_floor" => Tile::CaveFloor,
         "wood_floor" => Tile::WoodFloor,
         "wall" => Tile::Wall,
+        "wood_wall" => Tile::WoodWall,
+        "stone_brick" => Tile::StoneBrick,
+        "door" => Tile::Door,
         _ => Tile::Air,
     }
 }

@@ -42,16 +42,32 @@ pub enum Tile {
     // Player-placed / shared
     WoodFloor,
     Wall,
+    // Build pieces (construction system) — placed only, never generated.
+    WoodWall,
+    StoneBrick,
+    Door,
     Air,
 }
 
 impl Tile {
     /// Blocks walking (walls, water, solid rock — cave floors are walkable).
+    /// Build walls block; wood floors and doors are walkable.
     pub fn solid(self) -> bool {
-        matches!(self, Tile::Water | Tile::Wall | Tile::Bedrock | Tile::Stone | Tile::RockDark | Tile::RockRed)
+        matches!(
+            self,
+            Tile::Water
+                | Tile::Wall
+                | Tile::Bedrock
+                | Tile::Stone
+                | Tile::RockDark
+                | Tile::RockRed
+                | Tile::WoodWall
+                | Tile::StoneBrick
+        )
     }
 
-    /// Diggable (removable) → yields this item id, if any.
+    /// Diggable (removable) → yields this item id, if any. Build pieces refund
+    /// their material so deconstruction is just "dig the piece".
     pub fn dug_item(self) -> Option<&'static str> {
         match self {
             Tile::Grass | Tile::Dirt => Some("dirt"),
@@ -59,7 +75,8 @@ impl Tile {
             Tile::Regolith => Some("regolith"),
             Tile::Stone | Tile::RockRed => Some("stone"),
             Tile::RockDark => Some("stone"),
-            Tile::WoodFloor | Tile::Wall => Some("wood"),
+            Tile::WoodFloor | Tile::Wall | Tile::WoodWall | Tile::Door => Some("wood"),
+            Tile::StoneBrick => Some("stone"),
             _ => None,
         }
     }
@@ -79,9 +96,72 @@ impl Tile {
             Tile::CaveFloor => [0.24, 0.22, 0.26],
             Tile::WoodFloor => [0.58, 0.44, 0.26],
             Tile::Wall => [0.38, 0.34, 0.30],
+            Tile::WoodWall => [0.45, 0.31, 0.17],
+            Tile::StoneBrick => [0.55, 0.55, 0.58],
+            Tile::Door => [0.30, 0.20, 0.10],
             Tile::Air => [0.0, 0.0, 0.0],
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Construction system — build pieces catalogue (deterministic, shared)
+// ---------------------------------------------------------------------------
+
+/// A placeable structural piece. Placed on an empty surface cell via the build
+/// mode (hammer + `BuildModeActive`), snapping to the aimed cell. Removing a
+/// piece is just digging it — `Tile::dug_item` refunds the material.
+#[derive(Clone, Copy, Debug)]
+pub struct BuildPiece {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// The tile this piece places.
+    pub tile: Tile,
+    /// Resource consumed to place one (item id + quantity).
+    pub cost_item: &'static str,
+    pub cost_qty: u32,
+}
+
+/// Ordered palette of build pieces (index = palette slot).
+pub static BUILD_PIECES: &[BuildPiece] = &[
+    BuildPiece {
+        id: "build_wood_floor",
+        label: "Piso",
+        tile: Tile::WoodFloor,
+        cost_item: "wood",
+        cost_qty: 1,
+    },
+    BuildPiece {
+        id: "build_wood_wall",
+        label: "Muro madera",
+        tile: Tile::WoodWall,
+        cost_item: "wood",
+        cost_qty: 2,
+    },
+    BuildPiece {
+        id: "build_stone_brick",
+        label: "Muro piedra",
+        tile: Tile::StoneBrick,
+        cost_item: "stone",
+        cost_qty: 2,
+    },
+    BuildPiece {
+        id: "build_door",
+        label: "Puerta",
+        tile: Tile::Door,
+        cost_item: "wood",
+        cost_qty: 3,
+    },
+];
+
+/// Number of pieces in the build palette.
+pub fn build_piece_count() -> usize {
+    BUILD_PIECES.len()
+}
+
+/// Palette piece by index (clamped-safe: returns None if out of range).
+pub fn build_piece(idx: usize) -> Option<&'static BuildPiece> {
+    BUILD_PIECES.get(idx)
 }
 
 // ---------------------------------------------------------------------------
