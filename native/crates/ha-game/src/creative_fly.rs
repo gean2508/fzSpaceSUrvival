@@ -59,8 +59,10 @@ const SWAP_ALT: f32 = 200.0;
 const SWAP_VIEW_H: f32 = 200.0;
 const GROUND_VIEW_H: f32 = 30.0;
 /// In orbit the camera zoom follows altitude (SFS reveal): the body's circle
-/// shrinks as you climb. `view_h = (radius + alt) * this`, clamped.
-const ORBIT_ZOOM_FACTOR: f32 = 1.2;
+/// shrinks as you climb. `view_h = (radius + alt) * this`, clamped. High enough
+/// that the planet reads as a DISC below a tiny character (SFS scale), not a wall
+/// you're "standing on".
+const ORBIT_ZOOM_FACTOR: f32 = 4.5;
 const ORBIT_ZOOM_MAX: f32 = 2_000_000.0;
 /// Free-flight speed = view_h × this (auto-scales with zoom).
 const FLY_SPEED_FACTOR: f32 = 0.35;

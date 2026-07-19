@@ -135,7 +135,13 @@ fn interpolate_player_visual(
     // pos in Orbit, the walked ground spot mid Climb/Descend.
     if fly.flying() {
         let t = time.overstep_fraction() as f32;
-        let s = (zoom.view_h / 30.0).max(1.0);
+        // In orbit the character is a tiny SPECK against the planet disc (SFS
+        // scale); while climbing it stays camera-attached and readable.
+        let s = if fly.in_orbit() {
+            (zoom.view_h * 0.006).max(1.0)
+        } else {
+            (zoom.view_h / 30.0).max(1.0)
+        };
         for (visual, mut transform, mut vis) in &mut query {
             *vis = Visibility::Visible;
             let (wx, wz) = if fly.in_orbit() {
