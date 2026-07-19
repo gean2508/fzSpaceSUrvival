@@ -27,6 +27,15 @@ impl Plugin for AutoDrivePlugin {
                 .add_systems(Update, fly_test_drive);
             return;
         }
+        // Rocket transition visual test: ignite from the pad, thrust to space,
+        // release and fall back to touchdown — screenshots at altitude beats on
+        // BOTH legs so the surface↔space choreography can be SEEN
+        // (HA_ROCKETTEST=1 HA_AUTOPLAY=1).
+        if std::env::var("HA_ROCKETTEST").is_ok() {
+            app.init_resource::<RocketTestState>()
+                .add_systems(Update, rocket_test_drive);
+            return;
+        }
         if std::env::var("HA_AUTODRIVE").is_err() {
             return;
         }
@@ -42,7 +51,7 @@ struct FlyTestState {
 }
 
 const FLYTEST_DIR: &str =
-    "/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/501aea2c-9fc5-4caa-9230-ef1403004e02/scratchpad";
+    "/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/6399287e-c6d0-477a-ada7-4482fa0e8175/scratchpad";
 
 fn fly_test_drive(world: &mut World) {
     let now = world.resource::<Time>().elapsed_secs();
@@ -62,10 +71,11 @@ fn fly_test_drive(world: &mut World) {
     let want = [4.0f32, 6.0, 8.0, 10.0, 11.5, 12.8, 14.5, 17.0];
     let shots = world.resource::<FlyTestState>().shots as usize;
     if shots < want.len() && now >= want[shots] {
-        let (alt, cloud, orbit) = {
+        let (alt, orbit) = {
             let f = world.resource::<crate::creative_fly::CreativeFlight>();
-            (f.alt, f.cloud, f.in_orbit())
+            (f.alt, f.in_orbit())
         };
+        let cloud = world.resource::<crate::transition::FlightTransition>().cover;
         let region = format!("{:?}", world.resource::<crate::scene::RegionRuntime>().active);
         eprintln!(
             "ha-flytest[{shots}] t={now:.1} alt={alt:.0} cloud={cloud:.2} orbit={orbit} region={region}"
@@ -75,6 +85,105 @@ fn fly_test_drive(world: &mut World) {
     } else if shots >= want.len() {
         eprintln!("ha-flytest: DONE");
         std::process::exit(0);
+    }
+}
+
+#[derive(Resource, Default)]
+struct RocketTestState {
+    ignited: bool,
+    released: bool,
+    was_active: bool,
+    up_idx: usize,
+    down_idx: usize,
+    landed_at: Option<f32>,
+}
+
+/// Altitude beats to capture going up / coming down (m). The 330 beat sits in
+/// the fully-covered swap band; 500/800 show the orbital reveal.
+const ROCKET_UP_ALTS: [f32; 6] = [30.0, 150.0, 250.0, 330.0, 500.0, 800.0];
+const ROCKET_DOWN_ALTS: [f32; 4] = [500.0, 300.0, 150.0, 50.0];
+
+fn rocket_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    // Wait out the boot screen so the first shots show the world.
+    if now < 4.0 {
+        return;
+    }
+    if now > 120.0 {
+        eprintln!("ha-rockettest: TIMEOUT (FAIL)");
+        std::process::exit(1);
+    }
+    if !world.resource::<RocketTestState>().ignited {
+        let clk = world.resource::<crate::solar_system_clock::SolarSystemClock>().t;
+        let (pos, vel) =
+            crate::rocket_flight::launch_pos_vel(ha_shared::CelestialBody::Earth, clk, 60.0);
+        let mut flight = world.resource_mut::<crate::rocket_flight::RocketFlight>();
+        flight.clock_secs = clk;
+        flight.surface_flight = Some(ha_shared::CelestialBody::Earth);
+        flight.begin_at(pos);
+        flight.fuel = flight.capacity();
+        flight.vel = vel;
+        world.resource_mut::<RocketTestState>().ignited = true;
+        eprintln!("ha-rockettest: ignition");
+        return;
+    }
+
+    let (active, alt) = {
+        let f = world.resource::<crate::rocket_flight::RocketFlight>();
+        (f.active && f.phase != ha_shared::FlightPhase::Surface, f.altitude_m())
+    };
+    let (cover, mode) = {
+        let t = world.resource::<crate::transition::FlightTransition>();
+        (t.cover, t.mode)
+    };
+    let region = format!("{:?}", world.resource::<crate::scene::RegionRuntime>().active);
+    let st = world.resource::<RocketTestState>();
+    let (released, up_idx, down_idx, was_active, landed_at) =
+        (st.released, st.up_idx, st.down_idx, st.was_active, st.landed_at);
+
+    if active {
+        world.resource_mut::<RocketTestState>().was_active = true;
+    }
+
+    if !released {
+        press(world, KeyCode::Space); // thrust
+        if up_idx < ROCKET_UP_ALTS.len() && alt >= ROCKET_UP_ALTS[up_idx] {
+            eprintln!(
+                "ha-rockettest[up-{up_idx}] t={now:.1} alt={alt:.0} cover={cover:.2} mode={mode:?} region={region}"
+            );
+            shot(world, &format!("{FLYTEST_DIR}/rockettest-up-{up_idx}.png"));
+            world.resource_mut::<RocketTestState>().up_idx += 1;
+        }
+        if alt >= 900.0 {
+            release_all(world);
+            world.resource_mut::<RocketTestState>().released = true;
+            eprintln!("ha-rockettest: engine off at {alt:.0} m — falling back");
+        }
+    } else if active {
+        if down_idx < ROCKET_DOWN_ALTS.len() && alt <= ROCKET_DOWN_ALTS[down_idx] {
+            eprintln!(
+                "ha-rockettest[down-{down_idx}] t={now:.1} alt={alt:.0} cover={cover:.2} mode={mode:?} region={region}"
+            );
+            shot(world, &format!("{FLYTEST_DIR}/rockettest-down-{down_idx}.png"));
+            world.resource_mut::<RocketTestState>().down_idx += 1;
+        }
+    }
+
+    if was_active && !active {
+        match landed_at {
+            None => {
+                eprintln!(
+                    "ha-rockettest: touchdown t={now:.1} region={region} (shots up={up_idx} down={down_idx})"
+                );
+                shot(world, &format!("{FLYTEST_DIR}/rockettest-landed.png"));
+                world.resource_mut::<RocketTestState>().landed_at = Some(now);
+            }
+            Some(t0) if now - t0 > 1.5 => {
+                eprintln!("ha-rockettest: DONE");
+                std::process::exit(0);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -397,17 +506,24 @@ fn smoke_drive(world: &mut World) {
             }
         }
         4 => {
-            // Hold thrust; after a few seconds we should be in Space (orbital).
+            // Hold thrust. The ascent is GRADUAL now (shared transition layer):
+            // below the swap band the surface region stays live under the
+            // closing cover, so the pass condition is "flying with a coherent
+            // frame", not "instantly in Space".
             press(world, KeyCode::Space);
             if dt > 4.0 {
                 let in_space = matches!(
                     world.resource::<crate::scene::RegionRuntime>().active,
                     crate::scene::RegionId::Space
                 );
+                let in_surface_frame = world
+                    .resource::<crate::transition::FlightTransition>()
+                    .in_surface_frame();
                 let alt = world.resource::<crate::rocket_flight::RocketFlight>().altitude_m();
+                let ok = in_space || in_surface_frame;
                 eprintln!(
-                    "ha-verify: space-flight {} (region_space={in_space}, alt={alt:.0})",
-                    if in_space { "PASS" } else { "FAIL" }
+                    "ha-verify: space-flight {} (region_space={in_space}, surface_frame={in_surface_frame}, alt={alt:.0})",
+                    if ok { "PASS" } else { "FAIL" }
                 );
                 release_all(world);
                 shot(world, "ha-verify-topdown-space.png");

@@ -32,6 +32,7 @@ mod ship_builder;
 mod sim;
 mod survival_stats;
 mod targeting;
+mod transition;
 mod ui_editor;
 mod ui_theme;
 mod ui;
@@ -73,6 +74,7 @@ use ship_interior::ShipInteriorPlugin;
 use sky2d::Sky2dPlugin;
 use sim::SimPlugin;
 use targeting::TargetingPlugin;
+use transition::TransitionPlugin;
 use ui::IconFactoryPlugin;
 use ui_editor::UiEditorPlugin;
 use world2d::World2dPlugin;
@@ -198,6 +200,7 @@ fn run_app_inner() {
             RocketFlightPlugin,
             NavComputerPlugin,
             ShipInteriorPlugin,
+            TransitionPlugin,
             CreativeFlyPlugin,
             HarvestPlugin,
             SurvivalStatsPlugin,

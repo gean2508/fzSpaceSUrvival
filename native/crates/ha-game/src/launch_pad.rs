@@ -393,6 +393,7 @@ fn sync_pad_visuals(
     builder: Res<crate::ship_builder::ShipBuilderState>,
     decor: Query<Entity, With<PadDecor>>,
     roots: Query<(), With<LaunchPadRoot>>,
+    ship_vis: Query<Entity, With<ShipConfigVisual>>,
     mut cooldown: Local<u32>,
     mut commands: Commands,
 ) {
@@ -410,7 +411,22 @@ fn sync_pad_visuals(
         *cooldown -= 1;
         return;
     }
-    if flight.blocks_walking() || !roots.is_empty() {
+    if flight.blocks_walking() {
+        // The parked stack IS the rocket now — hide it while it flies (the pad
+        // itself stays: the ascent surface frame shows it receding below).
+        for e in &ship_vis {
+            commands.entity(e).despawn_recursive();
+        }
+        return;
+    }
+    if !roots.is_empty() {
+        // Pad survived the whole flight (ascent aborted back onto Earth):
+        // restore the parked stack the ignition hid.
+        if ship_vis.is_empty() {
+            if let Some(pad) = pads.pads.iter().find(|p| p.ready) {
+                spawn_config_ship_visual(&mut commands, pad.uid, pad.x, pad.z, &builder.config);
+            }
+        }
         return;
     }
     *cooldown = 3;

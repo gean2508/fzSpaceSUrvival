@@ -601,6 +601,7 @@ fn stream_tile_chunks(
     mut meshes: ResMut<Assets<Mesh>>,
     mut flora: ResMut<FloraHarvest>,
     fly: Res<crate::creative_fly::CreativeFlight>,
+    trans: Res<crate::transition::FlightTransition>,
     player: Query<&Transform, With<Player>>,
     chunks: Query<(Entity, &TileChunk)>,
     decor: Query<(Entity, &SurfaceDecor)>,
@@ -625,9 +626,10 @@ fn stream_tile_chunks(
     let pcx = (px / (CHUNK as f32 * TILE_M)).floor() as i64;
     let pcz = (pz / (CHUNK as f32 * TILE_M)).floor() as i64;
 
-    // Creative flight zooms the camera out, so stream a wider ring to fill the
-    // view with terrain (the clouds cover whatever's still beyond it).
-    let range = if fly.flying() { 10 } else { CHUNK_RANGE };
+    // Any ascent/descent transition (rocket or creative) zooms the camera out,
+    // so stream a wider ring to fill the view with terrain (the cover hides
+    // whatever's still beyond it).
+    let range = if fly.flying() || trans.active() { 10 } else { CHUNK_RANGE };
 
     let mut live: HashSet<(i64, i64)> = HashSet::new();
     for (e, chunk) in &chunks {

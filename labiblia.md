@@ -39,7 +39,10 @@ Clases scout/warrior/mage, habilidades, oleadas survival, AI hostiles — perman
 >   gravedad; cavar/colocar por celda. Cuevas = **Z-Levels** discretos (z<0) por
 >   portales (entrada de mina/escaleras); oscuridad + vetas densas abajo.
 > - Espacio = mismo plano XZ visto desde arriba (planetas = círculos reales,
->   `orbital2d`). Despegar/aterrizar = **zoom** de cámara (no cambio de coords).
+>   `orbital2d`). Despegar/aterrizar = **coreografía única por cuerpo** (19 jul,
+>   §13-nonies): zoom sigue la altura, cobertura (nubes/fundido) tapa el swap de
+>   marco a la altura del perfil (`ha-shared/transition.rs`), círculo SFS al
+>   despejar. Vale para cohete Y creativo, en TODOS los cuerpos.
 > - Assets LimeZu vía capa drop-in (`art2d.rs`, `assets/art/`, `sync:art`).
 
 ### (Histórico — modelo de tira, SUPERADO por top-down)
@@ -117,6 +120,7 @@ Validar: `npm run validate:arch`.
 | **Locomoción plana** (plataformero: gravedad por contexto, salto/coyote, wrap circunferencia, vuelo creativo) | `ha-shared/flat2d.rs` (`step_flat_movement`), `ha-game/sim.rs` |
 | **Vuelo 2D SFS** (thrust/coast/retro, fuel real, drag, paracaídas, SOI dinámica, aterrizaje, relanzamiento off-world, remap exacto superficie↔órbita; **telemetría H/V** `vertical_speed`/`horizontal_speed` + **radar** de superficie; **autopilot hover** ~500 m grueso) | `ha-game/rocket_flight.rs`, `ha-shared/flight_physics.rs`, `flat2d.rs` |
 | **Vista orbital** (cuerpos como círculos reales + halo atmósfera + Sol) | `ha-game/orbital2d.rs` |
+| **Transición superficie↔espacio** (perfil por cuerpo derivado de `atmo_top_m`, calibrado a la Tierra 190/290/300-360/400/700/900; cobertura = nubes tintadas o fundido airless; swap con histéresis `swap_down`/`swap_up` SIEMPRE bajo cobertura llena; recurso único `FlightTransition` que escribe el vuelo activo y leen cielo/cámara/streaming/región) | `ha-shared/transition.rs` (perfil + 6 tests), `ha-game/transition.rs` (recurso), guardián en `rocket_flight.rs::sync_flight_world_state` |
 | **Regiones + jugador** (RegionId/WorldContext, spawn, teleports MENU) | `ha-game/scene.rs` (`teleport_to_body`) |
 | **Interior de nave + cabina + recarga** (cuarto 2D abordable desde el pad; Z-level dedicado 64 sobre roca sólida = cuarto tallado en WoodFloor; abordar/salir = cambio región+z+teleport B8; `CockpitSeat` → `PreFlightUI` DESPEGAR/AUTOPILOTO/LEVANTARSE bloquea al walker; `FuelSource` + `RefuelEvent` en sala de máquinas = combustible gestionado) | `ha-game/ship_interior.rs` (`ShipInteriorPlugin`, `board_ship`/`leave_ship`, `CockpitState`, `RefuelEvent`), `RegionId::ShipInterior`, `TileWorld::force_tile` |
 | **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
@@ -226,11 +230,14 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
     que NO renderizaba** → siempre se veía el "cuadrado feo" del terreno finito; pasado a **UI Node**
     (`sky2d::CloudOverlay` + `sync_cloud_overlay`, `GlobalZIndex(600)`) que sí tapa. (2) El "modelo
     circular puro" regresaba a "aparecés en el espacio al instante" → **revertido** al climb gradual.
-  - **Modelo vigente (climb gradual + nubes que tapan el swap):** subís (`VERT_SPEED 150`, suelo visible
-    hasta ~90 m, terreno llena con `range=10` en `world2d`), las nubes entran (`cloud_from_alt`, llenas
-    ~170 m) tapando el cuadrado + el swap a `SWAP_ALT 200` (`SWAP_VIEW_H 200`), y despejan en el espacio
-    revelando el círculo del planeta (vista SFS de `orbital2d`, con anillo de atmósfera). Verificado por
-    capturas: suelo llena → nubes → círculo. *Tuning fino pendiente en device.*
+  - **Modelo vigente (climb gradual + cobertura que tapa el swap — COMPARTIDO desde 19 jul):** subís
+    (`VERT_SPEED 32`, terreno llena con `range=10` en `world2d`), la cobertura entra según el
+    **perfil del cuerpo** (`ha_shared::transition_profile` — Tierra: nubes 190→290 m), tapa el swap
+    de marco (Tierra: `swap_up` 360 m, vista `SWAP_VIEW_H 180`) y el espacio abre pasada la banda de
+    despeje (entrada a órbita explícita en `clear_end+60`). Todos los números viven en el perfil,
+    NO en `creative_fly.rs`. En cuerpos sin aire: SIN nubes, fundido oscuro breve alrededor del swap
+    (~125-165 m), círculo pelado (SFS-correcto). Verificado por capturas (flytest + rockettest):
+    suelo llena → cobertura → círculo. *Tuning fino pendiente en device.*
 
   - **(histórico, revertido) Modelo TRUE-SFS circular:** el vuelo ocurría **ENTERO en la vista circular** (`orbital2d`,
     el cuerpo es SIEMPRE un círculo), **sin swap intermedio** (se eliminaron las fases de tiles planos
@@ -474,6 +481,49 @@ la cámara **siempre centrada** en el cohete (vuelo) o el jugador (superficie), 
 (`FLIGHT_DEFAULT_H = 320 m`) al entrar/salir de vuelo. El pellizco se **gatea a vuelo/espacio**
 (en superficie los 2 sticks usan 2 dedos y se leería como falso pinch). Clamps `[18, 12000] m`.
 Necesario para poder testear salida/aterrizaje.
+
+### §13-nonies — Transición superficie↔espacio unificada (19 jul 2026)
+
+Plan aprobado en `PLAN_TRANSICION_ORBITAL.md` (raíz). Problema: el cohete cambiaba a
+`RegionId::Space` **en el primer frame de ignición** (corte instantáneo tiles→disco;
+`surface_flight`/`surface_ref_s` estaban muertos), el aterrizaje era un teleport seco,
+y la coreografía buena solo existía en el creativo con números de la Tierra hardcodeados
+(nubes en la Luna = mal). Solución — UNA capa compartida:
+
+- **`ha-shared/transition.rs` (NUEVO, 6 tests):** `TransitionProfile` por cuerpo derivado
+  de `atmo_top_m`, factores calibrados para que la Tierra dé EXACTO los números tuneados
+  (cover 190→290, swap_down 300 / swap_up 360, clear 400→700, fade 900). Invariante
+  testeada: **ambos swaps caen SIEMPRE dentro de la banda de cobertura llena** (el primer
+  intento `swap*0.85` la violaba — el test lo pescó). Airless: fundido oscuro corto
+  (swap 125/165), sin nubes. `cover_color` por cuerpo (Venus ocre, Marte salmón…).
+- **`ha-game/transition.rs` (NUEVO):** recurso `FlightTransition {mode, body, alt, cover,
+  cover_color, sky_blend, view_h, surface_anchor}` — lo escribe el vuelo activo (cohete
+  XOR creativo), lo leen `sky2d` (overlay + fade; reemplazó a `LaunchAtmosphere` y a
+  `CreativeFlight::cloud`, borrados), `camera` (la transición ES la dueña del zoom
+  mientras corre; el snap a `FLIGHT_DEFAULT_H` quedó solo para entrar a espacio SIN
+  transición), `world2d` (ring ancho también en vuelo cohete).
+- **Cohete gradual:** `sync_flight_world_state` es el guardián B8 real — región y
+  transición se escriben en UN solo sistema, gateados por altitud con histéresis. Bajo
+  el swap: marco superficie vivo, sprite del cohete fijo sobre `surface_anchor` (pad al
+  subir; **zona de aterrizaje** `scene::landing_site` al bajar — Tierra: el pad, antes
+  aterrizabas en arco 0), escala constante, el mundo retrocede por zoom. El walker
+  (oculto) se estaciona en la zona de aterrizaje al entrar en descenso para que el
+  streaming centre bien los chunks. `sync_pad_visuals` oculta la nave estacionada en
+  vuelo y la repone al volver.
+- **Fix de geometría (preexistente):** en órbita creativa `pos.y=0` vs centros en
+  `FLIGHT_PLANE_Y=-1500` inflaba TODA distancia ~+535 m → el despeje al entrar a órbita
+  era un accidente y el auto-aterrizaje en la Luna era **imposible**. Ahora distancias
+  en XZ + entrada a órbita explícita (`clear_end+60`).
+- **Cielo por cuerpo en superficie:** `sync_sky` — cuerpos con atmósfera (Venus 80,
+  Titán 60, Urano 55, Neptuno 50, Marte 45) tienen cielo tintado (`cover_color`) con
+  banda de fade escalada; airless sigue vacío+estrellas. Antes: todo no-Tierra era negro.
+- **Verificación:** 98 tests ha-shared verdes · `HA_ROCKETTEST=1 HA_AUTOPLAY=1` (nuevo en
+  `debug/autodrive.rs`) capturó subida y bajada completas (terreno→cobertura→espacio→
+  cobertura→pad) · `HA_FLYTEST` regresión creativa idéntica · smoke `HA_AUTODRIVE` todo
+  PASS (la fase 4 ahora acepta marco superficie coherente, no exige Space a los 4 s).
+- **Pendiente device:** sensación de bandas en cuerpos chicos; el paso por nubes del
+  cohete a todo empuje es rápido (~2 s) — si no alcanza a tapar, ensanchar
+  `cover_full→clear_start` en el perfil (un solo lugar).
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

@@ -26,6 +26,7 @@ pub mod types;
 pub mod ui;
 pub mod cosmic_scale;
 pub mod topdown;
+pub mod transition;
 pub mod flight_physics;
 pub mod luna_locomotion;
 pub mod luna_terrain;
@@ -120,6 +121,7 @@ pub use celestial_bodies::{
     EARTH_SOI_M, MOON_SOI_M, EARTH_ATMO_TOP_M, EARTH_FLIGHT_RADIUS_M, MOON_FLIGHT_RADIUS_M,
     MOON_ORBIT_X_M,
 };
+pub use transition::{transition_profile, TransitionProfile};
 pub use flight_physics::{
     altitude_above_body, altitude_above_body_at, atmosphere_drag, dominant_body, dominant_body_at,
     earth_center, gravity_accel_at, gravity_accel_at_time, gravity_accel_luna_gameplay,

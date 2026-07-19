@@ -7,8 +7,9 @@
 use bevy::prelude::*;
 
 use crate::camera::GameCamera;
-use crate::scene::{LaunchAtmosphere, RegionId, RegionRuntime};
+use crate::scene::{RegionId, RegionRuntime};
 use crate::sim::{Player, SimState};
+use crate::transition::FlightTransition;
 
 /// Full day length in seconds (matches the old sky_clock cycle).
 pub const DAY_SECS: f32 = 720.0;
@@ -58,10 +59,11 @@ struct NightOverlay;
 #[derive(Component)]
 struct StarSprite;
 
-/// Camera-following cloud layer for the creative ascent/descent — hides the
-/// ground (and the surface↔orbit swap) mid-atmosphere, clears into space.
-/// Alpha is driven by `CreativeFlight::cloud`. Colour = white fallback; drop a
-/// `decor/clouds` texture later for real clouds.
+/// Camera-following cover layer for every ascent/descent (rocket AND creative)
+/// — hides the ground (and the surface↔orbit swap) mid-atmosphere, clears into
+/// space. Alpha + tint are driven by `FlightTransition` (clouds on bodies with
+/// an atmosphere, a brief dark fade on airless ones). Drop a `decor/clouds`
+/// texture later for real clouds.
 #[derive(Component)]
 struct CloudOverlay;
 
@@ -114,7 +116,7 @@ fn spawn_sky_attachments(mut commands: Commands, camera: Query<Entity, With<Game
 fn sync_sky(
     clock: Res<DayClock>,
     region: Res<RegionRuntime>,
-    launch: Res<LaunchAtmosphere>,
+    trans: Res<FlightTransition>,
     lantern: Res<PlayerLanternControl>,
     tiles: Res<crate::world2d::TileWorld>,
     mut clear: ResMut<ClearColor>,
@@ -135,8 +137,11 @@ fn sync_sky(
         })
         .unwrap_or(30.0);
 
-    // How "spacey" is the view? 0 = Earth ground by day, 1 = void.
+    // How "spacey" is the view? 0 = surface sky by day, 1 = void. Bodies with
+    // an atmosphere get their own tinted sky (from the transition profile);
+    // airless surfaces are void + stars, as always.
     let mut space_f: f32;
+    let mut body_sky: Option<Vec3> = None;
     let day = clock.daylight();
     match region.active {
         RegionId::Overworld { .. } | RegionId::Cave(_) => {
@@ -147,17 +152,41 @@ fn sync_sky(
                 space_f = ((h - SKY_FADE_START_M) / (SKY_FADE_END_M - SKY_FADE_START_M))
                     .clamp(0.0, 1.0);
             }
-            if launch.active {
-                space_f = space_f.max(launch.blend.clamp(0.0, 1.0));
+            if trans.in_surface_frame() {
+                space_f = space_f.max(trans.sky_blend.clamp(0.0, 1.0));
+            }
+        }
+        RegionId::Luna | RegionId::Planet(_) => {
+            let body = match region.active {
+                RegionId::Planet(b) => b,
+                _ => ha_shared::CelestialBody::Moon,
+            };
+            let p = ha_shared::transition_profile(body);
+            if p.sky_fade_end > 0.0 {
+                // Same on-foot fade band as Earth, scaled to this atmosphere,
+                // so the sky you land under matches the descent you flew.
+                let start = p.sky_fade_end * (SKY_FADE_START_M / 900.0);
+                let end = p.sky_fade_end * (SKY_FADE_END_M / 900.0);
+                space_f = player
+                    .get_single()
+                    .map(|sim| ((sim.body.y - start) / (end - start)).clamp(0.0, 1.0))
+                    .unwrap_or(0.0);
+                if trans.in_surface_frame() {
+                    space_f = space_f.max(trans.sky_blend.clamp(0.0, 1.0));
+                }
+                body_sky = Some(Vec3::from_array(p.cover_color) * 0.85);
+            } else {
+                space_f = 1.0;
             }
         }
         _ => space_f = 1.0,
     }
 
-    // Earth sky palette by daylight.
+    // Sky palette: Earth runs its day/night cycle; other atmospheres use the
+    // body's haze tint (no local day cycle yet).
     let day_sky = Vec3::new(0.45, 0.68, 0.85);
     let dusk_sky = Vec3::new(0.13, 0.12, 0.22);
-    let sky = dusk_sky.lerp(day_sky, day);
+    let sky = body_sky.unwrap_or_else(|| dusk_sky.lerp(day_sky, day));
     let void = Vec3::new(0.01, 0.01, 0.03);
     let rgb = sky.lerp(void, space_f);
     *clear = ClearColor(Color::srgb(rgb.x, rgb.y, rgb.z));
@@ -195,8 +224,8 @@ fn sync_sky(
     }
 }
 
-/// Full-screen UI overlay for the creative ascent atmosphere/clouds. A UI Node
-/// (renders reliably on top, unlike the old camera-child sprite which never drew).
+/// Full-screen UI overlay for the ascent/descent cover. A UI Node (renders
+/// reliably on top, unlike the old camera-child sprite which never drew).
 fn spawn_cloud_overlay(mut commands: Commands) {
     commands.spawn((
         CloudOverlay,
@@ -218,10 +247,11 @@ fn spawn_cloud_overlay(mut commands: Commands) {
 }
 
 fn sync_cloud_overlay(
-    fly: Res<crate::creative_fly::CreativeFlight>,
+    trans: Res<FlightTransition>,
     mut q: Query<&mut BackgroundColor, With<CloudOverlay>>,
 ) {
+    let [r, g, b] = trans.cover_color;
     for mut bg in &mut q {
-        *bg = BackgroundColor(Color::srgba(0.86, 0.89, 0.95, fly.cloud.clamp(0.0, 1.0)));
+        *bg = BackgroundColor(Color::srgba(r, g, b, trans.cover.clamp(0.0, 1.0)));
     }
 }

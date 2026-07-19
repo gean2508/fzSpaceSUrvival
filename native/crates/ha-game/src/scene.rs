@@ -53,22 +53,6 @@ pub struct WorldContextRuntime {
     pub active: WorldContext,
 }
 
-/// Launch ascent blend consumed by the sky tint (0 pad → 1 void).
-#[derive(Resource, Default)]
-pub struct LaunchAtmosphere {
-    pub active: bool,
-    pub blend: f32,
-}
-
-impl LaunchAtmosphere {
-    pub fn atmosphere_alpha(&self) -> f32 {
-        if !self.active {
-            return 1.0;
-        }
-        (1.0 - self.blend).clamp(0.0, 1.0)
-    }
-}
-
 #[derive(Resource)]
 pub struct RegionRuntime {
     pub active: RegionId,
@@ -93,13 +77,23 @@ impl Default for RegionRuntime {
 /// Arc position of the agency launch pad on Earth (spawn/respawn anchor).
 pub const EARTH_PAD_S: f32 = ha_shared::LAUNCH_PAD_ZONE_X;
 
+/// Fixed landing zone per body: where rocket descents aim and touch down
+/// (Earth: beside the agency pad; elsewhere: the standard spawn zone).
+pub fn landing_site(body: CelestialBody) -> (f32, f32) {
+    let near_x = if body == CelestialBody::Earth {
+        EARTH_PAD_S + 4.0
+    } else {
+        0.0
+    };
+    walkable_spawn(body, near_x, 6.0)
+}
+
 pub struct ScenePlugin;
 
 impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WorldContextRuntime>()
             .init_resource::<RegionRuntime>()
-            .init_resource::<LaunchAtmosphere>()
             .add_systems(Startup, spawn_player);
     }
 }

@@ -1,8 +1,12 @@
 //! 2D SFS-style rocket flight — continuous thrust/coast/retro on the shared
-//! orbital plane. Physics run in world-plane coords (the same plane the
-//! ephemerides live on); render maps to the surface strip below escape
-//! altitude and to the orbital view above it. Transitions are pure frame
-//! changes (guard B8): no cutscenes, no input blocking, no velocity kicks.
+//! orbital plane. Physics ALWAYS run in world-plane coords (the same plane
+//! the ephemerides live on); the render frame is gated by the shared per-body
+//! transition layer (`ha_shared::transition_profile` + `FlightTransition`):
+//! below the swap band the surface region stays live (rocket sprite climbs/
+//! descends over its `surface_anchor`, cover rolls in), above it the orbital
+//! view takes over — the swap always happens under full cover. Transitions
+//! are pure frame changes (guard B8): no cutscenes, no input blocking, no
+//! velocity kicks.
 
 use bevy::prelude::*;
 
@@ -39,7 +43,7 @@ impl Plugin for RocketFlightPlugin {
             .add_systems(FixedUpdate, tick_rocket_flight)
             .add_systems(
                 Update,
-                (try_surface_launch, sync_flight_world_state, sync_rocket_visual),
+                (try_surface_launch, sync_flight_world_state, sync_rocket_visual).chain(),
             );
     }
 }
@@ -123,8 +127,6 @@ pub struct RocketFlight {
     pub safe_v_bonus: f32,
     /// Solar-clock snapshot from the last tick (for frame remaps off-tick).
     pub clock_secs: f32,
-    /// Reference arc position for unwrap-consistent surface render.
-    pub surface_ref_s: f32,
 }
 
 impl RocketFlight {
@@ -385,8 +387,10 @@ pub fn tick_rocket_flight(
         flight.surface_flight = None;
     }
 
-    // Touchdown: the rocket reaches the body's surface radius → zoom into a
-    // top-down surface patch. Radial descent speed gates a hard landing.
+    // Touchdown: the rocket reaches the body's surface radius → the walker
+    // steps out at the body's landing zone (the same cell the descent anchor
+    // pointed at, so the visible descent ends where you land). Radial descent
+    // speed gates a hard landing.
     if body_landable(flight.body) && flight.altitude() <= 0.4 {
         let c = Vec3::from_array(body_center_at(flight.body, t));
         let radial = (flight.pos - c).normalize_or_zero();
@@ -396,7 +400,7 @@ pub fn tick_rocket_flight(
         let hard = descent_v > safe_v;
         if let Ok((mut sim, mut visual)) = player.get_single_mut() {
             // Top-down: land on a walkable surface cell (patch, not a longitude).
-            let (sx, sz) = crate::scene::walkable_spawn(flight.body, 0.0, 6.0);
+            let (sx, sz) = crate::scene::landing_site(flight.body);
             sim.body.x = sx;
             sim.body.z = sz;
             sim.body.y = 0.0;
@@ -433,9 +437,15 @@ fn set_surface_region(
         CelestialBody::Moon => (RegionId::Luna, WorldContext::Luna),
         other => (RegionId::Planet(other), WorldContext::Planet),
     };
-    region.active = r;
-    ctx.active = c;
-    if !matches!(body, CelestialBody::Earth | CelestialBody::Moon) {
+    // Runs every frame while flying below the swap band — only touch the
+    // ResMuts on a real change so change-detection stays meaningful.
+    if region.active != r {
+        region.active = r;
+    }
+    if ctx.active != c {
+        ctx.active = c;
+    }
+    if !matches!(body, CelestialBody::Earth | CelestialBody::Moon) && planet.body != Some(body) {
         planet.body = Some(body);
     }
 }
@@ -480,25 +490,106 @@ fn try_surface_launch(
     flight.begin_surface_gameplay(body, pos, vel);
 }
 
-/// Keep RegionId/WorldContext in sync with the flight frame (B8: the ONLY
-/// place surface↔space transitions happen besides cave portals).
+/// Keep RegionId/WorldContext AND the shared transition state in sync with
+/// the flight frame (B8: the ONLY place rocket surface↔space transitions
+/// happen besides cave portals). The region swap is gated by the body's
+/// transition profile with hysteresis — below the swap band the launch/landing
+/// body's surface stays live under the closing cover; above it, Space. One
+/// system owns both writes so they can never disagree.
+#[allow(clippy::too_many_arguments)]
 fn sync_flight_world_state(
     flight: Res<RocketFlight>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    mut trans: ResMut<crate::transition::FlightTransition>,
+    mut was_flying: Local<bool>,
     mut region: ResMut<RegionRuntime>,
     mut ctx: ResMut<WorldContextRuntime>,
+    mut planet: ResMut<ActivePlanet>,
+    mut player: Query<(&mut SimState, &mut PlayerVisual, &mut Transform), With<Player>>,
 ) {
+    use crate::transition::TransitionMode;
     use ha_shared::WorldContext;
-    // While flying (not on a surface) the view is the orbital plane = Space.
-    // Touchdown sets the surface region directly (see `set_surface_region`).
-    if !flight.active || flight.phase == FlightPhase::Surface {
+
+    // Creative flight drives the shared transition itself (mutually exclusive
+    // with rocket flight — `creative_fly_enter` refuses while a rocket is up).
+    if fly.flying() {
+        *was_flying = false;
         return;
     }
-    if region.active != RegionId::Space {
-        region.active = RegionId::Space;
+    if !flight.active || flight.phase == FlightPhase::Surface {
+        // Flight over (touchdown set the surface region already): release the
+        // sky/cover/camera if we were the ones driving them.
+        if *was_flying {
+            trans.clear();
+            *was_flying = false;
+        }
+        return;
     }
-    if ctx.active != WorldContext::Space {
-        ctx.active = WorldContext::Space;
+
+    let body = flight.body;
+    let alt = flight.altitude();
+    let p = ha_shared::transition_profile(body);
+    // Hysteresis: leave the surface frame above swap_up, re-enter below
+    // swap_down — hovering in the (fully covered) band never ping-pongs.
+    let in_surface = *was_flying && trans.in_surface_frame();
+    let surface_frame = body_landable(body)
+        && if in_surface {
+            alt < p.swap_up
+        } else {
+            alt < p.swap_down
+        };
+
+    if surface_frame {
+        if !in_surface {
+            // Entering the surface frame: anchor the sprite. Ascent (ignition)
+            // → where the ship stands; descent (approach) → the body's landing
+            // zone, where the (hidden) walker is parked too so the terrain
+            // streams around the right cells and touchdown lands exactly where
+            // the descent showed.
+            let (sx, sz) = if flight.vertical_speed() >= 0.0 {
+                player
+                    .get_single()
+                    .map(|(s, _, _)| (s.body.x, s.body.z))
+                    .unwrap_or_else(|_| crate::scene::landing_site(body))
+            } else {
+                let (sx, sz) = crate::scene::landing_site(body);
+                if let Ok((mut sim, mut visual, mut tf)) = player.get_single_mut() {
+                    sim.body.x = sx;
+                    sim.body.z = sz;
+                    sim.body.y = 0.0;
+                    sim.body.vx = 0.0;
+                    sim.body.vz = 0.0;
+                    sim.body.vy = 0.0;
+                    visual.from_x = sx;
+                    visual.to_x = sx;
+                    visual.from_z = sz;
+                    visual.to_z = sz;
+                    let r = crate::world2d::render_xy(sx, sz);
+                    tf.translation = Vec3::new(r.x, r.y, crate::world2d::sort_z(sz) + 1.0);
+                }
+                (sx, sz)
+            };
+            trans.surface_anchor = crate::world2d::render_xy(sx, sz);
+        }
+        let mode = if flight.vertical_speed() >= 0.0 {
+            TransitionMode::Ascent
+        } else {
+            TransitionMode::Descent
+        };
+        trans.drive(mode, body, alt);
+        set_surface_region(body, &mut region, &mut ctx, &mut planet);
+    } else {
+        // Orbital frame; cover still tracks altitude so approaching any body
+        // rolls its atmosphere back in before the (covered) swap.
+        trans.drive(TransitionMode::Space, body, alt);
+        if region.active != RegionId::Space {
+            region.active = RegionId::Space;
+        }
+        if ctx.active != WorldContext::Space {
+            ctx.active = WorldContext::Space;
+        }
     }
+    *was_flying = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +605,7 @@ struct FlightRocketFlame;
 fn sync_rocket_visual(
     mut commands: Commands,
     flight: Res<RocketFlight>,
+    trans: Res<crate::transition::FlightTransition>,
     art: Res<crate::art2d::ArtLibrary>,
     mut rocket: Query<(Entity, &mut Transform), With<FlightRocketVisual>>,
     mut flame: Query<&mut Visibility, With<FlightRocketFlame>>,
@@ -525,14 +617,28 @@ fn sync_rocket_visual(
         }
         return;
     }
-    let pos = flight.render_pos_2d();
+    // Below the swap band the rocket renders in the SURFACE frame: pinned over
+    // its anchor (pad going up, landing zone coming down) while the terrain
+    // recedes/approaches via the camera zoom — top-down, vertical motion is
+    // depth, not screen travel. Above it: true orbital-plane position.
+    let surface = trans.in_surface_frame();
+    let pos = if surface {
+        trans.surface_anchor
+    } else {
+        flight.render_pos_2d()
+    };
     let rot = flight.render_rot_2d();
     if let Ok((_, mut tf)) = rocket.get_single_mut() {
         tf.translation = pos.extend(3.0);
         // Sprite nose points +Y at rot 0; rotate so it matches heading.
         tf.rotation = Quat::from_rotation_z(-rot);
-        // At high zoom the rocket sprite scales up so it stays visible.
-        let scale = (flight.altitude_m() / 900.0).clamp(1.0, 26.0);
+        // Surface frame: constant size (the world recedes instead). Orbital:
+        // scale up with altitude so the rocket stays visible at high zoom.
+        let scale = if surface {
+            1.0
+        } else {
+            (flight.altitude_m() / 900.0).clamp(1.0, 26.0)
+        };
         tf.scale = Vec3::splat(scale);
         for mut vis in &mut flame {
             *vis = if flight.phase == FlightPhase::Powered {

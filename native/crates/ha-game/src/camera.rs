@@ -170,6 +170,7 @@ fn follow_player_camera(
     time: Res<Time>,
     flight: Res<RocketFlight>,
     fly: Res<crate::creative_fly::CreativeFlight>,
+    trans: Res<crate::transition::FlightTransition>,
     region: Res<RegionRuntime>,
     trauma: Res<CameraTrauma>,
     mut zoom: ResMut<CameraZoom>,
@@ -184,10 +185,16 @@ fn follow_player_camera(
     let in_flight = flight.active && flight.phase != ha_shared::FlightPhase::Surface;
     let space_view = in_flight || fly.in_orbit() || matches!(region.active, RegionId::Space);
 
-    // Reset the zoom to a sane default entering/leaving ROCKET flight. Creative
-    // free-flight manages its own zoom across Climb/Orbit/Descend, so leave it
-    // alone while it's flying (otherwise the continuous ascent would snap).
-    if !fly.flying() {
+    // While a surface↔space transition is running it OWNS the zoom (it tracks
+    // the climb/descent altitude — single writer, no pinch fights, no snaps).
+    if let Some(h) = trans.view_h {
+        zoom.view_h = h;
+    }
+
+    // Reset the zoom to a sane default entering/leaving space WITHOUT a
+    // transition (MENU teleports, nav jumps). A running transition keeps the
+    // zoom continuous across the frame swap by construction.
+    if !fly.flying() && !trans.active() {
         if space_view && !*was_space {
             zoom.view_h = FLIGHT_DEFAULT_H;
         } else if !space_view && *was_space {
@@ -197,9 +204,12 @@ fn follow_player_camera(
     *was_space = space_view;
 
     // The camera is ALWAYS centred on: the character flying in orbit (creative),
-    // the rocket (flight), or the player (surface / mid-climb / mid-descent).
+    // the rocket over its surface anchor (ascent/descent below the swap), the
+    // rocket in the orbital frame, or the player.
     let target = if fly.in_orbit() {
         Vec2::new(fly.pos.x, -fly.pos.z)
+    } else if in_flight && trans.in_surface_frame() {
+        trans.surface_anchor
     } else if space_view {
         flight.render_pos_2d()
     } else {

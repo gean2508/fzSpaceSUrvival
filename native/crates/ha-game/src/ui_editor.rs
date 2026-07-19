@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use crate::debug::PerfOverlayVisible;
 use crate::rocket_flight::{orbital_start_above_pad, RocketFlight};
 use ha_shared::CelestialBody;
-use crate::scene::{teleport_to_body, LaunchAtmosphere, RegionId, RegionRuntime, WorldContextRuntime};
+use crate::scene::{teleport_to_body, RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::game_ui::{self, apply_top_center, apply_center, GameUiRoot, MENU_BUTTON_WIDTH};
 use crate::input::calibration::InputCalibration;
@@ -592,7 +592,7 @@ fn editor_button_system(
     mut region: ResMut<RegionRuntime>,
     mut world_ctx: ResMut<WorldContextRuntime>,
     mut planet: ResMut<crate::world2d::ActivePlanet>,
-    mut launch_atmo: ResMut<LaunchAtmosphere>,
+    mut trans: ResMut<crate::transition::FlightTransition>,
     mut flight: ResMut<RocketFlight>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
     mut buttons: Query<(&Interaction, &UiEditorCommand, &mut BackgroundColor), Changed<Interaction>>,
@@ -619,8 +619,7 @@ fn editor_button_system(
                 }
                 UiEditorCommand::GoLuna => {
                     flight.end_surface();
-                    launch_atmo.active = false;
-                    launch_atmo.blend = 0.0;
+                    trans.clear();
                     if let Ok((mut sim, mut visual)) = player.get_single_mut() {
                         teleport_to_body(
                             CelestialBody::Moon,
@@ -644,15 +643,14 @@ fn editor_button_system(
                     );
                     region.active = RegionId::Space;
                     world_ctx.active = ha_shared::WorldContext::Space;
-                    launch_atmo.active = false;
+                    trans.clear();
                     state.menu_open = false;
                     state.settings_open = false;
                     state.enabled = false;
                 }
                 UiEditorCommand::GoEarth => {
                     flight.end_surface();
-                    launch_atmo.active = false;
-                    launch_atmo.blend = 0.0;
+                    trans.clear();
                     if let Ok((mut sim, mut visual)) = player.get_single_mut() {
                         teleport_to_body(
                             CelestialBody::Earth,
