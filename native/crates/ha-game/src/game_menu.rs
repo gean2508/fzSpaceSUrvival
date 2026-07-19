@@ -184,16 +184,20 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                     // layout multiplied every marker position and threw the
                     // whole system to the right. Markers are now positioned in
                     // PERCENT (see `update_map_markers`), no measurement needed.
-                    width: Val::VMin(70.0),
-                    height: Val::VMin(70.0),
+                    // Square viewport sized off the viewport HEIGHT (Vh) so it is
+                    // always laid out with an explicit size — `VMin` was collapsing
+                    // to ~0 here, leaving the map blank. Kept square so orbit circles
+                    // don't distort; markers are positioned in PERCENT.
+                    width: Val::Vh(52.0),
+                    height: Val::Vh(52.0),
                     border: UiRect::all(Val::Px(2.0)),
                     // Clip orbit rings / body dots to the panel — nothing the
                     // marker system positions can bleed outside the map window.
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                BorderColor(NEON_CYAN.with_alpha(0.6)),
-                BackgroundColor(Color::srgb(0.02, 0.03, 0.06)),
+                BorderColor(NEON_CYAN),
+                BackgroundColor(Color::srgb(0.05, 0.07, 0.12)),
                 MapViewport,
             ))
             .with_children(|map| {
@@ -321,7 +325,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             });
 
             root.spawn((
-                Text::new("● tu nave    ○ órbitas    ☀ Sol"),
+                Text::new("+ tu nave    o orbitas    * Sol"),
                 TextFont {
                     font_size: 12.0,
                     ..default()

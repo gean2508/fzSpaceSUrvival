@@ -347,13 +347,14 @@ fn cockpit_button_system(
                         leave_ship(
                             &mut tiles, &mut region, &mut ctx, &mut state, &mut sim, &mut visual,
                         );
-                        // Reuse the pad ignition path (see launch_pad.rs), but
-                        // launch on WHATEVER fuel is in the tank — the cockpit does
-                        // NOT auto-refuel (F3). Fill it at the engine-room FuelSource.
+                        // Reuse the pad ignition path (see launch_pad.rs) and top
+                        // the tank so the flight is actually playable (the FuelSource
+                        // stays useful for off-world top-ups).
                         flight.clock_secs = clock.t;
                         let (pos, vel) = launch_pos_vel(CelestialBody::Earth, clock.t, 18.0);
                         flight.surface_flight = Some(CelestialBody::Earth);
                         flight.begin_at(pos);
+                        flight.fuel = flight.capacity();
                         flight.vel = vel;
                         flight.autopilot = matches!(btn.0, CockpitAction::Autopilot);
                         eprintln!("ha-ship: cockpit launch (autopilot={})", flight.autopilot);
@@ -402,7 +403,7 @@ fn spawn_preflight_panel(commands: &mut Commands) {
             ))
             .with_children(|panel| {
                 panel.spawn((
-                    Text::new("CABINA — PRE-VUELO"),
+                    Text::new("CABINA - PRE-VUELO"),
                     TextFont {
                         font_size: 20.0,
                         ..default()

@@ -19,7 +19,10 @@ pub use crate::celestial_bodies::{
 pub const ROCKET_THRUST_M_S2: f32 = 22.0;
 pub const ROCKET_RETRO_THRUST_M_S2: f32 = 38.0;
 pub const ROCKET_FUEL_MAX: f32 = 100.0;
-pub const ROCKET_FUEL_BURN_PER_S: f32 = 8.0;
+// Bajado de 8.0 → 3.5: con tanque lleno (100) da ~28 s de empuje continuo, lo
+// suficiente para alcanzar el espacio y maniobrar en el loop SFS (antes ~12 s se
+// agotaba a media subida). Native-only (no espejado en TS) — sin paridad.
+pub const ROCKET_FUEL_BURN_PER_S: f32 = 3.5;
 pub const ROCKET_RETRO_FUEL_BURN_PER_S: f32 = 14.0;
 pub const ROCKET_ROT_SPEED: f32 = 1.8;
 pub const ROCKET_MAX_V: f32 = 280.0;

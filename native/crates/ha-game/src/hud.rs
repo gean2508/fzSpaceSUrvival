@@ -1082,18 +1082,19 @@ fn build_interact_prompt(
         let fuel = flight.fuel_pct();
         let body = flight.body.label();
         let vac = if flight.in_vacuum() { "VAC" } else { "ATM" };
-        let chute = if flight.parachute_open { " · CHUTE" } else { "" };
+        let chute = if flight.parachute_open { " - CHUTE" } else { "" };
         let retro = if flight.phase == ha_shared::FlightPhase::Retro {
-            " · RC RETRO"
+            " - RC RETRO"
         } else {
             ""
         };
-        let ap = if flight.autopilot { " · AUTOPILOT" } else { "" };
+        let ap = if flight.autopilot { " - AUTOPILOT" } else { "" };
         // Autonomy = seconds of continuous thrust left at this ship's mass.
         let autonomy =
             flight.fuel / (ha_shared::flight_physics::ROCKET_FUEL_BURN_PER_S * flight.burn_rate_factor()).max(0.01);
+        // NOTE: la fuente del juego es ASCII-only (no ·, flechas, acentos) → separadores ASCII.
         return format!(
-            "FLIGHT — {body} · radar {alt:.0}m · ↕{v_vert:+.0} ↔{v_horiz:.0} m/s · {spd:.0} tot · fuel {fuel:.0}% · masa {:.1}t · ~{autonomy:.0}s thrust · {vac}{chute}{retro}{ap} · ACTION thrust · SHIFT/jump retro",
+            "FLIGHT - {body} - radar {alt:.0}m - vert {v_vert:+.0} horiz {v_horiz:.0} m/s - {spd:.0} tot - fuel {fuel:.0}% - masa {:.1}t - ~{autonomy:.0}s thrust - {vac}{chute}{retro}{ap} - ACTION thrust - SHIFT/jump retro",
             loadout.mass_t
         );
     }

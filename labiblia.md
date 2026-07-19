@@ -182,6 +182,8 @@ cd native && make run     # cliente desktop (o cargo run -p ha-game --features d
 - **Disco se llena en cargo:** `rm -rf native/target/debug` (el build Android usa otro target dir).
 - **Lock de cargo ("Blocking waiting for file lock"):** matar cargo zombie; borrar `native/target/**/.cargo-lock`.
 - **z-fighting de cuerpos lejanos:** far plane de vuelo grande + near razonable (GLES3 sin reversed-Z).
+- **"Aparece 3D viejo / no aparecen mis cambios en el APK":** el APK puede salir como **fat APK** con `.so` rancios en `native/android/app/src/main/jniLibs/<abi>/`. `ship:android` solo compila arm64 por defecto, pero **gradle empaqueta lo que haya en `jniLibs/`** — un `libha_game.so` viejo de `armeabi-v7a` (pre-purga 2D) se cuela y un equipo 32-bit corre el motor 3D viejo. Fix: borrar `jniLibs/armeabi-v7a` (o rebuildear ambos ABIs con `ANDROID_ABIS="arm64-v8a,armeabi-v7a" --rebuild-rust`). Verificar ABIs: `unzip -l APK | grep lib/`. Casi todo equipo moderno (Redmi 10+) es arm64.
+- **Fuente del juego = ASCII-only:** el `default_font` NO renderiza `· ↕ ↔ ● ○ ☀ ó — ` (salen cajas □). Toda cadena de UII/HUD debe ser ASCII (usar `-` en vez de `·`/`—`, `vert/horiz` en vez de flechas, sin acentos). Ver [[game-font-ascii-only]].
 
 ---
 
@@ -397,6 +399,23 @@ el intercept preciso + hover exacto se **tunean en device** (§6: nunca tunear v
 - **Pendiente:** texturas del interior/marcadores (`decor/cockpit_seat`, `decor/fuel_source`)
   = slots drop-in a asignar (LimeZu Interiors), hoy fallback de color; tuning de hover +
   sensaciones del bucle nave en el Redmi.
+
+### §13-octies — Fixes tras prueba en device (18 jul 2026)
+
+Primera prueba real del bucle de nave en el Redmi (capturas). Correcciones:
+- **Empaquetado APK (crítico):** un `libha_game.so` **armeabi-v7a del 6 jul (motor 3D
+  pre-purga)** quedó en `jniLibs/` y gradle lo metía al APK → en 32-bit corría el juego
+  3D viejo sin la nave. Borrado; APK ahora arm64-only. Ver §7.
+- **Fuente ASCII-only:** todas las cajas □ del HUD/menú eran `· ↕ ↔ ● ☀ ó —` que la fuente
+  no tiene. Pasado a ASCII (HUD de vuelo, leyenda del menú, panel de cabina). Regla nueva en §7.
+- **Vuelo injugable por combustible:** `ROCKET_FUEL_BURN_PER_S` 8.0→3.5 (native-only, sin
+  paridad) → ~28 s de empuje con tanque lleno (antes ~12 s, se agotaba a media subida); y el
+  despegue de cabina vuelve a llenar el tanque (el `FuelSource` queda como top-up off-world).
+- **Minimapa del menú en blanco:** el `MapViewport` con `Val::VMin(70)` colapsaba a ~0 →
+  cambiado a `Val::Vh(52)` (tamaño explícito) + borde/fondo visibles. *(A confirmar en device.)*
+- **Pendiente/observado:** el planeta en vuelo se ve como círculo 2D (SFS correcto) — con más
+  combustible ya se puede subir y ver el cuerpo completo + aproximar/aterrizar. Abordaje de la
+  nave (pisar `(28,6)`) puede ser finicky → si molesta, radio + cartel.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 
