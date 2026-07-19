@@ -23,6 +23,7 @@ mod platform;
 mod render;
 mod rocket_flight;
 mod scene;
+mod creative_fly;
 mod ship_interior;
 mod nav_computer;
 mod colony;
@@ -67,6 +68,7 @@ use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
 use render::particles::ParticlesPlugin;
 use scene::ScenePlugin;
+use creative_fly::CreativeFlyPlugin;
 use ship_interior::ShipInteriorPlugin;
 use sky2d::Sky2dPlugin;
 use sim::SimPlugin;
@@ -196,6 +198,7 @@ fn run_app_inner() {
             RocketFlightPlugin,
             NavComputerPlugin,
             ShipInteriorPlugin,
+            CreativeFlyPlugin,
             HarvestPlugin,
             SurvivalStatsPlugin,
             ShipBuilderPlugin,

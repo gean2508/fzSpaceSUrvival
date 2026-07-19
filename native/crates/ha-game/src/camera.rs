@@ -31,7 +31,7 @@ const ZOOM_MAX_H: f32 = 12_000.0;
 #[derive(Resource)]
 pub struct CameraZoom {
     /// Desired viewport height in world metres.
-    view_h: f32,
+    pub(crate) view_h: f32,
     /// Previous two-finger distance (px) for pinch deltas.
     pinch_prev: Option<f32>,
 }
@@ -160,6 +160,7 @@ fn camera_zoom_input(
 fn follow_player_camera(
     time: Res<Time>,
     flight: Res<RocketFlight>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     region: Res<RegionRuntime>,
     trauma: Res<CameraTrauma>,
     mut zoom: ResMut<CameraZoom>,
@@ -172,7 +173,7 @@ fn follow_player_camera(
     };
 
     let in_flight = flight.active && flight.phase != ha_shared::FlightPhase::Surface;
-    let space_view = in_flight || matches!(region.active, RegionId::Space);
+    let space_view = in_flight || fly.active || matches!(region.active, RegionId::Space);
 
     // Reset the zoom to a sane default on entering/leaving flight so the player
     // never spawns in a 9 km-out view; between transitions it's whatever they
@@ -184,8 +185,11 @@ fn follow_player_camera(
     }
     *was_space = space_view;
 
-    // The camera is ALWAYS centred on the rocket (flight) or the player (surface).
-    let target = if space_view {
+    // The camera is ALWAYS centred on: the flying character (creative), the
+    // rocket (flight), or the player (surface).
+    let target = if fly.active {
+        Vec2::new(fly.pos.x, -fly.pos.z)
+    } else if space_view {
         flight.render_pos_2d()
     } else {
         let Ok(p) = player.get_single() else {

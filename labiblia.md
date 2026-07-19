@@ -214,12 +214,15 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - **Build/craft/máquinas GRATIS:** construir (`build.rs::apply_build_hold`), craftear
   (`hud.rs::bag_panel_system` — cualquier receta, otorga el output sin consumir) y colocar
   máquinas (`machines.rs::try_place_on_hold`) sin costo de recursos.
-- **Vuelo a pie con JUMP (`rocket_flight.rs::creative_fly_ignite`):** parado en una superficie,
-  apretar **JUMP** enciende el vuelo del cohete DESDE el jugador (sin nave), con **combustible
-  infinito** (`creative_fuel_topup`). Reusa todo el pipeline SFS: subís, salís al espacio, cruzás
-  a la Luna, aterrizás, re-despegás. Reemplaza el parche de los botones TIERRA/LUNA/ESPACIO.
-  *Limitación actual:* despega desde el punto de lanzamiento canónico del cuerpo (`launch_pos_vel`),
-  no exactamente desde donde estás parado (mapear superficie→órbita es delicado; a afinar en device).
+- **Vuelo libre del PERSONAJE por el espacio (`creative_fly.rs`, módulo separado):** parado en
+  una superficie, **JUMP** te eleva a la vista orbital SIENDO el personaje (tu sprite, NO un cohete
+  — se probó y descartó re-encender `RocketFlight`, que es god-node degree 61 / el "corte feo" del
+  §8). `CreativeFlight { active, pos }`: te movés **libre en 2D** por el plano orbital (velocidad
+  escala con el zoom), sin fuel ni gravedad. La cámara te centra (+ pellizco). **Aterrizás** al
+  tocar un cuerpo (o USE = aterrizar en el más cercano) reusando `teleport_to_body` → coords de
+  superficie siempre correctas, **sin remap inverso riesgoso**. Reemplaza el parche de botones
+  TIERRA/LUNA/ESPACIO. Render: `sim.rs::interpolate_player_visual` dibuja al personaje en `pos`
+  escalado por el zoom; cámara: `camera.rs::follow_player_camera` apunta a `pos` cuando `fly.active`.
 - **Locomoción a pie:** noclip 8-dir (`sim.rs`: sin colisión, atraviesa agua/roca; `sim.body.y=0`).
 - `creative_topup_system` sigue dando herramientas.
 

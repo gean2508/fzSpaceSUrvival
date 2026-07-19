@@ -125,8 +125,23 @@ fn tick_sim(
 fn interpolate_player_visual(
     time: Res<Time<Fixed>>,
     flight: Res<RocketFlight>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    zoom: Res<crate::camera::CameraZoom>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
+    // Creative free-flight: draw the CHARACTER at its orbital position, scaled to
+    // keep a readable on-screen size at any zoom (matches the walking size).
+    if fly.active {
+        let r = render_xy(fly.pos.x, fly.pos.z);
+        let s = (zoom.view_h / 30.0).max(1.0);
+        for (_, mut transform, mut vis) in &mut query {
+            *vis = Visibility::Visible;
+            transform.translation = Vec3::new(r.x, r.y, 900.0);
+            transform.rotation = Quat::IDENTITY;
+            transform.scale = Vec3::new(s, s, 1.0);
+        }
+        return;
+    }
     let t = time.overstep_fraction() as f32;
     if flight.active && flight.phase != ha_shared::FlightPhase::Surface {
         for (_, _, mut vis) in &mut query {
