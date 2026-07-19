@@ -120,7 +120,7 @@ Validar: `npm run validate:arch`.
 | **Regiones + jugador** (RegionId/WorldContext, spawn, teleports MENU) | `ha-game/scene.rs` (`teleport_to_body`) |
 | **Interior de nave + cabina + recarga** (cuarto 2D abordable desde el pad; Z-level dedicado 64 sobre roca sólida = cuarto tallado en WoodFloor; abordar/salir = cambio región+z+teleport B8; `CockpitSeat` → `PreFlightUI` DESPEGAR/AUTOPILOTO/LEVANTARSE bloquea al walker; `FuelSource` + `RefuelEvent` en sala de máquinas = combustible gestionado) | `ha-game/ship_interior.rs` (`ShipInteriorPlugin`, `board_ship`/`leave_ship`, `CockpitState`, `RefuelEvent`), `RegionId::ShipInterior`, `TileWorld::force_tile` |
 | **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
-| **Cámara 2D** (follow + zoom continuo superficie↔órbita, shake) | `ha-game/camera.rs` |
+| **Cámara 2D** (SIEMPRE centrada en cohete/jugador; zoom **controlado por el usuario** — pellizco móvil / scroll desktop, `CameraZoom`; default cercano al entrar a vuelo, ya NO auto-aleja a 9 km; shake) | `ha-game/camera.rs` |
 | **Targeting 2D** (mira libre `AimCursor` movida por el stick derecho/mouse; tiles block_cell/place_cell; resalte de celda `CursorHighlight`) | `ha-game/targeting.rs`, `input/joystick.rs` (`AimCursor`, `AIM_MAX_REACH`), `input/desktop_input.rs` (`desktop_aim_cursor`), `world2d.rs` (`CursorHighlight`), `input/look_interact.rs` (USE→hold) |
 | **Mapa del sistema / menú unificado** (MENU fullscreen: minimapa DINÁMICO — terreno top-down en superficie, orbital en espacio — + panel LIMPIO: viaje TIERRA/LUNA/ESPACIO, CREATIVO/PERF, EDITAR UI, AJUSTES; los selectores del editor viven en `EditToolbar`, visible solo en modo edición) | `ha-game/game_menu.rs` (`OrbitalLayer`/`TerrainLayer`, `update_terrain_minimap`, `EditToolbar`), `ui_editor.rs` |
 | **Construcción 2D** (piezas en la pestaña CONSTRUIR de la BOLSA — pantalla limpia; elegir pieza entra modo build + cierra bolsa; ghost en la celda apuntada; colocar con USE cobrando recursos; quitar = cavar; chip mínimo "CONSTRUIR (salir)") | catálogo `ha-shared/topdown.rs` (`BUILD_PIECES`, tiles WoodWall/StoneBrick/Door), `ha-game/build.rs` (`BuildPlugin`, `SelectedBuildPiece`, `apply_build_hold`, ghost, chip), tab en `hud.rs` (`BagTab::Build`, `BagBuildSection`); `targeting.rs` set `place_cell` en build mode |
@@ -416,6 +416,14 @@ Primera prueba real del bucle de nave en el Redmi (capturas). Correcciones:
 - **Pendiente/observado:** el planeta en vuelo se ve como círculo 2D (SFS correcto) — con más
   combustible ya se puede subir y ver el cuerpo completo + aproximar/aterrizar. Abordaje de la
   nave (pisar `(28,6)`) puede ser finicky → si molesta, radio + cartel.
+
+**Cámara en vuelo (reporte device, v1.0.160):** el zoom **auto-alejaba a 9 km** (`SURFACE_VIEW_H +
+alt*2.2`) → el cohete quedaba un puntito lejísimos, imposible pilotar. Rework en `camera.rs`:
+recurso `CameraZoom` **controlado por el usuario** (pellizco 2-dedos en móvil / rueda en desktop),
+la cámara **siempre centrada** en el cohete (vuelo) o el jugador (superficie), con default cercano
+(`FLIGHT_DEFAULT_H = 320 m`) al entrar/salir de vuelo. El pellizco se **gatea a vuelo/espacio**
+(en superficie los 2 sticks usan 2 dedos y se leería como falso pinch). Clamps `[18, 12000] m`.
+Necesario para poder testear salida/aterrizaje.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

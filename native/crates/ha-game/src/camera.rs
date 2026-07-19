@@ -1,5 +1,7 @@
 //! 2D follow camera — surface view (Terraria zoom) and SFS-style flight zoom.
 
+use bevy::input::mouse::MouseWheel;
+use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
 
@@ -17,8 +19,28 @@ pub const FP_MAX_PITCH: f32 = 1.35;
 
 /// Viewport height (world metres) while walking on a surface.
 const SURFACE_VIEW_H: f32 = 30.0;
-/// Max viewport height (m) at high flight zoom-out (planets become circles).
-const FLIGHT_VIEW_H_MAX: f32 = 9_000.0;
+/// Default flight zoom — close enough to read the rocket + local horizon, far
+/// enough to feel airborne. The player pinches/scrolls out to see the whole body.
+const FLIGHT_DEFAULT_H: f32 = 320.0;
+/// User zoom clamps (viewport height, world m): from tight to whole-planet.
+const ZOOM_MIN_H: f32 = 18.0;
+const ZOOM_MAX_H: f32 = 12_000.0;
+
+/// User-controlled camera zoom (pinch on mobile, scroll on desktop). The camera
+/// ALWAYS stays centred on the rocket/player — only the zoom is user-driven.
+#[derive(Resource)]
+pub struct CameraZoom {
+    /// Desired viewport height in world metres.
+    view_h: f32,
+    /// Previous two-finger distance (px) for pinch deltas.
+    pinch_prev: Option<f32>,
+}
+
+impl Default for CameraZoom {
+    fn default() -> Self {
+        Self { view_h: SURFACE_VIEW_H, pinch_prev: None }
+    }
+}
 
 /// Facing direction on the 2D strip: rot 0 → +s, rot PI → -s.
 pub fn facing_sign(rot: f32) -> f32 {
@@ -53,9 +75,13 @@ pub struct FollowCameraPlugin;
 impl Plugin for FollowCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraTrauma>()
+            .init_resource::<CameraZoom>()
             .add_event::<CameraShakeEvent>()
             .add_systems(Startup, spawn_camera)
-            .add_systems(Update, (absorb_shake_events, follow_player_camera).chain());
+            .add_systems(
+                Update,
+                (absorb_shake_events, camera_zoom_input, follow_player_camera).chain(),
+            );
     }
 }
 
@@ -89,12 +115,55 @@ fn absorb_shake_events(
     trauma.0 = (trauma.0 - time.delta_secs() * 1.8).max(0.0);
 }
 
+/// Pinch (mobile) / scroll (desktop) adjust the user zoom; the camera stays
+/// centred on the target. Pinch is gated to flight/space so the on-foot
+/// twin-stick (two fingers) isn't misread as a pinch.
+fn camera_zoom_input(
+    flight: Res<RocketFlight>,
+    region: Res<RegionRuntime>,
+    mut zoom: ResMut<CameraZoom>,
+    mut wheel: EventReader<MouseWheel>,
+    touches: Res<Touches>,
+) {
+    let mut scroll = 0.0;
+    for e in wheel.read() {
+        scroll += e.y;
+    }
+    if scroll.abs() > 0.0 {
+        // Wheel up = zoom in (smaller viewport).
+        zoom.view_h = (zoom.view_h * (1.0 - scroll * 0.12)).clamp(ZOOM_MIN_H, ZOOM_MAX_H);
+    }
+
+    let space_view = (flight.active && flight.phase != ha_shared::FlightPhase::Surface)
+        || matches!(region.active, RegionId::Space);
+    if !space_view {
+        zoom.pinch_prev = None;
+        return;
+    }
+    let pts: Vec<Vec2> = touches.iter().map(|t| t.position()).collect();
+    if pts.len() == 2 {
+        let dist = pts[0].distance(pts[1]).max(1.0);
+        if let Some(prev) = zoom.pinch_prev {
+            if (dist - prev).abs() > 1.5 {
+                // Fingers apart (dist up) → zoom in (view_h down).
+                let ratio = (prev / dist).clamp(0.5, 2.0);
+                zoom.view_h = (zoom.view_h * ratio).clamp(ZOOM_MIN_H, ZOOM_MAX_H);
+            }
+        }
+        zoom.pinch_prev = Some(dist);
+    } else {
+        zoom.pinch_prev = None;
+    }
+}
+
 #[allow(clippy::type_complexity)]
 fn follow_player_camera(
     time: Res<Time>,
     flight: Res<RocketFlight>,
     region: Res<RegionRuntime>,
     trauma: Res<CameraTrauma>,
+    mut zoom: ResMut<CameraZoom>,
+    mut was_space: Local<bool>,
     player: Query<&Transform, (With<Player>, Without<GameCamera>)>,
     mut camera: Query<(&mut Transform, &mut OrthographicProjection), With<GameCamera>>,
 ) {
@@ -103,17 +172,26 @@ fn follow_player_camera(
     };
 
     let in_flight = flight.active && flight.phase != ha_shared::FlightPhase::Surface;
-    let (target, view_h) = if in_flight || matches!(region.active, RegionId::Space) {
-        // Flight: chase the rocket, zoom out with altitude (SFS feel).
-        let alt = flight.altitude_m().max(0.0);
-        let h = (SURFACE_VIEW_H + alt * 2.2).clamp(SURFACE_VIEW_H, FLIGHT_VIEW_H_MAX);
-        (flight.render_pos_2d(), h)
+    let space_view = in_flight || matches!(region.active, RegionId::Space);
+
+    // Reset the zoom to a sane default on entering/leaving flight so the player
+    // never spawns in a 9 km-out view; between transitions it's whatever they
+    // pinched/scrolled to.
+    if space_view && !*was_space {
+        zoom.view_h = FLIGHT_DEFAULT_H;
+    } else if !space_view && *was_space {
+        zoom.view_h = SURFACE_VIEW_H;
+    }
+    *was_space = space_view;
+
+    // The camera is ALWAYS centred on the rocket (flight) or the player (surface).
+    let target = if space_view {
+        flight.render_pos_2d()
     } else {
         let Ok(p) = player.get_single() else {
             return;
         };
-        // Top-down: centre on the player (no look-ahead bias).
-        (p.translation.truncate(), SURFACE_VIEW_H)
+        p.translation.truncate()
     };
 
     let blend = (time.delta_secs() * 6.0).clamp(0.0, 1.0);
@@ -131,7 +209,7 @@ fn follow_player_camera(
         ScalingMode::FixedVertical { viewport_height } => viewport_height,
         _ => SURFACE_VIEW_H,
     };
-    let next_h = current_h + (view_h - current_h) * (time.delta_secs() * 3.0).clamp(0.0, 1.0);
+    let next_h = current_h + (zoom.view_h - current_h) * (time.delta_secs() * 4.0).clamp(0.0, 1.0);
     proj.scaling_mode = ScalingMode::FixedVertical {
         viewport_height: next_h,
     };
