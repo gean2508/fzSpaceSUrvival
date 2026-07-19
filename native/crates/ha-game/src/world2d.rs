@@ -600,6 +600,7 @@ fn stream_tile_chunks(
     mat: Res<ChunkMaterial>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut flora: ResMut<FloraHarvest>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     player: Query<&Transform, With<Player>>,
     chunks: Query<(Entity, &TileChunk)>,
     decor: Query<(Entity, &SurfaceDecor)>,
@@ -624,12 +625,16 @@ fn stream_tile_chunks(
     let pcx = (px / (CHUNK as f32 * TILE_M)).floor() as i64;
     let pcz = (pz / (CHUNK as f32 * TILE_M)).floor() as i64;
 
+    // Creative flight zooms the camera out, so stream a wider ring to fill the
+    // view with terrain (the clouds cover whatever's still beyond it).
+    let range = if fly.flying() { 8 } else { CHUNK_RANGE };
+
     let mut live: HashSet<(i64, i64)> = HashSet::new();
     for (e, chunk) in &chunks {
         let stale = chunk.body != body
             || chunk.z != z
-            || (chunk.cx - pcx).abs() > CHUNK_RANGE + 1
-            || (chunk.cz - pcz).abs() > CHUNK_RANGE + 1;
+            || (chunk.cx - pcx).abs() > range + 1
+            || (chunk.cz - pcz).abs() > range + 1;
         if stale {
             commands.entity(e).despawn_recursive();
             flora.clear_chunk(chunk.cx as i32, chunk.cz as i32);
@@ -638,16 +643,13 @@ fn stream_tile_chunks(
         }
     }
     for (e, d) in &decor {
-        if d.z != z
-            || (d.cx - pcx).abs() > CHUNK_RANGE + 1
-            || (d.cz - pcz).abs() > CHUNK_RANGE + 1
-        {
+        if d.z != z || (d.cx - pcx).abs() > range + 1 || (d.cz - pcz).abs() > range + 1 {
             commands.entity(e).despawn_recursive();
         }
     }
 
-    for cx in (pcx - CHUNK_RANGE)..=(pcx + CHUNK_RANGE) {
-        for cz in (pcz - CHUNK_RANGE)..=(pcz + CHUNK_RANGE) {
+    for cx in (pcx - range)..=(pcx + range) {
+        for cz in (pcz - range)..=(pcz + range) {
             if live.contains(&(cx, cz)) {
                 continue;
             }

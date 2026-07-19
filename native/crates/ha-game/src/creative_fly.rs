@@ -50,18 +50,22 @@ impl CreativeFlight {
 
 /// Player-driven vertical speed (metres of altitude per second) — hold JUMP/USE.
 const VERT_SPEED: f32 = 320.0;
-/// Altitude of full space (sky fully void, clouds cleared).
-const SPACE_ALT: f32 = 2_500.0;
-/// Altitude where the surface view hands over to orbit — inside the cloud band,
-/// so the swap is hidden behind cloud cover.
-const SWAP_ALT: f32 = 1_500.0;
-/// Camera viewport height (m) at the swap — frames the body's circle.
-const SWAP_VIEW_H: f32 = 5_000.0;
+/// Altitude where the surface view hands over to orbit. Kept LOW + under full
+/// clouds so the flat-tile view never zooms out enough to reveal its finite edge
+/// — then the (infinitely-zoomable) orbital circle takes over. Hidden by clouds.
+const SWAP_ALT: f32 = 300.0;
+/// Camera viewport height (m) at the swap — small, matching the local ground scale
+/// so the swap to the orbital frame is scale-continuous.
+const SWAP_VIEW_H: f32 = 450.0;
 const GROUND_VIEW_H: f32 = 30.0;
+/// In orbit the camera zoom follows altitude (SFS reveal): the body's circle
+/// shrinks as you climb. `view_h = (radius + alt) * this`, clamped.
+const ORBIT_ZOOM_FACTOR: f32 = 1.2;
+const ORBIT_ZOOM_MAX: f32 = 2_000_000.0;
 /// Free-flight speed = view_h × this (auto-scales with zoom).
-const FLY_SPEED_FACTOR: f32 = 0.55;
+const FLY_SPEED_FACTOR: f32 = 0.35;
 /// Auto-descend when the character drifts this close to a body's surface (m).
-const APPROACH_LAND_M: f32 = 300.0;
+const APPROACH_LAND_M: f32 = 200.0;
 
 pub struct CreativeFlyPlugin;
 
@@ -95,11 +99,14 @@ fn radial_up(body: CelestialBody, t: f32) -> Vec3 {
     (pad - c).normalize_or_zero()
 }
 
-/// Cloud alpha as a function of altitude: none on the ground, thick in the mid
-/// atmosphere (hides the ground + the frame swap), clearing toward space.
+/// Cloud alpha as a function of altitude: none on the ground, full EARLY (~180 m,
+/// before the finite streamed terrain reveals its empty edge — the clouds are the
+/// optimisation that lets us stop drawing far terrain), staying thick through the
+/// frame swap, clearing toward space. Same curve in atmosphere (Climb/Descend) and
+/// near a body in Orbit, so approaching any body brings its clouds back.
 fn cloud_from_alt(alt: f32) -> f32 {
-    let rising = (alt / 900.0).clamp(0.0, 1.0);
-    let clearing = ((SPACE_ALT - alt) / 900.0).clamp(0.0, 1.0);
+    let rising = ((alt - 40.0) / 90.0).clamp(0.0, 1.0); // full by ~130 m
+    let clearing = ((900.0 - alt) / 400.0).clamp(0.0, 1.0); // clear by ~900 m
     rising.min(clearing)
 }
 
@@ -161,7 +168,7 @@ fn creative_fly_climb(
         return;
     }
 
-    let f = (fly.alt / SPACE_ALT).clamp(0.0, 1.0);
+    let f = (fly.alt / 900.0).clamp(0.0, 1.0); // sky fully void by ~900 m
     launch.active = true;
     launch.blend = f; // sky fade (surface region) — sky2d reads this
     fly.cloud = cloud_from_alt(fly.alt);
@@ -188,7 +195,7 @@ fn creative_fly_orbit(
     actions: Res<TouchActions>,
     intent: Res<MovementIntent>,
     clock: Res<SolarSystemClock>,
-    zoom: Res<CameraZoom>,
+    mut zoom: ResMut<CameraZoom>,
     mut fly: ResMut<CreativeFlight>,
     mut region: ResMut<RegionRuntime>,
     mut ctx: ResMut<WorldContextRuntime>,
@@ -199,9 +206,6 @@ fn creative_fly_orbit(
         return;
     }
     let dt = time.delta_secs();
-    // Clouds left over from the swap clear as space reveals.
-    fly.cloud = (fly.cloud - dt * 1.5).max(0.0);
-
     let speed = (zoom.view_h * FLY_SPEED_FACTOR).max(120.0);
     fly.pos.x += intent.move_x * speed * dt;
     fly.pos.z += intent.move_z * speed * dt;
@@ -216,6 +220,15 @@ fn creative_fly_orbit(
         }
     }
     let (body, dist) = nearest;
+    // Clouds follow the altitude above the nearest body — clear in deep space,
+    // roll back in as you approach any body (Earth, Moon, planets).
+    let alt_orbit = (dist - body_radius(body)).max(0.0);
+    fly.alt = alt_orbit;
+    fly.cloud = cloud_from_alt(alt_orbit);
+    // SFS reveal: the camera zoom follows altitude — the body's circle emerges as
+    // the clouds part and shrinks as you climb; deep space frames the system.
+    zoom.view_h = ((body_radius(body) + alt_orbit) * ORBIT_ZOOM_FACTOR)
+        .clamp(SWAP_VIEW_H, ORBIT_ZOOM_MAX);
     let touching = dist < body_radius(body) + APPROACH_LAND_M;
     if !touching && !actions.use_edge {
         return;
@@ -253,7 +266,7 @@ fn creative_fly_descend(
     }
     fly.alt = (fly.alt + vy * dt).clamp(0.0, SWAP_ALT);
 
-    let f = (fly.alt / SPACE_ALT).clamp(0.0, 1.0);
+    let f = (fly.alt / 900.0).clamp(0.0, 1.0); // sky fully void by ~900 m
     launch.active = true;
     launch.blend = f;
     fly.cloud = cloud_from_alt(fly.alt);

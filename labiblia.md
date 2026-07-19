@@ -218,15 +218,18 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
   en superficie, **JUMP** inicia la subida (sprite del personaje, NO cohete — se descartó re-encender
   `RocketFlight`, god-node degree 61 / "corte feo" §8). God-mode: sin fuel, sin gravedad, **no
   responde a órbitas** (eso es para la nave). Máquina de fases `CreativeFlight { phase, pos, alt, body }`:
-  - **Climb (control MANUAL, no animación):** mantené **JUMP = subís**, **USE = bajás**, soltás =
-    te quedás flotando. Todo (altura/cámara/cielo) reacciona a cuánto apretás (`VERT_SPEED` 320 m/s).
-    La altura `fly.alt` maneja: `LaunchAtmosphere.blend` (fade de cielo, `sky2d`), el zoom de cámara,
-    y **`fly.cloud`** = capa de **nubes** (`sky2d::CloudOverlay`, overlay que sigue la cámara, alpha =
-    bump de la altura) que **cubre el terreno + el swap** a media atmósfera y se despeja en el espacio
-    (así no se ve el "cuadrado feo rodeado de negro"). El swap superficie→órbita ocurre a `SWAP_ALT`
-    (1500 m) **bajo nubes densas** → sin cut. Baja a 0 → vuelve al suelo. Durante el vuelo los tres
-    `*_hold_interact` se gatean con `fly.flying()` (USE = bajar, no cavar). Slot de textura de nubes:
-    `decor/clouds` (hoy color blanco).
+  - **Climb (control MANUAL, no animación, aproximación SFS):** mantené **JUMP = subís**, **USE =
+    bajás**, soltás = flotás (`VERT_SPEED` 320). El **jugador va pegado a la cámara** (tamaño constante
+    en pantalla, `sim.rs::interpolate_player_visual` escala por el zoom) → la ilusión es que **el mundo
+    se aleja**, no que el personaje se achica. La vista plana se mantiene **chica** (swap a `SWAP_ALT`
+    bajo = 300 m, `SWAP_VIEW_H` 450) para que el terreno llene (streamer con `range=8` durante vuelo,
+    `world2d`) y **nunca se vea el borde finito**; lo que quede más allá lo tapan las **nubes tempranas**
+    (`sky2d::CloudOverlay`, `fly.cloud`, llenas por ~130 m). El swap superficie→órbita ocurre bajo nubes
+    densas → sin cut. En **órbita** el zoom sigue la altura (`ORBIT_ZOOM_FACTOR`): el **círculo del cuerpo
+    emerge de las nubes y se achica al subir** (reveal SFS), y en espacio profundo enmarca el sistema.
+    Las nubes se unifican con la altura sobre el cuerpo más cercano (vuelven al aproximarte a cualquiera).
+    Los 3 `*_hold_interact` se gatean con `fly.flying()` (USE = bajar, no cavar). Textura de nubes:
+    slot `decor/clouds` (hoy blanco procedural; a futuro sprites de nubes que se atraviesan).
   - **Orbit:** vuelo libre 2D en el plano orbital (velocidad escala con el zoom). Cámara centrada +
     pellizco (zoom max subido a **2.000.000 m** para ver el sistema solar completo — Sol/planetas/Luna).
   - **Descend:** al tocar un cuerpo (o USE = el más cercano) → `teleport_to_body` (coords correctas,

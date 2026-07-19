@@ -129,15 +129,23 @@ fn interpolate_player_visual(
     zoom: Res<crate::camera::CameraZoom>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
-    // Creative free-flight (orbit): draw the CHARACTER at its orbital position,
-    // scaled to keep a readable on-screen size at any zoom. During Climb/Descend
-    // the player renders normally on the surface (continuous ascent/descent).
-    if fly.in_orbit() {
-        let r = render_xy(fly.pos.x, fly.pos.z);
+    // Creative free-flight: the character is "attached to the camera" — a CONSTANT
+    // on-screen size (scaled up as we zoom out), so the illusion is that the WORLD
+    // recedes below you, not that you shrink into a static world. Position: orbital
+    // pos in Orbit, the walked ground spot mid Climb/Descend.
+    if fly.flying() {
+        let t = time.overstep_fraction() as f32;
         let s = (zoom.view_h / 30.0).max(1.0);
-        for (_, mut transform, mut vis) in &mut query {
+        for (visual, mut transform, mut vis) in &mut query {
             *vis = Visibility::Visible;
-            transform.translation = Vec3::new(r.x, r.y, 900.0);
+            let (wx, wz) = if fly.in_orbit() {
+                (fly.pos.x, fly.pos.z)
+            } else {
+                (visual.from_x.lerp(visual.to_x, t), visual.from_z.lerp(visual.to_z, t))
+            };
+            let r = render_xy(wx, wz);
+            let z = if fly.in_orbit() { 900.0 } else { sort_z(wz) + 1.0 };
+            transform.translation = Vec3::new(r.x, r.y, z);
             transform.rotation = Quat::IDENTITY;
             transform.scale = Vec3::new(s, s, 1.0);
         }
