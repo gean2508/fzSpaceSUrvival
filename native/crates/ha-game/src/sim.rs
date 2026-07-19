@@ -129,9 +129,10 @@ fn interpolate_player_visual(
     zoom: Res<crate::camera::CameraZoom>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
-    // Creative free-flight: draw the CHARACTER at its orbital position, scaled to
-    // keep a readable on-screen size at any zoom (matches the walking size).
-    if fly.active {
+    // Creative free-flight (orbit): draw the CHARACTER at its orbital position,
+    // scaled to keep a readable on-screen size at any zoom. During Climb/Descend
+    // the player renders normally on the surface (continuous ascent/descent).
+    if fly.in_orbit() {
         let r = render_xy(fly.pos.x, fly.pos.z);
         let s = (zoom.view_h / 30.0).max(1.0);
         for (_, mut transform, mut vis) in &mut query {

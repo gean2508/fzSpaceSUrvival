@@ -214,15 +214,19 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 - **Build/craft/máquinas GRATIS:** construir (`build.rs::apply_build_hold`), craftear
   (`hud.rs::bag_panel_system` — cualquier receta, otorga el output sin consumir) y colocar
   máquinas (`machines.rs::try_place_on_hold`) sin costo de recursos.
-- **Vuelo libre del PERSONAJE por el espacio (`creative_fly.rs`, módulo separado):** parado en
-  una superficie, **JUMP** te eleva a la vista orbital SIENDO el personaje (tu sprite, NO un cohete
-  — se probó y descartó re-encender `RocketFlight`, que es god-node degree 61 / el "corte feo" del
-  §8). `CreativeFlight { active, pos }`: te movés **libre en 2D** por el plano orbital (velocidad
-  escala con el zoom), sin fuel ni gravedad. La cámara te centra (+ pellizco). **Aterrizás** al
-  tocar un cuerpo (o USE = aterrizar en el más cercano) reusando `teleport_to_body` → coords de
-  superficie siempre correctas, **sin remap inverso riesgoso**. Reemplaza el parche de botones
-  TIERRA/LUNA/ESPACIO. Render: `sim.rs::interpolate_player_visual` dibuja al personaje en `pos`
-  escalado por el zoom; cámara: `camera.rs::follow_player_camera` apunta a `pos` cuando `fly.active`.
+- **Vuelo libre del PERSONAJE por el espacio, TRAYECTORIA CONTINUA (`creative_fly.rs`):** parado
+  en superficie, **JUMP** inicia la subida (sprite del personaje, NO cohete — se descartó re-encender
+  `RocketFlight`, god-node degree 61 / "corte feo" §8). God-mode: sin fuel, sin gravedad, **no
+  responde a órbitas** (eso es para la nave). Máquina de fases `CreativeFlight { phase, pos, alt, body }`:
+  - **Climb:** subís por la atmósfera SIN corte — seguís en la región de superficie mientras
+    `LaunchAtmosphere.blend` funde el cielo→vacío (150→1200 m ya lo maneja `sky2d`) y la cámara
+    aleja (`GROUND_VIEW_H`→`TRANSITION_VIEW_H`). Al pasar `TRANSITION_ALT` (1500 m, ya en vacío) se
+    pasa a la vista orbital → swap sin cut. Sprint = bajar / cancelar.
+  - **Orbit:** vuelo libre 2D en el plano orbital (velocidad escala con el zoom). Cámara centrada +
+    pellizco (zoom max subido a **2.000.000 m** para ver el sistema solar completo — Sol/planetas/Luna).
+  - **Descend:** al tocar un cuerpo (o USE = el más cercano) → `teleport_to_body` (coords correctas,
+    sin remap inverso) y caés por su atmósfera (sky se funde de vuelta, cámara acerca) hasta el suelo.
+  - Sin cortes en ningún tramo. Reemplaza el parche de botones TIERRA/LUNA/ESPACIO.
 - **Locomoción a pie:** noclip 8-dir (`sim.rs`: sin colisión, atraviesa agua/roca; `sim.body.y=0`).
 - `creative_topup_system` sigue dando herramientas.
 

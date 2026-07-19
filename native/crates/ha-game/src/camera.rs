@@ -22,9 +22,10 @@ const SURFACE_VIEW_H: f32 = 30.0;
 /// Default flight zoom — close enough to read the rocket + local horizon, far
 /// enough to feel airborne. The player pinches/scrolls out to see the whole body.
 const FLIGHT_DEFAULT_H: f32 = 320.0;
-/// User zoom clamps (viewport height, world m): from tight to whole-planet.
+/// User zoom clamps (viewport height, world m): from tight to whole-SYSTEM (the
+/// max frames the Sun + planets + Moon; Neptune's orbit is ~630 km from the Sun).
 const ZOOM_MIN_H: f32 = 18.0;
-const ZOOM_MAX_H: f32 = 12_000.0;
+const ZOOM_MAX_H: f32 = 2_000_000.0;
 
 /// User-controlled camera zoom (pinch on mobile, scroll on desktop). The camera
 /// ALWAYS stays centred on the rocket/player — only the zoom is user-driven.
@@ -173,21 +174,23 @@ fn follow_player_camera(
     };
 
     let in_flight = flight.active && flight.phase != ha_shared::FlightPhase::Surface;
-    let space_view = in_flight || fly.active || matches!(region.active, RegionId::Space);
+    let space_view = in_flight || fly.in_orbit() || matches!(region.active, RegionId::Space);
 
-    // Reset the zoom to a sane default on entering/leaving flight so the player
-    // never spawns in a 9 km-out view; between transitions it's whatever they
-    // pinched/scrolled to.
-    if space_view && !*was_space {
-        zoom.view_h = FLIGHT_DEFAULT_H;
-    } else if !space_view && *was_space {
-        zoom.view_h = SURFACE_VIEW_H;
+    // Reset the zoom to a sane default entering/leaving ROCKET flight. Creative
+    // free-flight manages its own zoom across Climb/Orbit/Descend, so leave it
+    // alone while it's flying (otherwise the continuous ascent would snap).
+    if !fly.flying() {
+        if space_view && !*was_space {
+            zoom.view_h = FLIGHT_DEFAULT_H;
+        } else if !space_view && *was_space {
+            zoom.view_h = SURFACE_VIEW_H;
+        }
     }
     *was_space = space_view;
 
-    // The camera is ALWAYS centred on: the flying character (creative), the
-    // rocket (flight), or the player (surface).
-    let target = if fly.active {
+    // The camera is ALWAYS centred on: the character flying in orbit (creative),
+    // the rocket (flight), or the player (surface / mid-climb / mid-descent).
+    let target = if fly.in_orbit() {
         Vec2::new(fly.pos.x, -fly.pos.z)
     } else if space_view {
         flight.render_pos_2d()

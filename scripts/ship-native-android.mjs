@@ -77,13 +77,16 @@ if (!noBump) {
 }
 
 if (skipTests) {
-  console.log("⊘ Skip tests (--skip-tests) — validá aparte con cargo check");
+  // Skip the pre-publish test/check gates — they recompile ha-game (full Bevy)
+  // twice extra and OOM low-RAM machines. `cargo ndk build` below still compiles
+  // it for real, so a broken build fails there anyway.
+  console.log("⊘ Skip tests + cargo check (--skip-tests) — validá aparte con cargo check");
 } else {
   run("npm run validate:arch", ROOT);
   run("npm test", ROOT);
   run("make -C native test", ROOT);
+  run(`cargo check -p ha-game --features android`, NATIVE, androidEnv);
 }
-run(`cargo check -p ha-game --features android`, NATIVE, androidEnv);
 
 const version = JSON.parse(readFileSync(VERSION_PATH, "utf8"));
 
