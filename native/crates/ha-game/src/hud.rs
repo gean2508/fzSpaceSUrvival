@@ -1978,7 +1978,11 @@ fn bag_panel_system(
     layout: Res<TouchLayout>,
     tune: Res<HudTune>,
     root: Query<Entity, With<GameUiRoot>>,
-    ship_state: Res<crate::ship_builder::ShipBuilderState>,
+    // Bundled into a tuple (Bevy caps systems at 16 params; this stays under).
+    creative_res: (
+        Res<crate::ship_builder::ShipBuilderState>,
+        Res<crate::ui_editor::UiEditorState>,
+    ),
     mut commands: Commands,
     mut bag_state: ResMut<BagPanelState>,
     mut craft_intent: ResMut<CraftIntent>,
@@ -2031,6 +2035,8 @@ fn bag_panel_system(
         >,
     )>,
 ) {
+    let ship_state = &creative_res.0;
+    let editor = &creative_res.1;
     if !bag_state.open {
         despawn_bag_panel(&mut commands, &mut bag_state);
         return;
@@ -2111,7 +2117,8 @@ fn bag_panel_system(
         let can = if recipe_btn.is_machine_select {
             true
         } else if let Some(recipe) = get_craft_recipe(recipe_btn.recipe_id) {
-            can_craft(&inv, recipe)
+            // Creative = craftable regardless of materials (Minecraft-style).
+            editor.creative || can_craft(&inv, recipe)
         } else {
             false
         };
@@ -2135,8 +2142,16 @@ fn bag_panel_system(
                 bag_state.open = false;
             } else if let Some(recipe) = get_craft_recipe(recipe_btn.recipe_id) {
                 flush_slots_to_inventory(&ui, &mut inv);
-                if craft(&mut inv, recipe) {
+                // Creative grants the output for free (no ingredient consumption).
+                let ok = if editor.creative {
+                    true
+                } else if craft(&mut inv, recipe) {
                     consume_from_ui_slots(&mut ui, recipe.ingredients);
+                    true
+                } else {
+                    false
+                };
+                if ok {
                     if !add_item_to_slots(&mut ui, recipe.output_id, recipe.output_qty) {
                         merge_inv_gains_into_ui(&mut ui, &inv);
                     }

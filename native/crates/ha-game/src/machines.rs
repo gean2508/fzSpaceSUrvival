@@ -143,6 +143,7 @@ pub(crate) fn try_place_on_hold(
     mut icons: ResMut<ItemIconCache>,
     mut images: ResMut<Assets<Image>>,
     art: Res<crate::art2d::ArtLibrary>,
+    editor: Res<crate::ui_editor::UiEditorState>,
     mut launch_pads: ResMut<LaunchPadWorld>,
 ) {
     // Consume only holds started as machine placement (cf. building_world.rs guard).
@@ -165,7 +166,8 @@ pub(crate) fn try_place_on_hold(
         eprintln!("ha-machines: {} not placeable on {}", def.id, body_def(body).label);
         return;
     }
-    if !inv.can_afford_machine(def) {
+    // Creative places machines free (Minecraft-style).
+    if !editor.creative && !inv.can_afford_machine(def) {
         return;
     }
     let Ok((_tf, sim)) = player.get_single() else {
@@ -185,7 +187,9 @@ pub(crate) fn try_place_on_hold(
         return;
     }
 
-    inv.consume_machine_cost(def);
+    if !editor.creative {
+        inv.consume_machine_cost(def);
+    }
     persist.mark_immediate();
     let uid = world.next_uid;
     world.next_uid += 1;

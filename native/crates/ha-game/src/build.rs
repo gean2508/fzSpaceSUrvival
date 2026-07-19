@@ -198,6 +198,7 @@ fn apply_build_hold(
     selected: Res<SelectedBuildPiece>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
+    editor: Res<crate::ui_editor::UiEditorState>,
     mut tiles: ResMut<TileWorld>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
@@ -213,12 +214,16 @@ fn apply_build_hold(
     let Some(piece) = build_piece(selected.0) else {
         return;
     };
-    if inv.qty(piece.cost_item) < piece.cost_qty {
+    // Creative = Minecraft-style: build free, no resource cost.
+    let creative = editor.creative;
+    if !creative && inv.qty(piece.cost_item) < piece.cost_qty {
         return;
     }
     let body = active_surface_body(&ctx, &planet);
     if tiles.place_tile(body, tx as i64, tz as i64, piece.tile) {
-        inv.remove(piece.cost_item, piece.cost_qty);
+        if !creative {
+            inv.remove(piece.cost_item, piece.cost_qty);
+        }
         persist.mark_immediate();
     }
 }

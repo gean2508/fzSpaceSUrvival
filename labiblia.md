@@ -209,6 +209,22 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 
 ## §11 Movimiento: creativo, jetpack, políticas (actualizado 10 jul 2026)
 
+**Creativo = tipo Minecraft (build/craft/máquinas GRATIS + vuelo a pie + noclip):** con
+`UiEditorState.creative` ON (botón CREATIVO del menú):
+- **Build/craft/máquinas GRATIS:** construir (`build.rs::apply_build_hold`), craftear
+  (`hud.rs::bag_panel_system` — cualquier receta, otorga el output sin consumir) y colocar
+  máquinas (`machines.rs::try_place_on_hold`) sin costo de recursos.
+- **Vuelo a pie con JUMP (`rocket_flight.rs::creative_fly_ignite`):** parado en una superficie,
+  apretar **JUMP** enciende el vuelo del cohete DESDE el jugador (sin nave), con **combustible
+  infinito** (`creative_fuel_topup`). Reusa todo el pipeline SFS: subís, salís al espacio, cruzás
+  a la Luna, aterrizás, re-despegás. Reemplaza el parche de los botones TIERRA/LUNA/ESPACIO.
+  *Limitación actual:* despega desde el punto de lanzamiento canónico del cuerpo (`launch_pos_vel`),
+  no exactamente desde donde estás parado (mapear superficie→órbita es delicado; a afinar en device).
+- **Locomoción a pie:** noclip 8-dir (`sim.rs`: sin colisión, atraviesa agua/roca; `sim.body.y=0`).
+- `creative_topup_system` sigue dando herramientas.
+
+(El texto de abajo describe el vuelo vertical del viejo side-scroller — superado por top-down.)
+
 **Modo creativo = modo dios (hoy es la ÚNICA forma de volar — el cohete construible aún no existe).**
 - Se vuela con la locomoción a pie libre: `sim.rs` en creativo llama `step_surface_creative_fly` (JUMP sube, sprint baja, **sin gravedad**). El controlador de movimiento es el mismo en Tierra/Luna/planeta — el contexto cambia solo para render/culling/efemérides.
 - **Es continuo por construcción:** en espacio-tangente `body.y` crece sin límite y se renderiza a lo largo de la normal (`interpolate_player_visual`), así subir recto desde la Tierra es un ascenso mundial correcto a cualquier altura, sin corte ni cambio de cámara.

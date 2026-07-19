@@ -39,8 +39,58 @@ impl Plugin for RocketFlightPlugin {
             .add_systems(FixedUpdate, tick_rocket_flight)
             .add_systems(
                 Update,
-                (try_surface_launch, sync_flight_world_state, sync_rocket_visual),
+                (
+                    try_surface_launch,
+                    creative_fly_ignite,
+                    creative_fuel_topup,
+                    sync_flight_world_state,
+                    sync_rocket_visual,
+                ),
             );
+    }
+}
+
+/// Creative: press JUMP while standing on a body surface to lift off like a
+/// rocket — no ship, no fuel limit. Reuses the whole flight/space/landing
+/// pipeline, so you leave the planet, cruise to the Moon and land, all "on foot"
+/// (what the MENU TIERRA/LUNA/ESPACIO teleports were a stopgap for).
+fn creative_fly_ignite(
+    editor: Res<crate::ui_editor::UiEditorState>,
+    actions: Res<TouchActions>,
+    region: Res<RegionRuntime>,
+    clock: Res<SolarSystemClock>,
+    mut flight: ResMut<RocketFlight>,
+    player: Query<&SimState, With<Player>>,
+) {
+    if !editor.creative || flight.active || !actions.jump_edge {
+        return;
+    }
+    // Only from a real walkable body surface (never the ship interior / space).
+    let body = match region.active {
+        RegionId::Overworld { .. } => CelestialBody::Earth,
+        RegionId::Luna => CelestialBody::Moon,
+        RegionId::Planet(b) => b,
+        _ => return,
+    };
+    if player.get_single().is_err() {
+        return;
+    }
+    flight.clock_secs = clock.t;
+    let (pos, vel) = launch_pos_vel(body, clock.t, 30.0);
+    flight.surface_flight = Some(body);
+    flight.begin_at(pos);
+    flight.fuel = flight.capacity();
+    flight.vel = vel;
+    eprintln!("ha-creative: fly ignition on foot ({body:?})");
+}
+
+/// Creative flight = infinite fuel (keeps the tank full so you never drop out).
+fn creative_fuel_topup(
+    editor: Res<crate::ui_editor::UiEditorState>,
+    mut flight: ResMut<RocketFlight>,
+) {
+    if editor.creative && flight.active {
+        flight.fuel = flight.capacity();
     }
 }
 

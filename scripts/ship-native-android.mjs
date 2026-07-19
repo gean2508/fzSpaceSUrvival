@@ -21,6 +21,10 @@ const VERSION_PATH = resolve(NATIVE, "version.json");
 const args = process.argv.slice(2);
 const noBump = args.includes("--no-bump");
 const forceRust = args.includes("--rebuild-rust");
+// Skip the pre-publish test gates (npm test + `make -C native test`). Those
+// recompile the ha-game TEST binary (full Bevy) and OOM on low-RAM machines
+// (see labiblia §7). Use when you've already validated with `cargo check`.
+const skipTests = args.includes("--skip-tests");
 const hostIdx = args.indexOf("--host");
 const lanHost =
   hostIdx >= 0
@@ -72,9 +76,13 @@ if (!noBump) {
   run("node scripts/bump-app-version.mjs android");
 }
 
-run("npm run validate:arch", ROOT);
-run("npm test", ROOT);
-run("make -C native test", ROOT);
+if (skipTests) {
+  console.log("⊘ Skip tests (--skip-tests) — validá aparte con cargo check");
+} else {
+  run("npm run validate:arch", ROOT);
+  run("npm test", ROOT);
+  run("make -C native test", ROOT);
+}
 run(`cargo check -p ha-game --features android`, NATIVE, androidEnv);
 
 const version = JSON.parse(readFileSync(VERSION_PATH, "utf8"));
