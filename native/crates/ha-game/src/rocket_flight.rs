@@ -28,6 +28,39 @@ fn radial_dir(angle: f32) -> Vec3 {
 /// Default launch heading: straight up on screen (−z).
 const LAUNCH_ANGLE: f32 = -std::f32::consts::FRAC_PI_2;
 
+/// Reference surface point per body calibrating the angle↔grid-x map: the
+/// agency pad on Earth (so launching from the pad puts you at LAUNCH_ANGLE,
+/// straight up on screen), the standard spawn elsewhere.
+fn surface_anchor_x(body: CelestialBody) -> f32 {
+    if body == CelestialBody::Earth {
+        crate::scene::EARTH_PAD_S + 4.0
+    } else {
+        0.0
+    }
+}
+
+/// Walkable grid x → orbital angle around the body. The flight plane is the
+/// 1D ring of angles; grid x is the arc that wraps the walk circumference —
+/// so WHERE you stand determines WHERE on the ring you launch, and vice
+/// versa: where you descend determines where you land (SFS freedom, no fixed
+/// landing zones).
+pub fn surface_x_to_angle(body: CelestialBody, x: f32) -> f32 {
+    LAUNCH_ANGLE + (x - surface_anchor_x(body)) / ha_shared::body_walk_radius(body).max(1.0)
+}
+
+/// Orbital angle → walkable grid x (shortest wrap around the circumference).
+pub fn angle_to_surface_x(body: CelestialBody, angle: f32) -> f32 {
+    use std::f32::consts::{PI, TAU};
+    let mut d = angle - LAUNCH_ANGLE;
+    while d > PI {
+        d -= TAU;
+    }
+    while d < -PI {
+        d += TAU;
+    }
+    surface_anchor_x(body) + d * ha_shared::body_walk_radius(body)
+}
+
 use crate::input::{MovementIntent, TouchActions};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
@@ -69,6 +102,15 @@ const AUTOPILOT_HOVER_ALT_M: f32 = 500.0;
 pub fn launch_pos_vel(body: CelestialBody, t: f32, speed: f32) -> (Vec3, Vec3) {
     let c = Vec3::from_array(body_center_at(body, t));
     let dir = radial_dir(LAUNCH_ANGLE);
+    let pos = c + dir * (body_radius(body) + 2.0);
+    (pos, dir * speed)
+}
+
+/// Ignite from wherever the walker stands: their grid x maps to the real
+/// orbital angle, so every launch leaves from the spot you're at.
+pub fn launch_pos_vel_from(body: CelestialBody, t: f32, speed: f32, surface_x: f32) -> (Vec3, Vec3) {
+    let c = Vec3::from_array(body_center_at(body, t));
+    let dir = radial_dir(surface_x_to_angle(body, surface_x));
     let pos = c + dir * (body_radius(body) + 2.0);
     (pos, dir * speed)
 }
@@ -388,9 +430,9 @@ pub fn tick_rocket_flight(
     }
 
     // Touchdown: the rocket reaches the body's surface radius → the walker
-    // steps out at the body's landing zone (the same cell the descent anchor
-    // pointed at, so the visible descent ends where you land). Radial descent
-    // speed gates a hard landing.
+    // steps out WHERE the rocket actually came down (orbital angle → grid x,
+    // snapped to the nearest walkable cell). Radial descent speed gates a
+    // hard landing.
     if body_landable(flight.body) && flight.altitude() <= 0.4 {
         let c = Vec3::from_array(body_center_at(flight.body, t));
         let radial = (flight.pos - c).normalize_or_zero();
@@ -400,7 +442,9 @@ pub fn tick_rocket_flight(
         let hard = descent_v > safe_v;
         if let Ok((mut sim, mut visual)) = player.get_single_mut() {
             // Top-down: land on a walkable surface cell (patch, not a longitude).
-            let (sx, sz) = crate::scene::landing_site(flight.body);
+            let theta = (flight.pos.z - c.z).atan2(flight.pos.x - c.x);
+            let lx = angle_to_surface_x(flight.body, theta);
+            let (sx, sz) = crate::scene::walkable_spawn(flight.body, lx, sim.body.z);
             sim.body.x = sx;
             sim.body.z = sz;
             sim.body.y = 0.0;
@@ -482,11 +526,12 @@ fn try_surface_launch(
         RegionId::Planet(b) if body_landable(b) => b,
         _ => return,
     };
-    if player.get_single().is_err() {
+    let Ok(sim) = player.get_single() else {
         return;
-    }
+    };
     flight.clock_secs = clock.t;
-    let (pos, vel) = launch_pos_vel(body, clock.t, 42.0);
+    // Relaunch from WHERE the lander stands (grid x → orbital angle).
+    let (pos, vel) = launch_pos_vel_from(body, clock.t, 42.0, sim.body.x);
     flight.begin_surface_gameplay(body, pos, vel);
 }
 
@@ -540,37 +585,36 @@ fn sync_flight_world_state(
         };
 
     if surface_frame {
-        if !in_surface {
-            // Entering the surface frame: anchor the sprite. Ascent (ignition)
-            // → where the ship stands; descent (approach) → the body's landing
-            // zone, where the (hidden) walker is parked too so the terrain
-            // streams around the right cells and touchdown lands exactly where
-            // the descent showed.
-            let (sx, sz) = if flight.vertical_speed() >= 0.0 {
-                player
-                    .get_single()
-                    .map(|(s, _, _)| (s.body.x, s.body.z))
-                    .unwrap_or_else(|_| crate::scene::landing_site(body))
-            } else {
-                let (sx, sz) = crate::scene::landing_site(body);
-                if let Ok((mut sim, mut visual, mut tf)) = player.get_single_mut() {
-                    sim.body.x = sx;
-                    sim.body.z = sz;
-                    sim.body.y = 0.0;
-                    sim.body.vx = 0.0;
-                    sim.body.vz = 0.0;
-                    sim.body.vy = 0.0;
-                    visual.from_x = sx;
-                    visual.to_x = sx;
-                    visual.from_z = sz;
-                    visual.to_z = sz;
-                    let r = crate::world2d::render_xy(sx, sz);
-                    tf.translation = Vec3::new(r.x, r.y, crate::world2d::sort_z(sz) + 1.0);
-                }
-                (sx, sz)
-            };
-            trans.surface_anchor = crate::world2d::render_xy(sx, sz);
+        // The anchor tracks the rocket's TRUE orbital angle every frame — you
+        // land wherever you actually descend, and lateral thrust below the
+        // swap drifts the world sideways (SFS freedom, no fixed landing zone).
+        let c = body_center_at(body, flight.clock_secs);
+        let theta = (flight.pos.z - c[2]).atan2(flight.pos.x - c[0]);
+        let sx = angle_to_surface_x(body, theta);
+        let mut sz = 6.0;
+        if let Ok((mut sim, mut visual, mut tf)) = player.get_single_mut() {
+            if !in_surface && flight.vertical_speed() < 0.0 {
+                // Entering a descent from space: drop the hidden walker onto
+                // the standard landing latitude of this body's grid.
+                sim.body.z = 6.0;
+            }
+            sz = sim.body.z;
+            // Park the (hidden) walker under the rocket so terrain streams
+            // around the right cells and touchdown lands where the descent
+            // showed. Walker sim is blocked during flight, nothing fights this.
+            sim.body.x = sx;
+            sim.body.y = 0.0;
+            sim.body.vx = 0.0;
+            sim.body.vz = 0.0;
+            sim.body.vy = 0.0;
+            visual.from_x = sx;
+            visual.to_x = sx;
+            visual.from_z = sz;
+            visual.to_z = sz;
+            let r = crate::world2d::render_xy(sx, sz);
+            tf.translation = Vec3::new(r.x, r.y, crate::world2d::sort_z(sz) + 1.0);
         }
+        trans.surface_anchor = crate::world2d::render_xy(sx, sz);
         let mode = if flight.vertical_speed() >= 0.0 {
             TransitionMode::Ascent
         } else {

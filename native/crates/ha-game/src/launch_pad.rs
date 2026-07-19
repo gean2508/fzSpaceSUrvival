@@ -366,15 +366,17 @@ pub(crate) fn try_ignite_on_hold(
         return;
     }
     hold.completed = false;
-    if player.get_single().is_err() {
+    let Ok(sim) = player.get_single() else {
         return;
-    }
+    };
 
     // SFS ascent in 2D top-down: ignite into the orbital plane straight up off
-    // Earth; the camera zooms out — continuous, no cutscene (B8).
+    // the spot where the ship stands; the camera zooms out — continuous, no
+    // cutscene (B8).
     let t = clock.t;
     flight.clock_secs = t;
-    let (pos, vel) = crate::rocket_flight::launch_pos_vel(CelestialBody::Earth, t, 18.0);
+    let (pos, vel) =
+        crate::rocket_flight::launch_pos_vel_from(CelestialBody::Earth, t, 18.0, sim.body.x);
     flight.surface_flight = Some(CelestialBody::Earth);
     flight.begin_at(pos);
     // The Earth pad is the ONLY refuel point — the agency tops the tank here.

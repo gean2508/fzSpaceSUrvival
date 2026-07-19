@@ -504,12 +504,19 @@ y la coreografía buena solo existía en el creativo con números de la Tierra h
   transición), `world2d` (ring ancho también en vuelo cohete).
 - **Cohete gradual:** `sync_flight_world_state` es el guardián B8 real — región y
   transición se escriben en UN solo sistema, gateados por altitud con histéresis. Bajo
-  el swap: marco superficie vivo, sprite del cohete fijo sobre `surface_anchor` (pad al
-  subir; **zona de aterrizaje** `scene::landing_site` al bajar — Tierra: el pad, antes
-  aterrizabas en arco 0), escala constante, el mundo retrocede por zoom. El walker
-  (oculto) se estaciona en la zona de aterrizaje al entrar en descenso para que el
-  streaming centre bien los chunks. `sync_pad_visuals` oculta la nave estacionada en
-  vuelo y la repone al volver.
+  el swap: marco superficie vivo, sprite del cohete sobre `surface_anchor`, escala
+  constante, el mundo retrocede por zoom. `sync_pad_visuals` oculta la nave estacionada
+  en vuelo y la repone al volver.
+- **Libertad SFS total (decisión del usuario, 19 jul): SIN zonas de aterrizaje fijas.**
+  Mapa ángulo↔grilla (`rocket_flight::surface_x_to_angle`/`angle_to_surface_x`: grid x =
+  arco que envuelve `walk_radius`, calibrado para que el pad de la agencia caiga en
+  `LAUNCH_ANGLE`): **despegás desde donde estás parado** (`launch_pos_vel_from` en pad,
+  cabina y relanzamiento off-world) y **aterrizás donde de verdad descendés** (touchdown
+  = ángulo orbital real → celda walkable más cercana). El `surface_anchor` sigue el
+  ángulo VIVO cada frame — empuje lateral bajo el swap se VE derivar sobre el mapa; el
+  walker oculto se estaciona bajo el cohete para que el streaming centre los chunks.
+  La física siempre fue libre (thrust/nariz/coast/SOI); esto elimina el último punto
+  predefinido que quedaba.
 - **Fix de geometría (preexistente):** en órbita creativa `pos.y=0` vs centros en
   `FLIGHT_PLANE_Y=-1500` inflaba TODA distancia ~+535 m → el despeje al entrar a órbita
   era un accidente y el auto-aterrizaje en la Luna era **imposible**. Ahora distancias

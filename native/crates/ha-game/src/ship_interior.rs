@@ -16,7 +16,7 @@ use ha_shared::topdown::{Tile, TILE_M};
 use ha_shared::{CelestialBody, WorldContext};
 
 use crate::art2d::ArtLibrary;
-use crate::rocket_flight::{launch_pos_vel, RocketFlight};
+use crate::rocket_flight::RocketFlight;
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::solar_system_clock::SolarSystemClock;
@@ -349,9 +349,15 @@ fn cockpit_button_system(
                         );
                         // Reuse the pad ignition path (see launch_pad.rs) and top
                         // the tank so the flight is actually playable (the FuelSource
-                        // stays useful for off-world top-ups).
+                        // stays useful for off-world top-ups). `leave_ship` already
+                        // put the walker back at the boarding spot — launch from it.
                         flight.clock_secs = clock.t;
-                        let (pos, vel) = launch_pos_vel(CelestialBody::Earth, clock.t, 18.0);
+                        let (pos, vel) = crate::rocket_flight::launch_pos_vel_from(
+                            CelestialBody::Earth,
+                            clock.t,
+                            18.0,
+                            sim.body.x,
+                        );
                         flight.surface_flight = Some(CelestialBody::Earth);
                         flight.begin_at(pos);
                         flight.fuel = flight.capacity();

@@ -77,17 +77,6 @@ impl Default for RegionRuntime {
 /// Arc position of the agency launch pad on Earth (spawn/respawn anchor).
 pub const EARTH_PAD_S: f32 = ha_shared::LAUNCH_PAD_ZONE_X;
 
-/// Fixed landing zone per body: where rocket descents aim and touch down
-/// (Earth: beside the agency pad; elsewhere: the standard spawn zone).
-pub fn landing_site(body: CelestialBody) -> (f32, f32) {
-    let near_x = if body == CelestialBody::Earth {
-        EARTH_PAD_S + 4.0
-    } else {
-        0.0
-    };
-    walkable_spawn(body, near_x, 6.0)
-}
-
 pub struct ScenePlugin;
 
 impl Plugin for ScenePlugin {
