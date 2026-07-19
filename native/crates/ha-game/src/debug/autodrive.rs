@@ -59,7 +59,7 @@ fn fly_test_drive(world: &mut World) {
     }
 
     // Screenshot the ascent at a sequence of times.
-    let want = [3.2f32, 3.5, 3.9, 4.3, 4.9, 6.0, 8.0, 11.0];
+    let want = [4.0f32, 6.0, 8.0, 10.0, 11.5, 12.8, 14.5, 17.0];
     let shots = world.resource::<FlyTestState>().shots as usize;
     if shots < want.len() && now >= want[shots] {
         let (alt, cloud, orbit) = {

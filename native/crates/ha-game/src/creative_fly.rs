@@ -49,14 +49,16 @@ impl CreativeFlight {
 }
 
 /// Player-driven vertical speed (metres of altitude per second) — hold JUMP/USE.
-const VERT_SPEED: f32 = 150.0;
+/// Slow: ~10 s from the ground to space so you FEEL the world receding.
+const VERT_SPEED: f32 = 32.0;
 /// Altitude where the surface view hands over to orbit. Kept LOW + under full
 /// clouds so the flat-tile view never zooms out enough to reveal its finite edge
 /// — then the (infinitely-zoomable) orbital circle takes over. Hidden by clouds.
-const SWAP_ALT: f32 = 200.0;
-/// Camera viewport height (m) at the swap — small, matching the local ground scale
-/// so the swap to the orbital frame is scale-continuous.
-const SWAP_VIEW_H: f32 = 200.0;
+const SWAP_ALT: f32 = 300.0;
+/// Camera viewport height (m) at the swap — kept small so the streamed terrain
+/// (range 10) always fills it (never the finite-edge square); the clouds cover
+/// whatever's beyond as they close in near the top.
+const SWAP_VIEW_H: f32 = 180.0;
 const GROUND_VIEW_H: f32 = 30.0;
 /// In orbit the camera zoom follows altitude (SFS reveal): the body's circle
 /// shrinks as you climb. `view_h = (radius + alt) * this`, clamped. High enough
@@ -107,8 +109,8 @@ fn radial_up(body: CelestialBody, t: f32) -> Vec3 {
 /// frame swap, clearing toward space. Same curve in atmosphere (Climb/Descend) and
 /// near a body in Orbit, so approaching any body brings its clouds back.
 fn cloud_from_alt(alt: f32) -> f32 {
-    let rising = ((alt - 90.0) / 80.0).clamp(0.0, 1.0); // ground visible to ~90 m, full by ~170
-    let clearing = ((600.0 - alt) / 250.0).clamp(0.0, 1.0); // clear by ~600 m (space)
+    let rising = ((alt - 190.0) / 100.0).clamp(0.0, 1.0); // ground visible to ~190 m, full by ~290
+    let clearing = ((700.0 - alt) / 300.0).clamp(0.0, 1.0); // clear by ~700 m (space)
     rising.min(clearing)
 }
 

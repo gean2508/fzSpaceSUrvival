@@ -209,7 +209,9 @@ fn spawn_cloud_overlay(mut commands: Commands) {
             ..default()
         },
         BackgroundColor(Color::srgba(0.86, 0.89, 0.95, 0.0)),
-        GlobalZIndex(600),
+        // Negative z: above the 2D world (UI pass always is) but BELOW the HUD so
+        // the clouds cover the ground, never the hearts/hotbar/buttons.
+        GlobalZIndex(-50),
         bevy::ui::FocusPolicy::Pass,
         Name::new("CloudOverlay"),
     ));

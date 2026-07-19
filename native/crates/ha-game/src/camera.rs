@@ -122,10 +122,18 @@ fn absorb_shake_events(
 fn camera_zoom_input(
     flight: Res<RocketFlight>,
     region: Res<RegionRuntime>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     mut zoom: ResMut<CameraZoom>,
     mut wheel: EventReader<MouseWheel>,
     touches: Res<Touches>,
 ) {
+    // Creative flight OWNS the zoom (auto-follows altitude). Letting the pinch
+    // also write it made the two fight every frame → the screen/UI flicker the
+    // player saw. So skip user zoom entirely while creative-flying.
+    if fly.flying() {
+        zoom.pinch_prev = None;
+        return;
+    }
     let mut scroll = 0.0;
     for e in wheel.read() {
         scroll += e.y;
