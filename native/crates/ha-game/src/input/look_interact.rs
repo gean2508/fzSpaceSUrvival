@@ -120,12 +120,17 @@ fn use_button_hold_interact(
     equipped: Res<EquippedItem>,
     pending: Res<crate::machines::PendingMachinePlacement>,
     build_mode: Res<BuildModeActive>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     mut hold: ResMut<HoldInteractState>,
     mut started: Local<bool>,
     mut held_ms: Local<f32>,
 ) {
     // Desktop keeps its mouse path (`desktop_hold_interact`).
     if !crate::platform::uses_touch_gameplay_ui() {
+        return;
+    }
+    // Creative flight repurposes USE as "descend" — don't dig/place while flying.
+    if fly.flying() {
         return;
     }
     if !actions.action {

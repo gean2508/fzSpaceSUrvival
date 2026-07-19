@@ -58,6 +58,13 @@ struct NightOverlay;
 #[derive(Component)]
 struct StarSprite;
 
+/// Camera-following cloud layer for the creative ascent/descent — hides the
+/// ground (and the surface↔orbit swap) mid-atmosphere, clears into space.
+/// Alpha is driven by `CreativeFlight::cloud`. Colour = white fallback; drop a
+/// `decor/clouds` texture later for real clouds.
+#[derive(Component)]
+struct CloudOverlay;
+
 pub struct Sky2dPlugin;
 
 impl Plugin for Sky2dPlugin {
@@ -83,6 +90,12 @@ fn spawn_sky_attachments(mut commands: Commands, camera: Query<Entity, With<Game
             NightOverlay,
             Sprite::from_color(Color::srgba(0.02, 0.02, 0.08, 0.0), Vec2::new(4.0, 2.4)),
             Transform::from_xyz(0.0, 0.0, 40.0),
+        ));
+        // Cloud layer for the creative ascent (in front of night, behind UI).
+        p.spawn((
+            CloudOverlay,
+            Sprite::from_color(Color::srgba(0.86, 0.89, 0.95, 0.0), Vec2::new(4.0, 2.4)),
+            Transform::from_xyz(0.0, 0.0, 45.0),
         ));
         // Static star pattern that follows the camera (skybox, never crossed).
         let mut seed = 0x1357_9bdfu32;
@@ -110,13 +123,21 @@ fn sync_sky(
     launch: Res<LaunchAtmosphere>,
     lantern: Res<PlayerLanternControl>,
     tiles: Res<crate::world2d::TileWorld>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     mut clear: ResMut<ClearColor>,
     player: Query<&SimState, With<Player>>,
     camera: Query<&OrthographicProjection, With<GameCamera>>,
-    mut overlay: Query<(&mut Sprite, &mut Transform), (With<NightOverlay>, Without<StarSprite>)>,
+    mut overlay: Query<
+        (&mut Sprite, &mut Transform),
+        (With<NightOverlay>, Without<StarSprite>, Without<CloudOverlay>),
+    >,
     mut stars: Query<
         (&mut Visibility, &mut Transform),
-        (With<StarSprite>, Without<NightOverlay>),
+        (With<StarSprite>, Without<NightOverlay>, Without<CloudOverlay>),
+    >,
+    mut clouds: Query<
+        (&mut Sprite, &mut Transform),
+        (With<CloudOverlay>, Without<NightOverlay>, Without<StarSprite>),
     >,
 ) {
     let view_h = camera
@@ -185,5 +206,11 @@ fn sync_sky(
             Visibility::Hidden
         };
         tf.scale = Vec3::splat(view_h);
+    }
+
+    // Creative-ascent clouds — hide the ground + the frame swap mid-atmosphere.
+    for (mut sprite, mut tf) in &mut clouds {
+        sprite.color = Color::srgba(0.86, 0.89, 0.95, fly.cloud.clamp(0.0, 1.0));
+        tf.scale = Vec3::splat(view_h * 1.7);
     }
 }

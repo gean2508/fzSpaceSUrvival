@@ -115,9 +115,13 @@ pub fn desktop_hold_interact(
     equipped: Res<super::EquippedItem>,
     pending: Res<crate::machines::PendingMachinePlacement>,
     build_mode: Res<crate::input::BuildModeActive>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     mut hold: ResMut<super::HoldInteractState>,
 ) {
     if editor.enabled || editor.menu_open || gameplay_block.blocked || !capture.active {
+        return;
+    }
+    if fly.flying() {
         return;
     }
 

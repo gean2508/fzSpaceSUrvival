@@ -126,12 +126,13 @@ pub(super) fn gamepad_hold_interact(
     pending: Res<crate::machines::PendingMachinePlacement>,
     build_mode: Res<crate::input::BuildModeActive>,
     flight: Res<crate::rocket_flight::RocketFlight>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     mut hold: ResMut<super::HoldInteractState>,
 ) {
     let Some(pad) = pads.iter().next() else {
         return;
     };
-    if editor.enabled || editor.menu_open || gameplay_block.blocked {
+    if editor.enabled || editor.menu_open || gameplay_block.blocked || fly.flying() {
         return;
     }
     // In flight RT is pure thrust — never a world interaction.

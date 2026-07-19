@@ -218,10 +218,15 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
   en superficie, **JUMP** inicia la subida (sprite del personaje, NO cohete — se descartó re-encender
   `RocketFlight`, god-node degree 61 / "corte feo" §8). God-mode: sin fuel, sin gravedad, **no
   responde a órbitas** (eso es para la nave). Máquina de fases `CreativeFlight { phase, pos, alt, body }`:
-  - **Climb:** subís por la atmósfera SIN corte — seguís en la región de superficie mientras
-    `LaunchAtmosphere.blend` funde el cielo→vacío (150→1200 m ya lo maneja `sky2d`) y la cámara
-    aleja (`GROUND_VIEW_H`→`TRANSITION_VIEW_H`). Al pasar `TRANSITION_ALT` (1500 m, ya en vacío) se
-    pasa a la vista orbital → swap sin cut. Sprint = bajar / cancelar.
+  - **Climb (control MANUAL, no animación):** mantené **JUMP = subís**, **USE = bajás**, soltás =
+    te quedás flotando. Todo (altura/cámara/cielo) reacciona a cuánto apretás (`VERT_SPEED` 320 m/s).
+    La altura `fly.alt` maneja: `LaunchAtmosphere.blend` (fade de cielo, `sky2d`), el zoom de cámara,
+    y **`fly.cloud`** = capa de **nubes** (`sky2d::CloudOverlay`, overlay que sigue la cámara, alpha =
+    bump de la altura) que **cubre el terreno + el swap** a media atmósfera y se despeja en el espacio
+    (así no se ve el "cuadrado feo rodeado de negro"). El swap superficie→órbita ocurre a `SWAP_ALT`
+    (1500 m) **bajo nubes densas** → sin cut. Baja a 0 → vuelve al suelo. Durante el vuelo los tres
+    `*_hold_interact` se gatean con `fly.flying()` (USE = bajar, no cavar). Slot de textura de nubes:
+    `decor/clouds` (hoy color blanco).
   - **Orbit:** vuelo libre 2D en el plano orbital (velocidad escala con el zoom). Cámara centrada +
     pellizco (zoom max subido a **2.000.000 m** para ver el sistema solar completo — Sol/planetas/Luna).
   - **Descend:** al tocar un cuerpo (o USE = el más cercano) → `teleport_to_body` (coords correctas,
