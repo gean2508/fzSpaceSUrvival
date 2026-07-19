@@ -71,8 +71,8 @@ impl Plugin for Sky2dPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DayClock>()
             .init_resource::<PlayerLanternControl>()
-            .add_systems(Startup, spawn_sky_attachments)
-            .add_systems(Update, (advance_day_clock, sync_sky));
+            .add_systems(Startup, (spawn_sky_attachments, spawn_cloud_overlay))
+            .add_systems(Update, (advance_day_clock, sync_sky, sync_cloud_overlay));
     }
 }
 
@@ -90,12 +90,6 @@ fn spawn_sky_attachments(mut commands: Commands, camera: Query<Entity, With<Game
             NightOverlay,
             Sprite::from_color(Color::srgba(0.02, 0.02, 0.08, 0.0), Vec2::new(4.0, 2.4)),
             Transform::from_xyz(0.0, 0.0, 40.0),
-        ));
-        // Cloud layer for the creative ascent (in front of night, behind UI).
-        p.spawn((
-            CloudOverlay,
-            Sprite::from_color(Color::srgba(0.86, 0.89, 0.95, 0.0), Vec2::new(4.0, 2.4)),
-            Transform::from_xyz(0.0, 0.0, 45.0),
         ));
         // Static star pattern that follows the camera (skybox, never crossed).
         let mut seed = 0x1357_9bdfu32;
@@ -123,21 +117,13 @@ fn sync_sky(
     launch: Res<LaunchAtmosphere>,
     lantern: Res<PlayerLanternControl>,
     tiles: Res<crate::world2d::TileWorld>,
-    fly: Res<crate::creative_fly::CreativeFlight>,
     mut clear: ResMut<ClearColor>,
     player: Query<&SimState, With<Player>>,
     camera: Query<&OrthographicProjection, With<GameCamera>>,
-    mut overlay: Query<
-        (&mut Sprite, &mut Transform),
-        (With<NightOverlay>, Without<StarSprite>, Without<CloudOverlay>),
-    >,
+    mut overlay: Query<(&mut Sprite, &mut Transform), (With<NightOverlay>, Without<StarSprite>)>,
     mut stars: Query<
         (&mut Visibility, &mut Transform),
-        (With<StarSprite>, Without<NightOverlay>, Without<CloudOverlay>),
-    >,
-    mut clouds: Query<
-        (&mut Sprite, &mut Transform),
-        (With<CloudOverlay>, Without<NightOverlay>, Without<StarSprite>),
+        (With<StarSprite>, Without<NightOverlay>),
     >,
 ) {
     let view_h = camera
@@ -207,12 +193,33 @@ fn sync_sky(
         };
         tf.scale = Vec3::splat(view_h);
     }
+}
 
-    // Creative flight atmosphere/fade overlay — the sky you rise through (blue on
-    // air bodies, none on airless) + the brief lift-off/touch-down cover.
-    let ac = fly.atmo_col;
-    for (mut sprite, mut tf) in &mut clouds {
-        sprite.color = Color::srgba(ac.x, ac.y, ac.z, fly.atmo.clamp(0.0, 1.0));
-        tf.scale = Vec3::splat(view_h * 1.7);
+/// Full-screen UI overlay for the creative ascent atmosphere/clouds. A UI Node
+/// (renders reliably on top, unlike the old camera-child sprite which never drew).
+fn spawn_cloud_overlay(mut commands: Commands) {
+    commands.spawn((
+        CloudOverlay,
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.86, 0.89, 0.95, 0.0)),
+        GlobalZIndex(600),
+        bevy::ui::FocusPolicy::Pass,
+        Name::new("CloudOverlay"),
+    ));
+}
+
+fn sync_cloud_overlay(
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    mut q: Query<&mut BackgroundColor, With<CloudOverlay>>,
+) {
+    for mut bg in &mut q {
+        *bg = BackgroundColor(Color::srgba(0.86, 0.89, 0.95, fly.cloud.clamp(0.0, 1.0)));
     }
 }

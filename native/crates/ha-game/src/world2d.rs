@@ -627,7 +627,7 @@ fn stream_tile_chunks(
 
     // Creative flight zooms the camera out, so stream a wider ring to fill the
     // view with terrain (the clouds cover whatever's still beyond it).
-    let range = if fly.flying() { 8 } else { CHUNK_RANGE };
+    let range = if fly.flying() { 10 } else { CHUNK_RANGE };
 
     let mut live: HashSet<(i64, i64)> = HashSet::new();
     for (e, chunk) in &chunks {

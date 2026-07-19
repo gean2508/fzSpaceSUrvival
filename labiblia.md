@@ -218,7 +218,21 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
   en superficie, **JUMP** inicia la subida (sprite del personaje, NO cohete — se descartó re-encender
   `RocketFlight`, god-node degree 61 / "corte feo" §8). God-mode: sin fuel, sin gravedad, **no
   responde a órbitas** (eso es para la nave). Máquina de fases `CreativeFlight { phase, pos, alt, body }`:
-  - **Modelo TRUE-SFS (18-19 jul, rework):** el vuelo ocurre **ENTERO en la vista circular** (`orbital2d`,
+  - **⚠ TESTEO EN DESKTOP (19 jul):** con la compu libre (matar rust-analyzer para RAM), se puede
+    correr `HA_FLYTEST=1 HA_AUTOPLAY=1 cargo run -p ha-game --features desktop` — activa creativo,
+    mantiene JUMP, y captura la subida a `scratchpad/flytest-N.png` (ver `debug/autodrive.rs`). La
+    ventana pierde foco a veces (Bevy suelta las teclas) → reintentar hasta que loguee "climb start".
+    **Esto reveló bugs invisibles a ciegas:** (1) el overlay de nubes era un **sprite hijo de la cámara
+    que NO renderizaba** → siempre se veía el "cuadrado feo" del terreno finito; pasado a **UI Node**
+    (`sky2d::CloudOverlay` + `sync_cloud_overlay`, `GlobalZIndex(600)`) que sí tapa. (2) El "modelo
+    circular puro" regresaba a "aparecés en el espacio al instante" → **revertido** al climb gradual.
+  - **Modelo vigente (climb gradual + nubes que tapan el swap):** subís (`VERT_SPEED 150`, suelo visible
+    hasta ~90 m, terreno llena con `range=10` en `world2d`), las nubes entran (`cloud_from_alt`, llenas
+    ~170 m) tapando el cuadrado + el swap a `SWAP_ALT 200` (`SWAP_VIEW_H 200`), y despejan en el espacio
+    revelando el círculo del planeta (vista SFS de `orbital2d`, con anillo de atmósfera). Verificado por
+    capturas: suelo llena → nubes → círculo. *Tuning fino pendiente en device.*
+
+  - **(histórico, revertido) Modelo TRUE-SFS circular:** el vuelo ocurría **ENTERO en la vista circular** (`orbital2d`,
     el cuerpo es SIEMPRE un círculo), **sin swap intermedio** (se eliminaron las fases de tiles planos
     Climb/Descend que causaban el corte). Fases: `Ground` / `Orbit`.
     - **Despegue:** JUMP en creativo → entra directo a la vista circular en el **borde del planeta**

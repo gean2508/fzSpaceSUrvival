@@ -20,11 +20,61 @@ pub struct AutoDrivePlugin;
 
 impl Plugin for AutoDrivePlugin {
     fn build(&self, app: &mut App) {
+        // Creative-fly visual test: enable creative, hold JUMP, screenshot the
+        // whole ascent so we can SEE it (HA_FLYTEST=1 HA_AUTOPLAY=1).
+        if std::env::var("HA_FLYTEST").is_ok() {
+            app.init_resource::<FlyTestState>()
+                .add_systems(Update, fly_test_drive);
+            return;
+        }
         if std::env::var("HA_AUTODRIVE").is_err() {
             return;
         }
         app.init_resource::<SmokeState>()
             .add_systems(Update, smoke_drive);
+    }
+}
+
+#[derive(Resource, Default)]
+struct FlyTestState {
+    triggered: bool,
+    shots: u32,
+}
+
+const FLYTEST_DIR: &str =
+    "/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/501aea2c-9fc5-4caa-9230-ef1403004e02/scratchpad";
+
+fn fly_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 1.0 {
+        return;
+    }
+    // Enable creative every frame (so nothing turns it back off).
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+
+    // From t=3s: hold JUMP (Space) through the REAL input pipeline — first frame
+    // gives the jump_edge that fires the fly, then it stays held to keep rising.
+    if now > 3.0 {
+        press(world, KeyCode::Space);
+    }
+
+    // Screenshot the ascent at a sequence of times.
+    let want = [3.2f32, 3.5, 3.9, 4.3, 4.9, 6.0, 8.0, 11.0];
+    let shots = world.resource::<FlyTestState>().shots as usize;
+    if shots < want.len() && now >= want[shots] {
+        let (alt, cloud, orbit) = {
+            let f = world.resource::<crate::creative_fly::CreativeFlight>();
+            (f.alt, f.cloud, f.in_orbit())
+        };
+        let region = format!("{:?}", world.resource::<crate::scene::RegionRuntime>().active);
+        eprintln!(
+            "ha-flytest[{shots}] t={now:.1} alt={alt:.0} cloud={cloud:.2} orbit={orbit} region={region}"
+        );
+        shot(world, &format!("{FLYTEST_DIR}/flytest-{shots}.png"));
+        world.resource_mut::<FlyTestState>().shots += 1;
+    } else if shots >= want.len() {
+        eprintln!("ha-flytest: DONE");
+        std::process::exit(0);
     }
 }
 
