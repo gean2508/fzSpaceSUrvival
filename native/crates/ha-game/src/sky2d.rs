@@ -208,9 +208,11 @@ fn sync_sky(
         tf.scale = Vec3::splat(view_h);
     }
 
-    // Creative-ascent clouds — hide the ground + the frame swap mid-atmosphere.
+    // Creative flight atmosphere/fade overlay — the sky you rise through (blue on
+    // air bodies, none on airless) + the brief lift-off/touch-down cover.
+    let ac = fly.atmo_col;
     for (mut sprite, mut tf) in &mut clouds {
-        sprite.color = Color::srgba(0.86, 0.89, 0.95, fly.cloud.clamp(0.0, 1.0));
+        sprite.color = Color::srgba(ac.x, ac.y, ac.z, fly.atmo.clamp(0.0, 1.0));
         tf.scale = Vec3::splat(view_h * 1.7);
     }
 }

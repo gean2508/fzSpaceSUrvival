@@ -1,18 +1,23 @@
-//! Creative free-flight — the CHARACTER (not a rocket) flies through the orbital
-//! view with a CONTINUOUS, PLAYER-DRIVEN trajectory (no auto-animation): hold
-//! JUMP to rise, USE to descend, release to hover. As you climb the sky fades and
-//! CLOUDS roll in to hide the ground (and the surface→orbit swap), then clear into
-//! space. Landing falls back through the clouds. God-mode debug: no orbits, no
-//! fuel, no gravity. SEPARATE from the `RocketFlight` god-node (biblia §9).
+//! Creative free-flight — TRUE-SFS model: the flight happens ENTIRELY in the
+//! circular orbital view (the body is always a circle), with NO mid-flight swap.
+//! You lift off the planet's edge, rise radially (the circle shrinks as the
+//! camera zooms out), cross the atmosphere into space, navigate freely and
+//! descend onto any body's edge to land.
+//!
+//! The top-down surface stays a separate "zone"; you only cross the boundary at
+//! lift-off / touchdown, covered by the atmosphere fade (blue on air bodies) or a
+//! brief dark fade (airless bodies — Moon/asteroids — SFS-correct: bare circle on
+//! black). God-mode debug: no orbits, no fuel, no gravity. SEPARATE from the
+//! `RocketFlight` god-node (biblia §9).
 
 use bevy::prelude::*;
 use ha_shared::solar_ephemeris::body_center_at;
-use ha_shared::{body_radius, CelestialBody, WorldContext};
+use ha_shared::{body_atmo_top, body_radius, CelestialBody, WorldContext};
 
 use crate::camera::CameraZoom;
 use crate::input::{MovementIntent, TouchActions};
 use crate::rocket_flight::{launch_pos_vel, RocketFlight};
-use crate::scene::{teleport_to_body, LaunchAtmosphere, RegionId, RegionRuntime, WorldContextRuntime};
+use crate::scene::{teleport_to_body, RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::solar_system_clock::SolarSystemClock;
 use crate::world2d::ActivePlanet;
@@ -21,22 +26,26 @@ use crate::world2d::ActivePlanet;
 pub enum Phase {
     #[default]
     Ground,
-    Climb,
     Orbit,
-    Descend,
 }
 
 #[derive(Resource, Default)]
 pub struct CreativeFlight {
     pub phase: Phase,
-    /// Orbital-plane position while in Orbit.
+    /// Orbital-plane position (world x/z) of the flying character.
     pub pos: Vec3,
-    /// Radial altitude above the (climb/descend) body surface, metres.
-    pub alt: f32,
-    /// The body we're climbing from / descending to.
+    /// Reference body for altitude / atmosphere (nearest).
     pub body: CelestialBody,
-    /// Cloud-cover alpha 0..1 (read by `sky2d` to draw the atmosphere layer).
-    pub cloud: f32,
+    /// Altitude above the reference body's surface (metres).
+    pub alt: f32,
+    /// Sky/atmosphere overlay alpha 0..1 (read by `sky2d`).
+    pub atmo: f32,
+    /// Sky/atmosphere overlay colour (rgb).
+    pub atmo_col: Vec3,
+    /// Brief lift-off / touch-down cover (fades the top-down↔circular boundary).
+    fade: f32,
+    /// Landing only arms once you've climbed away, so lift-off doesn't re-land.
+    armed: bool,
 }
 
 impl CreativeFlight {
@@ -48,39 +57,25 @@ impl CreativeFlight {
     }
 }
 
-/// Player-driven vertical speed (metres of altitude per second) — hold JUMP/USE.
-const VERT_SPEED: f32 = 320.0;
-/// Altitude where the surface view hands over to orbit. Kept LOW + under full
-/// clouds so the flat-tile view never zooms out enough to reveal its finite edge
-/// — then the (infinitely-zoomable) orbital circle takes over. Hidden by clouds.
-const SWAP_ALT: f32 = 300.0;
-/// Camera viewport height (m) at the swap — small, matching the local ground scale
-/// so the swap to the orbital frame is scale-continuous.
-const SWAP_VIEW_H: f32 = 450.0;
-const GROUND_VIEW_H: f32 = 30.0;
-/// In orbit the camera zoom follows altitude (SFS reveal): the body's circle
-/// shrinks as you climb. `view_h = (radius + alt) * this`, clamped.
-const ORBIT_ZOOM_FACTOR: f32 = 1.2;
+/// Radial (up/down) speed from holding JUMP/USE (m/s).
+const RADIAL_SPEED: f32 = 260.0;
+/// Lateral free-flight speed = view_h × this (auto-scales with zoom).
+const LATERAL_FACTOR: f32 = 0.35;
+/// Altitude just above the surface where lift-off drops you into orbit.
+const LIFTOFF_ALT: f32 = 6.0;
+/// Land when the character descends within this of a body's surface.
+const LAND_ALT: f32 = 24.0;
+/// Camera view height in orbit = (radius + alt) × this (SFS reveal).
+const ORBIT_ZOOM_FACTOR: f32 = 1.3;
 const ORBIT_ZOOM_MAX: f32 = 2_000_000.0;
-/// Free-flight speed = view_h × this (auto-scales with zoom).
-const FLY_SPEED_FACTOR: f32 = 0.35;
-/// Auto-descend when the character drifts this close to a body's surface (m).
-const APPROACH_LAND_M: f32 = 200.0;
+const GROUND_VIEW_H: f32 = 30.0;
 
 pub struct CreativeFlyPlugin;
 
 impl Plugin for CreativeFlyPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CreativeFlight>().add_systems(
-            Update,
-            (
-                creative_fly_enter,
-                creative_fly_climb,
-                creative_fly_orbit,
-                creative_fly_descend,
-            )
-                .chain(),
-        );
+        app.init_resource::<CreativeFlight>()
+            .add_systems(Update, (creative_fly_enter, creative_fly_orbit).chain());
     }
 }
 
@@ -99,24 +94,23 @@ fn radial_up(body: CelestialBody, t: f32) -> Vec3 {
     (pad - c).normalize_or_zero()
 }
 
-/// Cloud alpha as a function of altitude: none on the ground, full EARLY (~180 m,
-/// before the finite streamed terrain reveals its empty edge — the clouds are the
-/// optimisation that lets us stop drawing far terrain), staying thick through the
-/// frame swap, clearing toward space. Same curve in atmosphere (Climb/Descend) and
-/// near a body in Orbit, so approaching any body brings its clouds back.
-fn cloud_from_alt(alt: f32) -> f32 {
-    let rising = ((alt - 40.0) / 90.0).clamp(0.0, 1.0); // full by ~130 m
-    let clearing = ((900.0 - alt) / 400.0).clamp(0.0, 1.0); // clear by ~900 m
-    rising.min(clearing)
+/// Atmosphere colour of a body (air bodies get their sky tint; airless = dark).
+fn atmo_color(body: CelestialBody) -> Vec3 {
+    match body {
+        CelestialBody::Earth => Vec3::new(0.45, 0.65, 0.90),
+        _ => Vec3::new(0.55, 0.42, 0.32),
+    }
 }
 
-/// JUMP off a surface (creative) → begin a PLAYER-DRIVEN climb.
+/// JUMP off a surface (creative) → lift straight into the circular flight view.
 fn creative_fly_enter(
     editor: Res<crate::ui_editor::UiEditorState>,
     actions: Res<TouchActions>,
+    clock: Res<SolarSystemClock>,
     flight: Res<RocketFlight>,
-    region: Res<RegionRuntime>,
     mut fly: ResMut<CreativeFlight>,
+    mut region: ResMut<RegionRuntime>,
+    mut ctx: ResMut<WorldContextRuntime>,
 ) {
     if !editor.creative || fly.flying() || flight.active || !actions.jump_edge {
         return;
@@ -124,71 +118,23 @@ fn creative_fly_enter(
     let Some(body) = active_body(&region) else {
         return;
     };
+    let c = Vec3::from_array(body_center_at(body, clock.t));
     fly.body = body;
-    fly.alt = 0.0;
-    fly.cloud = 0.0;
-    fly.phase = Phase::Climb;
-    eprintln!("ha-creative: climb start from {body:?}");
+    fly.alt = LIFTOFF_ALT;
+    fly.pos = c + radial_up(body, clock.t) * (body_radius(body) + LIFTOFF_ALT);
+    fly.phase = Phase::Orbit;
+    fly.fade = 1.0; // cover the top-down → circular boundary
+    fly.atmo = 1.0;
+    fly.atmo_col = atmo_color(body);
+    fly.armed = false;
+    region.active = RegionId::Space; // the circular orbital view (orbital2d)
+    ctx.active = WorldContext::Space;
+    eprintln!("ha-creative: lift-off from {body:?} (circular flight)");
 }
 
-/// CLIMB (player-driven): hold JUMP to rise, USE to descend, release to hover.
-/// Camera zoom, sky fade and clouds all track the altitude YOU set. Hand over to
-/// orbit at `SWAP_ALT` (hidden under the clouds). Return to Ground at altitude 0.
-#[allow(clippy::too_many_arguments)]
-fn creative_fly_climb(
-    time: Res<Time>,
-    actions: Res<TouchActions>,
-    clock: Res<SolarSystemClock>,
-    mut fly: ResMut<CreativeFlight>,
-    mut launch: ResMut<LaunchAtmosphere>,
-    mut zoom: ResMut<CameraZoom>,
-    mut region: ResMut<RegionRuntime>,
-    mut ctx: ResMut<WorldContextRuntime>,
-) {
-    if fly.phase != Phase::Climb {
-        return;
-    }
-    let dt = time.delta_secs();
-    let mut vy = 0.0;
-    if actions.jump {
-        vy += VERT_SPEED; // hold JUMP = up
-    }
-    if actions.action {
-        vy -= VERT_SPEED; // hold USE = down
-    }
-    fly.alt = (fly.alt + vy * dt).max(0.0);
-
-    // Back on the ground → land (only when actively descending, so hovering at 0
-    // doesn't kick you out).
-    if fly.alt <= 0.5 && vy < 0.0 {
-        fly.phase = Phase::Ground;
-        fly.cloud = 0.0;
-        launch.active = false;
-        zoom.view_h = GROUND_VIEW_H;
-        return;
-    }
-
-    let f = (fly.alt / 900.0).clamp(0.0, 1.0); // sky fully void by ~900 m
-    launch.active = true;
-    launch.blend = f; // sky fade (surface region) — sky2d reads this
-    fly.cloud = cloud_from_alt(fly.alt);
-    let zf = (fly.alt / SWAP_ALT).clamp(0.0, 1.0);
-    zoom.view_h = GROUND_VIEW_H + (SWAP_VIEW_H - GROUND_VIEW_H) * zf;
-
-    if fly.alt >= SWAP_ALT {
-        // Hand over to the orbital frame — under full cloud cover, so no cut.
-        let c = Vec3::from_array(body_center_at(fly.body, clock.t));
-        fly.pos = c + radial_up(fly.body, clock.t) * (body_radius(fly.body) + fly.alt);
-        fly.phase = Phase::Orbit;
-        launch.active = false;
-        region.active = RegionId::Space;
-        ctx.active = WorldContext::Space;
-        eprintln!("ha-creative: reached orbit ({:?})", fly.body);
-    }
-}
-
-/// ORBIT: free 2D flight in the world plane; the leftover clouds clear into space
-/// over the first moment. Auto-descend onto a body you drift into, or USE = land.
+/// Circular flight (SFS): JUMP = rise (radially out of the nearest body), USE =
+/// descend (radially in), left stick = lateral. Camera zoom follows altitude so
+/// the body's circle emerges and shrinks. Atmosphere/fade drive the sky overlay.
 #[allow(clippy::too_many_arguments)]
 fn creative_fly_orbit(
     time: Res<Time>,
@@ -206,79 +152,63 @@ fn creative_fly_orbit(
         return;
     }
     let dt = time.delta_secs();
-    let speed = (zoom.view_h * FLY_SPEED_FACTOR).max(120.0);
-    fly.pos.x += intent.move_x * speed * dt;
-    fly.pos.z += intent.move_z * speed * dt;
-    fly.pos.y = 0.0;
 
-    let mut nearest = (CelestialBody::Earth, f32::MAX);
+    // Nearest body → radial "up" + altitude.
+    let mut nearest = (CelestialBody::Earth, f32::MAX, Vec3::ZERO);
     for &body in CelestialBody::all() {
         let c = Vec3::from_array(body_center_at(body, clock.t));
         let d = fly.pos.distance(c);
         if d < nearest.1 {
-            nearest = (body, d);
+            nearest = (body, d, c);
         }
     }
-    let (body, dist) = nearest;
-    // Clouds follow the altitude above the nearest body — clear in deep space,
-    // roll back in as you approach any body (Earth, Moon, planets).
-    let alt_orbit = (dist - body_radius(body)).max(0.0);
-    fly.alt = alt_orbit;
-    fly.cloud = cloud_from_alt(alt_orbit);
-    // SFS reveal: the camera zoom follows altitude — the body's circle emerges as
-    // the clouds part and shrinks as you climb; deep space frames the system.
-    zoom.view_h = ((body_radius(body) + alt_orbit) * ORBIT_ZOOM_FACTOR)
-        .clamp(SWAP_VIEW_H, ORBIT_ZOOM_MAX);
-    let touching = dist < body_radius(body) + APPROACH_LAND_M;
-    if !touching && !actions.use_edge {
-        return;
-    }
-    let Ok((mut sim, mut visual)) = player.get_single_mut() else {
-        return;
-    };
-    teleport_to_body(body, &mut region, &mut ctx, &mut planet, &mut sim, &mut visual);
+    let (body, _, center) = nearest;
     fly.body = body;
-    fly.alt = SWAP_ALT;
-    fly.phase = Phase::Descend;
-    eprintln!("ha-creative: descent onto {body:?}");
-}
+    let radial = (fly.pos - center).normalize_or_zero();
 
-/// DESCEND (player-driven): hold USE to keep falling, JUMP to slow/hold. Clouds
-/// roll back in through the atmosphere and clear at the ground.
-fn creative_fly_descend(
-    time: Res<Time>,
-    actions: Res<TouchActions>,
-    mut fly: ResMut<CreativeFlight>,
-    mut launch: ResMut<LaunchAtmosphere>,
-    mut zoom: ResMut<CameraZoom>,
-) {
-    if fly.phase != Phase::Descend {
-        return;
-    }
-    let dt = time.delta_secs();
-    // Default gentle fall; hold USE to speed it, JUMP to arrest.
-    let mut vy = -VERT_SPEED * 0.6;
-    if actions.action {
-        vy = -VERT_SPEED;
-    }
-    if actions.jump {
-        vy = 0.0;
-    }
-    fly.alt = (fly.alt + vy * dt).clamp(0.0, SWAP_ALT);
+    let lateral_speed = (zoom.view_h * LATERAL_FACTOR).max(120.0);
+    // Lateral (stick) — free 2D in the plane.
+    fly.pos.x += intent.move_x * lateral_speed * dt;
+    fly.pos.z += intent.move_z * lateral_speed * dt;
+    // Radial (JUMP up / USE down), scaled a touch with zoom for reach.
+    let radial_v = (if actions.jump { 1.0 } else { 0.0 } - if actions.action { 1.0 } else { 0.0 })
+        * RADIAL_SPEED
+        * (1.0 + zoom.view_h / 4000.0);
+    fly.pos += radial * radial_v * dt;
+    fly.pos.y = 0.0;
 
-    let f = (fly.alt / 900.0).clamp(0.0, 1.0); // sky fully void by ~900 m
-    launch.active = true;
-    launch.blend = f;
-    fly.cloud = cloud_from_alt(fly.alt);
-    let zf = (fly.alt / SWAP_ALT).clamp(0.0, 1.0);
-    zoom.view_h = GROUND_VIEW_H + (SWAP_VIEW_H - GROUND_VIEW_H) * zf;
+    let alt = (fly.pos.distance(center) - body_radius(body)).max(0.0);
+    fly.alt = alt;
 
-    if fly.alt <= 0.5 {
+    // Atmosphere overlay: thick near an air body's surface, fading to space; none
+    // on airless bodies. Plus the brief lift-off/touch-down fade cover.
+    let atmo_top = body_atmo_top(body);
+    let atmo = if atmo_top > 0.0 {
+        (1.0 - alt / (atmo_top * 5.0)).clamp(0.0, 0.85)
+    } else {
+        0.0
+    };
+    fly.fade = (fly.fade - dt * 2.0).max(0.0);
+    fly.atmo = atmo.max(fly.fade);
+    fly.atmo_col = atmo_color(body);
+
+    // SFS reveal: camera zoom follows altitude.
+    zoom.view_h = ((body_radius(body) + alt) * ORBIT_ZOOM_FACTOR).clamp(GROUND_VIEW_H, ORBIT_ZOOM_MAX);
+
+    // Arm landing once you've climbed away, so lift-off doesn't instantly re-land.
+    if alt > 150.0 {
+        fly.armed = true;
+    }
+    // Touchdown: descend onto the body's surface (covered by the fade).
+    if fly.armed && alt <= LAND_ALT {
+        let Ok((mut sim, mut visual)) = player.get_single_mut() else {
+            return;
+        };
+        teleport_to_body(body, &mut region, &mut ctx, &mut planet, &mut sim, &mut visual);
         fly.phase = Phase::Ground;
-        fly.alt = 0.0;
-        fly.cloud = 0.0;
-        launch.active = false;
+        fly.atmo = 0.0;
+        fly.fade = 0.0;
         zoom.view_h = GROUND_VIEW_H;
-        eprintln!("ha-creative: touchdown on {:?}", fly.body);
+        eprintln!("ha-creative: touchdown on {body:?}");
     }
 }
