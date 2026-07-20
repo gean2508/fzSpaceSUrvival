@@ -17,7 +17,7 @@ use crate::rocket_flight::{launch_pos_vel, RocketFlight};
 use crate::scene::{teleport_to_body, RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::solar_system_clock::SolarSystemClock;
-use crate::transition::{FlightTransition, TransitionMode, SWAP_VIEW_H};
+use crate::transition::{FlightTransition, TransitionMode};
 use crate::world2d::ActivePlanet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
@@ -57,14 +57,8 @@ impl CreativeFlight {
 /// Player-driven vertical speed (metres of altitude per second) — hold JUMP/USE.
 /// Slow: ~10 s from the ground to space so you FEEL the world receding.
 const VERT_SPEED: f32 = 32.0;
-/// In orbit the camera zoom follows altitude (SFS reveal): the body's circle
-/// shrinks as you climb. Anchored to be CONTINUOUS with the surface-frame zoom
-/// at the swap point — `view_h(swap_up) == SWAP_VIEW_H` exactly, zero jump —
-/// then grows with this power past it (>1 = accelerating reveal, same "circle
-/// shrinks, tiny character" feel as before, just arrived at gradually).
-const ORBIT_ZOOM_POWER: f32 = 1.6;
-const ORBIT_ZOOM_MAX: f32 = 2_000_000.0;
-/// Free-flight speed = view_h × this (auto-scales with zoom).
+/// Free-flight speed = view_h × this (auto-scales with zoom). The camera zoom
+/// itself comes from `transition::flight_view_h` (the SFS disc reveal).
 const FLY_SPEED_FACTOR: f32 = 0.35;
 /// Hard cap on orbital free-flight speed (m/s). WITHOUT this, zooming out to
 /// the system view (`view_h` up to 2 000 000) made speed ~700 000 m/s → you
@@ -195,12 +189,10 @@ fn creative_fly_climb(
     let p = transition_profile(fly.body);
     if fly.alt >= p.swap_up {
         // Hand over to the orbital frame — the swap itself happens under full
-        // cover. `fly.alt` carries over UNCHANGED (continuous with the climb):
-        // no altitude jump means no zoom jump next frame (`creative_fly_orbit`'s
-        // zoom formula is anchored to be continuous at this exact altitude —
-        // see ORBIT_ZOOM_POWER). A jumped entry altitude here used to snap the
-        // camera from the 180 m surface zoom straight out to ~10 km in one
-        // frame — the "clouds cut, tiny blue circle appears" bug.
+        // cover. `fly.alt` carries over UNCHANGED, and the camera zoom is the
+        // SAME continuous `flight_view_h(alt)` on both sides of the swap, so
+        // there's no jump. Above the swap the disc reveal (grows/shrinks with
+        // altitude) takes over as the cover clears.
         let c = Vec3::from_array(body_center_at(fly.body, clock.t));
         fly.pos = c + radial_up(fly.body, clock.t) * (body_radius(fly.body) + fly.alt);
         fly.pos.y = 0.0;
@@ -280,25 +272,17 @@ fn creative_fly_orbit(
     if alt_orbit > p.clear_end {
         fly.land_armed = true;
     }
-    // Cover follows the altitude above the nearest body — clear in deep space,
-    // rolling back in as you approach any body (clouds where there's air, a
-    // bare circle where there's none).
+    // Cover + camera zoom both come from the shared transition layer: cover
+    // follows altitude above the nearest body (clouds where there's air, a bare
+    // fade where there's none), and `flight_view_h` frames the body as a disc
+    // that GROWS as you approach and shrinks as you climb — continuous through
+    // the swap, no snap (see `transition::flight_view_h`). The camera applies
+    // the user pinch multiplier on top.
     trans.drive(TransitionMode::Space, body, alt_orbit);
-    // SFS reveal: the camera zoom follows altitude — the body's circle emerges
-    // as the cover parts and shrinks as you climb; deep space frames the
-    // system. Anchored so `view_h == SWAP_VIEW_H` exactly at `swap_up` (the
-    // altitude the surface frame handed off at) — zero jump entering OR
-    // leaving orbit — then grows with `ORBIT_ZOOM_POWER` past it. `user_mult`
-    // (pinch/scroll, see `camera.rs`) lets you pull the framing back in
-    // without losing the automatic reveal — default 1.0, untouched.
-    let dist_swap = body_radius(body) + p.swap_up.max(1.0);
-    let dist_now = (body_radius(body) + alt_orbit).max(1.0);
-    let auto = SWAP_VIEW_H * (dist_now / dist_swap).powf(ORBIT_ZOOM_POWER);
-    zoom.view_h = (auto * zoom.user_zoom_mult).clamp(SWAP_VIEW_H * 0.3, ORBIT_ZOOM_MAX);
 
-    // Land only after climbing clear (armed) AND drifting close to a surface.
-    let touching = dist < body_radius(body) + APPROACH_LAND_M;
-    if !(fly.land_armed && touching) {
+    // Land once armed and descended back into the covered swap band (swap_down,
+    // where cover==1 → the zoom is continuous into the surface Descent frame).
+    if !(fly.land_armed && alt_orbit < p.swap_down) {
         return;
     }
     let Ok((mut sim, mut visual)) = player.get_single_mut() else {

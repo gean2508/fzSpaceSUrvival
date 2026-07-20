@@ -53,8 +53,11 @@ pub struct TransitionProfile {
 pub fn transition_profile(body: CelestialBody) -> TransitionProfile {
     let atmo = body_atmo_top(body);
     if atmo <= 0.0 {
-        // Airless: fixed low bands with a short dark fade around the swap (no
-        // clouds to hide behind — SFS-correct bare circle over black).
+        // Airless: fixed low bands with a short fade around the swap (no clouds
+        // to hide behind). The fade uses the BODY'S OWN colour (not black), so
+        // the tile↔circle frame swap under it is invisible — the orbital disc
+        // (same colour) and the surface both blend into it. Seamless landing on
+        // airless bodies, matching the cloud-covered swap on bodies with air.
         return TransitionProfile {
             swap_up: 165.0,
             swap_down: 125.0,
@@ -64,7 +67,7 @@ pub fn transition_profile(body: CelestialBody) -> TransitionProfile {
             clear_end: 220.0,
             sky_fade_end: 0.0,
             has_clouds: false,
-            cover_color: [0.02, 0.02, 0.05],
+            cover_color: crate::celestial_bodies::body_def(body).color,
         };
     }
     TransitionProfile {

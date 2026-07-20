@@ -10,13 +10,56 @@
 //! physics and input never notice.
 
 use bevy::prelude::*;
-use ha_shared::{transition_profile, CelestialBody};
+use ha_shared::{body_radius, transition_profile, CelestialBody};
 
 /// Viewport height (m) standing on the ground (matches the surface camera).
 pub const GROUND_VIEW_H: f32 = 30.0;
 /// Viewport height (m) at the frame swap — small enough that the streamed
 /// terrain ring always fills it; the cover hides whatever lies beyond.
 pub const SWAP_VIEW_H: f32 = 180.0;
+/// Orbital reveal zoom: `view_h = (radius + alt) * this`. Frames the body as a
+/// DISC that grows as you approach and shrinks as you climb (SFS). Chosen so a
+/// body fills a healthy fraction of the screen at the swap altitude (Earth:
+/// (1500+360)*2.5 = 4650 m viewport, 3000 m disc ≈ 64% of the height).
+pub const ORBIT_REVEAL_FACTOR: f32 = 2.5;
+
+/// ONE continuous camera zoom for the whole flight, as a function of altitude
+/// above the body's surface — used by BOTH creative and rocket flight so the
+/// surface↔space transition is a smooth zoom, never a snap:
+/// - **Above the swap** (`orbital`): the body shows as a disc, growing as you
+///   descend, shrinking as you climb.
+/// - **Below the swap**: a gentle "rising" zoom (`GROUND→SWAP_VIEW_H`, keeps the
+///   streamed terrain filling the view) blended toward the orbital scale ONLY
+///   as the cover goes nearly opaque (`smoothstep(0.9,1)`), so the big zoom-out
+///   to disc scale — which would reveal the finite-terrain edge — happens fully
+///   hidden under cloud/fade. Where `cover==1` (the band around the swap) the
+///   blend equals `orbital(alt)` exactly, so the zoom is CONTINUOUS through the
+///   swap in either direction, on any body.
+pub fn flight_view_h(body: CelestialBody, alt: f32) -> f32 {
+    let r = body_radius(body);
+    let p = transition_profile(body);
+    let orbital = (r + alt) * ORBIT_REVEAL_FACTOR;
+    if alt >= p.swap_up {
+        return orbital;
+    }
+    let rise = GROUND_VIEW_H + (SWAP_VIEW_H - GROUND_VIEW_H) * (alt / p.swap_up).clamp(0.0, 1.0);
+    let cov = p.cover_at(alt);
+    // Blend rise→orbital by cover, weighted so the big zoom-out only happens
+    // once the cover is quite opaque (≥0.8) — hidden — and SMOOTHLY (smootherstep
+    // has zero slope at both ends, so no per-frame jump even when the fast climb
+    // crosses the band quickly). Where cover==1 (the band around the swap) the
+    // weight is 1, so view_h == orbital(alt) exactly → continuous through the
+    // swap in either direction.
+    let zf = smootherstep(0.8, 1.0, cov);
+    rise + (orbital - rise) * zf
+}
+
+/// Smootherstep 0→1 as `x` goes `edge0→edge1` (clamped). Zero 1st/2nd
+/// derivative at the ends → no visible kink where the blend starts/finishes.
+fn smootherstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum TransitionMode {
@@ -87,13 +130,9 @@ impl FlightTransition {
         self.cover = p.cover_at(alt);
         self.cover_color = p.cover_color;
         self.sky_blend = p.sky_blend_at(alt);
-        self.view_h = match mode {
-            TransitionMode::Ascent | TransitionMode::Descent => {
-                let zf = (alt / p.swap_up).clamp(0.0, 1.0);
-                Some(GROUND_VIEW_H + (SWAP_VIEW_H - GROUND_VIEW_H) * zf)
-            }
-            _ => None,
-        };
+        // ONE continuous zoom for every mode (surface frame AND orbital) so the
+        // swap is a smooth zoom, and the body is framed as a disc in space.
+        self.view_h = Some(flight_view_h(body, alt));
     }
 
     /// Back on the ground / flight over: release sky, cover and camera.

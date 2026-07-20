@@ -28,9 +28,15 @@ impl Plugin for Orbital2dPlugin {
 
 fn body_color(body: CelestialBody) -> Color {
     match body {
+        // Earth keeps its bright ocean-blue disc (its own catalog colour is a
+        // greener land tone). Every other body uses its catalog colour so the
+        // orbital disc matches the airless landing fade (same colour → the
+        // frame swap under the fade is invisible).
         CelestialBody::Earth => Color::srgb(0.30, 0.55, 0.70),
-        CelestialBody::Moon => Color::srgb(0.62, 0.62, 0.65),
-        _ => Color::srgb(0.62, 0.38, 0.28),
+        other => {
+            let [r, g, b] = ha_shared::body_def(other).color;
+            Color::srgb(r, g, b)
+        }
     }
 }
 

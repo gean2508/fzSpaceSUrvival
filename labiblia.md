@@ -625,6 +625,40 @@ entrar a Orbit), `HA_MOONTEST` (Luna despejada sin loop), rockettest + smoke PAS
 
 **Pendiente NO tocado:** HUD con no-ASCII (`→ · í` = cajas □, §7) — limpieza aparte.
 
+### §13-duodecies — Zoom continuo que revela los planetas (20 jul 2026)
+
+Plan en `PLAN_ZOOM_CONTINUO_PLANETAS.md`. El commit `de037a3` dejó el zoom
+orbital demasiado cerrado (~300 m) → al despejar las nubes el disco del planeta
+quedaba FUERA de pantalla (veías negro). El usuario: "me gustaba cómo estaba
+antes con los planetas... quiero que el disco crezca al acercarme y sea el mismo
+cuerpo que piso, sin cortes, en la nave y en creativo".
+
+**Fix — UN zoom continuo de la altitud (`transition::flight_view_h`)** usado por
+TODO el vuelo (creativo climb/orbit/descend Y cohete) vía `FlightTransition`:
+- **Sobre el swap:** `(radio+alt) * ORBIT_REVEAL_FACTOR (2.5)` — el cuerpo es un
+  disco que CRECE al bajar y se achica al subir (SFS). Es el círculo real de
+  `orbital2d` en la posición real del cuerpo = el MISMO que pisás al aterrizar.
+- **Bajo el swap:** `lerp(rise 30→180, orbital(alt), smootherstep(0.8,1,cover))`
+  — el zoom-out grande a escala de disco (que mostraría el borde finito del
+  terreno) ocurre SOLO cuando la cobertura está casi opaca (tapado) y SUAVE
+  (smootherstep, sin salto por-frame). Donde `cover==1` (banda del swap) da
+  exactamente `orbital(alt)` → **continuo en el swap, en cualquier dirección y
+  cuerpo**. En el suelo (`cover==0`) da 30 (zoom de caminar).
+- `FlightTransition::drive` setea `view_h` para TODOS los modos (no solo
+  superficie). La cámara lo aplica; en modo Space multiplica por `user_zoom_mult`
+  (pellizco). `creative_fly_orbit` dejó de escribir el zoom (lo maneja drive+
+  cámara). El cohete en espacio hereda el zoom que revela el planeta (antes
+  quedaba a 320 m sin ver el cuerpo).
+- **Fundido airless = color del cuerpo** (`transition_profile`: `cover_color =
+  body_def(body).color`) y `orbital2d` usa el color de catálogo para no-Tierra →
+  disco y fundido del mismo color (gris para la Luna) → el swap tile↔círculo bajo
+  el fundido es invisible. Aterrizaje seamless en cuerpos sin aire.
+
+**Verificado por CAPTURAS** (no solo logs, el usuario lo pidió): disco Tierra
+azul + halo al despejar, disco Luna gris que crece al acercarse (lejos/cerca),
+cohete ve la Tierra. Continuidad visible x1.4 (zoom-out tapado). 98 tests +
+flytest + moontest + rockettest + smoke PASS.
+
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 
 **Hecho y shipeado (v1.0.147, commits 792b98d..793be81):** F0 tests verdes · F1 survival core (§12) · F2 ship builder Fase 1 (contadores) · F3 base lunar (taladro/antena/monitoreo, máquinas por cuerpo) · F4 gamepad · F6 APK publicado. F5 perf: **medición bloqueada hasta conectar el Redmi** (plan en memoria del agente + §6).

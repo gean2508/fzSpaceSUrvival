@@ -129,43 +129,53 @@ fn camera_zoom_input(
     flight: Res<RocketFlight>,
     region: Res<RegionRuntime>,
     fly: Res<crate::creative_fly::CreativeFlight>,
+    trans: Res<crate::transition::FlightTransition>,
     mut zoom: ResMut<CameraZoom>,
     mut wheel: EventReader<MouseWheel>,
     touches: Res<Touches>,
 ) {
-    // Climb/Descend: the transition OWNS the zoom (tracks altitude through the
-    // covered swap). Letting the pinch also write it made the two fight every
-    // frame → the screen/UI flicker the player saw (biblia §11). Skip user
-    // zoom entirely there. In pure Orbit, the auto-reveal formula re-derives
-    // `view_h` every frame too — but as a multiplier on `user_zoom_mult`
-    // below, so pinch/scroll CAN adjust the framing without losing the reveal.
-    if fly.flying() && !fly.in_orbit() {
-        zoom.pinch_prev = None;
-        return;
-    }
+    use crate::transition::TransitionMode;
     let mut scroll = 0.0;
     for e in wheel.read() {
         scroll += e.y;
     }
-    if fly.in_orbit() {
-        if scroll.abs() > 0.0 {
-            zoom.user_zoom_mult = (zoom.user_zoom_mult * (1.0 - scroll * 0.12)).clamp(0.2, 6.0);
-        }
-        let pts: Vec<Vec2> = touches.iter().map(|t| t.position()).collect();
-        if pts.len() == 2 {
-            let dist = pts[0].distance(pts[1]).max(1.0);
-            if let Some(prev) = zoom.pinch_prev {
-                if (dist - prev).abs() > 1.5 {
-                    let ratio = (prev / dist).clamp(0.5, 2.0);
-                    zoom.user_zoom_mult = (zoom.user_zoom_mult * ratio).clamp(0.2, 6.0);
-                }
+    // While a flight transition owns the zoom, the surface frame (Ascent/
+    // Descent) is fully automatic — skip user input there (letting the pinch
+    // fight the per-frame auto-zoom caused the biblia §11 flicker). In the
+    // orbital frame (Space — creative OR rocket), pinch/scroll adjust the
+    // `user_zoom_mult` MULTIPLIER on top of the automatic reveal so the framing
+    // is user-tunable without losing it.
+    if trans.active() {
+        match trans.mode {
+            TransitionMode::Ascent | TransitionMode::Descent => {
+                zoom.pinch_prev = None;
+                return;
             }
-            zoom.pinch_prev = Some(dist);
-        } else {
-            zoom.pinch_prev = None;
+            TransitionMode::Space => {
+                if scroll.abs() > 0.0 {
+                    zoom.user_zoom_mult =
+                        (zoom.user_zoom_mult * (1.0 - scroll * 0.12)).clamp(0.2, 6.0);
+                }
+                let pts: Vec<Vec2> = touches.iter().map(|t| t.position()).collect();
+                if pts.len() == 2 {
+                    let dist = pts[0].distance(pts[1]).max(1.0);
+                    if let Some(prev) = zoom.pinch_prev {
+                        if (dist - prev).abs() > 1.5 {
+                            let ratio = (prev / dist).clamp(0.5, 2.0);
+                            zoom.user_zoom_mult =
+                                (zoom.user_zoom_mult * ratio).clamp(0.2, 6.0);
+                        }
+                    }
+                    zoom.pinch_prev = Some(dist);
+                } else {
+                    zoom.pinch_prev = None;
+                }
+                return;
+            }
+            TransitionMode::None => {}
         }
-        return;
     }
+    let _ = &fly;
     if scroll.abs() > 0.0 {
         // Wheel up = zoom in (smaller viewport).
         zoom.view_h = (zoom.view_h * (1.0 - scroll * 0.12)).clamp(ZOOM_MIN_H, ZOOM_MAX_H);
@@ -213,10 +223,17 @@ fn follow_player_camera(
     let in_flight = flight.active && flight.phase != ha_shared::FlightPhase::Surface;
     let space_view = in_flight || fly.in_orbit() || matches!(region.active, RegionId::Space);
 
-    // While a surface↔space transition is running it OWNS the zoom (it tracks
-    // the climb/descent altitude — single writer, no pinch fights, no snaps).
+    // While a flight is running the transition OWNS the zoom (one continuous
+    // function of altitude — single writer, no pinch fights, no snaps). In the
+    // orbital frame the user's pinch/scroll multiplier still applies on top so
+    // they can pull the framing in/out without losing the automatic reveal.
     if let Some(h) = trans.view_h {
-        zoom.view_h = h;
+        let mult = if matches!(trans.mode, crate::transition::TransitionMode::Space) {
+            zoom.user_zoom_mult
+        } else {
+            1.0
+        };
+        zoom.view_h = (h * mult).clamp(ZOOM_MIN_H, ZOOM_MAX_H);
     }
 
     // Reset the zoom to a sane default entering/leaving space WITHOUT a

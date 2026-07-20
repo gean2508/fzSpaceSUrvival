@@ -89,6 +89,7 @@ struct FlyTestState {
     /// to orbit)→descend→touchdown round trip.
     stage: u8,
     stage_entered: f32,
+    cleared_at: f32,
     /// While `now < this`, skip zoom-jump comparisons — set right before OUR
     /// OWN synthetic state injections (stage 1/4 force `CreativeFlight`
     /// directly, which is NOT a real gameplay transition). A single-frame
@@ -135,20 +136,22 @@ fn fly_test_drive(world: &mut World) {
     // Track the camera zoom every frame and flag any discontinuous jump
     // (ratio vs previous frame) — this is the exact bug class reported.
     let view_h = world.resource::<crate::camera::CameraZoom>().view_h;
+    // A zoom change is only a VISIBLE regression if it happens while the cover
+    // is thin enough to see through (cover < 0.5). The big zoom-out to disc
+    // scale is BY DESIGN hidden under near-opaque cover, so don't flag it.
+    let cover_now = world.resource::<crate::transition::FlightTransition>().cover;
     {
         let mut st = world.resource_mut::<FlyTestState>();
         if now < st.suppress_jump_until {
-            // Still inside the post-injection grace window — don't compare,
-            // but DO track this reading so comparisons resume cleanly once
-            // the window closes (instead of comparing across the gap).
-        } else if st.prev_view_h > 0.0 {
+            // Post-injection grace window — track but don't compare.
+        } else if st.prev_view_h > 0.0 && cover_now < 0.5 {
             let ratio = (view_h / st.prev_view_h).max(st.prev_view_h / view_h);
             if ratio > st.max_jump_ratio {
                 st.max_jump_ratio = ratio;
             }
             if ratio > 1.5 {
                 eprintln!(
-                    "ha-flytest: ZOOM JUMP t={now:.2} {:.0} -> {:.0} (x{ratio:.2})",
+                    "ha-flytest: VISIBLE ZOOM JUMP t={now:.2} {:.0} -> {:.0} (x{ratio:.2}, cover={cover_now:.2})",
                     st.prev_view_h, view_h
                 );
             }
@@ -173,8 +176,22 @@ fn fly_test_drive(world: &mut World) {
             let cover = world.resource::<crate::transition::FlightTransition>().cover;
             let armed = world.resource::<crate::creative_fly::CreativeFlight>().land_armed;
             if phase == crate::creative_fly::Phase::Orbit && cover < 0.05 && armed {
-                eprintln!("ha-flytest: climbed CLEAR of clouds into space (cover={cover:.2})");
-                advance_stage(world, now);
+                // Cleared! Release JUMP to HOVER (no radial movement) and linger
+                // ~1.8 s so the disc screenshot lands before the descent tests.
+                let cleared = world.resource::<FlyTestState>().cleared_at;
+                if cleared == 0.0 {
+                    let vh = world.resource::<crate::camera::CameraZoom>().view_h;
+                    eprintln!("ha-flytest: climbed CLEAR (cover={cover:.2} view_h={vh:.0}) — should see Earth disc");
+                    world.resource_mut::<FlyTestState>().cleared_at = now;
+                } else {
+                    release_all(world); // hover
+                    if now - cleared > 0.8 {
+                        shot(world, &format!("{FLYTEST_DIR}/earth-cleared-disc.png"));
+                    }
+                    if now - cleared > 1.8 {
+                        advance_stage(world, now);
+                    }
+                }
             } else if now > 40.0 {
                 eprintln!("ha-flytest: STUCK — never cleared clouds (cover={cover:.2} phase={phase:?})");
                 std::process::exit(1);
@@ -287,6 +304,32 @@ fn advance_stage(world: &mut World, now: f32) {
     st.stage_entered = now;
 }
 
+/// Force the creative-orbit state at a fixed altitude straight above the Moon
+/// (deterministic, overrides input drift) so a screenshot reliably frames the
+/// disc. Mirrors what `creative_fly_orbit` maintains: region/ctx = Space,
+/// phase = Orbit, armed, pos = moon centre + up*(radius+alt).
+fn place_creative_orbit(world: &mut World, alt: f32) {
+    let t = world.resource::<crate::solar_system_clock::SolarSystemClock>().t;
+    let c = ha_shared::solar_ephemeris::body_center_at(ha_shared::CelestialBody::Moon, t);
+    let r = ha_shared::body_radius(ha_shared::CelestialBody::Moon);
+    let up = Vec3::new(0.0, 0.0, -1.0);
+    {
+        let mut fly = world.resource_mut::<crate::creative_fly::CreativeFlight>();
+        fly.body = ha_shared::CelestialBody::Moon;
+        fly.phase = crate::creative_fly::Phase::Orbit;
+        fly.land_armed = true;
+        fly.alt = alt;
+        fly.pos = Vec3::new(c[0], 0.0, c[2]) + up * (r + alt);
+    }
+    world.resource_mut::<crate::scene::RegionRuntime>().active = crate::scene::RegionId::Space;
+    world.resource_mut::<crate::scene::WorldContextRuntime>().active =
+        ha_shared::WorldContext::Space;
+    // Neutralise any stale simulated input so `creative_fly_orbit` doesn't drift.
+    let mut intent = world.resource_mut::<crate::input::MovementIntent>();
+    intent.move_x = 0.0;
+    intent.move_z = 0.0;
+}
+
 /// Moon creative-fly regression: teleport to the Moon, climb, confirm you reach
 /// CLEAR orbit (no instant re-teleport loop = the "cuadrado blanco"), then
 /// measure the capped lateral cruise so travel isn't instant.
@@ -318,14 +361,13 @@ fn moon_test_drive(world: &mut World) {
             eprintln!("ha-moontest: teleported to Moon surface");
             advance_stage(world, now);
         }
-        // 1: hold JUMP, climb off the Moon, require CLEAR orbit (cover≈0, armed)
-        // — if the white-square re-teleport loop were still here, cover would
-        // never clear and this would time out.
+        // 1: hold JUMP just until you're clear of the fade and armed (NOT all
+        // the way up — we want to stay LOW so the Moon disc is big on screen).
         1 => {
             hold_with_fresh_edges(world, KeyCode::Space, now, 0.4);
-            let (phase, body, armed) = {
+            let (phase, body, armed, alt) = {
                 let f = world.resource::<crate::creative_fly::CreativeFlight>();
-                (f.phase, f.body, f.land_armed)
+                (f.phase, f.body, f.land_armed, f.alt)
             };
             let cover = world.resource::<crate::transition::FlightTransition>().cover;
             if phase == crate::creative_fly::Phase::Orbit
@@ -333,38 +375,37 @@ fn moon_test_drive(world: &mut World) {
                 && cover < 0.05
                 && armed
             {
-                eprintln!("ha-moontest: reached CLEAR Moon orbit (no white-square loop, cover={cover:.2})");
-                shot(world, &format!("{FLYTEST_DIR}/moontest-clear.png"));
+                eprintln!("ha-moontest: reached CLEAR Moon orbit (no white-square loop, cover={cover:.2} alt={alt:.0})");
                 advance_stage(world, now);
             } else if now - world.resource::<FlyTestState>().stage_entered > 30.0 {
                 eprintln!("ha-moontest: STUCK on Moon (cover={cover:.2} phase={phase:?} body={body:?}) — FAIL");
                 std::process::exit(1);
             }
         }
-        // 2: measure the capped lateral cruise. Force a big zoom (as if pinched
-        // out to travel) and push the stick; the displacement/dt is the real
-        // speed, and 52 km / speed is the Earth→Moon hop time.
+        // 2: place at a FAR orbit altitude (deterministic, no input drift) and
+        // screenshot — the Moon should be a clear grey disc, small.
         2 => {
-            release_all(world);
-            world.resource_mut::<crate::camera::CameraZoom>().user_zoom_mult = 6.0;
-            world.resource_mut::<crate::input::MovementIntent>().move_x = 1.0;
-            let px = world.resource::<crate::creative_fly::CreativeFlight>().pos.x;
-            world.resource_mut::<FlyTestState>().prev_view_h = px; // reuse as pos marker
-            world.resource_mut::<FlyTestState>().stage_entered = now;
-            advance_stage(world, now);
+            place_creative_orbit(world, 700.0);
+            if now - world.resource::<FlyTestState>().stage_entered > 1.0 {
+                let vh = world.resource::<crate::camera::CameraZoom>().view_h;
+                eprintln!("ha-moontest: FAR orbit alt=700 view_h={vh:.0} — Moon disc small");
+                shot(world, &format!("{FLYTEST_DIR}/moon-disc-far.png"));
+                advance_stage(world, now);
+            }
         }
+        // 3: place NEAR the Moon — the disc should be MUCH BIGGER (grew as we
+        // approached), same Moon.
         3 => {
-            world.resource_mut::<crate::input::MovementIntent>().move_x = 1.0;
+            place_creative_orbit(world, 180.0);
             let dt = now - world.resource::<FlyTestState>().stage_entered;
-            if dt > 2.0 {
-                let px0 = world.resource::<FlyTestState>().prev_view_h;
-                let px1 = world.resource::<crate::creative_fly::CreativeFlight>().pos.x;
-                let speed = ((px1 - px0).abs() / dt).max(1.0);
-                let hop = 52_000.0 / speed;
-                eprintln!(
-                    "ha-moontest: cruise speed = {speed:.0} m/s at max zoom -> Earth-Moon hop ≈ {hop:.1} s"
-                );
-                world.resource_mut::<crate::input::MovementIntent>().move_x = 0.0;
+            if dt > 1.0 && world.resource::<FlyTestState>().cleared_at == 0.0 {
+                let vh = world.resource::<crate::camera::CameraZoom>().view_h;
+                eprintln!("ha-moontest: NEAR orbit alt=180 view_h={vh:.0} — Moon disc BIG");
+                shot(world, &format!("{FLYTEST_DIR}/moon-disc-near.png"));
+                world.resource_mut::<FlyTestState>().cleared_at = now;
+            }
+            // Let the async screenshot observer flush before exiting.
+            if world.resource::<FlyTestState>().cleared_at > 0.0 && dt > 2.0 {
                 eprintln!("ha-moontest: DONE");
                 std::process::exit(0);
             }
