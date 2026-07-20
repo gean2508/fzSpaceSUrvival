@@ -38,6 +38,11 @@ pub struct CreativeFlight {
     pub alt: f32,
     /// The body we're climbing from / descending to.
     pub body: CelestialBody,
+    /// Landing is only allowed once you've climbed clear of the cover band
+    /// (past `clear_end`). Prevents the just-entered orbit from instantly
+    /// re-landing on small/airless bodies where `swap_up < APPROACH_LAND_M`
+    /// (the Moon "white square" re-teleport loop).
+    pub land_armed: bool,
 }
 
 impl CreativeFlight {
@@ -61,6 +66,13 @@ const ORBIT_ZOOM_POWER: f32 = 1.6;
 const ORBIT_ZOOM_MAX: f32 = 2_000_000.0;
 /// Free-flight speed = view_h × this (auto-scales with zoom).
 const FLY_SPEED_FACTOR: f32 = 0.35;
+/// Hard cap on orbital free-flight speed (m/s). WITHOUT this, zooming out to
+/// the system view (`view_h` up to 2 000 000) made speed ~700 000 m/s → you
+/// crossed to another planet in a blink ("salgo en 2 segundos"). At ~5500 m/s
+/// the Earth→Moon hop (~52 km) takes ~10 s — travel FEELS like distance,
+/// building a ship is worth it. Farther bodies take proportionally longer.
+const MAX_ORBIT_SPEED: f32 = 5_500.0;
+const MIN_ORBIT_SPEED: f32 = 120.0;
 /// Auto-descend when the character drifts this close to a body's surface (m).
 const APPROACH_LAND_M: f32 = 200.0;
 
@@ -193,14 +205,35 @@ fn creative_fly_climb(
         fly.pos = c + radial_up(fly.body, clock.t) * (body_radius(fly.body) + fly.alt);
         fly.pos.y = 0.0;
         fly.phase = Phase::Orbit;
+        fly.land_armed = false; // must climb clear of the cover before landing
         region.active = RegionId::Space;
         ctx.active = WorldContext::Space;
         eprintln!("ha-creative: reached orbit ({:?})", fly.body);
     }
 }
 
-/// ORBIT: free 2D flight in the world plane; the leftover cover clears into
-/// space. Auto-descend onto a body you drift into, or USE = land.
+/// Nearest body (XZ-plane distance) to a world-plane position. Y is ignored:
+/// `fly.pos.y` is flattened to 0 while body centres sit at FLIGHT_PLANE_Y, so a
+/// 3D distance would inflate every altitude by the plane offset.
+fn nearest_body_xz(pos: Vec3, t: f32) -> (CelestialBody, f32) {
+    let p = Vec2::new(pos.x, pos.z);
+    let mut nearest = (CelestialBody::Earth, f32::MAX);
+    for &body in CelestialBody::all() {
+        let c = body_center_at(body, t);
+        let d = (p - Vec2::new(c[0], c[2])).length();
+        if d < nearest.1 {
+            nearest = (body, d);
+        }
+    }
+    nearest
+}
+
+/// ORBIT: free flight in the world plane with FULL directional control —
+/// JUMP = climb radially away from the nearest body, USE = descend toward it,
+/// stick = lateral. So holding JUMP from the ground is ONE continuous ascent:
+/// through the swap (under full cover) and on OUT of the cover band, the planet
+/// revealed gradually as a disc — no sudden "clouds cut, blue circle" jump.
+/// Landing only once you've climbed clear (`land_armed`) and drift close.
 #[allow(clippy::too_many_arguments)]
 fn creative_fly_orbit(
     time: Res<Time>,
@@ -219,29 +252,37 @@ fn creative_fly_orbit(
         return;
     }
     let dt = time.delta_secs();
-    let speed = (zoom.view_h * FLY_SPEED_FACTOR).max(120.0);
-    fly.pos.x += intent.move_x * speed * dt;
-    fly.pos.z += intent.move_z * speed * dt;
+    // Speed scales with zoom (so it feels right at every scale) but is CAPPED —
+    // otherwise system-view zoom made travel instant. See MAX_ORBIT_SPEED.
+    let speed = (zoom.view_h * FLY_SPEED_FACTOR).clamp(MIN_ORBIT_SPEED, MAX_ORBIT_SPEED);
+
+    // Radial direction (away from the nearest body) for JUMP/USE vertical control.
+    let (body0, _) = nearest_body_xz(fly.pos, clock.t);
+    let c0 = body_center_at(body0, clock.t);
+    let radial = (Vec2::new(fly.pos.x, fly.pos.z) - Vec2::new(c0[0], c0[2])).normalize_or_zero();
+    let mut rv = 0.0;
+    if actions.jump {
+        rv += 1.0; // hold JUMP = climb out
+    }
+    if actions.action {
+        rv -= 1.0; // hold USE = descend toward the body
+    }
+    fly.pos.x += (intent.move_x + radial.x * rv) * speed * dt;
+    fly.pos.z += (intent.move_z + radial.y * rv) * speed * dt;
     fly.pos.y = 0.0;
 
-    // Distances in the XZ plane only: `fly.pos.y` is flattened to 0 while body
-    // centres sit at FLIGHT_PLANE_Y, so a 3D distance would inflate every
-    // altitude by the plane offset (it used to make Moon landings untriggerable
-    // and skip the cover band entirely).
-    let mut nearest = (CelestialBody::Earth, f32::MAX);
-    for &body in CelestialBody::all() {
-        let c = Vec3::from_array(body_center_at(body, clock.t));
-        let d = (Vec2::new(fly.pos.x, fly.pos.z) - Vec2::new(c.x, c.z)).length();
-        if d < nearest.1 {
-            nearest = (body, d);
-        }
-    }
-    let (body, dist) = nearest;
-    // Cover follows the altitude above the nearest body — clear in deep space,
-    // rolling back in as you approach any body (per that body's profile: clouds
-    // where there's an atmosphere, bare circle where there's none).
+    // Nearest body AFTER moving → cover, zoom, altitude, landing.
+    let (body, dist) = nearest_body_xz(fly.pos, clock.t);
     let alt_orbit = (dist - body_radius(body)).max(0.0);
     fly.alt = alt_orbit;
+    let p = transition_profile(body);
+    // Arm landing once you've climbed clear of the cover band (revealed space).
+    if alt_orbit > p.clear_end {
+        fly.land_armed = true;
+    }
+    // Cover follows the altitude above the nearest body — clear in deep space,
+    // rolling back in as you approach any body (clouds where there's air, a
+    // bare circle where there's none).
     trans.drive(TransitionMode::Space, body, alt_orbit);
     // SFS reveal: the camera zoom follows altitude — the body's circle emerges
     // as the cover parts and shrinks as you climb; deep space frames the
@@ -250,12 +291,14 @@ fn creative_fly_orbit(
     // leaving orbit — then grows with `ORBIT_ZOOM_POWER` past it. `user_mult`
     // (pinch/scroll, see `camera.rs`) lets you pull the framing back in
     // without losing the automatic reveal — default 1.0, untouched.
-    let dist_swap = body_radius(body) + transition_profile(body).swap_up.max(1.0);
+    let dist_swap = body_radius(body) + p.swap_up.max(1.0);
     let dist_now = (body_radius(body) + alt_orbit).max(1.0);
     let auto = SWAP_VIEW_H * (dist_now / dist_swap).powf(ORBIT_ZOOM_POWER);
     zoom.view_h = (auto * zoom.user_zoom_mult).clamp(SWAP_VIEW_H * 0.3, ORBIT_ZOOM_MAX);
+
+    // Land only after climbing clear (armed) AND drifting close to a surface.
     let touching = dist < body_radius(body) + APPROACH_LAND_M;
-    if !touching && !actions.use_edge {
+    if !(fly.land_armed && touching) {
         return;
     }
     let Ok((mut sim, mut visual)) = player.get_single_mut() else {
@@ -263,8 +306,7 @@ fn creative_fly_orbit(
     };
     teleport_to_body(body, &mut region, &mut ctx, &mut planet, &mut sim, &mut visual);
     fly.body = body;
-    // Continuous with the orbit zoom we just had (`touching` only fires below
-    // APPROACH_LAND_M, always < swap_down) — no altitude jump entering Descend.
+    // Continuous with the orbit altitude we just had — no jump entering Descend.
     fly.alt = alt_orbit;
     fly.phase = Phase::Descend;
     eprintln!("ha-creative: descent onto {body:?}");

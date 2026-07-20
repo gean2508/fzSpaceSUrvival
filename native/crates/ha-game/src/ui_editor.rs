@@ -2,8 +2,9 @@ use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::prelude::*;
 
 use crate::debug::PerfOverlayVisible;
-use crate::rocket_flight::{orbital_start_above_pad, RocketFlight};
-use ha_shared::CelestialBody;
+use crate::rocket_flight::RocketFlight;
+use ha_shared::solar_ephemeris::body_center_at;
+use ha_shared::{body_radius, transition_profile, CelestialBody};
 use crate::scene::{teleport_to_body, RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::game_ui::{self, apply_top_center, apply_center, GameUiRoot, MENU_BUTTON_WIDTH};
@@ -594,6 +595,8 @@ fn editor_button_system(
     mut planet: ResMut<crate::world2d::ActivePlanet>,
     mut trans: ResMut<crate::transition::FlightTransition>,
     mut flight: ResMut<RocketFlight>,
+    mut fly: ResMut<crate::creative_fly::CreativeFlight>,
+    clock: Res<crate::solar_system_clock::SolarSystemClock>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
     mut buttons: Query<(&Interaction, &UiEditorCommand, &mut BackgroundColor), Changed<Interaction>>,
 ) {
@@ -636,17 +639,29 @@ fn editor_button_system(
                     eprintln!("ha-luna: dev teleport → Luna strip");
                 }
                 UiEditorCommand::GoSpace => {
-                    flight.begin_coast_toward(
-                        orbital_start_above_pad(),
-                        Vec3::ZERO,
-                        CelestialBody::Earth,
-                    );
+                    // Drop into free creative orbit above Earth, CLEAR of the
+                    // cloud band (past `clear_end`), already armed to land. The
+                    // old path ignited a fuel-less rocket at 336 m — inside the
+                    // clouds — so you saw white and fell, never reaching space.
+                    flight.end_surface();
+                    let t = clock.t;
+                    let c = Vec3::from_array(body_center_at(CelestialBody::Earth, t));
+                    let clear_alt = transition_profile(CelestialBody::Earth).clear_end + 400.0;
+                    // Straight up on screen (−z) — matches the launch heading.
+                    let up = Vec3::new(0.0, 0.0, -1.0);
+                    fly.body = CelestialBody::Earth;
+                    fly.pos = c + up * (body_radius(CelestialBody::Earth) + clear_alt);
+                    fly.pos.y = 0.0;
+                    fly.alt = clear_alt;
+                    fly.phase = crate::creative_fly::Phase::Orbit;
+                    fly.land_armed = true;
                     region.active = RegionId::Space;
                     world_ctx.active = ha_shared::WorldContext::Space;
                     trans.clear();
                     state.menu_open = false;
                     state.settings_open = false;
                     state.enabled = false;
+                    eprintln!("ha-space: dev teleport → creative orbit above Earth");
                 }
                 UiEditorCommand::GoEarth => {
                     flight.end_surface();

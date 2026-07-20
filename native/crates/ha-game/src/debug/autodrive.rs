@@ -39,6 +39,20 @@ impl Plugin for AutoDrivePlugin {
             app.add_systems(Update, fly_test_drive);
             return;
         }
+        // Moon creative-fly test: teleport to the Moon, climb, confirm you
+        // reach CLEAR orbit (no instant re-teleport loop = the "white square"),
+        // then measure the Earth→Moon lateral cruise time (HA_MOONTEST=1).
+        if std::env::var("HA_MOONTEST").is_ok() {
+            app.init_resource::<FlyTestState>();
+            #[cfg(not(target_os = "android"))]
+            app.add_systems(
+                Update,
+                moon_test_drive.before(crate::input::desktop_input::desktop_keyboard_actions),
+            );
+            #[cfg(target_os = "android")]
+            app.add_systems(Update, moon_test_drive);
+            return;
+        }
         // Rocket transition visual test: ignite from the pad, thrust to space,
         // release and fall back to touchdown — screenshots at altitude beats on
         // BOTH legs so the surface↔space choreography can be SEEN
@@ -151,9 +165,19 @@ fn fly_test_drive(world: &mut World) {
         // (depends on system load) — `hold_with_fresh_edges` retries instead
         // of guessing a fixed delay.
         0 => {
+            // Keep holding JUMP until we've reached orbit AND CLIMBED CLEAR of
+            // the cover into open space (cover≈0). Entering orbit is NOT enough
+            // — the bug was being stuck at swap_up under full cloud with no way
+            // up. Requiring cover to clear is the real regression test.
             hold_with_fresh_edges(world, KeyCode::Space, now, 0.4);
-            if phase == crate::creative_fly::Phase::Orbit {
+            let cover = world.resource::<crate::transition::FlightTransition>().cover;
+            let armed = world.resource::<crate::creative_fly::CreativeFlight>().land_armed;
+            if phase == crate::creative_fly::Phase::Orbit && cover < 0.05 && armed {
+                eprintln!("ha-flytest: climbed CLEAR of clouds into space (cover={cover:.2})");
                 advance_stage(world, now);
+            } else if now > 40.0 {
+                eprintln!("ha-flytest: STUCK — never cleared clouds (cover={cover:.2} phase={phase:?})");
+                std::process::exit(1);
             }
         }
         // 1: test setup — jump straight to "mid-descent" (the gameplay path to
@@ -261,6 +285,96 @@ fn advance_stage(world: &mut World, now: f32) {
     let mut st = world.resource_mut::<FlyTestState>();
     st.stage += 1;
     st.stage_entered = now;
+}
+
+/// Moon creative-fly regression: teleport to the Moon, climb, confirm you reach
+/// CLEAR orbit (no instant re-teleport loop = the "cuadrado blanco"), then
+/// measure the capped lateral cruise so travel isn't instant.
+fn moon_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 {
+        return;
+    }
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+    let stage = world.resource::<FlyTestState>().stage;
+    match stage {
+        // 0: teleport onto the Moon surface.
+        0 => {
+            world.resource_mut::<crate::scene::RegionRuntime>().active = crate::scene::RegionId::Luna;
+            world.resource_mut::<crate::scene::WorldContextRuntime>().active =
+                ha_shared::WorldContext::Luna;
+            let (sx, sz) =
+                crate::scene::walkable_spawn(ha_shared::CelestialBody::Moon, 0.0, 6.0);
+            let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+            if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
+                sim.body.x = sx;
+                sim.body.z = sz;
+                sim.body.y = 0.0;
+                vis.from_x = sx;
+                vis.to_x = sx;
+                vis.from_z = sz;
+                vis.to_z = sz;
+            }
+            eprintln!("ha-moontest: teleported to Moon surface");
+            advance_stage(world, now);
+        }
+        // 1: hold JUMP, climb off the Moon, require CLEAR orbit (cover≈0, armed)
+        // — if the white-square re-teleport loop were still here, cover would
+        // never clear and this would time out.
+        1 => {
+            hold_with_fresh_edges(world, KeyCode::Space, now, 0.4);
+            let (phase, body, armed) = {
+                let f = world.resource::<crate::creative_fly::CreativeFlight>();
+                (f.phase, f.body, f.land_armed)
+            };
+            let cover = world.resource::<crate::transition::FlightTransition>().cover;
+            if phase == crate::creative_fly::Phase::Orbit
+                && body == ha_shared::CelestialBody::Moon
+                && cover < 0.05
+                && armed
+            {
+                eprintln!("ha-moontest: reached CLEAR Moon orbit (no white-square loop, cover={cover:.2})");
+                shot(world, &format!("{FLYTEST_DIR}/moontest-clear.png"));
+                advance_stage(world, now);
+            } else if now - world.resource::<FlyTestState>().stage_entered > 30.0 {
+                eprintln!("ha-moontest: STUCK on Moon (cover={cover:.2} phase={phase:?} body={body:?}) — FAIL");
+                std::process::exit(1);
+            }
+        }
+        // 2: measure the capped lateral cruise. Force a big zoom (as if pinched
+        // out to travel) and push the stick; the displacement/dt is the real
+        // speed, and 52 km / speed is the Earth→Moon hop time.
+        2 => {
+            release_all(world);
+            world.resource_mut::<crate::camera::CameraZoom>().user_zoom_mult = 6.0;
+            world.resource_mut::<crate::input::MovementIntent>().move_x = 1.0;
+            let px = world.resource::<crate::creative_fly::CreativeFlight>().pos.x;
+            world.resource_mut::<FlyTestState>().prev_view_h = px; // reuse as pos marker
+            world.resource_mut::<FlyTestState>().stage_entered = now;
+            advance_stage(world, now);
+        }
+        3 => {
+            world.resource_mut::<crate::input::MovementIntent>().move_x = 1.0;
+            let dt = now - world.resource::<FlyTestState>().stage_entered;
+            if dt > 2.0 {
+                let px0 = world.resource::<FlyTestState>().prev_view_h;
+                let px1 = world.resource::<crate::creative_fly::CreativeFlight>().pos.x;
+                let speed = ((px1 - px0).abs() / dt).max(1.0);
+                let hop = 52_000.0 / speed;
+                eprintln!(
+                    "ha-moontest: cruise speed = {speed:.0} m/s at max zoom -> Earth-Moon hop ≈ {hop:.1} s"
+                );
+                world.resource_mut::<crate::input::MovementIntent>().move_x = 0.0;
+                eprintln!("ha-moontest: DONE");
+                std::process::exit(0);
+            }
+        }
+        _ => {}
+    }
+    if now > 60.0 {
+        eprintln!("ha-moontest: TIMEOUT (FAIL, stage={stage})");
+        std::process::exit(1);
+    }
 }
 
 #[derive(Resource, Default)]

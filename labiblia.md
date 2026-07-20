@@ -591,6 +591,40 @@ distancias (mataría el ritmo sin más) sino agregar **time warp** (acelerar la
 simulación mientras se coastea, estilo KSP/SFS) — sistema nuevo, no trivial,
 deliberadamente fuera de esta tanda de fixes.
 
+### §13-undecies — Fix vuelo creativo roto + cap de velocidad (20 jul 2026)
+
+Plan en `PLAN_FIX_VUELO_ROTO.md`. El commit `7d7b580` (cámara continua) quitó el
+`entry_alt = clear_end+60` que ponía la entrada a órbita POR ENCIMA de las nubes,
+y entró en `swap_up` para la continuidad de zoom. Eso rompió el vuelo porque
+`creative_fly_orbit` **no tenía control vertical** (solo lateral):
+
+- **Tierra "nunca salgo de las nubes":** entrabas a órbita en `swap_up` (cover=1.0)
+  y el movimiento lateral no gana altitud → nubes eternas.
+- **Luna "cuadrado blanco":** `swap_up=165` < `APPROACH_LAND_M=200` → al entrar a
+  órbita ya cumplías `touching` → reteletransporte en loop cada frame.
+- **Botón ESPACIO:** `GoSpace` encendía un cohete sin combustible a 336m (dentro de
+  la banda de nubes) → veías blanco y caías.
+
+**Fix (`creative_fly.rs`):** órbita gana control vertical — **JUMP = subir radial**
+(alejarse del cuerpo), **USE = bajar**, stick = lateral. Así mantener JUMP desde
+el suelo es UN ascenso continuo que cruza el swap bajo nubes y SIGUE subiendo hasta
+despejarlas (reveal gradual del disco, sin corte). Flag `CreativeFlight.land_armed`:
+se arma solo tras superar `clear_end`; aterrizar exige `land_armed && touching` →
+mata el loop de la Luna. `GoSpace` (`ui_editor.rs`) ahora deja al personaje en
+órbita creativa libre sobre la Tierra por encima de `clear_end` (despejado, armado).
+
+**Velocidad ("salgo en 2s"):** el crucero creativo era `view_h*0.35` sin tope; a
+zoom de sistema (`view_h` 2.000.000) daba ~700.000 m/s = instantáneo. Nuevo cap
+`MAX_ORBIT_SPEED=5500` → cruce Tierra↔Luna (52km) mínimo ~9.5s (el ~10s pedido);
+más lento con zoom cerrado. **Distancias NO tocadas** (escalar centros toca
+efemérides/SOI, riesgoso; el objetivo temporal se logra con el cap). El cohete real
+(cap 640 m/s, ~80s a la Luna) ya era significativo y no se tocó.
+
+**Verificado:** 98 tests, `HA_FLYTEST` (ahora exige cover→0 en órbita, no solo
+entrar a Orbit), `HA_MOONTEST` (Luna despejada sin loop), rockettest + smoke PASS.
+
+**Pendiente NO tocado:** HUD con no-ASCII (`→ · í` = cajas □, §7) — limpieza aparte.
+
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 
 **Hecho y shipeado (v1.0.147, commits 792b98d..793be81):** F0 tests verdes · F1 survival core (§12) · F2 ship builder Fase 1 (contadores) · F3 base lunar (taladro/antena/monitoreo, máquinas por cuerpo) · F4 gamepad · F6 APK publicado. F5 perf: **medición bloqueada hasta conectar el Redmi** (plan en memoria del agente + §6).
