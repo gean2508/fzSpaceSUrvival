@@ -646,13 +646,24 @@ struct FlightRocketVisual;
 #[derive(Component)]
 struct FlightRocketFlame;
 
+/// Ground shadow while ascending/descending in the surface frame (biblia
+/// §11-bis) — same illusion-of-altitude idiom as `PlayerFlightShadow`. Hidden
+/// once in the orbital frame (no ground in view to fall on).
+#[derive(Component)]
+struct FlightRocketShadow;
+
 fn sync_rocket_visual(
     mut commands: Commands,
     flight: Res<RocketFlight>,
     trans: Res<crate::transition::FlightTransition>,
+    day: Res<crate::sky2d::DayClock>,
     art: Res<crate::art2d::ArtLibrary>,
     mut rocket: Query<(Entity, &mut Transform), With<FlightRocketVisual>>,
-    mut flame: Query<&mut Visibility, With<FlightRocketFlame>>,
+    mut flame: Query<&mut Visibility, (With<FlightRocketFlame>, Without<FlightRocketShadow>)>,
+    mut shadow: Query<
+        (&mut Visibility, &mut Sprite),
+        (With<FlightRocketShadow>, Without<FlightRocketFlame>),
+    >,
 ) {
     let flying = flight.blocks_walking();
     if !flying {
@@ -691,6 +702,22 @@ fn sync_rocket_visual(
                 Visibility::Hidden
             };
         }
+        if let Ok((mut vis, mut sprite)) = shadow.get_single_mut() {
+            if surface {
+                let sw = ha_shared::transition_profile(flight.body).swap_up.max(1.0);
+                let f = (1.0 - flight.altitude_m() / sw).clamp(0.0, 1.0);
+                let light = if flight.body == ha_shared::CelestialBody::Earth {
+                    day.daylight().max(0.15)
+                } else {
+                    1.0
+                };
+                *vis = Visibility::Visible;
+                sprite.color = Color::srgba(0.0, 0.0, 0.0, 0.5 * f * light);
+                sprite.custom_size = Some(Vec2::new(1.4, 0.6) * (0.4 + 0.6 * f));
+            } else {
+                *vis = Visibility::Hidden;
+            }
+        }
         return;
     }
     // Drop-in pack art (assets/art/ship/rocket.png) or procedural stack.
@@ -722,6 +749,13 @@ fn sync_rocket_visual(
                 FlightRocketFlame,
                 Sprite::from_color(Color::srgb(1.0, 0.72, 0.25), Vec2::new(0.9, 1.8)),
                 Transform::from_xyz(0.0, -3.0, 0.05),
+                Visibility::Hidden,
+            ));
+            // Flight-only ground shadow (biblia §11-bis).
+            p.spawn((
+                FlightRocketShadow,
+                Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.35), Vec2::new(1.4, 0.6)),
+                Transform::from_xyz(0.0, -3.6, -0.05),
                 Visibility::Hidden,
             ));
         });

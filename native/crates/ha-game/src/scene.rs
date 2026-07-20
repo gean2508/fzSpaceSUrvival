@@ -136,7 +136,21 @@ fn spawn_player(
         TextureAtlas { layout, index: 0 },
     );
     sprite.custom_size = Some(Vec2::new(1.6, 3.2));
-    commands.spawn((Player, sim, visual, sprite, tf, crate::sim::CurrentPose::default()));
+    commands
+        .spawn((Player, sim, visual, sprite, tf, crate::sim::CurrentPose::default()))
+        .with_children(|p| {
+            // Flight-only ground shadow (biblia §11-bis) — hidden until
+            // `sync_player_shadow` turns it on for Climb/Descend.
+            p.spawn((
+                crate::sim::PlayerFlightShadow,
+                Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.5), Vec2::new(1.2, 0.5)),
+                // Below the character sprite's own bottom edge (custom_size
+                // 1.6x3.2, centre-anchored → bottom at y=-1.6) so it reads as
+                // cast ON the ground, not smudged into the sprite's legs.
+                Transform::from_xyz(0.0, -1.8, -0.05),
+                Visibility::Hidden,
+            ));
+        });
 }
 
 /// Deliberate MENU teleport (creative/dev): put the walker on a body surface.

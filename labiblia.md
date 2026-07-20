@@ -120,7 +120,7 @@ Validar: `npm run validate:arch`.
 | **Locomoción plana** (plataformero: gravedad por contexto, salto/coyote, wrap circunferencia, vuelo creativo) | `ha-shared/flat2d.rs` (`step_flat_movement`), `ha-game/sim.rs` |
 | **Vuelo 2D SFS** (thrust/coast/retro, fuel real, drag, paracaídas, SOI dinámica, aterrizaje, relanzamiento off-world, remap exacto superficie↔órbita; **telemetría H/V** `vertical_speed`/`horizontal_speed` + **radar** de superficie; **autopilot hover** ~500 m grueso) | `ha-game/rocket_flight.rs`, `ha-shared/flight_physics.rs`, `flat2d.rs` |
 | **Vista orbital** (cuerpos como círculos reales + halo atmósfera + Sol) | `ha-game/orbital2d.rs` |
-| **Transición superficie↔espacio** (perfil por cuerpo derivado de `atmo_top_m`, calibrado a la Tierra 190/290/300-360/400/700/900; cobertura = nubes tintadas o fundido airless; swap con histéresis `swap_down`/`swap_up` SIEMPRE bajo cobertura llena; recurso único `FlightTransition` que escribe el vuelo activo y leen cielo/cámara/streaming/región) | `ha-shared/transition.rs` (perfil + 6 tests), `ha-game/transition.rs` (recurso), guardián en `rocket_flight.rs::sync_flight_world_state` |
+| **Transición superficie↔espacio** (perfil por cuerpo derivado de `atmo_top_m`, calibrado a la Tierra 190/290/300-360/400/700/900; cobertura = nubes tintadas o fundido airless; swap con histéresis `swap_down`/`swap_up` SIEMPRE bajo cobertura llena; recurso único `FlightTransition` que escribe el vuelo activo y leen cielo/cámara/streaming/región; zoom orbital del vuelo creativo ANCLADO al zoom de superficie en `swap_up` — cero salto, `ORBIT_ZOOM_POWER`; sombras `PlayerFlightShadow`/`FlightRocketShadow` bajo lo que vuela cerca de tierra) | `ha-shared/transition.rs` (perfil + 6 tests), `ha-game/transition.rs` (recurso), guardián en `rocket_flight.rs::sync_flight_world_state`, `creative_fly.rs` |
 | **Regiones + jugador** (RegionId/WorldContext, spawn, teleports MENU) | `ha-game/scene.rs` (`teleport_to_body`) |
 | **Interior de nave + cabina + recarga** (cuarto 2D abordable desde el pad; Z-level dedicado 64 sobre roca sólida = cuarto tallado en WoodFloor; abordar/salir = cambio región+z+teleport B8; `CockpitSeat` → `PreFlightUI` DESPEGAR/AUTOPILOTO/LEVANTARSE bloquea al walker; `FuelSource` + `RefuelEvent` en sala de máquinas = combustible gestionado) | `ha-game/ship_interior.rs` (`ShipInteriorPlugin`, `board_ship`/`leave_ship`, `CockpitState`, `RefuelEvent`), `RegionId::ShipInterior`, `TileWorld::force_tile` |
 | **Cielo 2D** (día/noche 720 s, overlay nocturno, fade a vacío, estrellas que siguen la cámara) | `ha-game/sky2d.rs` |
@@ -531,6 +531,65 @@ y la coreografía buena solo existía en el creativo con números de la Tierra h
 - **Pendiente device:** sensación de bandas en cuerpos chicos; el paso por nubes del
   cohete a todo empuje es rápido (~2 s) — si no alcanza a tapar, ensanchar
   `cover_full→clear_start` en el perfil (un solo lugar).
+
+### §13-decies — Vuelo libre sin cortes, cámara continua, sombras (20 jul 2026)
+
+Plan en `PLAN_VUELO_LIBRE_Y_CAMARA.md` (raíz). 4 correcciones puntuales en el vuelo
+creativo del player + sombras, reportadas jugando en device. **La física de vuelo
+NUNCA estuvo trabada ni con animaciones** — todo lo de abajo es render/cámara/UI.
+
+- **Panel de cabina aparecía sin querer:** `ship_interior.rs::cockpit_seating`
+  sentaba (y bloqueaba movimiento) con solo PISAR `COCKPIT_CELL` — el cuarto es
+  chico y el camino a la sala de máquinas roza esa celda. Ahora exige
+  `actions.use_edge` (apretar USE parado ahí), igual que la ignición del pad.
+  Cartel propio "USE: sentarse" (`CockpitSeatHint`, autocontenido, no toca
+  `hud.rs::build_interact_prompt`).
+- **Descend no dejaba volver a subir:** `creative_fly_descend` era asimétrico
+  respecto a Climb — soltar todo caía solo (a propósito, para que aterrizar se
+  sienta natural sin sostener nada) pero JUMP solo frenaba la caída a `vy=0`,
+  nunca revertía. Ahora JUMP es un control real: sostenido, sube de verdad y si
+  cruza `swap_up` de nuevo entrega a `Phase::Orbit` (mismo hand-off que Climb).
+  Cambiar de opinión a mitad de un descenso ya funciona en cualquier punto.
+- **Corte de cámara al salir al espacio (el bug real detrás de "las nubes se
+  cortan y aparece el círculo azul de golpe"):** un `fly.alt = clear_end+60`
+  forzaba un salto de altitud exactamente al cruzar `swap_up`, y como
+  `creative_fly_orbit` corre en el MISMO frame (systems chained), el zoom
+  pasaba de 180 m (superficie) a ~10.000 m (fórmula orbital, independiente) en
+  un solo frame. Se eliminó el salto (`fly.alt` sigue continuo al entregar de
+  Climb→Orbit) y la fórmula orbital se **ancló** al zoom de superficie:
+  `zoom = SWAP_VIEW_H * (dist/dist_swap)^ORBIT_ZOOM_POWER` da EXACTO el mismo
+  valor en `alt=swap_up` — cero salto, mismo efecto SFS de revelación, ahora
+  gradual. Mismo criterio en el aterrizaje (`fly.alt` = altitud real del
+  "touching", no un valor forzado). Verificado por harness: ratio máximo
+  medido x1.10 en toda la subida real (antes: hasta x56 en el salto).
+  Complemento: el pellizco/scroll del usuario, antes bloqueado por completo en
+  vuelo creativo, ahora funciona como MULTIPLICADOR sobre la fórmula automática
+  durante `Phase::Orbit` (`CameraZoom.user_zoom_mult`, default 1.0) — podés
+  achicar el encuadre sin perder el auto-reveal; sigue bloqueado en Climb/
+  Descend (la transición necesita dueño único del zoom, biblia §11 flicker).
+- **Sombras** (`biblia §11-bis` de facto): óvalo semitransparente bajo el
+  jugador (`PlayerFlightShadow`, hijo del `Player`) mientras `fly.flying() &&
+  !fly.in_orbit()` (Climb/Descend, cualquier cuerpo — en Orbit no hay suelo a
+  la vista) y bajo el cohete (`FlightRocketShadow`) mientras
+  `trans.in_surface_frame()`. Tamaño/alpha decaen con la altitud; en la Tierra
+  además ×`DayClock.daylight()` ("con luz" — otros cuerpos sin ciclo día/noche
+  propio quedan constantes, mejora futura si se agrega uno).
+- **Cielo por cuerpo** quedó intacto de la fase anterior (§13-nonies) — no se
+  tocó en esta pasada.
+
+**Bug de test descubierto en la verificación (no reportado por el usuario):**
+`HA_FLYTEST`/`HA_ROCKETTEST` podían perder el primer JUMP si caía en un frame
+bloqueado por el boot screen (el `just_pressed` se pierde y no recurre con la
+tecla sostenida) — intermitente según carga del sistema. Se resolvió ordenando
+el sistema de test **antes** de `desktop_keyboard_actions`
+(`input/mod.rs::desktop_input` pasa a `pub mod`), no con un timer fijo.
+
+**Pendiente (fase siguiente, NO implementada — ver plan §5):** el usuario señaló
+que con ship builder libre + distancias en escala de juego, viajar entre
+cuerpos es demasiado rápido. La solución correcta no es solo agrandar
+distancias (mataría el ritmo sin más) sino agregar **time warp** (acelerar la
+simulación mientras se coastea, estilo KSP/SFS) — sistema nuevo, no trivial,
+deliberadamente fuera de esta tanda de fixes.
 
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 

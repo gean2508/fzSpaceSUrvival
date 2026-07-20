@@ -20,7 +20,7 @@ use crate::solar_system_clock::SolarSystemClock;
 use crate::transition::{FlightTransition, TransitionMode, SWAP_VIEW_H};
 use crate::world2d::ActivePlanet;
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum Phase {
     #[default]
     Ground,
@@ -53,10 +53,11 @@ impl CreativeFlight {
 /// Slow: ~10 s from the ground to space so you FEEL the world receding.
 const VERT_SPEED: f32 = 32.0;
 /// In orbit the camera zoom follows altitude (SFS reveal): the body's circle
-/// shrinks as you climb. `view_h = (radius + alt) * this`, clamped. High enough
-/// that the planet reads as a DISC below a tiny character (SFS scale), not a wall
-/// you're "standing on".
-const ORBIT_ZOOM_FACTOR: f32 = 4.5;
+/// shrinks as you climb. Anchored to be CONTINUOUS with the surface-frame zoom
+/// at the swap point — `view_h(swap_up) == SWAP_VIEW_H` exactly, zero jump —
+/// then grows with this power past it (>1 = accelerating reveal, same "circle
+/// shrinks, tiny character" feel as before, just arrived at gradually).
+const ORBIT_ZOOM_POWER: f32 = 1.6;
 const ORBIT_ZOOM_MAX: f32 = 2_000_000.0;
 /// Free-flight speed = view_h × this (auto-scales with zoom).
 const FLY_SPEED_FACTOR: f32 = 0.35;
@@ -74,10 +75,38 @@ impl Plugin for CreativeFlyPlugin {
                 creative_fly_climb,
                 creative_fly_orbit,
                 creative_fly_descend,
+                sync_player_shadow,
             )
                 .chain(),
         );
     }
+}
+
+/// Ground shadow while flying above visible terrain (Climb/Descend, any
+/// body) — reinforces the sense of altitude. Hidden on foot (baseline look
+/// untouched) and in Orbit (no ground in view to fall on). Full size/alpha at
+/// alt 0, fades out approaching the swap (already hidden under cover there
+/// anyway). Faded further by daylight on Earth ("con luz" — no per-body day
+/// cycle exists yet elsewhere, so other bodies keep it constant; see plan).
+fn sync_player_shadow(
+    fly: Res<CreativeFlight>,
+    day: Res<crate::sky2d::DayClock>,
+    mut shadow: Query<(&mut Visibility, &mut Sprite), With<crate::sim::PlayerFlightShadow>>,
+) {
+    let Ok((mut vis, mut sprite)) = shadow.get_single_mut() else {
+        return;
+    };
+    let grounded_flight = fly.flying() && !fly.in_orbit();
+    if !grounded_flight {
+        *vis = Visibility::Hidden;
+        return;
+    }
+    *vis = Visibility::Visible;
+    let p = transition_profile(fly.body);
+    let f = (1.0 - fly.alt / p.swap_up.max(1.0)).clamp(0.0, 1.0);
+    let light = if fly.body == CelestialBody::Earth { day.daylight().max(0.15) } else { 1.0 };
+    sprite.color = Color::srgba(0.0, 0.0, 0.0, 0.5 * f * light);
+    sprite.custom_size = Some(Vec2::new(1.2, 0.5) * (0.4 + 0.6 * f));
 }
 
 fn active_body(region: &RegionRuntime) -> Option<CelestialBody> {
@@ -154,15 +183,15 @@ fn creative_fly_climb(
     let p = transition_profile(fly.body);
     if fly.alt >= p.swap_up {
         // Hand over to the orbital frame — the swap itself happens under full
-        // cover; the orbital view opens just past the clear band with the disc
-        // already revealed (the quick "clouds part" approved by the captures).
-        // Entry altitude is EXPLICIT now — it used to emerge from a y-flatten
-        // quirk that inflated all orbit distances by the flight-plane offset.
-        let entry_alt = p.clear_end + 60.0;
+        // cover. `fly.alt` carries over UNCHANGED (continuous with the climb):
+        // no altitude jump means no zoom jump next frame (`creative_fly_orbit`'s
+        // zoom formula is anchored to be continuous at this exact altitude —
+        // see ORBIT_ZOOM_POWER). A jumped entry altitude here used to snap the
+        // camera from the 180 m surface zoom straight out to ~10 km in one
+        // frame — the "clouds cut, tiny blue circle appears" bug.
         let c = Vec3::from_array(body_center_at(fly.body, clock.t));
-        fly.pos = c + radial_up(fly.body, clock.t) * (body_radius(fly.body) + entry_alt);
+        fly.pos = c + radial_up(fly.body, clock.t) * (body_radius(fly.body) + fly.alt);
         fly.pos.y = 0.0;
-        fly.alt = entry_alt;
         fly.phase = Phase::Orbit;
         region.active = RegionId::Space;
         ctx.active = WorldContext::Space;
@@ -215,9 +244,16 @@ fn creative_fly_orbit(
     fly.alt = alt_orbit;
     trans.drive(TransitionMode::Space, body, alt_orbit);
     // SFS reveal: the camera zoom follows altitude — the body's circle emerges
-    // as the cover parts and shrinks as you climb; deep space frames the system.
-    zoom.view_h = ((body_radius(body) + alt_orbit) * ORBIT_ZOOM_FACTOR)
-        .clamp(SWAP_VIEW_H, ORBIT_ZOOM_MAX);
+    // as the cover parts and shrinks as you climb; deep space frames the
+    // system. Anchored so `view_h == SWAP_VIEW_H` exactly at `swap_up` (the
+    // altitude the surface frame handed off at) — zero jump entering OR
+    // leaving orbit — then grows with `ORBIT_ZOOM_POWER` past it. `user_mult`
+    // (pinch/scroll, see `camera.rs`) lets you pull the framing back in
+    // without losing the automatic reveal — default 1.0, untouched.
+    let dist_swap = body_radius(body) + transition_profile(body).swap_up.max(1.0);
+    let dist_now = (body_radius(body) + alt_orbit).max(1.0);
+    let auto = SWAP_VIEW_H * (dist_now / dist_swap).powf(ORBIT_ZOOM_POWER);
+    zoom.view_h = (auto * zoom.user_zoom_mult).clamp(SWAP_VIEW_H * 0.3, ORBIT_ZOOM_MAX);
     let touching = dist < body_radius(body) + APPROACH_LAND_M;
     if !touching && !actions.use_edge {
         return;
@@ -227,40 +263,62 @@ fn creative_fly_orbit(
     };
     teleport_to_body(body, &mut region, &mut ctx, &mut planet, &mut sim, &mut visual);
     fly.body = body;
-    fly.alt = transition_profile(body).swap_down;
+    // Continuous with the orbit zoom we just had (`touching` only fires below
+    // APPROACH_LAND_M, always < swap_down) — no altitude jump entering Descend.
+    fly.alt = alt_orbit;
     fly.phase = Phase::Descend;
     eprintln!("ha-creative: descent onto {body:?}");
 }
 
-/// DESCEND (player-driven): hold USE to keep falling, JUMP to slow/hold. Cover
-/// rolls back in through the atmosphere and clears at the ground.
+/// DESCEND (player-driven, symmetric with Climb): default gentle fall so
+/// landing feels natural without holding anything, USE speeds the fall — but
+/// JUMP is a REAL control, not just a brake: hold it and you climb back out,
+/// same as Climb, handing back to `Phase::Orbit` if you cross `swap_up` again.
+/// (Used to only arrest the fall at vy=0 — "controls stop working" until you
+/// touched down. Now you can change your mind at any altitude.) Cover rolls
+/// back in through the atmosphere and clears at the ground.
 fn creative_fly_descend(
     time: Res<Time>,
     actions: Res<TouchActions>,
+    clock: Res<SolarSystemClock>,
     mut fly: ResMut<CreativeFlight>,
     mut trans: ResMut<FlightTransition>,
+    mut region: ResMut<RegionRuntime>,
+    mut ctx: ResMut<WorldContextRuntime>,
 ) {
     if fly.phase != Phase::Descend {
         return;
     }
     let dt = time.delta_secs();
-    // Default gentle fall; hold USE to speed it, JUMP to arrest.
+    // Default gentle fall; hold USE to speed it, JUMP to climb back out.
     let mut vy = -VERT_SPEED * 0.6;
     if actions.action {
         vy = -VERT_SPEED;
     }
     if actions.jump {
-        vy = 0.0;
+        vy = VERT_SPEED;
     }
-    let ceiling = transition_profile(fly.body).swap_down;
-    fly.alt = (fly.alt + vy * dt).clamp(0.0, ceiling);
+    fly.alt = (fly.alt + vy * dt).max(0.0);
 
-    trans.drive(TransitionMode::Descent, fly.body, fly.alt);
-
-    if fly.alt <= 0.5 {
+    if fly.alt <= 0.5 && vy < 0.0 {
         fly.phase = Phase::Ground;
         fly.alt = 0.0;
         trans.clear();
         eprintln!("ha-creative: touchdown on {:?}", fly.body);
+        return;
+    }
+
+    trans.drive(TransitionMode::Descent, fly.body, fly.alt);
+
+    let p = transition_profile(fly.body);
+    if fly.alt >= p.swap_up {
+        // Changed your mind mid-descent: same continuous hand-back Climb uses.
+        let c = Vec3::from_array(body_center_at(fly.body, clock.t));
+        fly.pos = c + radial_up(fly.body, clock.t) * (body_radius(fly.body) + fly.alt);
+        fly.pos.y = 0.0;
+        fly.phase = Phase::Orbit;
+        region.active = RegionId::Space;
+        ctx.active = WorldContext::Space;
+        eprintln!("ha-creative: aborted descent, back to orbit ({:?})", fly.body);
     }
 }

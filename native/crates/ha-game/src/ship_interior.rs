@@ -61,12 +61,13 @@ impl Plugin for ShipInteriorPlugin {
         app.init_resource::<ShipInteriorState>()
             .init_resource::<CockpitState>()
             .add_event::<RefuelEvent>()
-            .add_systems(Startup, (spawn_cockpit_marker, spawn_fuel_marker))
+            .add_systems(Startup, (spawn_cockpit_marker, spawn_fuel_marker, spawn_cockpit_hint))
             .add_systems(
                 Update,
                 (
                     ship_transitions,
                     cockpit_seating,
+                    sync_cockpit_hint,
                     toggle_preflight_panel,
                     update_preflight_fuel,
                     cockpit_button_system,
@@ -105,6 +106,12 @@ struct PreFlightPanel;
 
 #[derive(Component)]
 struct PreFlightFuelText;
+
+/// "USE: sentarse" hint — visible standing on the cockpit cell, not seated.
+/// Kept separate from `hud.rs::build_interact_prompt` (huge, shared, not worth
+/// the risk of touching it for one hint) so this is fully self-contained.
+#[derive(Component)]
+struct CockpitSeatHint;
 
 /// Carve the WoodFloor room over the solid-rock Z-level. Assumes `tiles.z` is
 /// already `SHIP_INTERIOR_Z`.
@@ -249,11 +256,15 @@ fn spawn_cockpit_marker(mut commands: Commands, art: Res<ArtLibrary>) {
     ));
 }
 
-/// Sit down when the player stands on the cockpit cell; movement is blocked
-/// while seated (see `sync_ui_gameplay_block` in hud.rs, which reads
+/// Sit down when the player PRESSES USE standing on the cockpit cell (NOT just
+/// by stepping on it — the room is small and the path to the fuel station
+/// grazes this cell, so a passive stand-on trigger sat the player down, froze
+/// their movement and popped the panel on every stray step near it). Movement
+/// is blocked while seated (see `sync_ui_gameplay_block` in hud.rs, which reads
 /// `CockpitState::seated`). Standing up is the panel's `LEVANTARSE` button.
 fn cockpit_seating(
     region: Res<RegionRuntime>,
+    actions: Res<crate::input::TouchActions>,
     mut cockpit: ResMut<CockpitState>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
@@ -262,7 +273,7 @@ fn cockpit_seating(
         cockpit.seated = false;
         return;
     }
-    if cockpit.seated {
+    if cockpit.seated || !actions.use_edge {
         return;
     }
     let Ok((mut sim, mut visual)) = player.get_single_mut() else {
@@ -279,6 +290,51 @@ fn cockpit_seating(
             COCKPIT_CELL.1 as f32 + 0.5,
         );
     }
+}
+
+/// Standalone "USE: sentarse" hint, shown only standing on the cockpit cell
+/// while not seated (spawned once, toggled by `Visibility` — B5).
+fn spawn_cockpit_hint(mut commands: Commands) {
+    commands.spawn((
+        CockpitSeatHint,
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Percent(50.0),
+            bottom: Val::Percent(28.0),
+            padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.05, 0.08, 0.12, 0.85)),
+        Visibility::Hidden,
+        FocusPolicy::Pass,
+        Name::new("CockpitSeatHint"),
+    ))
+    .with_children(|p| {
+        p.spawn((
+            Text::new("USE: sentarse"),
+            TextFont { font_size: 15.0, ..default() },
+            TextColor(CABIN_CYAN),
+        ));
+    });
+}
+
+fn sync_cockpit_hint(
+    region: Res<RegionRuntime>,
+    cockpit: Res<CockpitState>,
+    player: Query<&SimState, With<Player>>,
+    mut hint: Query<&mut Visibility, With<CockpitSeatHint>>,
+) {
+    let Ok(mut vis) = hint.get_single_mut() else {
+        return;
+    };
+    let on_seat = region.active == RegionId::ShipInterior
+        && !cockpit.seated
+        && player.get_single().is_ok_and(|sim| {
+            let tx = (sim.body.x / TILE_M).floor() as i64;
+            let tz = (sim.body.z / TILE_M).floor() as i64;
+            (tx, tz) == COCKPIT_CELL
+        });
+    *vis = if on_seat { Visibility::Visible } else { Visibility::Hidden };
 }
 
 /// Spawn the pre-flight panel on sitting, despawn on standing (guarded by the

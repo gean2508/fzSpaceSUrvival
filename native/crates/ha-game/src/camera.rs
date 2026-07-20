@@ -35,11 +35,17 @@ pub struct CameraZoom {
     pub(crate) view_h: f32,
     /// Previous two-finger distance (px) for pinch deltas.
     pinch_prev: Option<f32>,
+    /// User multiplier on top of creative-flight's automatic orbital reveal
+    /// zoom (`creative_fly_orbit`) — pinch/scroll adjust THIS instead of
+    /// `view_h` directly while in orbit, so the auto-formula (which re-derives
+    /// `view_h` from altitude every frame) doesn't fight and overwrite it.
+    /// Default 1.0 = the automatic framing, untouched until the user zooms.
+    pub(crate) user_zoom_mult: f32,
 }
 
 impl Default for CameraZoom {
     fn default() -> Self {
-        Self { view_h: SURFACE_VIEW_H, pinch_prev: None }
+        Self { view_h: SURFACE_VIEW_H, pinch_prev: None, user_zoom_mult: 1.0 }
     }
 }
 
@@ -127,16 +133,38 @@ fn camera_zoom_input(
     mut wheel: EventReader<MouseWheel>,
     touches: Res<Touches>,
 ) {
-    // Creative flight OWNS the zoom (auto-follows altitude). Letting the pinch
-    // also write it made the two fight every frame → the screen/UI flicker the
-    // player saw. So skip user zoom entirely while creative-flying.
-    if fly.flying() {
+    // Climb/Descend: the transition OWNS the zoom (tracks altitude through the
+    // covered swap). Letting the pinch also write it made the two fight every
+    // frame → the screen/UI flicker the player saw (biblia §11). Skip user
+    // zoom entirely there. In pure Orbit, the auto-reveal formula re-derives
+    // `view_h` every frame too — but as a multiplier on `user_zoom_mult`
+    // below, so pinch/scroll CAN adjust the framing without losing the reveal.
+    if fly.flying() && !fly.in_orbit() {
         zoom.pinch_prev = None;
         return;
     }
     let mut scroll = 0.0;
     for e in wheel.read() {
         scroll += e.y;
+    }
+    if fly.in_orbit() {
+        if scroll.abs() > 0.0 {
+            zoom.user_zoom_mult = (zoom.user_zoom_mult * (1.0 - scroll * 0.12)).clamp(0.2, 6.0);
+        }
+        let pts: Vec<Vec2> = touches.iter().map(|t| t.position()).collect();
+        if pts.len() == 2 {
+            let dist = pts[0].distance(pts[1]).max(1.0);
+            if let Some(prev) = zoom.pinch_prev {
+                if (dist - prev).abs() > 1.5 {
+                    let ratio = (prev / dist).clamp(0.5, 2.0);
+                    zoom.user_zoom_mult = (zoom.user_zoom_mult * ratio).clamp(0.2, 6.0);
+                }
+            }
+            zoom.pinch_prev = Some(dist);
+        } else {
+            zoom.pinch_prev = None;
+        }
+        return;
     }
     if scroll.abs() > 0.0 {
         // Wheel up = zoom in (smaller viewport).

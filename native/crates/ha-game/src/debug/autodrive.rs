@@ -21,10 +21,22 @@ pub struct AutoDrivePlugin;
 impl Plugin for AutoDrivePlugin {
     fn build(&self, app: &mut App) {
         // Creative-fly visual test: enable creative, hold JUMP, screenshot the
-        // whole ascent so we can SEE it (HA_FLYTEST=1 HA_AUTOPLAY=1).
+        // whole ascent so we can SEE it (HA_FLYTEST=1 HA_AUTOPLAY=1). Ordered
+        // BEFORE the desktop key-reading system: as an exclusive `&mut World`
+        // system, `fly_test_drive` is otherwise an unordered sync point
+        // relative to it, so a same-frame `press()` could land AFTER that
+        // system already read this frame's (stale) key state — the
+        // `just_pressed` edge silently missed and never recurring since the
+        // key stays "held". Explicit ordering removes that race entirely.
         if std::env::var("HA_FLYTEST").is_ok() {
-            app.init_resource::<FlyTestState>()
-                .add_systems(Update, fly_test_drive);
+            app.init_resource::<FlyTestState>();
+            #[cfg(not(target_os = "android"))]
+            app.add_systems(
+                Update,
+                fly_test_drive.before(crate::input::desktop_input::desktop_keyboard_actions),
+            );
+            #[cfg(target_os = "android")]
+            app.add_systems(Update, fly_test_drive);
             return;
         }
         // Rocket transition visual test: ignite from the pad, thrust to space,
@@ -32,8 +44,14 @@ impl Plugin for AutoDrivePlugin {
         // BOTH legs so the surface↔space choreography can be SEEN
         // (HA_ROCKETTEST=1 HA_AUTOPLAY=1).
         if std::env::var("HA_ROCKETTEST").is_ok() {
-            app.init_resource::<RocketTestState>()
-                .add_systems(Update, rocket_test_drive);
+            app.init_resource::<RocketTestState>();
+            #[cfg(not(target_os = "android"))]
+            app.add_systems(
+                Update,
+                rocket_test_drive.before(crate::input::desktop_input::desktop_keyboard_actions),
+            );
+            #[cfg(target_os = "android")]
+            app.add_systems(Update, rocket_test_drive);
             return;
         }
         if std::env::var("HA_AUTODRIVE").is_err() {
@@ -46,8 +64,47 @@ impl Plugin for AutoDrivePlugin {
 
 #[derive(Resource, Default)]
 struct FlyTestState {
-    triggered: bool,
     shots: u32,
+    /// Previous frame's camera `view_h`, to catch any jump automatically —
+    /// this is exactly the bug that caused the "clouds cut, tiny blue circle
+    /// appears" report: a discontinuous zoom at the surface↔orbit swap.
+    prev_view_h: f32,
+    max_jump_ratio: f32,
+    /// Simple stage machine driving JUMP/USE by OBSERVED phase, not fixed
+    /// timers, so it actually exercises the climb→orbit→descend→(abort back
+    /// to orbit)→descend→touchdown round trip.
+    stage: u8,
+    stage_entered: f32,
+    /// While `now < this`, skip zoom-jump comparisons — set right before OUR
+    /// OWN synthetic state injections (stage 1/4 force `CreativeFlight`
+    /// directly, which is NOT a real gameplay transition). A single-frame
+    /// flag isn't reliable here: which frame the camera actually reacts to
+    /// the forced state in depends on cross-plugin system ordering, which
+    /// isn't guaranteed — a short TIME WINDOW covers it regardless.
+    suppress_jump_until: f32,
+    last_press_pulse: f32,
+}
+
+/// Keep `key` held (so the game reads it as a continuous hold) while
+/// periodically releasing-then-repressing it to force a FRESH `just_pressed`
+/// edge every `period` seconds. A single press-at-time-T can silently miss
+/// its edge if that exact frame is gameplay-blocked (boot/loading screen) —
+/// once "stuck held" the edge never recurs since the key never re-transitions.
+/// Retrying removes the need to guess how long boot takes (it varies with
+/// system load) instead of gating on a fixed timer.
+fn hold_with_fresh_edges(world: &mut World, key: KeyCode, now: f32, period: f32) {
+    let pulse = {
+        let mut st = world.resource_mut::<FlyTestState>();
+        let due = now - st.last_press_pulse > period;
+        if due {
+            st.last_press_pulse = now;
+        }
+        due
+    };
+    if pulse {
+        release_all(world);
+    }
+    press(world, key);
 }
 
 const FLYTEST_DIR: &str =
@@ -61,31 +118,149 @@ fn fly_test_drive(world: &mut World) {
     // Enable creative every frame (so nothing turns it back off).
     world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
 
-    // From t=3s: hold JUMP (Space) through the REAL input pipeline — first frame
-    // gives the jump_edge that fires the fly, then it stays held to keep rising.
-    if now > 3.0 {
-        press(world, KeyCode::Space);
+    // Track the camera zoom every frame and flag any discontinuous jump
+    // (ratio vs previous frame) — this is the exact bug class reported.
+    let view_h = world.resource::<crate::camera::CameraZoom>().view_h;
+    {
+        let mut st = world.resource_mut::<FlyTestState>();
+        if now < st.suppress_jump_until {
+            // Still inside the post-injection grace window — don't compare,
+            // but DO track this reading so comparisons resume cleanly once
+            // the window closes (instead of comparing across the gap).
+        } else if st.prev_view_h > 0.0 {
+            let ratio = (view_h / st.prev_view_h).max(st.prev_view_h / view_h);
+            if ratio > st.max_jump_ratio {
+                st.max_jump_ratio = ratio;
+            }
+            if ratio > 1.5 {
+                eprintln!(
+                    "ha-flytest: ZOOM JUMP t={now:.2} {:.0} -> {:.0} (x{ratio:.2})",
+                    st.prev_view_h, view_h
+                );
+            }
+        }
+        st.prev_view_h = view_h;
     }
 
-    // Screenshot the ascent at a sequence of times.
-    let want = [4.0f32, 6.0, 8.0, 10.0, 11.5, 12.8, 14.5, 17.0];
+    let phase = world.resource::<crate::creative_fly::CreativeFlight>().phase;
+    let stage = world.resource::<FlyTestState>().stage;
+    match stage {
+        // 0: climb from the ground until Orbit (this leg already proves the
+        // zoom-continuity fix via the jump detector above). The boot/loading
+        // screen blocks gameplay input for a few seconds of VARIABLE length
+        // (depends on system load) — `hold_with_fresh_edges` retries instead
+        // of guessing a fixed delay.
+        0 => {
+            hold_with_fresh_edges(world, KeyCode::Space, now, 0.4);
+            if phase == crate::creative_fly::Phase::Orbit {
+                advance_stage(world, now);
+            }
+        }
+        // 1: test setup — jump straight to "mid-descent" (the gameplay path to
+        // get here is flying around in orbit for a while and choosing to land
+        // far from any body; not worth scripting here). Mirrors exactly what
+        // `creative_fly_orbit`'s landing branch does (region/ctx/phase/alt),
+        // just at a deliberately mid-band altitude instead of whatever alt the
+        // player happened to be at.
+        1 => {
+            release_all(world);
+            {
+                let mut fly = world.resource_mut::<crate::creative_fly::CreativeFlight>();
+                fly.phase = crate::creative_fly::Phase::Descend;
+                fly.alt = 150.0;
+                fly.body = ha_shared::CelestialBody::Earth;
+            }
+            {
+                let mut region = world.resource_mut::<crate::scene::RegionRuntime>();
+                region.active = crate::scene::RegionId::Overworld { gx: 0, gz: 0 };
+            }
+            world.resource_mut::<crate::scene::WorldContextRuntime>().active =
+                ha_shared::WorldContext::Overworld;
+            // This is OUR synthetic teleport (not a real gameplay transition)
+            // — don't let it register as a "zoom jump" regression.
+            world.resource_mut::<FlyTestState>().suppress_jump_until = now + 0.5;
+            eprintln!("ha-flytest: forced mid-descent (alt=150) for the abort test");
+            advance_stage(world, now);
+        }
+        // 2: let the DEFAULT auto-fall run a beat first (bonus coverage: also
+        // confirms the "release everything, it still lands on its own" path).
+        2 => {
+            release_all(world);
+            if now - world.resource::<FlyTestState>().stage_entered > 1.5 {
+                advance_stage(world, now);
+            }
+        }
+        // 3: THE regression test — hold JUMP mid-descent and confirm it
+        // actually climbs back to Orbit (used to just arrest the fall at
+        // vy=0 — "los controles dejan de servir, no puedo subir").
+        3 => {
+            hold_with_fresh_edges(world, KeyCode::Space, now, 0.4);
+            if phase == crate::creative_fly::Phase::Orbit {
+                eprintln!("ha-flytest: mid-descent abort -> Orbit CONFIRMED");
+                advance_stage(world, now);
+            } else if now - world.resource::<FlyTestState>().stage_entered > 14.0 {
+                // Budget: worst case climbs from ~120 m (after stage 2's 1.5 s
+                // default fall from the forced 150 m) to swap_up (360 m on
+                // Earth) at VERT_SPEED=32 m/s ≈ 7.5 s — 14 s leaves margin.
+                eprintln!("ha-flytest: mid-descent abort FAILED (stuck in Descend)");
+                std::process::exit(1);
+            }
+        }
+        // 4: force mid-descent again (one-shot) and this time let it land for
+        // real (natural default fall, no input), covering full touchdown.
+        4 => {
+            release_all(world);
+            {
+                let mut fly = world.resource_mut::<crate::creative_fly::CreativeFlight>();
+                fly.phase = crate::creative_fly::Phase::Descend;
+                fly.alt = 60.0;
+            }
+            world.resource_mut::<FlyTestState>().suppress_jump_until = now + 0.5; // synthetic, not a real jump
+            advance_stage(world, now); // one-shot: don't re-force every frame
+        }
+        // 5: just wait for the natural fall to touch down.
+        _ => {
+            release_all(world);
+        }
+    }
+
+    // Screenshot beats by observed phase change + a few time-based ones so we
+    // still SEE the mid-climb/mid-descent frames, not just the transitions.
+    let want = [4.0f32, 6.0, 8.0, 10.0, 11.5, 12.8, 14.5, 17.0, 19.0, 22.0, 26.0, 30.0];
     let shots = world.resource::<FlyTestState>().shots as usize;
     if shots < want.len() && now >= want[shots] {
-        let (alt, orbit) = {
+        let (alt, orbit, phase) = {
             let f = world.resource::<crate::creative_fly::CreativeFlight>();
-            (f.alt, f.in_orbit())
+            (f.alt, f.in_orbit(), f.phase)
         };
         let cloud = world.resource::<crate::transition::FlightTransition>().cover;
         let region = format!("{:?}", world.resource::<crate::scene::RegionRuntime>().active);
+        let view_h = world.resource::<crate::camera::CameraZoom>().view_h;
         eprintln!(
-            "ha-flytest[{shots}] t={now:.1} alt={alt:.0} cloud={cloud:.2} orbit={orbit} region={region}"
+            "ha-flytest[{shots}] t={now:.1} alt={alt:.0} cloud={cloud:.2} orbit={orbit} phase={phase:?} region={region} view_h={view_h:.0}"
         );
         shot(world, &format!("{FLYTEST_DIR}/flytest-{shots}.png"));
         world.resource_mut::<FlyTestState>().shots += 1;
-    } else if shots >= want.len() {
-        eprintln!("ha-flytest: DONE");
-        std::process::exit(0);
     }
+    if stage >= 5 && world.resource::<crate::creative_fly::CreativeFlight>().phase
+        == crate::creative_fly::Phase::Ground
+    {
+        let max_jump = world.resource::<FlyTestState>().max_jump_ratio;
+        eprintln!("ha-flytest: max zoom jump ratio observed = x{max_jump:.2}");
+        eprintln!("ha-flytest: {}", if max_jump > 1.5 { "ZOOM CONTINUITY FAIL" } else { "ZOOM CONTINUITY PASS" });
+        eprintln!("ha-flytest: DONE");
+        std::process::exit(if max_jump > 1.5 { 1 } else { 0 });
+    }
+    if now > 60.0 {
+        eprintln!("ha-flytest: TIMEOUT (FAIL, stage={stage})");
+        std::process::exit(1);
+    }
+}
+
+fn advance_stage(world: &mut World, now: f32) {
+    let mut st = world.resource_mut::<FlyTestState>();
+    st.stage += 1;
+    st.stage_entered = now;
 }
 
 #[derive(Resource, Default)]

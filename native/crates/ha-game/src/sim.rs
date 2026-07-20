@@ -19,6 +19,13 @@ pub const JETPACK_ITEM: &str = "jetpack";
 #[derive(Component)]
 pub struct Player;
 
+/// Ground shadow shown ONLY while flying above visible terrain (creative
+/// Climb/Descend — biblia §11-bis) to sell the illusion of altitude. Hidden
+/// on foot (unchanged baseline look) and in Orbit (no ground in view to fall
+/// on). Synced in `creative_fly.rs::sync_player_shadow`.
+#[derive(Component)]
+pub struct PlayerFlightShadow;
+
 #[derive(Resource, Clone)]
 pub struct WorldCollision(pub Vec<ha_shared::types::Obstacle>);
 
