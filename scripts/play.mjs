@@ -3,7 +3,10 @@
  * One command: ship APK + start server + landing. User only opens URL on phone.
  *
  * Usage: npm run play
- *        npm run play -- --no-ship   (skip rebuild if APK already published)
+ *        npm run play -- --no-ship     (skip rebuild if APK already published)
+ *        npm run play -- --skip-tests  (build APK but skip test gates — evita OOM en PCs de poca RAM)
+ *        npm run play -- --host 100.x.y.z  (bake this server host into the APK —
+ *            e.g. a Tailscale IP so the phone can DOWNLOAD + PLAY from OUTSIDE the LAN)
  */
 import { execSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
@@ -13,18 +16,28 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const noShip = args.includes("--no-ship");
+const skipTests = args.includes("--skip-tests");
+// Optional explicit server host baked into the APK (e.g. a Tailscale IP so the
+// phone downloads + plays from OUTSIDE the LAN): `npm run play -- --host 100.x.y.z`.
+// The dev server + landing bind ALL interfaces (vite host:true, colyseus 0.0.0.0),
+// so they stay reachable on the LAN IP too — only the APK's baked host is this one.
+const hostIdx = args.indexOf("--host");
+const explicitHost = hostIdx >= 0 ? args[hostIdx + 1] : null;
 
-const lanHost = execSync("node scripts/detect-lan-ip.mjs", {
-  cwd: ROOT,
-  encoding: "utf8",
-}).trim();
+const lanHost =
+  explicitHost ||
+  execSync("node scripts/detect-lan-ip.mjs", {
+    cwd: ROOT,
+    encoding: "utf8",
+  }).trim();
 
 const apkPath = resolve(ROOT, "client/public/downloads/hunger-arena.apk");
 const apkOk = existsSync(apkPath) && statSync(apkPath).size > 5_000_000;
 
 if (!noShip || !apkOk) {
   try {
-    execSync(`node scripts/ship-native-android.mjs --host ${lanHost}`, {
+    const shipFlags = skipTests ? " --skip-tests" : "";
+    execSync(`node scripts/ship-native-android.mjs --host ${lanHost}${shipFlags}`, {
       cwd: ROOT,
       stdio: "inherit",
     });

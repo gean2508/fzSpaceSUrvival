@@ -2,9 +2,8 @@ use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::prelude::*;
 
 use crate::debug::PerfOverlayVisible;
-use crate::rocket_flight::RocketFlight;
-use ha_shared::solar_ephemeris::body_center_at;
-use ha_shared::{body_radius, transition_profile, CelestialBody};
+use crate::flight::Flight;
+use ha_shared::{body_radius, CelestialBody};
 use crate::scene::{teleport_to_body, RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
 use crate::game_ui::{self, apply_top_center, apply_center, GameUiRoot, MENU_BUTTON_WIDTH};
@@ -184,6 +183,11 @@ enum CalAdjust {
     CurveUp,
     RenderDown,
     RenderUp,
+    // FASE 4 (audio): volumen SFX/Música en vivo.
+    SfxDown,
+    SfxUp,
+    MusicDown,
+    MusicUp,
 }
 
 #[derive(Component)]
@@ -321,6 +325,8 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                 spawn_cal_row(panel, "Move", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp);
                 spawn_cal_row(panel, "Curve", CalAdjust::CurveDown, CalAdjust::CurveUp);
                 spawn_cal_row(panel, "Render", CalAdjust::RenderDown, CalAdjust::RenderUp);
+                spawn_cal_row(panel, "SFX", CalAdjust::SfxDown, CalAdjust::SfxUp);
+                spawn_cal_row(panel, "Music", CalAdjust::MusicDown, CalAdjust::MusicUp);
             })
             .id();
     });
@@ -477,23 +483,34 @@ fn spawn_cal_button(parent: &mut ChildBuilder, label: &str, adjust: CalAdjust) {
 
 fn calibration_button_system(
     mut config: ResMut<UiLayoutConfig>,
+    mut audio: ResMut<crate::audio::AudioSettings>,
     mut buttons: Query<(&Interaction, &CalAdjust, &mut BackgroundColor), Changed<Interaction>>,
 ) {
     for (interaction, adjust, mut bg) in &mut buttons {
         if *interaction == Interaction::Pressed {
-            let cal = &mut config.calibration;
             match adjust {
-                CalAdjust::CamSensDown => cal.camera_sensitivity -= 0.1,
-                CalAdjust::CamSensUp => cal.camera_sensitivity += 0.1,
-                CalAdjust::MoveSensDown => cal.movement_sensitivity -= 0.1,
-                CalAdjust::MoveSensUp => cal.movement_sensitivity += 0.1,
-                CalAdjust::CurveDown => cal.stick_curve_exponent -= 0.1,
-                CalAdjust::CurveUp => cal.stick_curve_exponent += 0.1,
-                CalAdjust::RenderDown => cal.render_scale -= 0.05,
-                CalAdjust::RenderUp => cal.render_scale += 0.05,
+                // Volumen (en vivo, 0..1). No toca la calibración/layout.
+                CalAdjust::SfxDown => audio.sfx = (audio.sfx - 0.1).clamp(0.0, 1.0),
+                CalAdjust::SfxUp => audio.sfx = (audio.sfx + 0.1).clamp(0.0, 1.0),
+                CalAdjust::MusicDown => audio.music = (audio.music - 0.1).clamp(0.0, 1.0),
+                CalAdjust::MusicUp => audio.music = (audio.music + 0.1).clamp(0.0, 1.0),
+                other => {
+                    let cal = &mut config.calibration;
+                    match other {
+                        CalAdjust::CamSensDown => cal.camera_sensitivity -= 0.1,
+                        CalAdjust::CamSensUp => cal.camera_sensitivity += 0.1,
+                        CalAdjust::MoveSensDown => cal.movement_sensitivity -= 0.1,
+                        CalAdjust::MoveSensUp => cal.movement_sensitivity += 0.1,
+                        CalAdjust::CurveDown => cal.stick_curve_exponent -= 0.1,
+                        CalAdjust::CurveUp => cal.stick_curve_exponent += 0.1,
+                        CalAdjust::RenderDown => cal.render_scale -= 0.05,
+                        CalAdjust::RenderUp => cal.render_scale += 0.05,
+                        _ => {}
+                    }
+                    config.calibration = cal.clamp();
+                    save_ui_layout(&config);
+                }
             }
-            config.calibration = cal.clamp();
-            save_ui_layout(&config);
         }
         *bg = BackgroundColor(ui_theme::button_bg(
             UiButtonTone::Primary,
@@ -502,7 +519,7 @@ fn calibration_button_system(
     }
 }
 
-fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration) -> String {
+fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration, audio: &crate::audio::AudioSettings) -> String {
     match adjust {
         CalAdjust::CamSensUp | CalAdjust::CamSensDown => {
             format!("{:.2}", cal.camera_sensitivity)
@@ -516,19 +533,22 @@ fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration) -> String {
         CalAdjust::RenderUp | CalAdjust::RenderDown => {
             format!("{:.0}%", cal.render_scale * 100.0)
         }
+        CalAdjust::SfxUp | CalAdjust::SfxDown => format!("{:.0}%", audio.sfx * 100.0),
+        CalAdjust::MusicUp | CalAdjust::MusicDown => format!("{:.0}%", audio.music * 100.0),
     }
 }
 
 fn update_settings_labels(
     state: Res<UiEditorState>,
     config: Res<UiLayoutConfig>,
+    audio: Res<crate::audio::AudioSettings>,
     mut labels: Query<(&CalLabel, &mut Text)>,
 ) {
     if !state.menu_open {
         return;
     }
     for (label, mut text) in &mut labels {
-        let line = cal_label_for(label.0, &config.calibration);
+        let line = cal_label_for(label.0, &config.calibration, &audio);
         if text.0 != line {
             text.0 = line;
         }
@@ -564,7 +584,12 @@ fn creative_topup_system(
     const TOOLS: &[&str] = &[
         "wood_pickaxe", "stone_pickaxe", "pickaxe", "wood_axe", "stone_axe",
         "hammer", "lantern", "jetpack", "probe", "shield_wood",
+        // Ítems "en la mano" (`held_item.rs`) + almacenamiento: en creativo se
+        // prueban al instante sin craftear.
+        "sword_iron", "sword_steel",
     ];
+    // Consumibles/colocables que conviene tener en pila, no de a uno.
+    const KIT_STACKS: &[(&str, u32)] = &[("torch", 16), ("chest", 4)];
 
     let mut changed = false;
     for &(id, target) in MATERIALS {
@@ -577,6 +602,13 @@ fn creative_topup_system(
     for &id in TOOLS {
         if inv.qty(id) == 0 {
             crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, id, 1);
+            changed = true;
+        }
+    }
+    for &(id, target) in KIT_STACKS {
+        if inv.qty(id) < target {
+            let need = target - inv.qty(id);
+            crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, id, need);
             changed = true;
         }
     }
@@ -594,9 +626,9 @@ fn editor_button_system(
     mut world_ctx: ResMut<WorldContextRuntime>,
     mut planet: ResMut<crate::world2d::ActivePlanet>,
     mut trans: ResMut<crate::transition::FlightTransition>,
-    mut flight: ResMut<RocketFlight>,
+    mut flight: ResMut<Flight>,
     mut fly: ResMut<crate::creative_fly::CreativeFlight>,
-    clock: Res<crate::solar_system_clock::SolarSystemClock>,
+    mut frame: ResMut<crate::universe::UniverseFrame>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
     mut buttons: Query<(&Interaction, &UiEditorCommand, &mut BackgroundColor), Changed<Interaction>>,
 ) {
@@ -626,6 +658,7 @@ fn editor_button_system(
                     if let Ok((mut sim, mut visual)) = player.get_single_mut() {
                         teleport_to_body(
                             CelestialBody::Moon,
+                            &mut frame,
                             &mut region,
                             &mut world_ctx,
                             &mut planet,
@@ -639,29 +672,19 @@ fn editor_button_system(
                     eprintln!("ha-luna: dev teleport → Luna strip");
                 }
                 UiEditorCommand::GoSpace => {
-                    // Drop into free creative orbit above Earth, CLEAR of the
-                    // cloud band (past `clear_end`), already armed to land. The
-                    // old path ignited a fuel-less rocket at 336 m — inside the
-                    // clouds — so you saw white and fell, never reaching space.
+                    // Marco único: "ir al espacio" es SÓLO subir. El jugador se
+                    // queda donde está (encima de la Tierra), y la región la
+                    // deriva `creative_fly::sync_frame_region` de la altura.
                     flight.end_surface();
-                    let t = clock.t;
-                    let c = Vec3::from_array(body_center_at(CelestialBody::Earth, t));
-                    let clear_alt = transition_profile(CelestialBody::Earth).clear_end + 400.0;
-                    // Straight up on screen (−z) — matches the launch heading.
-                    let up = Vec3::new(0.0, 0.0, -1.0);
                     fly.body = CelestialBody::Earth;
-                    fly.pos = c + up * (body_radius(CelestialBody::Earth) + clear_alt);
-                    fly.pos.y = 0.0;
-                    fly.alt = clear_alt;
+                    fly.alt = body_radius(CelestialBody::Earth) * 1.4;
+                    fly.vy = 0.0;
                     fly.phase = crate::creative_fly::Phase::Orbit;
                     fly.land_armed = true;
-                    region.active = RegionId::Space;
-                    world_ctx.active = ha_shared::WorldContext::Space;
-                    trans.clear();
                     state.menu_open = false;
                     state.settings_open = false;
                     state.enabled = false;
-                    eprintln!("ha-space: dev teleport → creative orbit above Earth");
+                    eprintln!("ha-space: dev teleport → orbita creativa sobre la Tierra");
                 }
                 UiEditorCommand::GoEarth => {
                     flight.end_surface();
@@ -669,6 +692,7 @@ fn editor_button_system(
                     if let Ok((mut sim, mut visual)) = player.get_single_mut() {
                         teleport_to_body(
                             CelestialBody::Earth,
+                            &mut frame,
                             &mut region,
                             &mut world_ctx,
                             &mut planet,

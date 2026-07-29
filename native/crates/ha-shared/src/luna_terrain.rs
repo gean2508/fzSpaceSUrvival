@@ -277,7 +277,7 @@ mod tests {
         let mut min = f32::MAX;
         for i in 0..80 {
             let a = i as f32 * 0.31;
-            let v = luna_displacement_at(a.cos() * 40.0, a.sin() * 40.0);
+            let v = luna_displacement_at(a.cos() * 800.0, a.sin() * 800.0);
             min = min.min(v);
         }
         assert!(min < -4.0, "expected crater bowl min={min}");

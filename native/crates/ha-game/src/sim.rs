@@ -2,13 +2,13 @@
 //! `body.x`/`body.z` are the ground plane; render maps to screen `(x, -z)`.
 
 use bevy::prelude::*;
-use ha_shared::topdown::step_topdown_movement;
+use ha_shared::topdown::{step_topdown_movement, step_topdown_movement_ex};
 use ha_shared::{collision_obstacles, generate_world, InputState, WorldContext};
 
 use crate::game_time::configure_game_clock;
 use crate::game_time::fixed_delta_secs;
 use crate::input::{MovementIntent, TouchActions};
-use crate::rocket_flight::RocketFlight;
+use crate::flight::Flight;
 use crate::scene::WorldContextRuntime;
 use crate::world2d::{active_surface_body, render_xy, sort_z, ActivePlanet, TileWorld};
 
@@ -25,6 +25,13 @@ pub struct Player;
 /// on). Synced in `creative_fly.rs::sync_player_shadow`.
 #[derive(Component)]
 pub struct PlayerFlightShadow;
+
+/// Saiyan Ki aura — a golden glow behind the character that flares while
+/// charging (power-up) and stays lit while flying. Hidden on foot at rest.
+/// Procedural pulse today; the user can texture logical slot `fx/aura_saiyan`.
+/// Synced in `creative_fly.rs::sync_player_aura`.
+#[derive(Component)]
+pub struct PlayerAura;
 
 #[derive(Resource, Clone)]
 pub struct WorldCollision(pub Vec<ha_shared::types::Obstacle>);
@@ -73,10 +80,14 @@ fn tick_sim(
     time: Res<Time<Fixed>>,
     intent: Res<MovementIntent>,
     actions: Res<TouchActions>,
-    flight: Res<RocketFlight>,
+    flight: Res<Flight>,
     world_ctx: Res<WorldContextRuntime>,
     planet_ctx: Res<ActivePlanet>,
     tiles: Res<TileWorld>,
+    art: Res<crate::art2d::ArtLibrary>,
+    flora: Res<crate::harvest::FloraHarvest>,
+    structures: Res<crate::structures::BuiltStructures>,
+    walls: Res<crate::walls::BuiltWalls>,
     editor: Res<crate::ui_editor::UiEditorState>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
@@ -115,8 +126,30 @@ fn tick_sim(
                 step_topdown_movement(&mut sim.body, &input, dt, &no_solid);
             }
             _ => {
-                let solid = |tx: i64, tz: i64| tiles.solid_at(body_surface, tx, tz);
-                step_topdown_movement(&mut sim.body, &input, dt, &solid);
+                // Solid tiles PLUS decor collision: a tree blocks its own cell so
+                // you can't walk through the trunk (keeps the 3/4 illusion), while
+                // the canopy stays visual — you pass "behind" it. Per-asset the
+                // user can flip this in the editor ("bloquea el paso"), so e.g.
+                // rocks/boulders can be made solid too.
+                let solid = |tx: i64, tz: i64| {
+                    tiles.solid_at(body_surface, tx, tz)
+                        || structures.blocks(body_surface, tiles.z, tx, tz)
+                        || (crate::world2d::decor_blocks_walk(&art, body_surface, tx, tz)
+                            && !flora.is_removed(
+                                body_surface,
+                                0,
+                                0,
+                                crate::world2d::pack_cell(tx, tz),
+                            ))
+                };
+                // Paredes de BORDE (construcción LDoE): viven en la arista
+                // entre celdas, así que van por fuera del grid de sólidos.
+                let wall_hit = |x: f32, z: f32| {
+                    ha_shared::build_grid::wall_capsule_hits(x, z, &|tx, tz, axis| {
+                        walls.blocks(body_surface, tiles.z, tx, tz, axis)
+                    })
+                };
+                step_topdown_movement_ex(&mut sim.body, &input, dt, &solid, &wall_hit);
             }
         }
         sim.body.y = 0.0;
@@ -131,34 +164,33 @@ fn tick_sim(
 
 fn interpolate_player_visual(
     time: Res<Time<Fixed>>,
-    flight: Res<RocketFlight>,
+    flight: Res<Flight>,
     fly: Res<crate::creative_fly::CreativeFlight>,
     zoom: Res<crate::camera::CameraZoom>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
-    // Creative free-flight: the character is "attached to the camera" — a CONSTANT
-    // on-screen size (scaled up as we zoom out), so the illusion is that the WORLD
-    // recedes below you, not that you shrink into a static world. Position: orbital
-    // pos in Orbit, the walked ground spot mid Climb/Descend.
+    // Volando: el personaje NUNCA cambia de sitio (marco único — `universe.rs`),
+    // sólo deja de encoger. Se dibuja con TAMAÑO DE PANTALLA CONSTANTE, así que
+    // a cualquier altura seguís viéndote: la sensación de subir la da el mundo
+    // que se aleja (el zoom por altura), no el sprite.
+    //
+    // Que el personaje se volviera un punto sub-píxel al alejarse era la mitad
+    // del bug "no veo nada y los controles no responden" — respondían, pero no
+    // había forma de saber dónde estabas.
     if fly.flying() {
         let t = time.overstep_fraction() as f32;
-        // In orbit the character is a tiny SPECK against the planet disc (SFS
-        // scale); while climbing it stays camera-attached and readable.
-        let s = if fly.in_orbit() {
-            (zoom.view_h * 0.006).max(1.0)
-        } else {
-            (zoom.view_h / 30.0).max(1.0)
-        };
+        // 1 = igual de grande que pisando el suelo. En vista de mapa se achica
+        // un poco (marcador, no protagonista) pero nunca por debajo de ~2/3.
+        let screen_f =
+            1.0 - 0.35 * crate::universe::smootherstep(200.0, 4_000.0, zoom.view_h);
+        let s = (zoom.view_h / crate::universe::GROUND_VIEW_H * screen_f).max(1.0);
         for (visual, mut transform, mut vis) in &mut query {
             *vis = Visibility::Visible;
-            let (wx, wz) = if fly.in_orbit() {
-                (fly.pos.x, fly.pos.z)
-            } else {
-                (visual.from_x.lerp(visual.to_x, t), visual.from_z.lerp(visual.to_z, t))
-            };
+            let wx = visual.from_x.lerp(visual.to_x, t);
+            let wz = visual.from_z.lerp(visual.to_z, t);
             let r = render_xy(wx, wz);
-            let z = if fly.in_orbit() { 900.0 } else { sort_z(wz) + 1.0 };
-            transform.translation = Vec3::new(r.x, r.y, z);
+            // Siempre por delante del terreno y de los discos planetarios.
+            transform.translation = Vec3::new(r.x, r.y, 900.0);
             transform.rotation = Quat::IDENTITY;
             transform.scale = Vec3::new(s, s, 1.0);
         }
@@ -177,8 +209,11 @@ fn interpolate_player_visual(
         let x = visual.from_x.lerp(visual.to_x, t);
         let z = visual.from_z.lerp(visual.to_z, t);
         let r = render_xy(x, z);
-        // Player sorts by its own z (+1 so it draws above same-cell ground decor).
-        transform.translation = Vec3::new(r.x, r.y, sort_z(z) + 1.0);
+        // Y-sort by the player's own base z, with a TINY epsilon (< one tile
+        // step) so it draws above same-cell flat ground art but still sorts
+        // fairly against trees/walls: a tree to the SOUTH (larger z) now draws
+        // OVER the player — real 3/4 depth, canopies can hide you.
+        transform.translation = Vec3::new(r.x, r.y, sort_z(z) + 0.0005);
         // Facing: flip horizontally when moving west (left half of the circle).
         let facing_left = visual.to_rot.abs() > std::f32::consts::FRAC_PI_2;
         transform.rotation = Quat::IDENTITY;
@@ -204,6 +239,32 @@ fn pose_direction(to_rot: f32) -> &'static str {
     } else {
         "right"
     }
+}
+
+/// Direcciones candidatas para el rumbo, de la más específica a la más general:
+/// la **diagonal** (octante) y después la **cardinal** (cuadrante). Si el atlas
+/// trae `walk_down_left` se usa; si sólo trae `walk_left`, cae ahí sola. Así un
+/// pack de 8 direcciones se aprovecha entero sin romper los de 4.
+fn pose_directions(to_rot: f32) -> [&'static str; 2] {
+    let (dx, dz) = (to_rot.cos(), to_rot.sin());
+    let card = pose_direction(to_rot);
+    // Octante: diagonal sólo si ambas componentes son comparables (±22.5°..67.5°).
+    let (ax, az) = (dx.abs(), dz.abs());
+    let diagonal = ax > 0.383 && az > 0.383;
+    if !diagonal {
+        return [card, card];
+    }
+    let vert = if dz > 0.0 { "down" } else { "up" };
+    let horiz = if dx < 0.0 { "left" } else { "right" };
+    [
+        match (vert, horiz) {
+            ("down", "left") => "down_left",
+            ("down", _) => "down_right",
+            (_, "left") => "up_left",
+            _ => "up_right",
+        },
+        card,
+    ]
 }
 
 /// Orient the character sprite to the facing direction. Si el slot
@@ -237,13 +298,19 @@ fn face_player_sprite(
 
         let moving = (visual.to_x - visual.from_x).abs() > 1e-4 || (visual.to_z - visual.from_z).abs() > 1e-4;
         let verb = if moving { "walk" } else { "idle" };
-        let dir = pose_direction(visual.to_rot);
+        let [diag, card] = pose_directions(visual.to_rot);
 
-        let mut wanted = format!("{verb}_{dir}");
+        // Orden de preferencia: diagonal → cardinal → mismo verbo espejado →
+        // idle en esa dirección → idle_down. Lo que el usuario sliceó manda; lo
+        // que no sliceó nunca deja al personaje sin sprite.
         let mut flip = false;
+        let mut wanted = format!("{verb}_{diag}");
+        if !art.has_pose(PLAYER_ART_KEY, &wanted) {
+            wanted = format!("{verb}_{card}");
+        }
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
             // Sólo se sliceó un lado (ej. "right") — espejar para el opuesto.
-            let mirror = match dir {
+            let mirror = match card {
                 "left" => Some("right"),
                 "right" => Some("left"),
                 _ => None,
@@ -257,6 +324,9 @@ fn face_player_sprite(
             }
         }
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
+            wanted = format!("idle_{card}");
+        }
+        if !art.has_pose(PLAYER_ART_KEY, &wanted) {
             wanted = "idle_down".to_string();
         }
 
@@ -267,6 +337,15 @@ fn face_player_sprite(
         current.0 = state_key;
         sprite.flip_x = flip;
 
+        // Personaje armado con VARIAS hojas (un PNG por dirección/estado): la
+        // pose trae su propia imagen. Con una sola hoja esto devuelve la misma
+        // y no cambia nada.
+        if let Some(img) = art.pose_image(PLAYER_ART_KEY, &wanted) {
+            if sprite.image != img {
+                sprite.image = img;
+                sprite.texture_atlas = None; // el layout se rehace para la hoja nueva
+            }
+        }
         if let Some(([x, y, w, h], anim)) = art.pose(PLAYER_ART_KEY, &wanted) {
             match anim {
                 Some(anim) => {

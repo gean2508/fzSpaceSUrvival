@@ -6,7 +6,7 @@ const TAU: f32 = std::f32::consts::TAU;
 
 /// Sun anchor — all planet distances measured from here at t=0.
 pub fn sun_position() -> [f32; 3] {
-    [-180_000.0, FLIGHT_PLANE_Y, 0.0]
+    [-4_000_000.0, FLIGHT_PLANE_Y, 0.0]
 }
 
 fn helio_radius_from_catalog(body: CelestialBody) -> f32 {
@@ -25,12 +25,13 @@ fn helio_base_angle(body: CelestialBody) -> f32 {
 
 fn helio_orbit_period(body: CelestialBody) -> f32 {
     let r = helio_radius_from_catalog(body);
-    // Farther = slower arcade year. Compressed so orbits read as ALIVE from
-    // the hub in one session: Earth ~29 min, Mars ~37 min, Neptune ~64 min
-    // (the old 4200 + r*0.04 gave 3-8 h — frozen to any human eye).
-    // TODO(device): final "feels alive" scale to be tuned watching the hub
-    // on the Redmi.
-    900.0 + r * 0.004 + (body_def(body).terrain_seed % 900) as f32
+    // Más lejos = año más lento. Calibrado a la escala grande (29 jul 2026):
+    // Tierra ~50 min, Marte ~62 min, Neptuno ~1 h 45. Se ven VIVAS en una
+    // sesión, y —clave— la velocidad tangencial resultante (~4 km/s en la
+    // Tierra) queda por DEBAJO del techo de crucero del jugador (30 km/s), así
+    // que un planeta destino nunca se te escapa. Con la fórmula vieja aplicada a
+    // esta escala las órbitas iban a 10 km/s y viajar era imposible.
+    1_800.0 + r * 0.0003 + (body_def(body).terrain_seed % 600) as f32
 }
 
 /// World position (flight metres) at arcade time `t_secs`.
@@ -39,25 +40,31 @@ pub fn body_center_at(body: CelestialBody, t_secs: f32) -> [f32; 3] {
         CelestialBody::Sun => sun_position(),
         CelestialBody::Earth => earth_center_at(t_secs),
         CelestialBody::Moon => moon_center_at(t_secs),
-        CelestialBody::Phobos => moon_of(CelestialBody::Mars, 1_100.0, 220.0, 0.0, t_secs),
-        CelestialBody::Deimos => moon_of(CelestialBody::Mars, 1_400.0, 280.0, 1.7, t_secs),
+        CelestialBody::Phobos => moon_of(CelestialBody::Mars, 22_000.0, 1_200.0, 0.0, t_secs),
+        CelestialBody::Deimos => moon_of(CelestialBody::Mars, 28_000.0, 1_600.0, 1.7, t_secs),
         _ => heliocentric(body, t_secs),
     }
 }
 
-/// CONTINUIDAD (fase 1): la Tierra es el ORIGEN FIJO del marco de juego — no
-/// revoluciona. Así su centro orbital coincide siempre con el caminable
-/// (`earth_gameplay_center`) y el remap gameplay→orbital es identidad (despegue
-/// continuo). La Luna sigue orbitando este centro fijo (bonus: circula la Tierra
-/// cerca del origen). Los planetas exteriores siguen siendo heliocéntricos.
-pub fn earth_center_at(_t_secs: f32) -> [f32; 3] {
-    body_def(CelestialBody::Earth).center
+/// La Tierra ORBITA el Sol como cualquier otro planeta (pedido del usuario
+/// 2026-07-26: "haz que la Tierra también orbite al Sol, no que se quede quieta").
+/// En `t=0` `heliocentric` devuelve EXACTAMENTE el centro de catálogo (el ángulo y
+/// el radio se derivan de ese centro), así que el spawn/despegue sigue arrancando
+/// en la posición de siempre; a partir de ahí la Tierra revoluciona. El hand-off
+/// superficie→órbita ya usa `body_center_at(body, t)` en vivo y ocurre bajo nubes
+/// opacas, igual que en Marte (que ya orbitaba), así que el despegue sigue siendo
+/// continuo. La Luna orbita este centro móvil (la sigue por el sistema).
+pub fn earth_center_at(t_secs: f32) -> [f32; 3] {
+    heliocentric(CelestialBody::Earth, t_secs)
 }
 
 pub fn moon_center_at(t_secs: f32) -> [f32; 3] {
     let earth = earth_center_at(t_secs);
-    let r = 52_000.0_f32;
-    let period = 540.0;
+    let r = 416_000.0_f32;
+    // 1 h por vuelta: sigue leyéndose como una luna en movimiento, pero su
+    // velocidad tangencial (~730 m/s) es una fracción de la del jugador, así que
+    // se puede interceptar y aterrizar sin perseguirla.
+    let period = 3_600.0;
     let a = t_secs / period * TAU;
     [
         earth[0] + a.cos() * r,
@@ -179,10 +186,10 @@ mod tests {
 
     #[test]
     fn cruise_curve_moon_short_far_capped() {
-        let moon = transit_cruise_secs(52_000.0);
-        assert!(moon >= 18.0 && moon < 40.0, "moon cruise {moon}");
-        assert!((transit_cruise_secs(450_000.0) - 180.0).abs() < 1.0);
-        assert!((transit_cruise_secs(10_000_000.0) - 180.0).abs() < 1e-3);
+        let moon = transit_cruise_secs(416_000.0);
+        assert!(moon >= 18.0 && moon < 60.0, "moon cruise {moon}");
+        assert!((transit_cruise_secs(3_600_000.0) - 180.0).abs() < 1.0);
+        assert!((transit_cruise_secs(80_000_000.0) - 180.0).abs() < 1e-3);
     }
 
     #[test]
@@ -208,8 +215,8 @@ mod tests {
         let m1 = moon_center_at(t + 120.0);
         let d0 = dist(e, m0);
         let d1 = dist(earth_center_at(t + 120.0), m1);
-        assert!((d0 - 52_000.0).abs() < 500.0);
-        assert!((d1 - 52_000.0).abs() < 500.0);
+        assert!((d0 - 416_000.0).abs() < 4_000.0);
+        assert!((d1 - 416_000.0).abs() < 4_000.0);
         assert!(dist(m0, m1) > 1000.0);
     }
 

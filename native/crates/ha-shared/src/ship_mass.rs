@@ -38,7 +38,7 @@ pub const TRANSIT_CRUISE_MAX_SECS: f32 = 180.0;
 pub const TRANSIT_CRUISE_MIN_SECS: f32 = 18.0;
 pub const TRANSIT_CRUISE_EXPONENT: f32 = 0.85;
 /// Farthest catalog body sits ~448 km (flight metres) from Earth.
-pub const TRANSIT_FAR_REF_M: f32 = 450_000.0;
+pub const TRANSIT_FAR_REF_M: f32 = 3_600_000.0;
 
 pub fn module_mass_t(id: &str) -> f32 {
     MODULE_MASS_T

@@ -66,6 +66,9 @@ struct DualJoystickState {
 pub struct AimCursor {
     pub world: Vec2,
     pub initialized: bool,
+    /// Mira FIJADA por código (drivers de QA / autodrive): ni el stick ni el
+    /// mouse la mueven. Mismo idioma que `LookTarget::locked`.
+    pub locked: bool,
 }
 
 impl Default for AimCursor {
@@ -73,13 +76,26 @@ impl Default for AimCursor {
         Self {
             world: Vec2::ZERO,
             initialized: false,
+            locked: false,
         }
     }
 }
 
-/// Cursor travel speed (m/s) and how far it can sit from the player.
-const AIM_SPEED: f32 = 11.0;
+/// How far the aim cursor can sit from the player.
 pub const AIM_MAX_REACH: f32 = 5.2;
+/// How fast the reticle chases the stick's ABSOLUTE position. High enough to
+/// feel instant (near-1:1 within a couple of frames), low enough to filter thumb
+/// jitter so the reticle doesn't shiver while building. See `update_aim_cursor`.
+const AIM_FOLLOW_RATE: f32 = 30.0;
+/// Reticle magnetism: catch radius (m) around the aim point that starts pulling
+/// it toward a nearby interactable. Slightly wider than the pointer pick radius
+/// (`targeting::POINT_PICK_RADIUS`, 1.35 m) so the assist kicks in a bit before
+/// you'd have to land the reticle exactly on the object.
+const MAGNET_RADIUS: f32 = 1.9;
+/// Max blend weight toward the magnet target (of the aim→candidate lerp per
+/// frame). Kept well under 1.0 so it's a soft assist, not a snap: you can still
+/// steer the stick past a caught object toward one right next to it.
+const MAGNET_STRENGTH_MAX: f32 = 0.4;
 
 const DEADZONE: f32 = 0.07; // legacy fallback; runtime uses adaptive_deadzone_norm
 const INPUT_SMOOTH_RATE: f32 = 42.0;
@@ -271,6 +287,7 @@ fn touch_move_stick(
     button_rects: Res<actions::ActionButtonRects>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
+    pinch: Res<crate::camera::PinchActive>,
     mut touches: EventReader<TouchInput>,
     mut state: ResMut<DualJoystickState>,
     look: Res<CameraLookIntent>,
@@ -283,6 +300,20 @@ fn touch_move_stick(
     if editor.enabled || editor.menu_open || gameplay_block.blocked {
         return;
     }
+    // Pinch-zoom activo (dos dedos en la banda superior): soltar el stick si uno
+    // de esos dedos lo había reclamado, y no reclamar dedos del gesto.
+    let pinch_ids = pinch.ids;
+    let in_pinch = |id: u64| pinch_ids.map(|(a, b)| id == a || id == b).unwrap_or(false);
+    if let Some(id) = state.move_stick.pointer_id {
+        if in_pinch(id) {
+            state.move_stick.active = false;
+            state.move_stick.pointer_id = None;
+            state.move_stick.current = state.move_stick.anchor;
+            raw.move_x = 0.0;
+            raw.move_z = 0.0;
+            raw.sprint = false;
+        }
+    }
     let r = (layout.radius * config.slot(UiEditable::MoveStick).scale).max(1.0);
     let move_sens = config.calibration.movement_sensitivity;
     let curve = config.calibration.stick_curve_exponent;
@@ -291,7 +322,7 @@ fn touch_move_stick(
         let pos = ev.position;
         match ev.phase {
             TouchPhase::Started => {
-                if actions::touch_hits_action_button(pos, &button_rects) {
+                if actions::touch_hits_action_button(pos, &button_rects) || in_pinch(ev.id) {
                     continue;
                 }
                 if layout::touch_in_move_zone(pos, &layout)
@@ -356,6 +387,7 @@ fn touch_look_stick(
     button_rects: Res<actions::ActionButtonRects>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
+    pinch: Res<crate::camera::PinchActive>,
     mut touches: EventReader<TouchInput>,
     mut state: ResMut<DualJoystickState>,
 ) {
@@ -365,11 +397,20 @@ fn touch_look_stick(
     if editor.enabled || editor.menu_open || gameplay_block.blocked {
         return;
     }
+    // Pinch-zoom activo: soltar/ignorar los dedos del gesto (ver touch_move_stick).
+    let in_pinch = |id: u64| pinch.ids.map(|(a, b)| id == a || id == b).unwrap_or(false);
+    if let Some(id) = state.look_stick.pointer_id {
+        if in_pinch(id) {
+            state.look_stick.active = false;
+            state.look_stick.pointer_id = None;
+            state.look_stick.current = state.look_stick.anchor;
+        }
+    }
     for ev in touches.read() {
         let pos = ev.position;
         match ev.phase {
             TouchPhase::Started => {
-                if actions::touch_hits_action_button(pos, &button_rects) {
+                if actions::touch_hits_action_button(pos, &button_rects) || in_pinch(ev.id) {
                     continue;
                 }
                 if layout::touch_in_look_zone(pos, &layout)
@@ -399,6 +440,7 @@ fn touch_look_stick(
 
 /// Integrate the right stick into the free aim cursor (world ground coords),
 /// clamped within `AIM_MAX_REACH` of the player. Persists when released.
+#[allow(clippy::too_many_arguments)]
 fn update_aim_cursor(
     time: Res<Time>,
     layout: Res<TouchLayout>,
@@ -406,10 +448,15 @@ fn update_aim_cursor(
     state: Res<DualJoystickState>,
     mut cursor: ResMut<AimCursor>,
     player: Query<&crate::sim::SimState, With<crate::sim::Player>>,
+    region: Res<crate::scene::RegionRuntime>,
+    interactables: Query<(&GlobalTransform, &crate::targeting::InteractTarget)>,
 ) {
     let Ok(sim) = player.get_single() else {
         return;
     };
+    if cursor.locked {
+        return;
+    }
     let p = Vec2::new(sim.body.x, sim.body.z);
     if !cursor.initialized {
         cursor.world = p + Vec2::new(0.0, -2.0);
@@ -417,15 +464,64 @@ fn update_aim_cursor(
     }
     let r = (layout.radius * config.slot(UiEditable::MoveStick).scale).max(1.0);
     let v = stick_vector(&state.look_stick, r, config.calibration.stick_curve_exponent);
-    if v.length() > 0.01 {
-        // Screen dirs: x = east, y (down) = +z (south).
-        cursor.world += Vec2::new(v.x, v.y) * AIM_SPEED * time.delta_secs();
+    // Where the stick alone would put the reticle this frame (or, released,
+    // where it already sits — magnetism still applies so walking up to an
+    // object nudges a resting reticle onto it).
+    let mut desired = if state.look_stick.active {
+        // DIRECT/absolute aim: the reticle's offset from the player maps 1:1 to
+        // the stick deflection (screen dirs: x = east, y-down = +z south) — no
+        // trackball drift, no per-tile snap, and because the target is anchored
+        // to the player it tracks WITH you as you run (the old velocity model let
+        // the reticle fall behind and only snapped when it hit the reach clamp,
+        // which felt like lag/quantisation).
+        p + Vec2::new(v.x, v.y) * AIM_MAX_REACH
+    } else {
+        cursor.world
+    };
+    if let Some(biased) = magnet_bias(desired, region.active, &interactables) {
+        desired = biased;
     }
+    // A brief lerp filters thumb jitter (and smooths the magnet pull) without
+    // perceptible latency.
+    let k = 1.0 - (-AIM_FOLLOW_RATE * time.delta_secs()).exp();
+    cursor.world = cursor.world.lerp(desired, k);
+    // Keep the cursor within reach of the player if they walked away.
     let d = cursor.world - p;
     let dist = d.length();
     if dist > AIM_MAX_REACH {
         cursor.world = p + d / dist * AIM_MAX_REACH;
     }
+}
+
+/// Soft reticle magnetism: finds the nearest region-valid interactable within
+/// `MAGNET_RADIUS` of `aim` and returns `aim` blended toward it. The blend
+/// weight ramps up the closer `aim` already is (0 at the radius edge, up to
+/// `MAGNET_STRENGTH_MAX` right on top), so the pull is barely-there at the
+/// edge of the catch radius and only firms up once you're basically there —
+/// light enough that steering toward a neighbouring object still wins.
+fn magnet_bias(
+    aim: Vec2,
+    region: crate::scene::RegionId,
+    interactables: &Query<(&GlobalTransform, &crate::targeting::InteractTarget)>,
+) -> Option<Vec2> {
+    let mut best: Option<(Vec2, f32)> = None;
+    for (gtf, target) in interactables.iter() {
+        if !crate::targeting::target_allowed_in_region(target.kind, region) {
+            continue;
+        }
+        let center = gtf.translation().truncate();
+        let d = aim.distance(center);
+        if d >= MAGNET_RADIUS {
+            continue;
+        }
+        if best.map(|(_, bd)| d < bd).unwrap_or(true) {
+            best = Some((center, d));
+        }
+    }
+    best.map(|(center, d)| {
+        let w = MAGNET_STRENGTH_MAX * (1.0 - d / MAGNET_RADIUS);
+        aim.lerp(center, w)
+    })
 }
 
 fn smooth_movement_intent(

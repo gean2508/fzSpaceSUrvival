@@ -9,17 +9,15 @@ use crate::game_ui::{
 use crate::debug::{span_guard, CpuSpanSlot, CpuSpanStats};
 use crate::input::{CraftIntent, EquippedItem, HoldInteractState, AbilityCooldown, TouchActions, TouchLayout, TouchBlockRects};
 use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
-use crate::launch_pad::LaunchPadWorld;
-use crate::rocket_flight::RocketFlight;
+use crate::flight::Flight;
 use crate::machines::{MachineWorld, PendingMachinePlacement};
 use crate::scene::{RegionId, RegionRuntime};
 use crate::sim::{Player, SimState};
 use crate::targeting::LookTarget;
 use ha_shared::{
-    can_assemble_module, can_craft, craft, get_craft_recipe, item_display_name, item_hotbar_label,
+    can_craft, craft, get_craft_recipe, item_display_name, item_hotbar_label,
     require_machine, resolve_interaction, CraftRecipe, InteractActionKind,
-    InteractTargetKind, STAMINA_MAX, CRAFT_RECIPES, STONE_EXTRACTOR, WOOD_EXTRACTOR, LAUNCH_PAD,
-    LAUNCH_PAD_MODULE_COUNT,
+    InteractTargetKind, STAMINA_MAX, CRAFT_RECIPES, STONE_EXTRACTOR, WOOD_EXTRACTOR,
 };
 use crate::ui_theme::{self, UiButtonState, UiButtonTone};
 use crate::sky2d::PlayerLanternControl;
@@ -37,7 +35,8 @@ use icons::{
 use item_icons::ItemIconCache;
 use inventory_ui::{
     add_item_to_slots, consume_from_ui_slots, ensure_inventory_ui_state, flush_slots_to_inventory,
-    grid_signature, inventory_drop_while_held_system, inventory_held_world_drop_system,
+    grid_signature, inventory_drop_while_held_system, inventory_release_keeps_held_system,
+    inventory_return_held_on_close_system,
     inventory_long_press_system, inventory_signature, inventory_slot_press_system,
     inventory_slot_release_system, load_grid_from_inventory, merge_inv_gains_into_ui, InventoryGridRoot, InventoryGridSlot, InventorySlotIcon,
     InventorySlotQty, InventoryUiState, HotbarItemSlot, HotbarSlotIcon, HotbarSlotName, HotbarSlotQty, SlotId,
@@ -73,6 +72,10 @@ impl Plugin for PixelHudPlugin {
             .init_resource::<HotbarSelectRequest>()
             .init_resource::<survival_bars::SurvivalBarsCache>()
             .add_systems(Startup, ensure_game_ui_root)
+            .add_systems(Update, skin_ui_from_art.after(spawn_hud_once))
+            // Aparte del bloque de abajo: ese ya llegó al tope de 20 sistemas
+            // por tupla que acepta `add_systems`.
+            .add_systems(Update, update_day_clock.after(spawn_hud_once))
             .add_systems(Update, (
                 sync_game_ui_root,
                 spawn_hud_once.after(sync_game_ui_root),
@@ -89,18 +92,18 @@ impl Plugin for PixelHudPlugin {
                 inventory_long_press_system,
                 inventory_drop_while_held_system.after(inventory_long_press_system),
                 inventory_slot_release_system,
-                inventory_held_world_drop_system.after(inventory_drop_while_held_system),
+                inventory_release_keeps_held_system.after(inventory_drop_while_held_system),
+                inventory_return_held_on_close_system.after(inventory_drop_while_held_system),
                 sync_inventory_from_player,
                 update_inventory_slot_visuals,
                 update_hotbar_item_visuals,
-                sync_hotbar_chrome_icons,
             ))
             .add_systems(Update, (
+                sync_hotbar_chrome_icons,
                 equip_from_hotbar_selection,
                 equip_from_hotbar_click,
                 equip_toast_system,
                 hotbar_hammer_system,
-                sync_lantern_equipped,
                 lantern_toggle_system,
                 update_lantern_toggle_ui,
                 update_held_item_ghost,
@@ -112,10 +115,7 @@ impl Plugin for PixelHudPlugin {
                 (
                     append_hud_touch_blocks.after(crate::ui_editor::append_editor_touch_blocks),
                     update_interact_hud
-                        .after(crate::machines::try_place_on_hold)
-                        .after(crate::launch_pad::try_assemble_on_hold)
-                        .after(crate::launch_pad::try_ignite_on_hold)
-                        ,
+                        .after(crate::machines::try_place_on_hold),
                 ),
             );
     }
@@ -155,9 +155,7 @@ pub(crate) enum BagTab {
     #[default]
     Inventory,
     Craft,
-    /// Ship builder — part counters + live stats (`ship_builder.rs`).
-    Ship,
-    /// Construction — pick a build piece; entering build mode (`build.rs`).
+    /// Construction - pick a build piece; entering build mode (`build.rs`).
     Build,
 }
 
@@ -388,11 +386,122 @@ fn spawn_hud_once(
                 }
             });
 
+        spawn_day_clock(parent, &layout, margin, heart, gap);
         spawn_hotbar(parent, &layout, short, heart);
         spawn_equip_toast(parent, &layout, heart);
         spawn_lantern_toggle(parent, &layout, short);
         spawn_interact_hud(parent, &layout, short);
     });
+}
+
+/// Reloj del día (arriba a la derecha, DEBAJO de la fila de energía — misma
+/// columna, mismo margen, mismo panel que el resto del HUD). Muestra la hora del
+/// mundo y el tramo (`DIA`/`ATARDECER`/`NOCHE`), y una barra fina que se llena a
+/// lo largo del día. Importa ahora que la noche es oscura de verdad: hay que
+/// poder mirar y saber cuánto falta para que amanezca. ASCII-only.
+#[derive(Component)]
+struct DayClockText;
+#[derive(Component)]
+struct DayClockPhaseText;
+#[derive(Component)]
+struct DayClockFill;
+
+fn spawn_day_clock(
+    parent: &mut ChildBuilder,
+    layout: &TouchLayout,
+    margin: f32,
+    heart: f32,
+    gap: f32,
+) {
+    // Debajo de la fila de energía: su alto es `heart`, más el margen y un hueco.
+    let top = layout.insets.top as f32 + margin + heart + gap * 3.0;
+    parent
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(layout.insets.right as f32 + margin),
+                top: Val::Px(top),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexEnd,
+                row_gap: Val::Px(gap * 0.5),
+                padding: UiRect::axes(Val::Px(8.0), Val::Px(5.0)),
+                border: UiRect::all(Val::Px(ui_theme::panel_border_width())),
+                min_width: Val::Px(heart * 3.4),
+                ..default()
+            },
+            BorderColor(ui_theme::accent_ink()),
+            BackgroundColor(ui_theme::panel_bg(0.82)),
+            Name::new("DayClock"),
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                Text::new("--:--"),
+                TextFont { font_size: (heart * 0.72).clamp(12.0, 18.0), ..default() },
+                TextColor(ui_theme::text_primary()),
+                DayClockText,
+            ));
+            panel.spawn((
+                Text::new("DIA"),
+                TextFont { font_size: (heart * 0.42).clamp(8.0, 11.0), ..default() },
+                TextColor(ui_theme::text_muted()),
+                DayClockPhaseText,
+            ));
+            // Barra de progreso del día (pista + relleno).
+            panel
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Px(3.0),
+                        ..default()
+                    },
+                    BackgroundColor(ui_theme::panel_bg(0.6)),
+                ))
+                .with_children(|track| {
+                    track.spawn((
+                        Node { width: Val::Percent(0.0), height: Val::Percent(100.0), ..default() },
+                        BackgroundColor(ui_theme::accent_ink()),
+                        DayClockFill,
+                    ));
+                });
+        });
+}
+
+/// Refresca el reloj. Sólo escribe cuando el MINUTO cambia (el texto de Bevy
+/// re-mide el layout en cada set) → coste despreciable.
+#[allow(clippy::type_complexity)]
+fn update_day_clock(
+    clock: Res<crate::sky2d::DayClock>,
+    mut q: ParamSet<(
+        Query<&mut Text, With<DayClockText>>,
+        Query<(&mut Text, &mut TextColor), With<DayClockPhaseText>>,
+        Query<&mut Node, With<DayClockFill>>,
+    )>,
+    mut last: Local<(u32, u32)>,
+) {
+    let (h, m) = clock.clock_hm();
+    for mut node in &mut q.p2() {
+        node.width = Val::Percent(clock.phase() * 100.0);
+    }
+    if (h, m) == *last {
+        return;
+    }
+    *last = (h, m);
+    let hhmm = format!("{h:02}:{m:02}");
+    for mut text in &mut q.p0() {
+        text.0 = hhmm.clone();
+    }
+    let name = clock.phase_name();
+    // El tramo se tiñe como el cielo: cálido al atardecer, frío de noche.
+    let col = match name {
+        "ATARDECER" | "AMANECER" => Color::srgb(1.0, 0.72, 0.42),
+        "NOCHE" => Color::srgb(0.62, 0.72, 1.0),
+        _ => ui_theme::text_muted(),
+    };
+    for (mut text, mut color) in &mut q.p1() {
+        text.0 = name.to_string();
+        color.0 = col;
+    }
 }
 
 fn spawn_status_prompt_block(parent: &mut ChildBuilder, heart: f32, gap: f32) {
@@ -811,9 +920,7 @@ fn update_survival_hud(
     region: Res<RegionRuntime>,
     pending: Res<PendingMachinePlacement>,
     inv: Res<PlayerInventory>,
-    pads: Res<LaunchPadWorld>,
-    flight: Res<RocketFlight>,
-    loadout: Res<crate::rocket_flight::ShipLoadout>,
+    flight: Res<Flight>,
     mut cache: ResMut<HudDisplayCache>,
     mut prompts: Query<(&mut Text, &mut TextColor), With<InteractPromptText>>,
     mut prompt_roots: Query<(&mut BackgroundColor, &mut BorderColor), With<StatusPromptRoot>>,
@@ -826,9 +933,7 @@ fn update_survival_hud(
         &region,
         &pending,
         &inv,
-        &pads,
         &flight,
-        &loadout,
         player_pos,
     );
     if cache.prompt_line != prompt_line {
@@ -838,9 +943,9 @@ fn update_survival_hud(
         }
     }
 
-    let idle_hint = prompt_line.starts_with('←')
+    let idle_hint = prompt_line.starts_with("<- Move")
         || prompt_line.starts_with("WASD")
-        || prompt_line.contains("Move · Look");
+        || prompt_line.contains("Move | Look");
     let target_alpha = if hold.active || !idle_hint { 0.92 } else { 0.34 };
     if cache.prompt_is_idle != idle_hint || (cache.prompt_alpha - target_alpha).abs() > 0.02 {
         cache.prompt_is_idle = idle_hint;
@@ -945,9 +1050,9 @@ fn format_inventory_line(inv: &PlayerInventory) -> String {
     }
     let parts: Vec<String> = entries
         .iter()
-        .map(|(id, qty)| format!("{}×{qty}", item_label(id)))
+        .map(|(id, qty)| format!("{}x{qty}", item_label(id)))
         .collect();
-    format!("Stock: {}", parts.join(" · "))
+    format!("Stock: {}", parts.join(" | "))
 }
 
 fn item_label(id: &str) -> &str {
@@ -962,7 +1067,7 @@ fn item_label(id: &str) -> &str {
 fn format_ingredients(ingredients: &[(&str, u32)]) -> String {
     ingredients
         .iter()
-        .map(|(id, qty)| format!("{}×{qty}", item_label(id)))
+        .map(|(id, qty)| format!("{}x{qty}", item_label(id)))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -977,7 +1082,7 @@ fn recipe_status(inv: &PlayerInventory, recipe: &CraftRecipe) -> (bool, String) 
         .filter_map(|(id, need)| {
             let have = inv.qty(id);
             if have < *need {
-                Some(format!("{}×{}", item_label(id), need - have))
+                Some(format!("{}x{}", item_label(id), need - have))
             } else {
                 None
             }
@@ -997,7 +1102,11 @@ fn scroll_craft_list(
     mut wheel: EventReader<bevy::input::mouse::MouseWheel>,
     mut sections: Query<
         &mut ScrollPosition,
-        Or<(With<BagCraftSection>, With<BagInventorySection>)>,
+        Or<(
+            With<BagCraftSection>,
+            With<BagInventorySection>,
+            With<BagBuildSection>,
+        )>,
     >,
 ) {
     if !bag.open {
@@ -1052,7 +1161,7 @@ fn build_machine_panel_text(
     for m in nearby.iter().take(3) {
         let def = require_machine(m.machine_id);
         lines.push(format!(
-            "{} — stored {} {} ({}/s)",
+            "{} - stored {} {} ({}/s)",
             def.display_name,
             m.stored_output,
             def.output_item_id,
@@ -1069,9 +1178,7 @@ fn build_interact_prompt(
     region: &RegionRuntime,
     pending: &PendingMachinePlacement,
     inv: &PlayerInventory,
-    pads: &LaunchPadWorld,
-    flight: &RocketFlight,
-    loadout: &crate::rocket_flight::ShipLoadout,
+    flight: &Flight,
     player_pos: Option<Vec3>,
 ) -> String {
     if flight.active {
@@ -1079,23 +1186,13 @@ fn build_interact_prompt(
         let spd = flight.speed();
         let v_vert = flight.vertical_speed();
         let v_horiz = flight.horizontal_speed();
-        let fuel = flight.fuel_pct();
+        let ki = flight.ki_pct();
         let body = flight.body.label();
         let vac = if flight.in_vacuum() { "VAC" } else { "ATM" };
-        let chute = if flight.parachute_open { " - CHUTE" } else { "" };
-        let retro = if flight.phase == ha_shared::FlightPhase::Retro {
-            " - RC RETRO"
-        } else {
-            ""
-        };
-        let ap = if flight.autopilot { " - AUTOPILOT" } else { "" };
-        // Autonomy = seconds of continuous thrust left at this ship's mass.
-        let autonomy =
-            flight.fuel / (ha_shared::flight_physics::ROCKET_FUEL_BURN_PER_S * flight.burn_rate_factor()).max(0.01);
-        // NOTE: la fuente del juego es ASCII-only (no ·, flechas, acentos) → separadores ASCII.
+        let charge = if flight.charging { " - CARGANDO" } else { "" };
+        // NOTE: la fuente del juego es ASCII-only (no |, flechas, acentos) -> separadores ASCII.
         return format!(
-            "FLIGHT - {body} - radar {alt:.0}m - vert {v_vert:+.0} horiz {v_horiz:.0} m/s - {spd:.0} tot - fuel {fuel:.0}% - masa {:.1}t - ~{autonomy:.0}s thrust - {vac}{chute}{retro}{ap} - ACTION thrust - SHIFT/jump retro",
-            loadout.mass_t
+            "VUELO KI - {body} - alt {alt:.0}m - vert {v_vert:+.0} horiz {v_horiz:.0} m/s - {spd:.0} tot - Ki {ki:.0}% - {vac}{charge} - JUMP subir - USE bajar",
         );
     }
 
@@ -1106,7 +1203,7 @@ fn build_interact_prompt(
         } else {
             0
         };
-        return format!("BUILD {} — {}%", def.display_name, pct);
+        return format!("BUILD {} - {}%", def.display_name, pct);
     }
 
     if hold.active && hold.eating {
@@ -1116,7 +1213,7 @@ fn build_interact_prompt(
             0
         };
         return format!(
-            "EATING {} — {}%",
+            "EATING {} - {}%",
             ha_shared::item_display_name(&equipped.item_id),
             pct
         );
@@ -1127,94 +1224,70 @@ fn build_interact_prompt(
         && inv.qty(&equipped.item_id) > 0
     {
         return format!(
-            "HOLD → Eat {}",
+            "HOLD -> Eat {}",
             ha_shared::item_display_name(&equipped.item_id)
         );
     }
 
     if let Some(pos) = player_pos {
         if matches!(region.active, RegionId::Cave(_)) {
-            return "USE → Exit cave".to_string();
+            return "USE -> Exit cave".to_string();
         }
         if pos.distance(region.cave_portal) <= 3.2 {
-            return "USE → Descend into the core".to_string();
+            return "USE -> Descend into the core".to_string();
         }
     }
 
     if let Some(kind) = target.kind {
-        if kind == InteractTargetKind::LaunchIgnition {
-            if let Some(pad) = nearest_launch_pad(pads, target.hit_point) {
-                if !pad.ready {
-                    return format!(
-                        "Need starship modules {}/{}",
-                        pad.assembled_modules, LAUNCH_PAD_MODULE_COUNT
-                    );
-                }
-            }
-        }
-        if kind == InteractTargetKind::LaunchModule {
-            if let Some((pad, idx)) = nearest_launch_module_slot(pads, target.hit_point) {
-                if pad.assembled_modules > idx {
-                    return format!("Module {} installed", idx + 1);
-                }
-                if !can_assemble_module(pad, idx, inv) {
-                    return format!("Need materials for module {}", idx + 1);
-                }
-            }
-        }
         if kind == InteractTargetKind::Block {
             if ha_shared::is_block_item(&equipped.item_id) {
                 return format!(
-                    "HOLD → Place {}",
+                    "HOLD -> Place {}",
                     ha_shared::item_display_name(&equipped.item_id)
                 );
             }
-            return "HOLD → Break block".to_string();
+            return "HOLD -> Break block".to_string();
         }
         if let Some(rule) = resolve_interaction(Some(equipped.item_id.as_str()), kind) {
             return match rule.kind {
                 InteractActionKind::Gather => {
-                    format!("HOLD → Gather {}", rule.item_id.unwrap_or("resource"))
+                    format!("HOLD -> Gather {}", rule.item_id.unwrap_or("resource"))
                 }
                 InteractActionKind::Mine => {
-                    format!("HOLD → Mine {}", rule.item_id.unwrap_or("stone"))
+                    format!("HOLD -> Mine {}", rule.item_id.unwrap_or("stone"))
                 }
-                InteractActionKind::Collect => "HOLD → Collect".to_string(),
+                InteractActionKind::Collect => "HOLD -> Collect".to_string(),
                 InteractActionKind::Assemble if kind == InteractTargetKind::SpaceStationModule => {
-                    "HOLD → Install station module".to_string()
+                    "HOLD -> Install station module".to_string()
                 }
-                InteractActionKind::Assemble => "HOLD → Install starship module".to_string(),
-                InteractActionKind::Launch => "HOLD → LAUNCH to orbit".to_string(),
+                InteractActionKind::Assemble => "HOLD -> Install starship module".to_string(),
+                InteractActionKind::Launch => "HOLD -> LAUNCH to orbit".to_string(),
                 InteractActionKind::ReturnEarth if kind == InteractTargetKind::LunarReturn => {
-                    "HOLD → Return to orbital hub".to_string()
+                    "HOLD -> Return to orbital hub".to_string()
                 }
-                InteractActionKind::ReturnEarth => "HOLD → Re-enter Earth".to_string(),
+                InteractActionKind::ReturnEarth => "HOLD -> Re-enter Earth".to_string(),
                 InteractActionKind::TravelLuna => {
-                    // Earth→Moon distance is effectively fixed (~52 km flight
-                    // metres) — cost preview without needing the clock.
+                    // Earth->Moon distance is effectively fixed (~52 km flight
+                    // metres) - travel-time preview without needing the clock.
                     let secs = ha_shared::transit_cruise_secs(52_000.0);
-                    let cost = ha_shared::transit_fuel_cost(secs, flight.burn_rate_factor());
-                    format!(
-                        "HOLD → AUTOPILOT Luna · ~{secs:.0}s · {cost:.0} fuel (tenés {:.0}) · requiere nav data",
-                        flight.fuel
-                    )
+                    format!("HOLD -> AUTOPILOT Luna | ~{secs:.0}s | requiere nav data")
                 }
                 InteractActionKind::TravelBody => {
-                    "HOLD → AUTOPILOT a planeta · coste según distancia · requiere nav data".to_string()
+                    "HOLD -> AUTOPILOT a planeta | coste segun distancia | requiere nav data".to_string()
                 }
                 InteractActionKind::LaunchProbe => {
                     if inv.qty("probe") > 0 {
-                        "HOLD → Launch nav probe".to_string()
+                        "HOLD -> Launch nav probe".to_string()
                     } else {
-                        "Need Nav Probe — BAG → CRAFT".to_string()
+                        "Need Nav Probe - BAG -> CRAFT".to_string()
                     }
                 }
-                InteractActionKind::Attack => "TAP → Ability".to_string(),
+                InteractActionKind::Attack => "TAP -> Ability".to_string(),
                 InteractActionKind::None => match kind {
                     InteractTargetKind::Rock
                     | InteractTargetKind::OreIron
                     | InteractTargetKind::OreGold => {
-                        "Need pickaxe — BAG → CRAFT".to_string()
+                        "Need pickaxe - BAG -> CRAFT".to_string()
                     }
                     _ => "No action".to_string(),
                 },
@@ -1224,7 +1297,7 @@ fn build_interact_prompt(
 
     if ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some() {
         return format!(
-            "HOLD → Place {}",
+            "HOLD -> Place {}",
             ha_shared::item_display_name(&equipped.item_id)
         );
     }
@@ -1234,7 +1307,7 @@ fn build_interact_prompt(
         let can = inv.can_afford_machine(def);
         if can {
             return format!(
-                "HOLD (empty) → Place {} · W{} S{} T{}",
+                "HOLD (empty) -> Place {} | W{} S{} T{}",
                 def.display_name, def.cost_wood, def.cost_stone, def.cost_sticks
             );
         }
@@ -1245,46 +1318,13 @@ fn build_interact_prompt(
     }
 
     if region.active == RegionId::Space {
-        return "Vacío orbital · ACTION thrust · quemar hacia Tierra/Luna · muelle sobre pad".to_string();
+        return "Vacio orbital | JUMP subir - USE bajar | vuela con Ki hacia Tierra/Luna".to_string();
     }
     if region.active == RegionId::Luna {
-        return "Superficie lunar · ACTION thrust → despegar hacia el espacio".to_string();
+        return "Superficie lunar | JUMP para cargar Ki y despegar hacia el espacio".to_string();
     }
 
     platform::gameplay_controls_hint().to_string()
-}
-
-fn nearest_launch_pad<'a>(
-    pads: &'a LaunchPadWorld,
-    hit: Vec3,
-) -> Option<&'a ha_shared::LaunchPadState> {
-    pads.pads.iter().min_by(|a, b| {
-        let da = hit.distance(Vec3::new(a.x, a.y, a.z));
-        let db = hit.distance(Vec3::new(b.x, b.y, b.z));
-        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-    })
-}
-
-fn nearest_launch_module_slot<'a>(
-    pads: &'a LaunchPadWorld,
-    hit: Vec3,
-) -> Option<(&'a ha_shared::LaunchPadState, u8)> {
-    // 2D pad slots: offsets along the strip (see launch_pad::spawn_launch_pad).
-    let offsets = [(0u8, -5.0_f32), (1u8, 5.0_f32), (2u8, -2.5_f32)];
-    let mut best: Option<(&ha_shared::LaunchPadState, u8, f32)> = None;
-    for pad in &pads.pads {
-        for (idx, ox) in offsets {
-            let slot = Vec3::new(pad.x + ox, pad.y + 1.6, 0.0);
-            let d = hit.distance(slot);
-            if d > 2.5 {
-                continue;
-            }
-            if best.map(|(_, _, bd)| d < bd).unwrap_or(true) {
-                best = Some((pad, idx, d));
-            }
-        }
-    }
-    best.map(|(pad, idx, _)| (pad, idx))
 }
 
 fn spawn_interact_hud(parent: &mut ChildBuilder, layout: &TouchLayout, short: f32) {
@@ -1298,7 +1338,7 @@ fn spawn_interact_hud(parent: &mut ChildBuilder, layout: &TouchLayout, short: f3
             height: Val::Px(ring),
             border: UiRect::all(Val::Px(ui_theme::panel_border_width())),
             // Hidden until an ability is actually on cooldown (the update
-            // system reveals it) — it was showing as a stray magenta square.
+            // system reveals it) - it was showing as a stray magenta square.
             display: Display::None,
             ..default()
         },
@@ -1371,7 +1411,6 @@ fn spawn_bag_panel(
     layout: &TouchLayout,
     tune: &HudTune,
     tab: BagTab,
-    ship_state: &crate::ship_builder::ShipBuilderState,
     inv: &PlayerInventory,
 ) -> Entity {
     let short = layout.width.min(layout.height);
@@ -1470,7 +1509,6 @@ fn spawn_bag_panel(
                                 spawn_bag_tab_button(tabs, "INVENTORY", BagTab::Inventory, heart);
                                 spawn_bag_tab_button(tabs, "CRAFT", BagTab::Craft, heart);
                                 spawn_bag_tab_button(tabs, "CONSTRUIR", BagTab::Build, heart);
-                                spawn_bag_tab_button(tabs, "SHIP", BagTab::Ship, heart);
                             });
 
                         panel
@@ -1493,7 +1531,7 @@ fn spawn_bag_panel(
                             ))
                             .with_children(|section| {
                                 section.spawn((
-                                    Text::new("Tap move · Tap again split · Hold drag"),
+                                    Text::new("Toca = elegir · toca otro = mover · 2 toques = dividir · manten = levantar"),
                                     TextFont {
                                         font_size: (heart * 0.46).clamp(9.0, 12.0),
                                         ..default()
@@ -1574,13 +1612,6 @@ fn spawn_bag_panel(
                                 );
                                 spawn_machine_select_button(
                                     section,
-                                    "Launch Pad",
-                                    12,
-                                    machine_cost_label(&LAUNCH_PAD),
-                                    heart,
-                                );
-                                spawn_machine_select_button(
-                                    section,
                                     "Regolith Drill (Luna)",
                                     13,
                                     machine_cost_label(&ha_shared::REGOLITH_DRILL),
@@ -1602,7 +1633,7 @@ fn spawn_bag_panel(
                                 );
                             });
 
-                        // CONSTRUIR — build-piece palette (owned by build.rs).
+                        // CONSTRUIR - build-piece palette (owned by build.rs).
                         panel
                             .spawn((
                                 Node {
@@ -1631,17 +1662,129 @@ fn spawn_bag_panel(
                                     TextColor(ui_theme::text_muted()),
                                 ));
                                 for (idx, piece) in ha_shared::topdown::BUILD_PIECES.iter().enumerate() {
-                                    spawn_build_piece_button(section, idx, piece, heart);
+                                    spawn_build_piece_button(section, idx, piece.label, piece.cost_item, piece.cost_qty, heart);
                                 }
+                                // Prefabs multi-tile (F5): stamp del area completa.
+                                section.spawn((
+                                    Text::new("Prefabs (area completa de una):"),
+                                    TextFont {
+                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
+                                        ..default()
+                                    },
+                                    TextColor(ui_theme::text_muted()),
+                                ));
+                                let base = ha_shared::topdown::build_piece_count();
+                                for (i, p) in ha_shared::topdown::PREFABS.iter().enumerate() {
+                                    spawn_build_piece_button(
+                                        section,
+                                        base + i,
+                                        p.label,
+                                        p.cost_item,
+                                        ha_shared::topdown::prefab_cost(p),
+                                        heart,
+                                    );
+                                }
+                                // Assets grandes (A2): sprite unico + footprint,
+                                // colocado como estructura (se rodea, no se entra).
+                                section.spawn((
+                                    Text::new("Assets grandes (bloquean su base):"),
+                                    TextFont {
+                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
+                                        ..default()
+                                    },
+                                    TextColor(ui_theme::text_muted()),
+                                ));
+                                let lbase = ha_shared::topdown::build_piece_count()
+                                    + ha_shared::topdown::prefab_count();
+                                for (i, a) in ha_shared::topdown::LARGE_ASSETS.iter().enumerate() {
+                                    spawn_build_piece_button(
+                                        section,
+                                        lbase + i,
+                                        a.label,
+                                        a.cost_item,
+                                        a.cost_qty,
+                                        heart,
+                                    );
+                                }
+                                // Paredes de BORDE (estilo Last Day on Earth): se
+                                // enganchan a la arista de la celda apuntada y
+                                // necesitan piso construido de algún lado.
+                                section.spawn((
+                                    Text::new("Paredes (se pegan al borde del piso; volver a tocar = demoler):"),
+                                    TextFont {
+                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
+                                        ..default()
+                                    },
+                                    TextColor(ui_theme::text_muted()),
+                                ));
+                                let ebase = crate::build::edge_palette_base();
+                                for (i, e) in ha_shared::build_grid::EDGE_PIECES.iter().enumerate() {
+                                    spawn_build_piece_button(
+                                        section,
+                                        ebase + i,
+                                        e.label,
+                                        e.cost_item,
+                                        e.cost_qty,
+                                        heart,
+                                    );
+                                }
+                                // VIVARIO (F1): spawn de fauna RESIDENTE — surte efecto
+                                // SOLO en creativo. Encerrala (puerta cerrada) y observa
+                                // como evoluciona. Ver PLAN_VIVARIO_VIDA_EMERGENTE.md.
+                                section.spawn((
+                                    Text::new("Fauna (solo creativo) - encerrala y observa:"),
+                                    TextFont {
+                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
+                                        ..default()
+                                    },
+                                    TextColor(ui_theme::text_muted()),
+                                ));
+                                for i in 0..crate::fauna::spawn_species_count() {
+                                    spawn_build_piece_button(
+                                        section,
+                                        crate::fauna::SPAWN_PALETTE_BASE + i,
+                                        crate::fauna::spawn_species_label(i),
+                                        "solo creativo",
+                                        0,
+                                        heart,
+                                    );
+                                }
+                                // F8: feeder de comida persistente (diseñar la presion del habitat).
+                                spawn_build_piece_button(
+                                    section,
+                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::FEED_PALETTE_SUB,
+                                    "Comida (feeder)",
+                                    "solo creativo",
+                                    0,
+                                    heart,
+                                );
+                                // F7: dejar una camara de vigilancia (verla remoto con CAM).
+                                spawn_build_piece_button(
+                                    section,
+                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::CAMERA_PALETTE_SUB,
+                                    "Camara",
+                                    "solo creativo",
+                                    0,
+                                    heart,
+                                );
+                                // F8: depredador (hostil) + agua (abrevadero) para el habitat.
+                                spawn_build_piece_button(
+                                    section,
+                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::PREDATOR_PALETTE_SUB,
+                                    "Depredador",
+                                    "solo creativo",
+                                    0,
+                                    heart,
+                                );
+                                spawn_build_piece_button(
+                                    section,
+                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::WATER_PALETTE_SUB,
+                                    "Agua",
+                                    "solo creativo",
+                                    0,
+                                    heart,
+                                );
                             });
-
-                        crate::ship_builder::spawn_ship_section(
-                            panel,
-                            heart,
-                            tab == BagTab::Ship,
-                            ship_state,
-                            inv,
-                        );
                     });
             })
             .id();
@@ -1784,7 +1927,7 @@ fn spawn_recipe_button(panel: &mut ChildBuilder, recipe: &CraftRecipe, heart: f3
     });
 }
 
-/// "W5 S2 T1 I4" — only nonzero costs, so lunar kit shows its iron.
+/// "W5 S2 T1 I4" - only nonzero costs, so lunar kit shows its iron.
 fn machine_cost_label(def: &ha_shared::MachineDef) -> String {
     let mut parts: Vec<String> = Vec::new();
     for (tag, qty) in [
@@ -1854,7 +1997,9 @@ fn spawn_machine_select_button(
 fn spawn_build_piece_button(
     panel: &mut ChildBuilder,
     idx: usize,
-    piece: &ha_shared::topdown::BuildPiece,
+    label: &str,
+    cost_item: &str,
+    cost_qty: u32,
     heart: f32,
 ) {
     panel
@@ -1875,15 +2020,22 @@ fn spawn_build_piece_button(
         ))
         .with_children(|btn| {
             btn.spawn((
-                Text::new(piece.label),
+                Text::new(label.to_string()),
                 TextFont {
                     font_size: (heart * 0.58).clamp(11.0, 17.0),
                     ..default()
                 },
                 TextColor(ui_theme::text_primary()),
             ));
+            // cost_qty == 0 → entrada sin costo (ej. spawn creativo): mostrar solo
+            // la etiqueta (evita el feo "0 x ...").
+            let cost_text = if cost_qty == 0 {
+                cost_item.to_string()
+            } else {
+                format!("{cost_qty} x {cost_item}")
+            };
             btn.spawn((
-                Text::new(format!("{} x {}", piece.cost_qty, piece.cost_item)),
+                Text::new(cost_text),
                 TextFont {
                     font_size: (heart * 0.52).clamp(10.0, 15.0),
                     ..default()
@@ -1891,6 +2043,59 @@ fn spawn_build_piece_button(
                 TextColor(ui_theme::text_muted()),
             ));
         });
+}
+
+/// F7 - reskin de UI data-driven: cuando un elemento del HUD spawnea, si su
+/// slot `ui/*` tiene arte asignado en el editor, se le inserta el `ImageNode`
+/// (con recorte de atlas si corresponde). Sin arte, no pasa nada - el dibujo
+/// procedural actual queda intacto (cero regresion). Corre con `Added<>`: costo
+/// cero en reposo.
+fn skin_ui_from_art(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    hotbar: Query<Entity, Added<HotbarSlot>>,
+    actions: Query<(Entity, &crate::input::ActionButton), Added<crate::input::ActionButton>>,
+    lantern: Query<Entity, Added<LanternToggleButton>>,
+    closes: Query<
+        Entity,
+        Or<(Added<BagPanelCloseButton>, Added<MachinePanelCloseButton>)>,
+    >,
+    tabs: Query<(Entity, &BagTabButton), Added<BagTabButton>>,
+) {
+    for e in &hotbar {
+        if let Some(img) = art.ui_image_node("ui/hotbar_slot") {
+            commands.entity(e).insert(img);
+        }
+    }
+    for (e, action) in &actions {
+        let key = match action.0 {
+            crate::input::ActionKind::Use => "ui/use_button",
+            crate::input::ActionKind::Jump => "ui/jump_button",
+        };
+        if let Some(img) = art.ui_image_node(key) {
+            commands.entity(e).insert(img);
+        }
+    }
+    for e in &lantern {
+        if let Some(img) = art.ui_image_node("ui/lantern_button") {
+            commands.entity(e).insert(img);
+        }
+    }
+    for e in &closes {
+        if let Some(img) = art.ui_image_node("ui/close_button") {
+            commands.entity(e).insert(img);
+        }
+    }
+    for (e, tab) in &tabs {
+        let key = match tab.tab {
+            BagTab::Inventory => "ui/tab_inventario",
+            BagTab::Craft => "ui/tab_craft",
+            BagTab::Build => "ui/tab_construir",
+        };
+        if let Some(img) = art.ui_image_node(key) {
+            commands.entity(e).insert(img);
+        }
+    }
 }
 
 /// Gamepad D-pad (or any other device) asks for a hotbar slot; consumed here.
@@ -1978,11 +2183,7 @@ fn bag_panel_system(
     layout: Res<TouchLayout>,
     tune: Res<HudTune>,
     root: Query<Entity, With<GameUiRoot>>,
-    // Bundled into a tuple (Bevy caps systems at 16 params; this stays under).
-    creative_res: (
-        Res<crate::ship_builder::ShipBuilderState>,
-        Res<crate::ui_editor::UiEditorState>,
-    ),
+    editor_res: Res<crate::ui_editor::UiEditorState>,
     mut commands: Commands,
     mut bag_state: ResMut<BagPanelState>,
     mut craft_intent: ResMut<CraftIntent>,
@@ -2035,8 +2236,7 @@ fn bag_panel_system(
         >,
     )>,
 ) {
-    let ship_state = &creative_res.0;
-    let editor = &creative_res.1;
+    let editor = &editor_res;
     if !bag_state.open {
         despawn_bag_panel(&mut commands, &mut bag_state);
         return;
@@ -2052,7 +2252,6 @@ fn bag_panel_system(
             &layout,
             &tune,
             bag_state.tab,
-            &ship_state,
             &inv,
         ));
     }
@@ -2130,8 +2329,6 @@ fn bag_panel_system(
                     pending.machine_id = WOOD_EXTRACTOR.id;
                 } else if recipe_btn.recipe_id == 11 {
                     pending.machine_id = STONE_EXTRACTOR.id;
-                } else if recipe_btn.recipe_id == 12 {
-                    pending.machine_id = LAUNCH_PAD.id;
                 } else if recipe_btn.recipe_id == 13 {
                     pending.machine_id = ha_shared::REGOLITH_DRILL.id;
                 } else if recipe_btn.recipe_id == 14 {
@@ -2205,10 +2402,13 @@ fn elastic_out(t: f32) -> f32 {
 }
 
 pub(crate) fn update_interact_hud(
+    mut commands: Commands,
     mut hold: ResMut<HoldInteractState>,
     cooldown: Res<AbilityCooldown>,
     equipped: Res<EquippedItem>,
     target: Res<crate::targeting::LookTarget>,
+    ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
     mut inv: ResMut<PlayerInventory>,
     mut inv_ui: ResMut<InventoryUiState>,
     mut persist: ResMut<InventoryPersistState>,
@@ -2242,18 +2442,23 @@ pub(crate) fn update_interact_hud(
                             {
                                 add_item_to_slots(&mut inv_ui, "sticks", 1);
                             }
-                            // Chopping a streamed tree removes it from the world
-                            // (persisted, re-merges the batch without it).
-                            if kind == InteractTargetKind::Tree {
-                                if let Some((cx, cz, pid)) = target.flora_cell {
-                                    // Deterministic fruit tree: every 3rd tree
-                                    // by cell hash also drops an apple (food).
+                            // Harvestable decor (tree/rock/ore/gem): remove it from
+                            // the world NOW - despawn the sprite - and persist the
+                            // removal (per the ACTIVE body, so it stays gone on
+                            // every planet and after the chunk re-streams). A tree
+                            // also drops a deterministic apple.
+                            if let Some((cx, cz, pid)) = target.flora_cell {
+                                if kind == InteractTargetKind::Tree {
                                     let hash =
                                         cx as i64 * 7 + cz as i64 * 13 + pid as i64;
                                     if hash.rem_euclid(3) == 0 {
                                         add_item_to_slots(&mut inv_ui, "apple", 1);
                                     }
-                                    flora.harvest(ha_shared::CelestialBody::Earth, cx, cz, pid);
+                                }
+                                let body = crate::world2d::active_surface_body(&ctx, &planet);
+                                flora.harvest(body, cx, cz, pid);
+                                if let Some(e) = target.entity {
+                                    commands.entity(e).despawn_recursive();
                                 }
                             }
                             flush_slots_to_inventory(&inv_ui, &mut inv);
@@ -2267,7 +2472,7 @@ pub(crate) fn update_interact_hud(
                 hold.completed = false;
             }
         } else if !hold.placing_block && !hold.placing_machine && !hold.placing_build {
-            // Placement holds have no target kind — their consumers
+            // Placement holds have no target kind - their consumers
             // (world2d/machines/building) own hold.completed.
             hold.completed = false;
         }
@@ -2322,13 +2527,6 @@ pub(crate) fn update_interact_hud(
     }
 }
 
-fn sync_lantern_equipped(
-    equipped: Res<EquippedItem>,
-    mut ctrl: ResMut<PlayerLanternControl>,
-) {
-    ctrl.equipped = equipped.item_id == "lantern";
-}
-
 fn lantern_toggle_system(
     keys: Res<ButtonInput<KeyCode>>,
     equipped: Res<EquippedItem>,
@@ -2337,7 +2535,8 @@ fn lantern_toggle_system(
     mut ctrl: ResMut<PlayerLanternControl>,
     mut buttons: Query<&Interaction, (With<LanternToggleButton>, Changed<Interaction>)>,
 ) {
-    if equipped.item_id != "lantern" {
+    // Cualquier ítem que ilumine en la mano (antorcha, linterna…) puede apagarse.
+    if crate::held_item::item_light(&equipped.item_id).is_none() {
         return;
     }
     if !editor.menu_open && !editor.enabled && !gameplay_block.blocked {
@@ -2360,7 +2559,7 @@ fn update_lantern_toggle_ui(
     mut labels: Query<&mut Text, With<LanternToggleLabel>>,
     mut buttons: Query<&mut BackgroundColor, With<LanternToggleButton>>,
 ) {
-    let show = equipped.item_id == "lantern";
+    let show = crate::held_item::item_light(&equipped.item_id).is_some();
     let short = layout.width.min(layout.height);
     let (_, _, total, bottom) = hotbar_layout_metrics(&layout);
     let btn_h = (short * 0.052).clamp(28.0, 40.0);
@@ -2470,6 +2669,7 @@ fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
     matches!(
         kind,
         InteractTargetKind::Block
+            | InteractTargetKind::Chest
             | InteractTargetKind::LaunchModule
             | InteractTargetKind::LaunchIgnition
             | InteractTargetKind::SpaceReentry
@@ -2481,27 +2681,27 @@ fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
 
 fn sync_ui_gameplay_block(
     bag: Res<BagPanelState>,
+    chest: Res<crate::chests::ChestPanelState>,
     editor: Res<crate::ui_editor::UiEditorState>,
-    cockpit: Res<crate::ship_interior::CockpitState>,
     mut block: ResMut<UiGameplayBlock>,
 ) {
-    // Only REAL UI blocks gameplay input. Flight must NOT block (B8): thrust
-    // (JUMP/Space) and steering run through the same action pipeline. Sitting in
-    // the cockpit (pre-flight) freezes the walker until launch/stand-up.
-    block.blocked = bag.open || editor.menu_open || editor.enabled || cockpit.seated;
+    // Only REAL UI blocks gameplay input. Flight must NOT block (B8): Ki thrust
+    // (JUMP/USE) and steering run through the same action pipeline.
+    block.blocked = bag.open || chest.is_open() || editor.menu_open || editor.enabled;
 }
 
-/// Public so the touch-stick systems can order themselves AFTER it — otherwise
+/// Public so the touch-stick systems can order themselves AFTER it - otherwise
 /// the sticks may read `TouchBlockRects` before the hotbar band is appended and
 /// steal taps meant for the hotbar (item never gets equipped). See `InputPlugin`.
 pub(crate) fn append_hud_touch_blocks(
     layout: Res<TouchLayout>,
     bag: Res<BagPanelState>,
+    chest: Res<crate::chests::ChestPanelState>,
     hud_blocks: Res<HudTouchBlocks>,
     mut blocks: ResMut<TouchBlockRects>,
 ) {
     blocks.0.extend(hud_blocks.0.iter().copied());
-    if bag.open {
+    if bag.open || chest.is_open() {
         blocks.0.push(fullscreen_block_rect(&layout));
     }
 }
@@ -2654,7 +2854,7 @@ fn update_hotbar_item_visuals(
     ui: Res<InventoryUiState>,
     children_q: Query<&Children>,
     mut slots: Query<
-        (&HotbarItemSlot, &mut BorderColor, &Children),
+        (&HotbarItemSlot, &mut BorderColor, &mut BackgroundColor, &Children),
         Without<InventoryGridSlot>,
     >,
     mut icon_markers: Query<
@@ -2676,7 +2876,7 @@ fn update_hotbar_item_visuals(
     mut span: ResMut<CpuSpanStats>,
 ) {
     let _guard = span_guard(&mut span, CpuSpanSlot::Hud);
-    for (slot, mut border, children) in &mut slots {
+    for (slot, mut border, mut bg, children) in &mut slots {
         let stack = &ui.hotbar[slot.index];
         let selected = ui.selected == Some(SlotId::Hotbar(slot.index));
         *border = BorderColor(if selected {
@@ -2686,6 +2886,16 @@ fn update_hotbar_item_visuals(
         } else {
             ui_theme::button_border(UiButtonTone::Inventory)
         });
+        // El slot equipado se lee de un vistazo: borde cian + celda encendida.
+        // Sin esto "seleccionado" era un borde fino que en el teléfono no se ve.
+        *bg = BackgroundColor(ui_theme::button_bg(
+            UiButtonTone::Inventory,
+            if selected {
+                UiButtonState::Pressed
+            } else {
+                UiButtonState::Normal
+            },
+        ));
         visit_slot_entities(children, &children_q, &mut |entity| {
             if let Ok((icon_e, mut vis)) = icon_markers.get_mut(entity) {
                 let handle = if stack.is_empty() {
@@ -2788,25 +2998,35 @@ fn equip_from_hotbar_selection(
         return;
     };
     let stack = &ui.hotbar[idx];
-    let Some(ref id) = stack.item_id else {
-        return;
-    };
-    if stack.qty == 0 {
+    if stack.is_empty() {
+        // El slot seleccionado se vació (lo gastaste o lo mandaste a un cofre):
+        // volvés a mano vacía, y el ítem desaparece de la mano del personaje.
+        if equipped.item_id != "hand" && equipped.item_id != "hammer" {
+            equipped.item_id = "hand".to_string();
+        }
         return;
     }
-    if equipped.item_id != *id {
-        equipped.item_id = id.clone();
+    let id = stack.item_id.clone().unwrap_or_default();
+    if equipped.item_id != id {
+        equipped.item_id = id;
     }
 }
 
-/// Tapping/clicking a hotbar item cell selects + equips it — works for both
+/// Tapping/clicking a hotbar item cell selects + equips it - works for both
 /// touch (mobile) and mouse (desktop), so the hotbar is usable without the bag.
 fn equip_from_hotbar_click(
+    bag: Res<BagPanelState>,
     mut ui: ResMut<InventoryUiState>,
     mut equipped: ResMut<EquippedItem>,
     mut build_mode: ResMut<crate::input::BuildModeActive>,
     slots: Query<(&Interaction, &HotbarItemSlot), Changed<Interaction>>,
 ) {
+    // Con la mochila abierta el toque en la hotbar significa MOVER (destino del
+    // stack seleccionado), no equipar: si equipáramos aquí pisaríamos
+    // `ui.selected` y sacar un ítem del grid a la hotbar sería imposible.
+    if bag.open {
+        return;
+    }
     for (interaction, slot) in &slots {
         if *interaction == Interaction::Pressed {
             // Picking a hotbar item leaves build mode so USE acts on the item.
@@ -2822,7 +3042,7 @@ const EQUIP_TOAST_HOLD: f32 = 1.1;
 const EQUIP_TOAST_FADE: f32 = 0.8;
 
 /// The floating "en mano: <item>" label that appears when the equipped item
-/// changes and then fades away (only the text fades — nothing stays on screen).
+/// changes and then fades away (only the text fades - nothing stays on screen).
 #[derive(Component)]
 struct EquipToast {
     /// Seconds of visible life remaining; 0 = hidden.

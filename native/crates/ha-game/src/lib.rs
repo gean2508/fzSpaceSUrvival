@@ -2,12 +2,26 @@
 //! + Terraria-style diggable surfaces (rewrite-2d).
 
 mod art2d;
+mod audio;
 mod boot_ui;
+mod game_phase;
+mod character_create;
 mod build;
+mod building;
+mod structures;
+mod walls;
+mod world_edits;
+mod companion;
+mod dialog;
+mod fauna;
+mod ambient;
+mod light2d;
 mod game_menu;
 mod game_time;
 mod sky2d;
 mod camera;
+mod sightings;
+mod camera_feed;
 mod world_persist;
 mod telemetry;
 mod solar_system_clock;
@@ -16,19 +30,21 @@ mod game_ui;
 mod hud;
 mod input;
 mod inventory_persist;
-mod launch_pad;
 mod machines;
-mod orbital2d;
+mod npc_menu;
+mod space_fx;
+mod universe;
 mod platform;
 mod render;
-mod rocket_flight;
+mod flight;
 mod scene;
 mod creative_fly;
-mod ship_interior;
 mod nav_computer;
 mod colony;
+mod society;
 mod harvest;
-mod ship_builder;
+mod held_item;
+mod chests;
 mod sim;
 mod survival_stats;
 mod targeting;
@@ -56,21 +72,19 @@ use hud::PixelHudPlugin;
 use boot_ui::BootUiPlugin;
 use game_menu::GameMenuPlugin;
 use input::{InputPlugin, LookInteractPlugin};
-use launch_pad::LaunchPadPlugin;
 use machines::MachinesPlugin;
-use orbital2d::Orbital2dPlugin;
-use rocket_flight::RocketFlightPlugin;
+use space_fx::SpaceFxPlugin;
+use universe::UniversePlugin;
+use flight::FlightPlugin;
 use nav_computer::NavComputerPlugin;
 use colony::ColonyPlugin;
 use harvest::HarvestPlugin;
-use ship_builder::ShipBuilderPlugin;
 use survival_stats::SurvivalStatsPlugin;
 use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
 use render::particles::ParticlesPlugin;
 use scene::ScenePlugin;
 use creative_fly::CreativeFlyPlugin;
-use ship_interior::ShipInteriorPlugin;
 use sky2d::Sky2dPlugin;
 use sim::SimPlugin;
 use targeting::TargetingPlugin;
@@ -104,7 +118,7 @@ pub fn run_app() {
 
 fn run_app_inner() {
     let mut window = Window {
-        title: "Starship".into(),
+        title: "Ki - Mundo Abierto".into(),
         #[cfg(target_os = "android")]
         present_mode: bevy::window::PresentMode::Fifo,
         #[cfg(not(target_os = "android"))]
@@ -179,6 +193,8 @@ fn run_app_inner() {
             }
         })
         .add_plugins((
+            game_phase::GamePhasePlugin,
+            character_create::CharacterCreatePlugin,
             PlatformPlugin,
             Art2dPlugin,
             WorldPersistPlugin,
@@ -187,24 +203,24 @@ fn run_app_inner() {
             SimPlugin,
             ScenePlugin,
             World2dPlugin,
-            Orbital2dPlugin,
+            UniversePlugin,
+            SpaceFxPlugin,
+            ambient::AmbientPlugin,
+            light2d::Light2dPlugin,
             Sky2dPlugin,
         ))
         .add_plugins((
             InventoryPersistPlugin,
             MachinesPlugin,
-            LaunchPadPlugin,
             InputPlugin,
             TargetingPlugin,
             LookInteractPlugin,
-            RocketFlightPlugin,
+            FlightPlugin,
             NavComputerPlugin,
-            ShipInteriorPlugin,
             TransitionPlugin,
             CreativeFlyPlugin,
             HarvestPlugin,
             SurvivalStatsPlugin,
-            ShipBuilderPlugin,
             ColonyPlugin,
         ))
         .add_plugins((
@@ -213,13 +229,28 @@ fn run_app_inner() {
             PixelHudPlugin,
             BootUiPlugin,
             GameMenuPlugin,
+            audio::GameAudioPlugin,
             build::BuildPlugin,
+            building::BuildingPlugin,
+            structures::StructuresPlugin,
             ParticlesPlugin,
             PerfDebugPlugin,
             CpuSpanPlugin,
             CrashReportPlugin,
             UiEditorPlugin,
             AutoDrivePlugin,
+        ))
+        .add_plugins((
+            world_edits::WorldEditsPlugin,
+            walls::WallsPlugin,
+            fauna::FaunaPlugin,
+            companion::CompanionPlugin,
+            dialog::DialogPlugin,
+            society::SocietyPlugin,
+            npc_menu::NpcMenuPlugin,
+            camera_feed::CameraFeedPlugin,
+            held_item::HeldItemPlugin,
+            chests::ChestsPlugin,
         ))
         .add_systems(Startup, apply_android_frame_cap)
         .run();

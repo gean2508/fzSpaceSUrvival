@@ -1,7 +1,7 @@
 //! Region/context runtime + player spawn for the 2D world.
 //!
 //! `WorldContext` (gravity/locomotion) vs `RegionId` (render/visibility) keep
-//! their old meanings; transitions still only happen in `rocket_flight.rs`
+//! their old meanings; transitions still only happen in `flight.rs`
 //! (B8) or via deliberate MENU teleports (`teleport_to_body`).
 
 use bevy::prelude::*;
@@ -83,7 +83,11 @@ impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WorldContextRuntime>()
             .init_resource::<RegionRuntime>()
-            .add_systems(Startup, spawn_player);
+            // El jugador (y por lo tanto el mundo, que se streamea a su alrededor)
+            // NO existe hasta tocar JUGAR: se spawnea al entrar a `Playing`. Sin
+            // Player, `world2d::stream_tile_chunks` retorna temprano → cero worldgen
+            // durante splash/menú/creación de personaje.
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Playing), spawn_player);
     }
 }
 
@@ -96,6 +100,7 @@ fn spawn_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    selected: Res<crate::game_phase::SelectedCharacter>,
 ) {
     let (sx, sz) = walkable_spawn(CelestialBody::Earth, EARTH_PAD_S + 4.0, 6.0);
     let mut body = ha_shared::MovementBody::new(5.2, ha_shared::topdown::PLAYER_RADIUS);
@@ -123,7 +128,8 @@ fn spawn_player(
     let tf = Transform::from_xyz(r.x, r.y, sort_z(sz) + 1.0);
 
     // LimeZu directional character (assets/art/player/character.png). Frame is
-    // 16×32; drawn ~2.6 m tall so the feet sit near the ground point.
+    // 16×32 (1:2); drawn at a HUMAN ~1.9 m tall (0.95×1.9) so a person reads
+    // small against trees (4–8 m) and props — real proportions, not a giant.
     let layout = layouts.add(TextureAtlasLayout::from_grid(
         UVec2::new(16, 32),
         CHAR_COLS,
@@ -131,11 +137,13 @@ fn spawn_player(
         None,
         None,
     ));
+    // Skin + tinte elegidos en la pantalla de creación (default = character.png).
     let mut sprite = Sprite::from_atlas_image(
-        asset_server.load("art/player/character.png"),
+        asset_server.load(selected.sheet.clone()),
         TextureAtlas { layout, index: 0 },
     );
-    sprite.custom_size = Some(Vec2::new(1.6, 3.2));
+    sprite.custom_size = Some(Vec2::new(0.95, 1.9));
+    sprite.color = selected.tint_color();
     commands
         .spawn((Player, sim, visual, sprite, tf, crate::sim::CurrentPose::default()))
         .with_children(|p| {
@@ -143,30 +151,54 @@ fn spawn_player(
             // `sync_player_shadow` turns it on for Climb/Descend.
             p.spawn((
                 crate::sim::PlayerFlightShadow,
-                Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.5), Vec2::new(1.2, 0.5)),
-                // Below the character sprite's own bottom edge (custom_size
-                // 1.6x3.2, centre-anchored → bottom at y=-1.6) so it reads as
-                // cast ON the ground, not smudged into the sprite's legs.
-                Transform::from_xyz(0.0, -1.8, -0.05),
+                Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.5), Vec2::new(0.9, 0.35)),
+                // Just below the character's feet (custom_size 0.95x1.9,
+                // centre-anchored → bottom at y=-0.95) so it reads as cast ON
+                // the ground, not smudged into the sprite's legs.
+                Transform::from_xyz(0.0, -1.0, -0.05),
+                Visibility::Hidden,
+            ));
+            // Saiyan Ki aura — behind the character (z below the sprite). Hidden
+            // until `sync_player_aura` flares it while charging/flying. Gold glow;
+            // the user can texture logical slot `fx/aura_saiyan` later.
+            p.spawn((
+                crate::sim::PlayerAura,
+                Sprite::from_color(Color::srgba(1.0, 0.86, 0.25, 0.0), Vec2::new(1.7, 2.6)),
+                Transform::from_xyz(0.0, 0.1, -0.03),
                 Visibility::Hidden,
             ));
         });
 }
 
-/// Deliberate MENU teleport (creative/dev): put the walker on a body surface.
+/// The surface region + world-context a body walks in (Earth = overworld,
+/// Moon = Luna, everything else = its planet patch). Single source of truth so
+/// landing paths never disagree on where "the ground" is.
+pub fn surface_region_for(body: CelestialBody) -> (RegionId, WorldContext) {
+    match body {
+        CelestialBody::Earth => (RegionId::Overworld { gx: 0, gz: 0 }, WorldContext::Overworld),
+        CelestialBody::Moon => (RegionId::Luna, WorldContext::Luna),
+        other => (RegionId::Planet(other), WorldContext::Planet),
+    }
+}
+
+/// Teletransporte DELIBERADO desde el menú (creativo/dev): deja al caminante en
+/// la superficie de un cuerpo.
+///
+/// Es el único salto de coordenadas que queda en el juego, y es explícito: el
+/// vuelo normal (`creative_fly`) nunca teletransporta. Mueve también el ORIGEN
+/// del marco (`UniverseFrame`), porque las coordenadas del jugador se leen
+/// siempre respecto del centro del cuerpo de referencia (`universe.rs`).
 pub fn teleport_to_body(
     body: CelestialBody,
+    frame: &mut crate::universe::UniverseFrame,
     region: &mut RegionRuntime,
     ctx: &mut WorldContextRuntime,
     planet: &mut crate::world2d::ActivePlanet,
     sim: &mut SimState,
     visual: &mut PlayerVisual,
 ) {
-    let (target_region, target_ctx) = match body {
-        CelestialBody::Earth => (RegionId::Overworld { gx: 0, gz: 0 }, WorldContext::Overworld),
-        CelestialBody::Moon => (RegionId::Luna, WorldContext::Luna),
-        other => (RegionId::Planet(other), WorldContext::Planet),
-    };
+    let (target_region, target_ctx) = surface_region_for(body);
+    frame.ref_body = body;
     region.active = target_region;
     ctx.active = target_ctx;
     if !matches!(body, CelestialBody::Earth | CelestialBody::Moon) {

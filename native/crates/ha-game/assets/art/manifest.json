@@ -1,7 +1,1963 @@
 {
   "sprites": {
-    "decor/rock": "art/decor/rock.png",
-    "decor/tree": "art/decor/tree.png",
-    "player/character": "art/player/character.png"
+    "decor/ladder": {
+      "png": "art/decor/ladder.png"
+    },
+    "decor/rock": {
+      "png": "art/decor/rock.png"
+    },
+    "decor/tree": {
+      "png": "art/decor/tree.png"
+    },
+    "decor/tree_abedul": {
+      "png": "art/decor/tree_abedul.png"
+    },
+    "decor/tree_arbusto": {
+      "png": "art/decor/tree_arbusto.png"
+    },
+    "decor/tree_arce": {
+      "png": "art/decor/tree_arce.png"
+    },
+    "decor/tree_palmera": {
+      "png": "art/decor/tree_palmera.png"
+    },
+    "decor/tree_pino": {
+      "png": "art/decor/tree_pino.png"
+    },
+    "decor/tree_roble": {
+      "png": "art/decor/tree_roble.png"
+    },
+    "decor/tree_sauce": {
+      "png": "art/decor/tree_sauce.png"
+    },
+    "decor/tree_seco": {
+      "png": "art/decor/tree_seco.png"
+    },
+    "floor/wood": {
+      "png": "art/floor/wood.png"
+    },
+    "furniture/cama": {
+      "png": "art/furniture/cama.png"
+    },
+    "furniture/campfire": {
+      "png": "art/atlas/campfire_32x32_de45950c.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 6,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 2
+      },
+      "strip_dir": "Right",
+      "emission": {
+        "color": [
+          1.0,
+          0.7079061,
+          0.45
+        ],
+        "radius": 3.0,
+        "intensity": 0.6,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "flicker": 0.42,
+        "day": false
+      }
+    },
+    "furniture/cocina": {
+      "png": "art/furniture/cocina.png"
+    },
+    "furniture/fridge_grey": {
+      "png": "art/atlas/animated_fridge_grey_32x32_77496fb6.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "furniture/grocery_store_bakery_industrial_fridge_both": {
+      "png": "art/atlas/animated_grocery_store_bakery_industrial_fridge_both_32x32_4ebeef40.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "furniture/heladera": {
+      "png": "art/furniture/heladera.png",
+      "anim": {
+        "frames": 1,
+        "fps": 6.0
+      }
+    },
+    "furniture/mesa": {
+      "png": "art/furniture/mesa.png"
+    },
+    "furniture/pileta": {
+      "png": "art/atlas/animated_bathroom_sink_new_3_10_loop_32x32_58320321.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 14,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 2
+      },
+      "strip_dir": "Right"
+    },
+    "furniture/silla": {
+      "png": "art/furniture/silla.png"
+    },
+    "furniture/sofa": {
+      "png": "art/furniture/sofa.png"
+    },
+    "interior/amplifier": {
+      "png": "art/atlas/animated_amplifier_32x32_115cbfd2.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 3,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "interior/amplifier_big": {
+      "png": "art/atlas/animated_amplifier_big_32x32_fa995513.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 3,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "interior/bathroom_cabinet_blue_empty": {
+      "png": "art/atlas/animated_bathroom_cabinet_blue_empty_32x32_130a6776.png",
+      "grid": [
+        32,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 3
+      }
+    },
+    "interior/blood_altar": {
+      "png": "art/atlas/animated_blood_altar_32x32_08d41b0b.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 4
+      },
+      "strip_dir": "Right"
+    },
+    "interior/fishmonger_fish_tank": {
+      "png": "art/atlas/animated_fishmonger_fish_tank_32x32_f93ee35a.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "interior/fishtank_orange": {
+      "png": "art/atlas/animated_fishtank_orange_32x32_a71d2de0.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 2
+      },
+      "strip_dir": "Right"
+    },
+    "interior/grocery_store_butchershop_carcass": {
+      "png": "art/atlas/animated_grocery_store_butchershop_carcass_32x32_571c4bf3.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 7,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "interior/grocery_store_butchershop_carcass_stale": {
+      "png": "art/atlas/animated_grocery_store_butchershop_carcass_stale_32x32_7b2e3702.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 12,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 3
+      },
+      "strip_dir": "Right"
+    },
+    "items/lantern": {
+      "png": "art/atlas/camping_lantern_32x32_4_2ad9ddc0.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 3
+      },
+      "strip_dir": "Right",
+      "emission": {
+        "color": [
+          1.0,
+          0.82000005,
+          0.45
+        ],
+        "radius": 4.0,
+        "intensity": 1.0,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "flicker": 0.58,
+        "day": true
+      }
+    },
+    "machines/antenna": {
+      "png": "art/machines/antenna.png"
+    },
+    "nature/arbusto": {
+      "png": "art/nature/arbusto.png"
+    },
+    "nature/flores_amarillas": {
+      "png": "art/nature/flores_amarillas.png"
+    },
+    "nature/hongo": {
+      "png": "art/nature/hongo.png"
+    },
+    "npc/char_1": {
+      "png": "art/npc/char_01.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_10": {
+      "png": "art/npc/char_10.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_11": {
+      "png": "art/npc/char_11.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_12": {
+      "png": "art/npc/char_12.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_13": {
+      "png": "art/npc/char_13.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_14": {
+      "png": "art/npc/char_14.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_15": {
+      "png": "art/npc/char_15.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_16": {
+      "png": "art/npc/char_16.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_17": {
+      "png": "art/npc/char_17.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_18": {
+      "png": "art/npc/char_18.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_19": {
+      "png": "art/npc/char_19.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_2": {
+      "png": "art/npc/char_02.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_20": {
+      "png": "art/npc/char_20.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_3": {
+      "png": "art/npc/char_03.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_4": {
+      "png": "art/npc/char_04.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_5": {
+      "png": "art/npc/char_05.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_6": {
+      "png": "art/npc/char_06.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_7": {
+      "png": "art/npc/char_07.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_8": {
+      "png": "art/npc/char_08.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/char_9": {
+      "png": "art/npc/char_09.png",
+      "grid": [
+        16,
+        32
+      ],
+      "rect": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      }
+    },
+    "npc/companion": {
+      "png": "art/npc/companion.png"
+    },
+    "npc/fauna_crow": {
+      "png": "art/atlas/crow_idle_up_32x32_a64f4aca.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 6,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 2
+      },
+      "strip_dir": "Right"
+    },
+    "particles/mariposa": {
+      "png": "art/atlas/animated_butterfly_2_idle_32x32_32f0b7dd.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "particles/mariposa_amarilla": {
+      "png": "art/atlas/animated_butterfly_6_32x32_995ba886.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "particles/mariposa_azul": {
+      "png": "art/atlas/animated_butterfly_32x32_14a85709.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "particles/mariposa_roja": {
+      "png": "art/atlas/animated_butterfly_3_idle_32x32_a197b6a6.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "particles/mariposa_verde": {
+      "png": "art/atlas/animated_butterfly_4_32x32_e0b92f85.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "player/character": "art/player/character.png",
+    "prop/banco": {
+      "png": "art/prop/banco.png"
+    },
+    "prop/barril": {
+      "png": "art/prop/barril.png"
+    },
+    "prop/buzon": {
+      "png": "art/prop/buzon.png"
+    },
+    "prop/caja": {
+      "png": "art/atlas/box_2_empty_32x32_e345343f.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 14,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 2
+      },
+      "strip_dir": "Right"
+    },
+    "prop/carpa": {
+      "png": "art/prop/carpa.png"
+    },
+    "prop/cartel": {
+      "png": "art/prop/cartel.png"
+    },
+    "prop/cerca": {
+      "png": "art/prop/cerca.png"
+    },
+    "prop/estatua": {
+      "png": "art/prop/estatua.png"
+    },
+    "prop/farol": {
+      "png": "art/prop/farol.png",
+      "emission": {
+        "color": [
+          1.0,
+          0.85000014,
+          0.55
+        ],
+        "radius": 7.0,
+        "intensity": 1.0,
+        "offset": [
+          0.0,
+          0.8
+        ],
+        "flicker": 0.06,
+        "day": false
+      }
+    },
+    "prop/hidrante": {
+      "png": "art/prop/hidrante.png"
+    },
+    "prop/maceta": {
+      "png": "art/prop/maceta.png"
+    },
+    "prop/mesa_picnic": {
+      "png": "art/prop/mesa_picnic.png"
+    },
+    "prop/tacho_basura": {
+      "png": "art/prop/tacho_basura.png"
+    },
+    "room/casa_1": {
+      "png": "art/room/casa_1.png"
+    },
+    "room/room_medium": {
+      "png": "art/room/room_medium.png"
+    },
+    "room/room_small": {
+      "png": "art/room/room_small.png"
+    },
+    "structure/statue": {
+      "png": "art/atlas/garden_fountain_4_32x32_6ef412ea.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 6,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 6
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/fishes": {
+      "png": "art/atlas/fishes_3_32x32_18b884c7.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/floating_rock": {
+      "png": "art/atlas/beach_floating_rock_9_32x32_c0bbfb77.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 8,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 2,
+        "h": 2
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/floating_rock_big": {
+      "png": "art/atlas/beach_floating_rock_13_32x32_18b411f2.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 8,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 4,
+        "h": 4
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/floating_rock_big_moss": {
+      "png": "art/atlas/beach_floating_rock_moss_13_32x32_6fd53d54.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 4,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 4,
+        "h": 4
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/floating_rock_moss": {
+      "png": "art/atlas/beach_floating_rock_moss_5_32x32_25545cea.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 8,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/floating_trunk": {
+      "png": "art/atlas/floating_trunk_32x32_2d5aff81.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 8,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 6
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/grass": {
+      "png": "art/tiles/grass.png"
+    },
+    "tiles/sand": {
+      "png": "art/tiles/sand.png"
+    },
+    "tiles/water": {
+      "png": "art/atlas/water_tileset_32x32_fb37aa19.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 8,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 3
+      },
+      "strip_dir": "Right",
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 1,
+            "row": 1,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "corner_ne": {
+          "rect": {
+            "col": 2,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "corner_nw": {
+          "rect": {
+            "col": 0,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "corner_se": {
+          "rect": {
+            "col": 2,
+            "row": 2,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "corner_sw": {
+          "rect": {
+            "col": 0,
+            "row": 2,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "edge_e": {
+          "rect": {
+            "col": 2,
+            "row": 1,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "edge_n": {
+          "rect": {
+            "col": 1,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "edge_s": {
+          "rect": {
+            "col": 1,
+            "row": 2,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        },
+        "edge_w": {
+          "rect": {
+            "col": 0,
+            "row": 1,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 8,
+            "fps": 6.0
+          },
+          "dir": "Right",
+          "layer": "Floor"
+        }
+      }
+    },
+    "tiles/water_bubbles": {
+      "png": "art/atlas/bubbles_32x32_cf82b998.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 8,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right"
+    },
+    "tiles/waterfall_3": {
+      "png": "art/atlas/waterfall_3_32x32_fb173e74.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 6,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 0,
+        "row": 0,
+        "w": 3,
+        "h": 4
+      },
+      "strip_dir": "Right"
+    },
+    "ui/bag_button": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 51,
+            "row": 19,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 3,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/button": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "rect": {
+        "col": 27,
+        "row": 0,
+        "w": 1,
+        "h": 1
+      },
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 37,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/button_pressed": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "anim": {
+        "frames": 3,
+        "fps": 6.0
+      },
+      "strip": {
+        "col": 51,
+        "row": 35,
+        "w": 1,
+        "h": 1
+      },
+      "strip_dir": "Right",
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 51,
+            "row": 35,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 3,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/close_button": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 48,
+            "row": 21,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 3,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/energy_full": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 10,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/heart_full": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 13,
+            "row": 10,
+            "w": 2,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/heart_half": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 13,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/hold_progress_bg": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 17,
+            "row": 24,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 24,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 24,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/hold_progress_fill": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 17,
+            "row": 25,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 25,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 25,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/hotbar_slot": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 4,
+            "row": 11,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_ne": {
+          "rect": {
+            "col": 5,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_nw": {
+          "rect": {
+            "col": 3,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_se": {
+          "rect": {
+            "col": 5,
+            "row": 12,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_sw": {
+          "rect": {
+            "col": 3,
+            "row": 12,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 5,
+            "row": 11,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_n": {
+          "rect": {
+            "col": 4,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_s": {
+          "rect": {
+            "col": 4,
+            "row": 12,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 3,
+            "row": 11,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/hotbar_slot_selected": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 4,
+            "row": 13,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/hunger_full": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 12,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/hunger_half": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 12,
+            "row": 9,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/icon_interactuar": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 51,
+            "row": 31,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 3,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/joystick_base": {
+      "png": "art/atlas/modern_ui_gamepad_32x32_ff0f8161.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 0,
+            "row": 18,
+            "w": 2,
+            "h": 2
+          }
+        }
+      }
+    },
+    "ui/joystick_knob": {
+      "png": "art/atlas/modern_ui_gamepad_32x32_ff0f8161.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 0,
+            "row": 16,
+            "w": 2,
+            "h": 2
+          }
+        }
+      }
+    },
+    "ui/jump_button": {
+      "png": "art/atlas/modern_ui_gamepad_32x32_ff0f8161.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 0,
+            "row": 15,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/menu_button": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 54,
+            "row": 27,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 3,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/minimapa_marco": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 1,
+            "row": 1,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "corner_ne": {
+          "rect": {
+            "col": 2,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "corner_nw": {
+          "rect": {
+            "col": 0,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "corner_se": {
+          "rect": {
+            "col": 2,
+            "row": 2,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "corner_sw": {
+          "rect": {
+            "col": 0,
+            "row": 2,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "edge_e": {
+          "rect": {
+            "col": 2,
+            "row": 1,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "edge_n": {
+          "rect": {
+            "col": 1,
+            "row": 0,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "edge_s": {
+          "rect": {
+            "col": 1,
+            "row": 2,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        },
+        "edge_w": {
+          "rect": {
+            "col": 0,
+            "row": 1,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 4,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    },
+    "ui/oxygen_empty": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 16,
+            "row": 8,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 7,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 7,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/oxygen_full": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 17,
+            "row": 7,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 7,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 7,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/panel": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "rect": {
+        "col": 3,
+        "row": 8,
+        "w": 3,
+        "h": 2
+      },
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 4,
+            "row": 11,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_ne": {
+          "rect": {
+            "col": 5,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_nw": {
+          "rect": {
+            "col": 3,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_se": {
+          "rect": {
+            "col": 5,
+            "row": 12,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "corner_sw": {
+          "rect": {
+            "col": 3,
+            "row": 12,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 5,
+            "row": 11,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_n": {
+          "rect": {
+            "col": 4,
+            "row": 10,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_s": {
+          "rect": {
+            "col": 4,
+            "row": 12,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 3,
+            "row": 11,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/slot_empty": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 3,
+            "row": 8,
+            "w": 3,
+            "h": 2
+          }
+        }
+      }
+    },
+    "ui/thirst_empty": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 17,
+            "row": 19,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 19,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 19,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/thirst_full": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 17,
+            "row": 16,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 16,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 16,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/thirst_half": {
+      "png": "art/atlas/modern_ui_style_1_32x32_27a3e5b4.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 16,
+            "row": 18,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_e": {
+          "rect": {
+            "col": 18,
+            "row": 19,
+            "w": 1,
+            "h": 1
+          }
+        },
+        "edge_w": {
+          "rect": {
+            "col": 16,
+            "row": 19,
+            "w": 1,
+            "h": 1
+          }
+        }
+      }
+    },
+    "ui/use_button": {
+      "png": "art/atlas/modern_ui_gamepad_32x32_ff0f8161.png",
+      "grid": [
+        32,
+        32
+      ],
+      "poses": {
+        "center": {
+          "rect": {
+            "col": 0,
+            "row": 15,
+            "w": 1,
+            "h": 1
+          },
+          "anim": {
+            "frames": 3,
+            "fps": 6.0
+          },
+          "dir": "Right"
+        }
+      }
+    }
   }
 }

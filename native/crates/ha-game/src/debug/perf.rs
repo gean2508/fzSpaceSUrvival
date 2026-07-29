@@ -296,7 +296,7 @@ fn log_perf_periodic(
     span: Res<CpuSpanStats>,
     region: Res<crate::scene::RegionRuntime>,
     world_ctx: Res<crate::scene::WorldContextRuntime>,
-    flight: Res<crate::rocket_flight::RocketFlight>,
+    flight: Res<crate::flight::Flight>,
     mut ring: ResMut<PerfRingBuffer>,
     mut log_timer: Local<f32>,
 ) {

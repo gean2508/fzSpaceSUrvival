@@ -11,18 +11,17 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use ha_shared::{body_def, require_machine, ANTENNA, LAUNCH_PAD, REGOLITH_DRILL, WOOD_EXTRACTOR};
+use ha_shared::{body_def, require_machine, ANTENNA, REGOLITH_DRILL, WOOD_EXTRACTOR};
 use serde::{Deserialize, Serialize};
 
 use crate::game_time::fixed_delta_secs;
-use crate::launch_pad::{in_launch_pad_zone, spawn_launch_pad, zone_has_launch_pad, LaunchPadWorld};
 
 use crate::hud::item_icons::ItemIconCache;
 use crate::input::{EquippedItem, HoldInteractState};
 use crate::inventory_persist::{persist_dir, InventoryPersistState, PlayerInventory};
 use crate::platform::is_app_paused;
 use crate::render::particles::spawn_harvest_particles;
-use crate::rocket_flight::RocketFlight;
+use crate::flight::Flight;
 use crate::scene::{RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, SimState};
 use crate::world2d::{active_landable_body, ActivePlanet, TileWorld};
@@ -103,12 +102,12 @@ pub struct MachineEntity {
 pub struct PlacementCtx<'w> {
     region: Res<'w, RegionRuntime>,
     world_ctx: Res<'w, WorldContextRuntime>,
-    flight: Res<'w, RocketFlight>,
+    flight: Res<'w, Flight>,
     planet: Res<'w, ActivePlanet>,
 }
 
 impl PlacementCtx<'_> {
-    fn body(&self) -> Option<CelestialBody> {
+    pub(crate) fn body(&self) -> Option<CelestialBody> {
         active_landable_body(&self.region, &self.world_ctx, &self.flight, &self.planet)
     }
 }
@@ -119,7 +118,7 @@ fn machine_allowed_on(machine_id: &str, body: CelestialBody) -> bool {
     let airless = body_def(body).atmo_top_m <= 0.0;
     match machine_id {
         // Trees/launch zone are Earth content.
-        id if id == WOOD_EXTRACTOR.id || id == LAUNCH_PAD.id => body == CelestialBody::Earth,
+        id if id == WOOD_EXTRACTOR.id => body == CelestialBody::Earth,
         // Regolith + uplink + sealed habitats are the off-world camp kit.
         id if id == REGOLITH_DRILL.id || id == ANTENNA.id || id == ha_shared::HABITAT.id => {
             airless
@@ -144,7 +143,6 @@ pub(crate) fn try_place_on_hold(
     mut images: ResMut<Assets<Image>>,
     art: Res<crate::art2d::ArtLibrary>,
     editor: Res<crate::ui_editor::UiEditorState>,
-    mut launch_pads: ResMut<LaunchPadWorld>,
 ) {
     // Consume only holds started as machine placement (cf. building_world.rs guard).
     if !hold.completed || !hold.placing_machine || hold.flight_hold {
@@ -178,15 +176,6 @@ pub(crate) fn try_place_on_hold(
     let tz = sim.body.z + sim.body.rot.sin() * 2.4;
     let _ = &tiles;
 
-    if machine_id == LAUNCH_PAD.id && !in_launch_pad_zone(tx, tz) {
-        eprintln!("ha-launch: launch pad must be placed in the reserved zone");
-        return;
-    }
-    if machine_id == LAUNCH_PAD.id && zone_has_launch_pad(&launch_pads) {
-        eprintln!("ha-launch: spaceport already has a launch pad");
-        return;
-    }
-
     if !editor.creative {
         inv.consume_machine_cost(def);
     }
@@ -206,13 +195,9 @@ pub(crate) fn try_place_on_hold(
     });
     world.dirty = true;
 
-    if machine_id == LAUNCH_PAD.id {
-        spawn_launch_pad(&mut commands, uid, tx, tz, &mut launch_pads);
-    } else {
-        spawn_machine_visual(
-            &mut commands, &mut icons, &mut images, &art, def.id, body, uid, tx, tz,
-        );
-    }
+    spawn_machine_visual(
+        &mut commands, &mut icons, &mut images, &art, def.id, body, uid, tx, tz,
+    );
 
     let r = crate::world2d::render_xy(tx, tz);
     spawn_harvest_particles(&mut commands, &pool, Vec3::new(r.x, r.y + 0.6, 0.0), uid as usize);
@@ -286,7 +271,7 @@ fn sync_machine_visuals(
         return;
     };
     for m in world.on_body(body) {
-        if m.machine_id == LAUNCH_PAD.id || spawned.contains(&m.uid) {
+        if spawned.contains(&m.uid) {
             continue;
         }
         spawn_machine_visual(
@@ -402,13 +387,9 @@ fn load_machines_on_startup(mut world: ResMut<MachineWorld>) {
     };
     world.next_uid = save.next_uid;
     for m in save.placed {
-        // Launch pads respawn through their own demo/pad flow — skip here.
         let Some(def) = ha_shared::get_machine(&m.machine_id) else {
             continue;
         };
-        if def.id == LAUNCH_PAD.id {
-            continue;
-        }
         let Some(&body) = CelestialBody::all()
             .iter()
             .find(|b| body_def(**b).label == m.body)
@@ -438,7 +419,6 @@ fn save_machines_to_disk(world: &MachineWorld) {
         placed: world
             .placed
             .iter()
-            .filter(|m| m.machine_id != LAUNCH_PAD.id)
             .map(|m| MachineSave {
                 uid: m.uid,
                 machine_id: m.machine_id.to_string(),

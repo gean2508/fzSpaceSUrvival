@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn vacuum_high_altitude() {
-        assert!(in_vacuum([0.0, 500.0, 0.0]));
+        assert!(in_vacuum([0.0, 10_000.0, 0.0]));
     }
 
     #[test]

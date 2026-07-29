@@ -26,3 +26,25 @@ graphify-out/
 
 # Raw LimeZu asset packs (reference for top-down migration Fase 6 — no bundlear)
 /PRUEBAS-CODIGOS/
+
+# IA frugal fuente (HIVE_OS) — 350M con venv; lo esencial (kernel C + genoma)
+# ya está vendorizado en native/crates/iafz-sys/. No versionar la fuente cruda.
+/iagrufal-main/
+
+# Claude Code: config local de la máquina (permisos/locks), no del proyecto.
+/.claude/settings.local.json
+/.claude/scheduled_tasks.lock
+
+# Save-state/dumps que quedan en la RAÍZ cuando una herramienta corre desde el
+# repo root en vez de native/ (accidental) — el save real vive en native/.
+/inventory.json
+/structures.json
+/tiles.json
+/vessels.json
+/society/
+/vivarium/
+
+# Screenshots/log de los QA drivers (debug/perf.rs, autodrive.rs) — se
+# regeneran en cada corrida, no son fuente.
+/ha-shot-*.png
+/native/bugreport.jsonl

@@ -1,5 +1,5 @@
 import { WORLD_HALF } from "./constants.js";
-import type { MovementBody } from "./movement.js";
+import type { MovementBody } from "./parkour.js";
 
 export function worldWrapLimit(radius: number): number {
   return WORLD_HALF - radius;

@@ -24,6 +24,7 @@
     "verify:apk": "node scripts/verify-apk-pipeline.mjs",
     "verify": "node scripts/verify-all.mjs",
     "sync:art": "node scripts/sync-art.mjs",
+    "tools": "node scripts/tools-server.mjs",
     "test": "npm test -w @hunger-arena/shared",
     "test:native": "make -C native test",
     "phone:install": "bash scripts/device-ready.sh",
@@ -33,7 +34,8 @@
     "dev:native": "make -C native run",
     "dev:pc": "node scripts/dev-pc.mjs",
     "dev:pc:game": "node scripts/dev-pc.mjs --game",
-    "build:native": "make -C native release"
+    "build:native": "make -C native release",
+    "qa:suite": "node scripts/ha-suite.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

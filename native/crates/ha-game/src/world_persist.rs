@@ -8,7 +8,7 @@ use ha_shared::FlightPhase;
 
 use crate::inventory_persist::persist_dir;
 use crate::platform::is_app_paused;
-use crate::rocket_flight::RocketFlight;
+use crate::flight::Flight;
 use crate::solar_system_clock::SolarSystemClock;
 
 /// Bevy resource wrapper around shared vessel registry.
@@ -140,7 +140,7 @@ fn debounced_vessel_save(
 }
 
 fn sync_player_vessel_from_flight(
-    flight: Res<RocketFlight>,
+    flight: Res<Flight>,
     clock: Res<SolarSystemClock>,
     mut reg: ResMut<VesselRegistryRes>,
     mut persist: ResMut<VesselPersistState>,
@@ -151,7 +151,7 @@ fn sync_player_vessel_from_flight(
         reg.ensure(VesselId::PlayerShip, flight.body);
         reg.set_active_flight(VesselId::PlayerShip);
         if let Some(v) = reg.get_mut(VesselId::PlayerShip) {
-            v.fuel_pct = flight.fuel_pct();
+            v.fuel_pct = flight.ki_pct();
         }
         persist.mark_dirty();
     } else if !flying && *was_flying {
@@ -160,12 +160,12 @@ fn sync_player_vessel_from_flight(
         let phase = (pos[0] * 0.001 + pos[2] * 0.0013).rem_euclid(std::f32::consts::TAU);
         reg.park_orbit(VesselId::PlayerShip, flight.body, alt.max(50.0), phase);
         if let Some(v) = reg.get_mut(VesselId::PlayerShip) {
-            v.fuel_pct = flight.fuel_pct();
+            v.fuel_pct = flight.ki_pct();
         }
         persist.mark_dirty();
     } else if flying {
         if let Some(v) = reg.get_mut(VesselId::PlayerShip) {
-            v.fuel_pct = flight.fuel_pct();
+            v.fuel_pct = flight.ki_pct();
             v.body = flight.body;
         }
     }

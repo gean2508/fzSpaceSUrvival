@@ -263,7 +263,7 @@ fn sync_telemetry_panel(
         ))
         .with_children(|b| {
             b.spawn((
-                Text::new("REMOTE CAM — LUNA MODULE"),
+                Text::new("REMOTE CAM - LUNA MODULE"),
                 TextFont {
                     font_size: 14.0,
                     ..default()

@@ -1,5 +1,5 @@
 import { BLOCK_STEP_HEIGHT, LAUNCH_PAD_ZONE, WORLD_HALF } from "./constants.js";
-import type { MovementBody } from "./movement.js";
+import type { MovementBody } from "./parkour.js";
 import { Rng } from "./rng.js";
 import {
   BLOCK_TERRAIN,

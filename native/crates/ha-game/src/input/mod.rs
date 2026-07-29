@@ -10,9 +10,9 @@ pub use calibration::{
     apply_stick_curve_vec, adaptive_deadzone_norm, apply_stick_deadzone, InputCalibration,
     DEFAULT_RENDER_SCALE, DEFAULT_STICK_CURVE_EXPONENT, CAMERA_LOOK_SMOOTH_RATE,
 };
-pub use actions::{layout_action_buttons, CraftIntent, TouchActions};
+pub use actions::{layout_action_buttons, ActionButton, ActionKind, CraftIntent, TouchActions};
 pub use joystick::{AimCursor, CameraLookIntent, InputPlugin, MovementIntent, AIM_MAX_REACH};
-pub use layout::{TouchBlockRects, TouchLayout};
+pub use layout::{touch_blocked, touch_in_move_zone, TouchBlockRects, TouchLayout};
 pub use desktop_input::DesktopMouseCapture;
 pub use look_interact::{
     AbilityCooldown, AbilityTapPulse, BuildModeActive, EquippedItem, HoldInteractState,

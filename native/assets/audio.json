@@ -1,0 +1,1032 @@
+{
+  "sfx_volume": 0.75,
+  "music_volume": 0.38,
+  "director": {
+    "first_delay": 25.0,
+    "silence_min": 90.0,
+    "silence_max": 240.0
+  },
+  "sfx": {
+    "bag_close": {
+      "dur": 0.16,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.06,
+          "f0": 780.0,
+          "f1": 780.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "square",
+          "at": 0.07,
+          "dur": 0.07,
+          "f0": 520.0,
+          "f1": 520.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "bag_open": {
+      "dur": 0.16,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.06,
+          "f0": 520.0,
+          "f1": 520.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "square",
+          "at": 0.07,
+          "dur": 0.07,
+          "f0": 780.0,
+          "f1": 780.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "chop": {
+      "dur": 0.16,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.06,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.4,
+          "attack": 0.0,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "triangle",
+          "at": 0.0,
+          "dur": 0.12,
+          "f0": 220.0,
+          "f1": 140.0,
+          "amp": 0.2,
+          "attack": 0.0,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "bitcrush",
+          "bits": 7,
+          "downsample": 3
+        },
+        {
+          "fx": "fade_out",
+          "secs": 8.5
+        },
+        {
+          "fx": "reverb",
+          "size": 0.5,
+          "mix": 0.3
+        }
+      ]
+    },
+    "click": {
+      "dur": 0.05,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 1200.0,
+          "f1": 800.0,
+          "amp": 0.25,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.65,
+          "mix": 0.45
+        }
+      ]
+    },
+    "craft": {
+      "dur": 0.4,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "triangle",
+          "at": 0.0,
+          "dur": 0.14,
+          "f0": 392.0,
+          "f1": 392.0,
+          "amp": 0.3,
+          "attack": 0.1,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "triangle",
+          "at": 0.11,
+          "dur": 0.14,
+          "f0": 494.0,
+          "f1": 494.0,
+          "amp": 0.3,
+          "attack": 0.1,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "triangle",
+          "at": 0.22,
+          "dur": 0.14,
+          "f0": 587.0,
+          "f1": 587.0,
+          "amp": 0.3,
+          "attack": 0.1,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.22,
+          "mix": 0.13
+        }
+      ]
+    },
+    "dig": {
+      "dur": 0.14,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.09,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.35,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 110.0,
+          "f1": 70.0,
+          "amp": 0.5,
+          "attack": 0.02,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.5,
+          "mix": 0.3
+        },
+        {
+          "fx": "fade_out",
+          "secs": 3.0
+        }
+      ]
+    },
+    "door_close": {
+      "dur": 0.18,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "saw",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 220.0,
+          "f1": 160.0,
+          "amp": 0.14,
+          "attack": 0.2,
+          "vibrato": 2.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.1,
+          "dur": 0.07,
+          "f0": 90.0,
+          "f1": 70.0,
+          "amp": 0.35,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.62,
+          "mix": 0.3
+        }
+      ]
+    },
+    "door_open": {
+      "dur": 0.3,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "saw",
+          "at": 0.0,
+          "dur": 0.25,
+          "f0": 150.0,
+          "f1": 220.0,
+          "amp": 0.16,
+          "attack": 0.2,
+          "vibrato": 3.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.63,
+          "mix": 0.3
+        }
+      ]
+    },
+    "drink": {
+      "dur": 0.4,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 300.0,
+          "f1": 420.0,
+          "amp": 0.18,
+          "attack": 0.83,
+          "vibrato": 1.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.12,
+          "dur": 0.1,
+          "f0": 360.0,
+          "f1": 504.0,
+          "amp": 0.36,
+          "attack": 0.62,
+          "vibrato": 1.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.24,
+          "dur": 0.1,
+          "f0": 420.0,
+          "f1": 588.0,
+          "amp": 0.12,
+          "attack": 0.57,
+          "vibrato": 1.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.45,
+          "mix": 0.3
+        }
+      ]
+    },
+    "eat": {
+      "dur": 0.42,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.25,
+          "attack": 0.18,
+          "vibrato": 1.8
+        },
+        {
+          "wave": "triangle",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 160.0,
+          "f1": 120.0,
+          "amp": 0.2,
+          "attack": 0.2,
+          "vibrato": 2.1
+        },
+        {
+          "wave": "noise",
+          "at": 0.14,
+          "dur": 0.07,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.25,
+          "attack": 0.3,
+          "vibrato": 2.1
+        },
+        {
+          "wave": "triangle",
+          "at": 0.14,
+          "dur": 0.1,
+          "f0": 160.0,
+          "f1": 120.0,
+          "amp": 0.0,
+          "attack": 0.2,
+          "vibrato": 2.2
+        },
+        {
+          "wave": "noise",
+          "at": 0.28,
+          "dur": 0.07,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.25,
+          "attack": 0.41,
+          "vibrato": 1.8
+        },
+        {
+          "wave": "triangle",
+          "at": 0.28,
+          "dur": 0.07,
+          "f0": 160.0,
+          "f1": 120.0,
+          "amp": 0.2,
+          "attack": 0.4,
+          "vibrato": 2.05
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.5,
+          "mix": 0.3
+        }
+      ]
+    },
+    "hurt": {
+      "dur": 0.16,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.13,
+          "f0": 440.0,
+          "f1": 180.0,
+          "amp": 0.35,
+          "attack": 0.02,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "jump": {
+      "dur": 0.1,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.08,
+          "f0": 300.0,
+          "f1": 500.0,
+          "amp": 0.15,
+          "attack": 0.3,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "launch": {
+      "dur": 0.8,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.75,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.11,
+          "attack": 0.5,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.6,
+          "f0": 130.0,
+          "f1": 60.0,
+          "amp": 0.0,
+          "attack": 0.4,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.76,
+          "mix": 0.3
+        }
+      ]
+    },
+    "pickup": {
+      "dur": 0.14,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.05,
+          "f0": 880.0,
+          "f1": 880.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "square",
+          "at": 0.06,
+          "dur": 0.07,
+          "f0": 1320.0,
+          "f1": 1320.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "place": {
+      "dur": 0.1,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 220.0,
+          "f1": 220.0,
+          "amp": 0.28,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 330.0,
+          "f1": 330.0,
+          "amp": 0.18,
+          "attack": 0.02,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "stairs": {
+      "dur": 0.28,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "saw",
+          "at": 0.0,
+          "dur": 0.25,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.42,
+          "attack": 0.12,
+          "vibrato": 2.3
+        },
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.2,
+          "f0": 440.0,
+          "f1": 440.0,
+          "amp": 0.33,
+          "attack": 0.15,
+          "vibrato": 1.2
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.2,
+          "f0": 440.0,
+          "f1": 440.0,
+          "amp": 0.43,
+          "attack": 0.05,
+          "vibrato": 0.4
+        }
+      ],
+      "effects": []
+    },
+    "stamp": {
+      "dur": 0.34,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "square",
+          "at": 0.0,
+          "dur": 0.08,
+          "f0": 330.0,
+          "f1": 330.0,
+          "amp": 0.28,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.18,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "square",
+          "at": 0.1,
+          "dur": 0.08,
+          "f0": 262.0,
+          "f1": 262.0,
+          "amp": 0.28,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "noise",
+          "at": 0.1,
+          "dur": 0.04,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.18,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "square",
+          "at": 0.2,
+          "dur": 0.08,
+          "f0": 196.0,
+          "f1": 196.0,
+          "amp": 0.28,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "noise",
+          "at": 0.2,
+          "dur": 0.04,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.18,
+          "attack": 0.02,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "step_hard1": {
+      "dur": 0.04,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.03,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.14,
+          "attack": 0.05,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "triangle",
+          "at": 0.0,
+          "dur": 0.03,
+          "f0": 240.0,
+          "f1": 168.0,
+          "amp": 0.1,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "step_hard2": {
+      "dur": 0.04,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.03,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.14,
+          "attack": 0.05,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "triangle",
+          "at": 0.0,
+          "dur": 0.03,
+          "f0": 280.0,
+          "f1": 196.0,
+          "amp": 0.1,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "step_soft1": {
+      "dur": 0.05,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.1,
+          "attack": 0.15,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 90.0,
+          "f1": 72.0,
+          "amp": 0.12,
+          "attack": 0.1,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "step_soft2": {
+      "dur": 0.05,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.1,
+          "attack": 0.15,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 110.0,
+          "f1": 88.0,
+          "amp": 0.12,
+          "attack": 0.1,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
+    "touchdown": {
+      "dur": 0.18,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.15,
+          "f0": 90.0,
+          "f1": 60.0,
+          "amp": 0.5,
+          "attack": 0.02,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.05,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.15,
+          "attack": 0.05,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.88,
+          "mix": 0.3
+        },
+        {
+          "fx": "echo",
+          "delay": 0.67,
+          "feedback": 0.68,
+          "mix": 0.77
+        },
+        {
+          "fx": "bitcrush",
+          "bits": 4,
+          "downsample": 3
+        }
+      ]
+    }
+  },
+  "thrust": {
+    "dur": 1.0,
+    "rate": 22050,
+    "tones": [
+      {
+        "wave": "noise",
+        "at": 0.0,
+        "dur": 1.0,
+        "f0": 0.0,
+        "f1": 0.0,
+        "amp": 0.3,
+        "attack": 0.18,
+        "vibrato": 0.0
+      }
+    ],
+    "effects": [
+      {
+        "fx": "lowpass",
+        "alpha": 0.2
+      },
+      {
+        "fx": "loop_crossfade",
+        "secs": 0.115
+      },
+      {
+        "fx": "normalize",
+        "peak": 0.11
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "name": "pradera-1",
+      "mood": "surface",
+      "seed": 43521,
+      "dur": 42.0,
+      "base": 220.0,
+      "scale": [
+        0.0,
+        3.0,
+        5.0,
+        7.0,
+        10.0,
+        12.0
+      ],
+      "rate": 16000,
+      "pad": {
+        "wave": "sine",
+        "freq_mult": 0.35,
+        "amp": 0.1,
+        "attack": 0.4,
+        "vibrato": 2.05
+      },
+      "melody": {
+        "wave": "triangle",
+        "amp": 0.12,
+        "attack": 0.35,
+        "vibrato": 0.6,
+        "note_min": 1.2,
+        "note_max": 2.6,
+        "gap_min": 0.9,
+        "gap_max": 2.2,
+        "rest_prob": 0.38,
+        "rest_min": 0.8,
+        "rest_max": 2.4,
+        "harmony_prob": 0.23,
+        "harmony_wave": "sine",
+        "harmony_amp": 0.125,
+        "harmony_attack": 0.4,
+        "harmony_vibrato": 0.4
+      },
+      "effects": [
+        {
+          "fx": "fade_out",
+          "secs": 5.1
+        }
+      ]
+    },
+    {
+      "name": "pradera-2",
+      "mood": "surface",
+      "seed": 1511943370,
+      "dur": 42.0,
+      "base": 220.0,
+      "scale": [
+        0.0,
+        2.0,
+        4.0,
+        7.0,
+        9.0,
+        12.0,
+        14.0
+      ],
+      "rate": 16000,
+      "pad": {
+        "wave": "sine",
+        "freq_mult": 1.25,
+        "amp": 0.05,
+        "attack": 0.4,
+        "vibrato": 0.5
+      },
+      "melody": {
+        "wave": "square",
+        "amp": 0.08,
+        "attack": 0.25,
+        "vibrato": 0.1,
+        "note_min": 1.2,
+        "note_max": 2.6,
+        "gap_min": 0.9,
+        "gap_max": 2.2,
+        "rest_prob": 0.35,
+        "rest_min": 0.8,
+        "rest_max": 2.4,
+        "harmony_prob": 0.3,
+        "harmony_wave": "sine",
+        "harmony_amp": 0.09,
+        "harmony_attack": 0.4,
+        "harmony_vibrato": 0.4
+      },
+      "effects": [
+        {
+          "fx": "fade_out",
+          "secs": 3.0
+        },
+        {
+          "fx": "reverb",
+          "size": 0.7,
+          "mix": 0.3
+        }
+      ]
+    },
+    {
+      "name": "pradera-3",
+      "mood": "surface",
+      "seed": 43523,
+      "dur": 42.0,
+      "base": 220.0,
+      "scale": [
+        0.0,
+        2.0,
+        4.0,
+        7.0,
+        9.0,
+        12.0,
+        14.0
+      ],
+      "rate": 16000,
+      "pad": {
+        "wave": "sine",
+        "freq_mult": 0.5,
+        "amp": 0.05,
+        "attack": 0.4,
+        "vibrato": 0.5
+      },
+      "melody": {
+        "wave": "triangle",
+        "amp": 0.16,
+        "attack": 0.35,
+        "vibrato": 0.6,
+        "note_min": 1.2,
+        "note_max": 2.6,
+        "gap_min": 0.9,
+        "gap_max": 2.2,
+        "rest_prob": 0.35,
+        "rest_min": 0.8,
+        "rest_max": 2.4,
+        "harmony_prob": 0.3,
+        "harmony_wave": "sine",
+        "harmony_amp": 0.09,
+        "harmony_attack": 0.4,
+        "harmony_vibrato": 0.4
+      },
+      "effects": [
+        {
+          "fx": "fade_out",
+          "secs": 3.0
+        }
+      ]
+    },
+    {
+      "name": "vacio-estelar",
+      "mood": "space",
+      "seed": 47873,
+      "dur": 55.0,
+      "base": 138.6,
+      "scale": [
+        0.0,
+        3.0,
+        5.0,
+        7.0,
+        10.0,
+        12.0
+      ],
+      "rate": 16000,
+      "pad": {
+        "wave": "sine",
+        "freq_mult": 0.5,
+        "amp": 0.05,
+        "attack": 0.4,
+        "vibrato": 0.5
+      },
+      "melody": {
+        "wave": "triangle",
+        "amp": 0.16,
+        "attack": 0.35,
+        "vibrato": 0.6,
+        "note_min": 1.2,
+        "note_max": 2.6,
+        "gap_min": 0.9,
+        "gap_max": 2.2,
+        "rest_prob": 0.35,
+        "rest_min": 0.8,
+        "rest_max": 2.4,
+        "harmony_prob": 0.3,
+        "harmony_wave": "sine",
+        "harmony_amp": 0.09,
+        "harmony_attack": 0.4,
+        "harmony_vibrato": 0.4
+      },
+      "effects": [
+        {
+          "fx": "fade_out",
+          "secs": 3.0
+        }
+      ]
+    },
+    {
+      "name": "subsuelo",
+      "mood": "underground",
+      "seed": 52225,
+      "dur": 48.0,
+      "base": 164.8,
+      "scale": [
+        0.0,
+        3.0,
+        5.0,
+        8.0,
+        10.0
+      ],
+      "rate": 16000,
+      "pad": {
+        "wave": "sine",
+        "freq_mult": 0.5,
+        "amp": 0.05,
+        "attack": 0.4,
+        "vibrato": 0.5
+      },
+      "melody": {
+        "wave": "triangle",
+        "amp": 0.16,
+        "attack": 0.35,
+        "vibrato": 0.6,
+        "note_min": 1.2,
+        "note_max": 2.6,
+        "gap_min": 0.9,
+        "gap_max": 2.2,
+        "rest_prob": 0.35,
+        "rest_min": 0.8,
+        "rest_max": 2.4,
+        "harmony_prob": 0.3,
+        "harmony_wave": "sine",
+        "harmony_amp": 0.09,
+        "harmony_attack": 0.4,
+        "harmony_vibrato": 0.4
+      },
+      "effects": [
+        {
+          "fx": "fade_out",
+          "secs": 3.0
+        }
+      ]
+    }
+  ]
+}

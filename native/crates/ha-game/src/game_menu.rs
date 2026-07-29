@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, Overflow, RepeatedGridTrack};
 use ha_shared::{body_center_at, body_def, CelestialBody};
 
-use crate::rocket_flight::RocketFlight;
+use crate::flight::Flight;
 use crate::scene::RegionId;
 use crate::sim::{Player, SimState};
 use crate::solar_system_clock::SolarSystemClock;
@@ -325,7 +325,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             });
 
             root.spawn((
-                Text::new("+ tu nave    o orbitas    * Sol"),
+                Text::new("+ tu     o orbitas    * Sol"),
                 TextFont {
                     font_size: 12.0,
                     ..default()
@@ -358,8 +358,8 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             ))
             .with_children(|row| {
                 use crate::colony::{ColonyAction, ColonyButton};
-                menu_button(row, "COLONO (5🍎)", ColonyButton(ColonyAction::SendColonist));
-                menu_button(row, "VÍVERES (3🍎)", ColonyButton(ColonyAction::SendSupplies));
+                menu_button(row, "COLONO (5 manz)", ColonyButton(ColonyAction::SendColonist));
+                menu_button(row, "VIVERES (3 manz)", ColonyButton(ColonyAction::SendSupplies));
             });
 
             // ── Menú principal: SOLO funciones de menú (viaje, modos, opciones).
@@ -397,7 +397,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             ))
             .with_children(|col| {
                 col.spawn((
-                    Text::new("EDITAR UI — elegí un control y movelo/escalalo:"),
+                    Text::new("EDITAR UI - elegi un control y movelo/escalalo:"),
                     TextFont {
                         font_size: 13.0,
                         ..default()
@@ -406,10 +406,10 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 ));
                 menu_row(col, |bar| {
                     use crate::ui_editor::UiEditorCommand as C;
-                    menu_button(bar, "◧ Stick", C::SelectMove);
-                    menu_button(bar, "◧ Usar", C::SelectUse);
-                    menu_button(bar, "◧ Saltar", C::SelectJump);
-                    menu_button(bar, "−", C::ScaleDown);
+                    menu_button(bar, "> Stick", C::SelectMove);
+                    menu_button(bar, "> Usar", C::SelectUse);
+                    menu_button(bar, "> Saltar", C::SelectJump);
+                    menu_button(bar, "-", C::ScaleDown);
                     menu_button(bar, "+", C::ScaleUp);
                     menu_button(bar, "RESET", C::Reset);
                     menu_button(bar, "GUARDAR", C::Save);
@@ -481,7 +481,7 @@ fn map_percent(pos: [f32; 3], sun: [f32; 3]) -> (f32, f32) {
 fn update_map_markers(
     menu: Res<GameMenuState>,
     clock: Res<SolarSystemClock>,
-    flight: Res<RocketFlight>,
+    flight: Res<Flight>,
     region: Res<crate::scene::RegionRuntime>,
     mut sets: ParamSet<(
         Query<(&MapBody, &mut Node)>,
@@ -645,12 +645,12 @@ fn update_luna_base_monitor(
         let fed = if crew == 0 {
             ""
         } else if ha_shared::colony_fed(&colony.state) {
-            " (trabajando ×1.5)"
+            " (trabajando x1.5)"
         } else {
-            " (SIN VÍVERES)"
+            " (SIN VIVERES)"
         };
         format!(
-            "BASE LUNA — antena OK · taladros {drills} · hierro {banked} · colonos {crew}/{cap}{fed} · víveres {:.0}",
+            "BASE LUNA - antena OK | taladros {drills} | hierro {banked} | colonos {crew}/{cap}{fed} | viveres {:.0}",
             colony.state.food_stock
         )
     } else {

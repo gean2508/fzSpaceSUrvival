@@ -25,9 +25,15 @@ pub const LUNA_SKY_EARTH_RADIUS_M: f32 = 14.0;
 // Antes 480 (caminable) vs 8000 (orbital) → despegar teletransportaba entre dos
 // marcos/escala. Ahora la Tierra es un cuerpo normal de radio 1500: mismo radio
 // caminable y orbital, centro único, remap identidad (ver `planet_surface.rs`).
-pub const EARTH_GAMEPLAY_RADIUS_M: f32 = 1_500.0;
-/// Walkable moon shell — arcade metres.
-pub const MOON_GAMEPLAY_RADIUS_M: f32 = 420.0;
+/// ESCALA GTA-V (29 jul 2026): 30 km de radio ⇒ 60 km de punta a punta. A la
+/// altura de crucero cómoda (~1.4 km, donde todavía distinguís el terreno) son
+/// unos **10 minutos de vuelo** para cruzarlo — el orden de magnitud que pidió
+/// el usuario, y el que hace que ver el planeta entero desde el espacio impresione.
+/// Antes eran 1500 m: cruzabas el mundo en 20 segundos y el "planeta" era un
+/// pueblo. Todos los cuerpos escalaron ×20 con él (ver `celestial_bodies`).
+pub const EARTH_GAMEPLAY_RADIUS_M: f32 = 30_000.0;
+/// Walkable moon shell — arcade metres (mantiene la proporción real con la Tierra).
+pub const MOON_GAMEPLAY_RADIUS_M: f32 = 8_400.0;
 
 /// Visual-only radius for orbital / hub spheres (unchanged ratios).
 pub const MOON_SURFACE_RADIUS_M: f32 = MOON_GAMEPLAY_RADIUS_M;

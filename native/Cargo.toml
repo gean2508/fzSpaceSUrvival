@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ha-shared", "crates/ha-assets", "crates/ha-asset-tools", "crates/ha-game"]
+members = ["crates/ha-shared", "crates/ha-assets", "crates/ha-asset-tools", "crates/ha-audio", "crates/ha-game", "crates/iafz-sys"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,11 +11,14 @@ repository = "https://github.com/hunger-arena/hunger-arena"
 [workspace.dependencies]
 bevy = { version = "0.15", default-features = false, features = [
   "bevy_asset",
+  "bevy_audio",
+  "wav",
   "bevy_color",
   "bevy_core_pipeline",
   "bevy_pbr",
   "bevy_render",
   "bevy_scene",
+  "bevy_state",
   "bevy_gltf",
   "bevy_sprite",
   "bevy_text",

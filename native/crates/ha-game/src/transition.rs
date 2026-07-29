@@ -1,97 +1,56 @@
-//! Shared surface↔space transition state — ONE choreography for rocket and
-//! creative flight, on every celestial body.
+//! Estado ATMOSFÉRICO del vuelo — lo que el resto del motor lee mientras volás.
 //!
-//! The active flight (rocket XOR creative — they are mutually exclusive)
-//! writes this resource each frame from `ha_shared::transition_profile`;
-//! passive readers consume it: `sky2d` (cover overlay + sky fade), `camera`
-//! (zoom while transitioning), `world2d` (wide streaming ring),
-//! `rocket_flight::sync_flight_world_state` (the altitude-gated region swap).
-//! B8 holds by construction: the swap is pure render/region under full cover,
-//! physics and input never notice.
+//! Antes esto era la coreografía que TAPABA el salto superficie↔órbita con una
+//! capa opaca de nubes. Ese salto ya no existe (`universe.rs`: un solo marco,
+//! altura = zoom, terreno con LOD continuo), así que este módulo se quedó con lo
+//! único que sigue teniendo sentido: **cuánta atmósfera hay entre la cámara y el
+//! suelo**, y qué encuadre pide la altura actual.
+//!
+//! Reglas nuevas:
+//! - `cover` es BRUMA, no una persiana: nunca llega a opaca (`MAX_HAZE`), así que
+//!   el jugador SIEMPRE ve a dónde va. Si algo necesita esconderse detrás de una
+//!   pantalla opaca, es un bug de continuidad, no algo para tapar.
+//! - Los cuerpos sin aire no tienen bruma: su disco ya está pintado con el mismo
+//!   terreno que pisás, así que no hay nada que disimular.
+//! - `view_h` sale de `universe::view_h_for_alt` — una sola función para todos.
 
 use bevy::prelude::*;
-use ha_shared::{body_radius, transition_profile, CelestialBody};
+use ha_shared::{body_atmo_top, CelestialBody};
 
-/// Viewport height (m) standing on the ground (matches the surface camera).
-pub const GROUND_VIEW_H: f32 = 30.0;
-/// Viewport height (m) at the frame swap — small enough that the streamed
-/// terrain ring always fills it; the cover hides whatever lies beyond.
-pub const SWAP_VIEW_H: f32 = 180.0;
-/// Orbital reveal zoom: `view_h = (radius + alt) * this`. Frames the body as a
-/// DISC that grows as you approach and shrinks as you climb (SFS). Chosen so a
-/// body fills a healthy fraction of the screen at the swap altitude (Earth:
-/// (1500+360)*2.5 = 4650 m viewport, 3000 m disc ≈ 64% of the height).
-pub const ORBIT_REVEAL_FACTOR: f32 = 2.5;
+use crate::universe::{space_alt, view_h_for_alt};
 
-/// ONE continuous camera zoom for the whole flight, as a function of altitude
-/// above the body's surface — used by BOTH creative and rocket flight so the
-/// surface↔space transition is a smooth zoom, never a snap:
-/// - **Above the swap** (`orbital`): the body shows as a disc, growing as you
-///   descend, shrinking as you climb.
-/// - **Below the swap**: a gentle "rising" zoom (`GROUND→SWAP_VIEW_H`, keeps the
-///   streamed terrain filling the view) blended toward the orbital scale ONLY
-///   as the cover goes nearly opaque (`smoothstep(0.9,1)`), so the big zoom-out
-///   to disc scale — which would reveal the finite-terrain edge — happens fully
-///   hidden under cloud/fade. Where `cover==1` (the band around the swap) the
-///   blend equals `orbital(alt)` exactly, so the zoom is CONTINUOUS through the
-///   swap in either direction, on any body.
-pub fn flight_view_h(body: CelestialBody, alt: f32) -> f32 {
-    let r = body_radius(body);
-    let p = transition_profile(body);
-    let orbital = (r + alt) * ORBIT_REVEAL_FACTOR;
-    if alt >= p.swap_up {
-        return orbital;
-    }
-    let rise = GROUND_VIEW_H + (SWAP_VIEW_H - GROUND_VIEW_H) * (alt / p.swap_up).clamp(0.0, 1.0);
-    let cov = p.cover_at(alt);
-    // Blend rise→orbital by cover, weighted so the big zoom-out only happens
-    // once the cover is quite opaque (≥0.8) — hidden — and SMOOTHLY (smootherstep
-    // has zero slope at both ends, so no per-frame jump even when the fast climb
-    // crosses the band quickly). Where cover==1 (the band around the swap) the
-    // weight is 1, so view_h == orbital(alt) exactly → continuous through the
-    // swap in either direction.
-    let zf = smootherstep(0.8, 1.0, cov);
-    rise + (orbital - rise) * zf
-}
 
-/// Smootherstep 0→1 as `x` goes `edge0→edge1` (clamped). Zero 1st/2nd
-/// derivative at the ends → no visible kink where the blend starts/finishes.
-fn smootherstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-    t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
-}
+/// Opacidad máxima de la bruma atmosférica. Deliberadamente < 1: la continuidad
+/// se logra con LOD, no cegando al jugador.
+const MAX_HAZE: f32 = 0.28;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum TransitionMode {
     #[default]
     None,
-    /// Below the swap band, surface frame, climbing out.
+    /// Subiendo dentro de la atmósfera / cerca del suelo.
     Ascent,
-    /// Below the swap band, surface frame, coming down.
+    /// Bajando hacia la superficie.
     Descent,
-    /// Orbital frame — cover/zoom still tracked so approaching any body
-    /// rolls its atmosphere back in.
+    /// Por encima del techo atmosférico del cuerpo.
     Space,
 }
 
 #[derive(Resource)]
 pub struct FlightTransition {
     pub mode: TransitionMode,
-    /// Body whose transition profile is in effect.
+    /// Cuerpo cuya atmósfera/superficie manda ahora.
     pub body: CelestialBody,
-    /// Altitude above that body's surface (m).
+    /// Altura sobre esa superficie (m).
     pub alt: f32,
-    /// Cover overlay opacity 0..1 (clouds / airless fade) → `sky2d`.
+    /// Bruma atmosférica 0..MAX_HAZE → `sky2d`.
     pub cover: f32,
-    /// Cover overlay tint (sRGB) → `sky2d`.
+    /// Tinte de la bruma (sRGB) → `sky2d`.
     pub cover_color: [f32; 3],
-    /// Sky fade 0 (surface sky) → 1 (void) → `sky2d`.
+    /// Desvanecido del cielo 0 (cielo de superficie) → 1 (vacío) → `sky2d`.
     pub sky_blend: f32,
-    /// Zoom the transition wants while it owns the camera (`None` = user's).
+    /// Encuadre que pide la altura (`None` = manda el usuario, a pie).
     pub view_h: Option<f32>,
-    /// Surface-frame render anchor: launch pad on ascent, landing zone on
-    /// descent (render x,y — the rocket sprite climbs/descends "over" it).
-    pub surface_anchor: Vec2,
 }
 
 impl Default for FlightTransition {
@@ -104,7 +63,6 @@ impl Default for FlightTransition {
             cover_color: [1.0, 1.0, 1.0],
             sky_blend: 0.0,
             view_h: None,
-            surface_anchor: Vec2::ZERO,
         }
     }
 }
@@ -114,30 +72,63 @@ impl FlightTransition {
         self.mode != TransitionMode::None
     }
 
-    /// In the surface frame below the swap (rocket sprite renders at the
-    /// anchor, terrain visible under the closing cover).
+    /// Todavía por debajo del techo atmosférico (el HUD y el audio lo usan para
+    /// distinguir "volando sobre el mundo" de "en el espacio").
     pub fn in_surface_frame(&self) -> bool {
         matches!(self.mode, TransitionMode::Ascent | TransitionMode::Descent)
     }
 
-    /// Drive the choreography from the current altitude. Computes cover,
-    /// sky fade and (below the swap) the camera zoom from the body profile.
+    /// Actualiza el estado desde la altura actual. Todo lo de acá es una función
+    /// PURA y continua de `alt` — no hay bandas de conmutación ni histéresis
+    /// porque ya no hay nada que conmutar.
     pub fn drive(&mut self, mode: TransitionMode, body: CelestialBody, alt: f32) {
-        let p = transition_profile(body);
         self.mode = mode;
         self.body = body;
         self.alt = alt;
-        self.cover = p.cover_at(alt);
-        self.cover_color = p.cover_color;
-        self.sky_blend = p.sky_blend_at(alt);
-        // ONE continuous zoom for every mode (surface frame AND orbital) so the
-        // swap is a smooth zoom, and the body is framed as a disc in space.
-        self.view_h = Some(flight_view_h(body, alt));
+        self.cover = haze_at(body, alt);
+        self.cover_color = ha_shared::transition_profile(body).cover_color;
+        self.sky_blend = sky_blend_at(body, alt);
+        self.view_h = Some(view_h_for_alt(body, alt));
     }
 
-    /// Back on the ground / flight over: release sky, cover and camera.
+    /// De vuelta en el suelo: el cielo, la bruma y la cámara vuelven al jugador.
     pub fn clear(&mut self) {
-        *self = Self { body: self.body, surface_anchor: self.surface_anchor, ..default() };
+        *self = Self { body: self.body, ..default() };
+    }
+}
+
+/// Bruma atmosférica a una altura: nula en el suelo (ves tu mundo nítido), pico
+/// suave cruzando la atmósfera, nula otra vez arriba (ves el planeta entero).
+/// Los cuerpos sin aire no tienen ninguna.
+pub fn haze_at(body: CelestialBody, alt: f32) -> f32 {
+    let atmo = body_atmo_top(body);
+    if atmo <= 0.0 {
+        return 0.0;
+    }
+    // Campana sobre [0, 2·atmo] con el pico en el techo de la atmósfera.
+    let x = (alt / atmo.max(1.0)).clamp(0.0, 2.0);
+    let bell = 1.0 - (x - 1.0).abs();
+    MAX_HAZE * bell.clamp(0.0, 1.0)
+}
+
+/// Cielo de superficie → vacío estrellado. Completo un poco por encima del
+/// techo atmosférico; instantáneo en cuerpos sin aire (allí ya es vacío).
+pub fn sky_blend_at(body: CelestialBody, alt: f32) -> f32 {
+    let atmo = body_atmo_top(body);
+    if atmo <= 0.0 {
+        return 1.0;
+    }
+    (alt / (atmo * 2.0)).clamp(0.0, 1.0)
+}
+
+/// Modo que corresponde a una altura y una velocidad vertical.
+pub fn mode_for(body: CelestialBody, alt: f32, vy: f32) -> TransitionMode {
+    if alt >= space_alt(body) {
+        TransitionMode::Space
+    } else if vy < 0.0 {
+        TransitionMode::Descent
+    } else {
+        TransitionMode::Ascent
     }
 }
 
@@ -146,5 +137,30 @@ pub struct TransitionPlugin;
 impl Plugin for TransitionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FlightTransition>();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn haze_never_blinds_and_clears_on_both_ends() {
+        for &b in CelestialBody::all() {
+            assert_eq!(haze_at(b, 0.0), 0.0, "{b:?} en el suelo");
+            let atmo = body_atmo_top(b);
+            let high = if atmo > 0.0 { atmo * 4.0 } else { 500.0 };
+            assert_eq!(haze_at(b, high), 0.0, "{b:?} arriba");
+            for step in 0..200 {
+                let alt = step as f32 * 10.0;
+                assert!(haze_at(b, alt) <= MAX_HAZE, "{b:?} alt {alt}");
+            }
+        }
+    }
+
+    #[test]
+    fn airless_bodies_have_no_haze_at_all() {
+        assert_eq!(haze_at(CelestialBody::Moon, 50.0), 0.0);
+        assert_eq!(sky_blend_at(CelestialBody::Moon, 0.0), 1.0);
     }
 }

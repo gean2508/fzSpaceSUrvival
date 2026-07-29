@@ -125,7 +125,7 @@ pub(super) fn gamepad_hold_interact(
     equipped: Res<super::EquippedItem>,
     pending: Res<crate::machines::PendingMachinePlacement>,
     build_mode: Res<crate::input::BuildModeActive>,
-    flight: Res<crate::rocket_flight::RocketFlight>,
+    flight: Res<crate::flight::Flight>,
     fly: Res<crate::creative_fly::CreativeFlight>,
     mut hold: ResMut<super::HoldInteractState>,
 ) {
@@ -155,6 +155,7 @@ pub(super) fn gamepad_hold_interact(
         hold.placing_block = false;
         hold.flight_hold = false;
         hold.eating = false;
+        hold.placing_chest = false;
         hold.locked_kind = None;
 
         if place_pressed {
@@ -166,6 +167,10 @@ pub(super) fn gamepad_hold_interact(
                 hold.active = true;
                 hold.duration_ms = 300;
                 hold.placing_block = true;
+            } else if equipped.item_id == crate::chests::CHEST_ITEM && target.kind.is_none() {
+                hold.active = true;
+                hold.duration_ms = 450;
+                hold.placing_chest = true;
             } else if ha_shared::food_restore(&equipped.item_id).is_some()
                 && target.kind.is_none()
             {

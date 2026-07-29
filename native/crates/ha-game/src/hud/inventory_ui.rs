@@ -147,6 +147,13 @@ pub fn flush_slots_to_inventory(state: &InventoryUiState, inv: &mut PlayerInvent
             }
         }
     }
+    // La pila "en el dedo" sigue siendo del jugador: si no se contara aquí, un
+    // guardado (o un save-on-pause) mientras arrastrás la borraría del mundo.
+    if let Some(ref held) = state.held {
+        if held.qty > 0 {
+            *inv.items.entry(held.item_id.clone()).or_insert(0) += held.qty;
+        }
+    }
 }
 
 fn stack_mut(state: &mut InventoryUiState, slot: SlotId) -> &mut Stack {
@@ -194,9 +201,18 @@ pub fn consume_from_ui_slots(state: &mut InventoryUiState, ingredients: &[(&str,
 }
 
 /// Prefer hotbar, then grid — for gather/craft output visible next to HAM.
+/// `true` = entró algo (aunque sea parcial). Si necesitás saber CUÁNTO quedó
+/// afuera (mover pilas entre cofre y mochila), usá [`add_item_to_slots_rest`].
 pub fn add_item_to_slots(state: &mut InventoryUiState, item_id: &str, qty: u32) -> bool {
+    add_item_to_slots_rest(state, item_id, qty) < qty
+}
+
+/// Igual que [`add_item_to_slots`] pero devuelve las unidades que NO entraron.
+/// Quien mueve una pila desde otro contenedor debe descontar sólo lo aceptado —
+/// borrar la pila de origen tras un guardado parcial la haría desaparecer.
+pub fn add_item_to_slots_rest(state: &mut InventoryUiState, item_id: &str, qty: u32) -> u32 {
     if qty == 0 {
-        return false;
+        return 0;
     }
     let mut remaining = qty;
     for stack in state.hotbar.iter_mut().chain(state.grid.iter_mut()) {
@@ -222,7 +238,7 @@ pub fn add_item_to_slots(state: &mut InventoryUiState, item_id: &str, qty: u32) 
         };
         remaining -= put;
     }
-    remaining < qty
+    remaining
 }
 
 pub fn pick_up_stack(state: &mut InventoryUiState, slot: SlotId) -> bool {
@@ -317,17 +333,68 @@ pub fn drop_held_on(state: &mut InventoryUiState, slot: SlotId) {
         dest.qty += held.qty;
         return;
     }
+    // Intercambio: lo que había en destino vuelve al slot de origen SÓLO si
+    // sigue libre. Si mientras arrastrabas algo ocupó ese hueco, el desplazado
+    // va al primer slot vacío — nunca se sobrescribe (eso borraba ítems).
     let displaced = dest.clone();
     *dest = Stack {
         item_id: Some(held.item_id),
         qty: held.qty,
     };
-    *stack_mut(state, held.from) = displaced;
+    place_stack_safely(state, displaced, held.from);
 }
 
-/// Drop held stack to the world — item leaves inventory.
-pub fn drop_held_to_world(state: &mut InventoryUiState) -> bool {
-    state.held.take().is_some()
+/// Guarda `stack` en `preferred` si está libre; si no, en el primer hueco libre
+/// (hotbar → grid). Devuelve `false` sólo si el inventario está lleno, y en ese
+/// caso el stack se conserva fusionándolo con uno igual.
+fn place_stack_safely(state: &mut InventoryUiState, stack: Stack, preferred: SlotId) -> bool {
+    if stack.is_empty() {
+        return true;
+    }
+    if stack_ref(state, preferred).is_empty() {
+        *stack_mut(state, preferred) = stack;
+        return true;
+    }
+    if stack_ref(state, preferred).item_id == stack.item_id {
+        stack_mut(state, preferred).qty += stack.qty;
+        return true;
+    }
+    let dest = first_empty_hotbar(state)
+        .map(SlotId::Hotbar)
+        .or_else(|| first_empty_grid(state).map(SlotId::Grid));
+    if let Some(dest) = dest {
+        *stack_mut(state, dest) = stack;
+        return true;
+    }
+    // Inventario lleno: último recurso, apilar sobre otro montón del mismo ítem.
+    let same = state
+        .hotbar
+        .iter_mut()
+        .chain(state.grid.iter_mut())
+        .find(|s| s.item_id == stack.item_id);
+    if let Some(slot) = same {
+        slot.qty += stack.qty;
+        return true;
+    }
+    false
+}
+
+/// Devuelve la pila arrastrada al inventario (su slot de origen si sigue libre).
+/// Es el camino que garantiza que soltar el dedo NUNCA borre un ítem.
+pub fn return_held_to_inventory(state: &mut InventoryUiState) -> bool {
+    let Some(held) = state.held.take() else {
+        return false;
+    };
+    let from = held.from;
+    place_stack_safely(
+        state,
+        Stack {
+            item_id: Some(held.item_id),
+            qty: held.qty,
+        },
+        from,
+    );
+    true
 }
 
 pub fn handle_slot_tap(
@@ -516,32 +583,44 @@ pub fn inventory_slot_release_system(
     }
 }
 
-/// Drop held stack when finger lifts outside any inventory slot (world drop).
-pub fn inventory_held_world_drop_system(
+/// Levantar el dedo NO suelta la pila al vacío: queda "en la mano" (fantasma en
+/// pantalla) hasta que toques un slot destino. Antes esto la tiraba al mundo —
+/// que en la práctica era BORRARLA, porque no existe entidad de ítem caído.
+///
+/// Lo único que hace este sistema al soltar es limpiar el press track, para que
+/// el siguiente toque cuente como "colocar aquí".
+pub fn inventory_release_keeps_held_system(
     mut touches: EventReader<TouchInput>,
+    mouse: Res<ButtonInput<MouseButton>>,
     mut state: ResMut<InventoryUiState>,
-    mut inv: ResMut<PlayerInventory>,
-    mut persist: ResMut<InventoryPersistState>,
-    grid_slots: Query<&Interaction, With<InventoryGridSlot>>,
-    hotbar_slots: Query<&Interaction, With<HotbarItemSlot>>,
 ) {
     if state.held.is_none() {
         return;
     }
-    for ev in touches.read() {
-        if ev.phase != TouchPhase::Ended {
-            continue;
-        }
-        let over_slot = grid_slots.iter().any(|i| {
-            matches!(*i, Interaction::Pressed | Interaction::Hovered)
-        }) || hotbar_slots.iter().any(|i| {
-            matches!(*i, Interaction::Pressed | Interaction::Hovered)
-        });
-        if !over_slot && drop_held_to_world(&mut state) {
-            flush_slots_to_inventory(&state, &mut inv);
-            persist.mark_dirty();
-            state.press = None;
-        }
+    let released = mouse.just_released(MouseButton::Left)
+        || touches
+            .read()
+            .any(|ev| matches!(ev.phase, TouchPhase::Ended | TouchPhase::Canceled));
+    if released {
+        state.press = None;
+    }
+}
+
+/// Cerrar la mochila con una pila arrastrada la devuelve al inventario. Sin
+/// esto, cerrar el panel (o el botón atrás de Android) evaporaba el stack.
+pub fn inventory_return_held_on_close_system(
+    bag: Res<BagPanelState>,
+    mut state: ResMut<InventoryUiState>,
+    mut inv: ResMut<PlayerInventory>,
+    mut persist: ResMut<InventoryPersistState>,
+) {
+    if bag.open || state.held.is_none() {
+        return;
+    }
+    if return_held_to_inventory(&mut state) {
+        state.press = None;
+        flush_slots_to_inventory(&state, &mut inv);
+        persist.mark_dirty();
     }
 }
 
@@ -587,4 +666,90 @@ pub fn grid_signature(state: &InventoryUiState) -> String {
         }
     }
     parts.join(",")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state_with(slot: SlotId, item: &str, qty: u32) -> InventoryUiState {
+        let mut s = InventoryUiState {
+            grid: vec![Stack::default(); GRID_LEN],
+            ..default()
+        };
+        *stack_mut(&mut s, slot) = Stack {
+            item_id: Some(item.to_string()),
+            qty,
+        };
+        s
+    }
+
+    fn total(state: &InventoryUiState, item: &str) -> u32 {
+        let mut inv = PlayerInventory::default();
+        flush_slots_to_inventory(state, &mut inv);
+        inv.qty(item)
+    }
+
+    /// El bug reportado: levantar una pila y soltar el dedo la borraba. Ahora la
+    /// pila arrastrada sigue contando como inventario del jugador.
+    #[test]
+    fn held_stack_still_counts_as_inventory() {
+        let mut s = state_with(SlotId::Grid(3), "wood", 12);
+        assert!(pick_up_stack(&mut s, SlotId::Grid(3)));
+        assert!(s.held.is_some());
+        assert_eq!(total(&s, "wood"), 12, "la pila en la mano no puede evaporarse");
+    }
+
+    #[test]
+    fn returning_held_restores_origin_slot() {
+        let mut s = state_with(SlotId::Hotbar(2), "stone", 7);
+        pick_up_stack(&mut s, SlotId::Hotbar(2));
+        assert!(return_held_to_inventory(&mut s));
+        assert_eq!(s.hotbar[2].qty, 7);
+        assert_eq!(s.hotbar[2].item_id.as_deref(), Some("stone"));
+        assert!(s.held.is_none());
+    }
+
+    /// Si mientras arrastrabas algo ocupó el slot de origen, el desplazado va a
+    /// un hueco libre en vez de sobrescribirse (antes se perdía).
+    #[test]
+    fn swap_never_overwrites_a_refilled_origin() {
+        let mut s = state_with(SlotId::Grid(0), "wood", 5);
+        s.grid[1] = Stack { item_id: Some("stone".into()), qty: 3 };
+        pick_up_stack(&mut s, SlotId::Grid(0));
+        // Otro ítem ocupa el origen mientras la pila está en la mano.
+        s.grid[0] = Stack { item_id: Some("apple".into()), qty: 2 };
+        drop_held_on(&mut s, SlotId::Grid(1));
+
+        assert_eq!(total(&s, "wood"), 5);
+        assert_eq!(total(&s, "stone"), 3, "el stack desplazado sigue existiendo");
+        assert_eq!(total(&s, "apple"), 2);
+    }
+
+    #[test]
+    fn add_reports_what_did_not_fit() {
+        let mut s = InventoryUiState {
+            grid: vec![Stack::default(); GRID_LEN],
+            ..default()
+        };
+        // Llenar cada hueco con un ítem distinto para que no haya apilado.
+        for i in 0..HOTBAR_ITEM_SLOTS {
+            s.hotbar[i] = Stack { item_id: Some(format!("h{i}")), qty: 1 };
+        }
+        for i in 0..GRID_LEN {
+            s.grid[i] = Stack { item_id: Some(format!("g{i}")), qty: 1 };
+        }
+        assert_eq!(add_item_to_slots_rest(&mut s, "wood", 9), 9);
+        assert!(!add_item_to_slots(&mut s, "wood", 9));
+    }
+
+    #[test]
+    fn drop_on_empty_slot_moves_the_whole_stack() {
+        let mut s = state_with(SlotId::Grid(4), "iron_ingot", 3);
+        pick_up_stack(&mut s, SlotId::Grid(4));
+        drop_held_on(&mut s, SlotId::Hotbar(5));
+        assert!(s.grid[4].is_empty());
+        assert_eq!(s.hotbar[5].qty, 3);
+        assert_eq!(total(&s, "iron_ingot"), 3);
+    }
 }

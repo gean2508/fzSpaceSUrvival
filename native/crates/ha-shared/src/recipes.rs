@@ -141,6 +141,36 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "part_nose",
         output_qty: 1,
     },
+    // Tier temprano de luz + almacenamiento + combate cuerpo a cuerpo: todo se
+    // equipa desde la hotbar y se ve EN LA MANO del personaje (`held_item.rs`).
+    CraftRecipe {
+        id: 19,
+        display_name: "Torch",
+        ingredients: &[("wood", 1), ("sticks", 1)],
+        output_id: "torch",
+        output_qty: 4,
+    },
+    CraftRecipe {
+        id: 20,
+        display_name: "Chest",
+        ingredients: &[("wood", 8)],
+        output_id: "chest",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 21,
+        display_name: "Iron Sword",
+        ingredients: &[("iron_ingot", 2), ("sticks", 1)],
+        output_id: "sword_iron",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 22,
+        display_name: "Steel Sword",
+        ingredients: &[("iron_ingot", 3), ("gold_ingot", 1), ("sticks", 1)],
+        output_id: "sword_steel",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {

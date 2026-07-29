@@ -10,6 +10,8 @@ use ha_shared::{palette_rgb, PaletteKey};
 /// Faint chrome for empty inventory / hotbar cells.
 pub const SLOT_EMPTY_ID: &str = "_slot_empty";
 pub const BAG_SLOT_ID: &str = "_bag";
+/// Prefijo de caché para la variante sin fondo (ítem en la mano).
+const HAND_ICON_PREFIX: &str = "_hand:";
 
 #[derive(Resource, Default)]
 pub struct ItemIconCache {
@@ -32,6 +34,19 @@ impl ItemIconCache {
         handle
     }
 
+    /// Igual que [`Self::get`] pero SIN el cuadrado de fondo: es el sprite que
+    /// el personaje lleva en la mano dentro del mundo (un icono con fondo se
+    /// vería como una cajita negra flotando junto al brazo).
+    pub fn hand_sprite(&mut self, item_id: &str, images: &mut Assets<Image>) -> Handle<Image> {
+        let key = format!("{HAND_ICON_PREFIX}{item_id}");
+        if let Some(hit) = self.cache.get(&key) {
+            return hit.clone();
+        }
+        let handle = images.add(rasterize_item(item_id, false));
+        self.cache.insert(key, handle.clone());
+        handle
+    }
+
     pub fn empty_slot(&mut self, images: &mut Assets<Image>) -> Handle<Image> {
         self.get(SLOT_EMPTY_ID, images)
     }
@@ -42,12 +57,18 @@ impl ItemIconCache {
 }
 
 pub fn rasterize_item_icon(item_id: &str) -> Image {
+    rasterize_item(item_id, true)
+}
+
+fn rasterize_item(item_id: &str, with_bg: bool) -> Image {
     let size = 40u32;
     let mut data = vec![0u8; (size * size * 4) as usize];
-    let bg = rgba(PaletteKey::Night, 0.92);
-    for y in 0..size {
-        for x in 0..size {
-            put_px(&mut data, size, x, y, bg);
+    if with_bg {
+        let bg = rgba(PaletteKey::Night, 0.92);
+        for y in 0..size {
+            for x in 0..size {
+                put_px(&mut data, size, x, y, bg);
+            }
         }
     }
     match item_id {
@@ -59,6 +80,10 @@ pub fn rasterize_item_icon(item_id: &str) -> Image {
         "pickaxe" | "wood_pickaxe" | "stone_pickaxe" => draw_pickaxe(&mut data, size),
         "hammer" => draw_hammer(&mut data, size),
         "lantern" => draw_lantern(&mut data, size),
+        "torch" => draw_torch(&mut data, size),
+        "chest" => draw_chest(&mut data, size),
+        "sword_iron" => draw_sword(&mut data, size, PaletteKey::Iron),
+        "sword_steel" => draw_sword(&mut data, size, PaletteKey::Fog),
         "shield_wood" => draw_shield(&mut data, size),
         "jetpack" => draw_jetpack(&mut data, size),
         "iron_ingot" => draw_ingot(&mut data, size, PaletteKey::Iron),
@@ -168,6 +193,38 @@ fn draw_lantern(data: &mut [u8], size: u32) {
     fill_rect(data, size, 16, 12, 24, 24, glow);
     fill_rect(data, size, 18, 14, 22, 22, flame);
     fill_rect(data, size, 18, 26, 22, 32, metal);
+}
+
+/// Antorcha: palo + llama. Vertical y estrecha, para que leída a 40 px (icono)
+/// y a 0.5 m (mano del personaje) siga siendo reconocible.
+fn draw_torch(data: &mut [u8], size: u32) {
+    let handle = rgba(PaletteKey::Wood, 1.0);
+    let ember = rgba(PaletteKey::Gold, 1.0);
+    let flame = rgba(PaletteKey::PotionRed, 1.0);
+    fill_rect(data, size, 18, 16, 22, 36, handle);
+    fill_rect(data, size, 16, 12, 24, 18, ember);
+    fill_rect(data, size, 17, 6, 23, 14, flame);
+    fill_rect(data, size, 19, 3, 21, 8, ember);
+}
+
+fn draw_chest(data: &mut [u8], size: u32) {
+    let body = rgba(PaletteKey::Wood, 1.0);
+    let band = rgba(PaletteKey::Iron, 1.0);
+    let lock = rgba(PaletteKey::Gold, 1.0);
+    fill_rect(data, size, 7, 14, 33, 32, body);
+    fill_rect(data, size, 7, 14, 33, 20, band);
+    fill_rect(data, size, 7, 14, 10, 32, band);
+    fill_rect(data, size, 30, 14, 33, 32, band);
+    fill_rect(data, size, 18, 20, 22, 26, lock);
+}
+
+fn draw_sword(data: &mut [u8], size: u32, blade: PaletteKey) {
+    let steel = rgba(blade, 1.0);
+    let guard = rgba(PaletteKey::Gold, 1.0);
+    let grip = rgba(PaletteKey::Leather, 1.0);
+    fill_rect(data, size, 18, 4, 22, 26, steel);
+    fill_rect(data, size, 12, 26, 28, 29, guard);
+    fill_rect(data, size, 18, 29, 22, 36, grip);
 }
 
 fn draw_shield(data: &mut [u8], size: u32) {

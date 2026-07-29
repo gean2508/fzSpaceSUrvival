@@ -49,6 +49,8 @@ pub struct HoldInteractState {
     pub placing_block: bool,
     /// Food equipped + no target — hold to eat (consumed in `survival_stats.rs`).
     pub eating: bool,
+    /// Cofre equipado + sin objetivo — lo coloca `chests.rs`.
+    pub placing_chest: bool,
 }
 
 #[derive(Resource, Default)]
@@ -182,6 +184,15 @@ fn use_button_hold_interact(
                 };
             }
         }
+    } else if equipped.item_id == crate::chests::CHEST_ITEM {
+        // Cofre en la mano y nada apuntado → lo planta delante tuyo.
+        *started = true;
+        *hold = HoldInteractState {
+            active: true,
+            duration_ms: 450,
+            placing_chest: true,
+            ..default()
+        };
     } else if ha_shared::food_restore(&equipped.item_id).is_some() {
         *started = true;
         *hold = HoldInteractState {
@@ -443,6 +454,9 @@ pub(crate) fn tick_hold_interact(
         || hold.placing_machine
         || hold.placing_build
         || hold.eating
+        // Plantar un cofre se hace sobre suelo vacío: no hay objetivo que
+        // validar, igual que colocar una máquina.
+        || hold.placing_chest
         || (hold.placing_block && target.place_cell.is_some())
         || (hold.flight_hold && hold.locked_kind.is_some());
     let delta_ms = (time.delta_secs() * 1000.0) as u32;

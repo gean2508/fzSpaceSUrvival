@@ -120,9 +120,9 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
             center: [0.0, FLIGHT_PLANE_Y, 0.0],
             radius_m: crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M,
             walk_radius_m: crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M,
-            soi_m: 22_000.0,
+            soi_m: 440_000.0,
             gravity_surface: GRAVITY,
-            atmo_top_m: 120.0,
+            atmo_top_m: 2_400.0,
             landable: true,
             color: [0.28, 0.52, 0.38],
             transit_burn: 55.0,
@@ -131,10 +131,10 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Moon,
             label: "MOON",
-            center: [52_000.0, FLIGHT_PLANE_Y, 0.0],
-            radius_m: 420.0,
-            walk_radius_m: 420.0,
-            soi_m: 4_800.0,
+            center: [416_000.0, FLIGHT_PLANE_Y, 0.0],
+            radius_m: crate::cosmic_scale::MOON_GAMEPLAY_RADIUS_M,
+            walk_radius_m: crate::cosmic_scale::MOON_GAMEPLAY_RADIUS_M,
+            soi_m: 96_000.0,
             gravity_surface: GRAVITY * GRAVITY_LUNA_SCALE,
             atmo_top_m: 0.0,
             landable: true,
@@ -145,10 +145,13 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Mercury,
             label: "MERCURY",
-            center: [88_000.0, FLIGHT_PLANE_Y, 14_000.0],
-            radius_m: 280.0,
-            walk_radius_m: 280.0,
-            soi_m: 3_200.0,
+            // ORDEN 2026-07-26: Mercurio es el más INTERIOR — entre el Sol
+            // (x=-180000) y la Tierra (x=0). dist al Sol ~61.6k < Venus < Tierra,
+            // así orbita el más rápido (`heliocentric` deriva radio/periodo del centro).
+            center: [-960_000.0, FLIGHT_PLANE_Y, 112_000.0],
+            radius_m: 5_600.0,
+            walk_radius_m: 5_600.0,
+            soi_m: 64_000.0,
             gravity_surface: GRAVITY * 0.38,
             atmo_top_m: 0.0,
             landable: true,
@@ -159,12 +162,13 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Venus,
             label: "VENUS",
-            center: [128_000.0, FLIGHT_PLANE_Y, -10_000.0],
-            radius_m: 520.0,
-            walk_radius_m: 520.0,
-            soi_m: 5_500.0,
+            // ORDEN 2026-07-26: Venus entre Mercurio y la Tierra (dist al Sol ~125k).
+            center: [-440_000.0, FLIGHT_PLANE_Y, -80_000.0],
+            radius_m: 10_400.0,
+            walk_radius_m: 10_400.0,
+            soi_m: 110_000.0,
             gravity_surface: GRAVITY * 0.91,
-            atmo_top_m: 80.0,
+            atmo_top_m: 1_600.0,
             landable: true,
             color: [0.82, 0.62, 0.35],
             transit_burn: 155.0,
@@ -173,12 +177,12 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Mars,
             label: "MARS",
-            center: [198_000.0, FLIGHT_PLANE_Y, 0.0],
-            radius_m: 380.0,
-            walk_radius_m: 380.0,
-            soi_m: 5_000.0,
+            center: [1_584_000.0, FLIGHT_PLANE_Y, 0.0],
+            radius_m: 7_600.0,
+            walk_radius_m: 7_600.0,
+            soi_m: 100_000.0,
             gravity_surface: GRAVITY * 0.38,
-            atmo_top_m: 45.0,
+            atmo_top_m: 900.0,
             landable: true,
             color: [0.72, 0.38, 0.28],
             transit_burn: 175.0,
@@ -187,10 +191,10 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Phobos,
             label: "PHOBOS",
-            center: [199_200.0, FLIGHT_PLANE_Y, 600.0],
-            radius_m: 90.0,
-            walk_radius_m: 90.0,
-            soi_m: 900.0,
+            center: [1_606_000.0, FLIGHT_PLANE_Y, 4_800.0],
+            radius_m: 1_800.0,
+            walk_radius_m: 1_800.0,
+            soi_m: 18_000.0,
             gravity_surface: GRAVITY * 0.06,
             atmo_top_m: 0.0,
             landable: true,
@@ -201,10 +205,10 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Deimos,
             label: "DEIMOS",
-            center: [196_800.0, FLIGHT_PLANE_Y, -900.0],
-            radius_m: 70.0,
-            walk_radius_m: 70.0,
-            soi_m: 750.0,
+            center: [1_556_000.0, FLIGHT_PLANE_Y, -7_200.0],
+            radius_m: 1_400.0,
+            walk_radius_m: 1_400.0,
+            soi_m: 15_000.0,
             gravity_surface: GRAVITY * 0.04,
             atmo_top_m: 0.0,
             landable: true,
@@ -215,10 +219,10 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Io,
             label: "IO",
-            center: [278_000.0, FLIGHT_PLANE_Y, 2_400.0],
-            radius_m: 200.0,
-            walk_radius_m: 200.0,
-            soi_m: 2_200.0,
+            center: [2_224_000.0, FLIGHT_PLANE_Y, 19_200.0],
+            radius_m: 4_000.0,
+            walk_radius_m: 4_000.0,
+            soi_m: 44_000.0,
             gravity_surface: GRAVITY * 0.18,
             atmo_top_m: 0.0,
             landable: true,
@@ -229,10 +233,10 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Europa,
             label: "EUROPA",
-            center: [274_000.0, FLIGHT_PLANE_Y, 4_200.0],
-            radius_m: 190.0,
-            walk_radius_m: 190.0,
-            soi_m: 2_000.0,
+            center: [2_192_000.0, FLIGHT_PLANE_Y, 33_600.0],
+            radius_m: 3_800.0,
+            walk_radius_m: 3_800.0,
+            soi_m: 40_000.0,
             gravity_surface: GRAVITY * 0.13,
             atmo_top_m: 0.0,
             landable: true,
@@ -243,12 +247,12 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Titan,
             label: "TITAN",
-            center: [348_000.0, FLIGHT_PLANE_Y, 1_800.0],
-            radius_m: 250.0,
-            walk_radius_m: 250.0,
-            soi_m: 2_800.0,
+            center: [2_784_000.0, FLIGHT_PLANE_Y, 14_400.0],
+            radius_m: 5_000.0,
+            walk_radius_m: 5_000.0,
+            soi_m: 56_000.0,
             gravity_surface: GRAVITY * 0.14,
-            atmo_top_m: 60.0,
+            atmo_top_m: 1_200.0,
             landable: true,
             color: [0.68, 0.52, 0.28],
             transit_burn: 235.0,
@@ -257,12 +261,12 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Uranus,
             label: "URANUS",
-            center: [398_000.0, FLIGHT_PLANE_Y, 0.0],
-            radius_m: 420.0,
-            walk_radius_m: 420.0,
-            soi_m: 4_500.0,
+            center: [3_184_000.0, FLIGHT_PLANE_Y, 0.0],
+            radius_m: 8_400.0,
+            walk_radius_m: 8_400.0,
+            soi_m: 90_000.0,
             gravity_surface: GRAVITY * 0.89,
-            atmo_top_m: 55.0,
+            atmo_top_m: 1_100.0,
             landable: true,
             color: [0.45, 0.72, 0.78],
             transit_burn: 250.0,
@@ -271,12 +275,12 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Neptune,
             label: "NEPTUNE",
-            center: [448_000.0, FLIGHT_PLANE_Y, -8_000.0],
-            radius_m: 400.0,
-            walk_radius_m: 400.0,
-            soi_m: 4_200.0,
+            center: [3_584_000.0, FLIGHT_PLANE_Y, -64_000.0],
+            radius_m: 8_000.0,
+            walk_radius_m: 8_000.0,
+            soi_m: 84_000.0,
             gravity_surface: GRAVITY * 1.12,
-            atmo_top_m: 50.0,
+            atmo_top_m: 1_000.0,
             landable: true,
             color: [0.28, 0.42, 0.88],
             transit_burn: 265.0,
@@ -285,10 +289,10 @@ pub fn body_def(body: CelestialBody) -> &'static BodyDef {
         BodyDef {
             id: CelestialBody::Sun,
             label: "SUN",
-            center: [-180_000.0, FLIGHT_PLANE_Y, 0.0],
-            radius_m: 12_000.0,
+            center: [-4_000_000.0, FLIGHT_PLANE_Y, 0.0],
+            radius_m: 240_000.0,
             walk_radius_m: 0.0,
-            soi_m: 35_000.0,
+            soi_m: 700_000.0,
             gravity_surface: GRAVITY * 28.0,
             atmo_top_m: 0.0,
             landable: false,
@@ -352,11 +356,11 @@ pub fn moon_center() -> [f32; 3] {
 }
 
 pub const EARTH_FLIGHT_RADIUS_M: f32 = crate::cosmic_scale::EARTH_GAMEPLAY_RADIUS_M;
-pub const MOON_ORBIT_X_M: f32 = 52_000.0;
-pub const MOON_FLIGHT_RADIUS_M: f32 = 420.0;
-pub const EARTH_SOI_M: f32 = 22_000.0;
-pub const MOON_SOI_M: f32 = 4_800.0;
-pub const EARTH_ATMO_TOP_M: f32 = 120.0;
+pub const MOON_ORBIT_X_M: f32 = 416_000.0;
+pub const MOON_FLIGHT_RADIUS_M: f32 = crate::cosmic_scale::MOON_GAMEPLAY_RADIUS_M;
+pub const EARTH_SOI_M: f32 = 440_000.0;
+pub const MOON_SOI_M: f32 = 96_000.0;
+pub const EARTH_ATMO_TOP_M: f32 = 2_400.0;
 pub const EARTH_CENTER_Y: f32 = FLIGHT_PLANE_Y;
 
 #[cfg(test)]

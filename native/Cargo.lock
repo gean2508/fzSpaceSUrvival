@@ -844,6 +844,7 @@ dependencies = [
  "bevy_render",
  "bevy_scene",
  "bevy_sprite",
+ "bevy_state",
  "bevy_tasks",
  "bevy_text",
  "bevy_time",
@@ -1128,6 +1129,32 @@ dependencies = [
  "nonmax",
  "radsort",
  "rectangle-pack",
+]
+
+[[package]]
+name = "bevy_state"
+version = "0.15.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "243a72266f81452412f7a3859e5d11473952a25767dc29c8d285660330f007ba"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_hierarchy",
+ "bevy_reflect",
+ "bevy_state_macros",
+ "bevy_utils",
+]
+
+[[package]]
+name = "bevy_state_macros"
+version = "0.15.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "022eb069dfd64090fd92ba4a7f235383e49aa1c0f4320dab4999b23f67843b36"
+dependencies = [
+ "bevy_macro_utils",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2683,8 +2710,13 @@ dependencies = [
  "eframe",
  "egui",
  "ha-assets",
+ "ha-audio",
+ "ha-shared",
+ "iafz-sys",
  "image",
  "rfd",
+ "rodio",
+ "serde_json",
 ]
 
 [[package]]
@@ -2698,12 +2730,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ha-audio"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ha-game"
 version = "0.1.0"
 dependencies = [
  "bevy",
  "ha-assets",
+ "ha-audio",
  "ha-shared",
+ "iafz-sys",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -2772,6 +2814,19 @@ name = "hexf-parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
+
+[[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
+name = "iafz-sys"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "icu_collections"
@@ -4218,6 +4273,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6006a627c1a38d37f3d3a85c6575418cfe34a5392d60a686d0071e1c8d427acb"
 dependencies = [
  "cpal",
+ "hound",
  "thiserror 1.0.69",
 ]
 

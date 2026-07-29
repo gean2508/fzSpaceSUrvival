@@ -58,9 +58,9 @@ pub fn uses_touch_gameplay_ui() -> bool {
 /// Idle HUD hint when no interact target is active.
 pub fn gameplay_controls_hint() -> &'static str {
     if uses_touch_gameplay_ui() {
-        "← Move · Look → · USE · JUMP · BAG"
+        "<- Move | Look -> | USE | JUMP | BAG"
     } else {
-        "WASD · Mouse look · LMB break · RMB/F place · Space jump · Shift sprint · F5 view · F3 debug · BAG"
+        "WASD | Mouse look | LMB break | RMB/F place | Space jump | Shift sprint | F5 view | F3 debug | BAG"
     }
 }
 

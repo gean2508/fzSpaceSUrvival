@@ -20,7 +20,7 @@ use crate::input::{EquippedItem, HoldInteractState};
 use crate::inventory_persist::{persist_dir, InventoryPersistState, PlayerInventory};
 use crate::world2d::ActivePlanet;
 use crate::platform::is_app_paused;
-use crate::rocket_flight::RocketFlight;
+use crate::flight::Flight;
 use crate::scene::WorldContextRuntime;
 use crate::sim::{Player, SimState};
 use crate::targeting::InteractTarget;
@@ -88,7 +88,7 @@ fn tick_survival(
     time: Res<Time<Fixed>>,
     world_ctx: Res<WorldContextRuntime>,
     planet_ctx: Res<ActivePlanet>,
-    flight: Res<RocketFlight>,
+    flight: Res<Flight>,
     machines: Res<crate::machines::MachineWorld>,
     beacons: Query<(&GlobalTransform, &InteractTarget)>,
     mut player: Query<(&mut SimState, &Transform), With<Player>>,

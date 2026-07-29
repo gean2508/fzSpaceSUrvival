@@ -1,6 +1,17 @@
-# La Biblia — Starship (Agencia Espacial Survival)
+# La Biblia — Ki · Mundo Abierto (sandbox de role-play + vuelo Saiyan)
 
 > Contexto maestro para agentes IA. **Magra y VIGENTE** (reescrita 6 jul 2026, reemplaza la histórica de 1188 líneas). Si algo acá contradice al código, gana el código — pero avisá para actualizar. El historial viejo se descartó a propósito; lo único "histórico" que queda es la sección §10.
+
+> **⚠ ANTI-REGRESIÓN 2026-07-26 — VUELO SAIYAN (naves eliminadas).** Se borró TODO
+> el programa espacial: ship builder, plataforma de lanzamiento, interior de nave,
+> física de cohete, `RocketFlight`. Ahora **el personaje vuela como Dragon Ball**:
+> mantené JUMP para cargar el aura y despegar, JUMP sube / USE baja / stick en
+> órbita; el **Ki** reemplaza el combustible; **aura dorada** procedural
+> (`fx/aura_saiyan`). `rocket_flight.rs`→`flight.rs`, `RocketFlight`→**`Flight`**
+> (espejo pasivo que escribe `creative_fly.rs`, el vuelo por defecto). Se
+> **conservan** universo, sondas (`nav_computer`), efemérides y coreografía de
+> transición. Detalle: `PLAN_VUELO_SAIYAN.md`. Las menciones históricas de
+> cohete/ship builder abajo son de la etapa anterior (gana el código).
 
 ---
 
@@ -8,8 +19,8 @@
 
 | Campo | Valor |
 |-------|-------|
-| **Producto** | **Starship** (Agencia Espacial Survival). Repo interno `hunger-arena`; package Android `com.hungerarena.app`. |
-| **Género** | Survival + construir base/laboratorio + automatizar recolección → naves prefab → off-world → colonos. |
+| **Producto** | **Ki · Mundo Abierto** (sandbox de role-play; ex "Starship / Agencia Espacial"). Repo interno `hunger-arena`; package Android `com.hungerarena.app` (sin cambios). |
+| **Género** | **Caja de arena de role-play**: el juego NO cuenta historia, da herramientas (editor de mundo/capas para ciudades, NPCs, vehículos; survival; construir base). Superficie Terraria + **vuelo Saiyan (Ki)**: el personaje despega volando → off-world → colonos. Las "naves" se retiraron; volás vos. |
 | **Referencias** | **Top-Down 3/4 (Stardew/LimeZu Modern)** en superficie + **Space Flight Simulator (2D)** para vuelo/planetas; **cero** física orbital real (siempre arcade). |
 | **Home base** | **Tierra** (seed **42**). |
 | **Plataformas** | Android APK (arm64) + Linux AppImage (Bevy) · landing web · servidor Colyseus. |
@@ -137,7 +148,7 @@ Validar: `npm run validate:arch`.
 | **Gamepad** (stick izq mover+sprint; A salto/thrust, RT acción/romper, LT colocar/comer/retro, Start mapa, B cerrar, D-pad bag/hotbar) | `input/gamepad.rs` — alimenta los MISMOS intents que touch/teclado; prioridad touch > pad > teclado |
 | **HUD / UI / editor** (twin-stick: izq mover, der mira; USE/JUMP en arco arriba del stick der; editor de UI fusionado en el menú) | `ha-game/hud.rs`, `ui_editor.rs`, `input/actions.rs` (botones USE/JUMP), `input/joystick.rs` (sticks), `ui/icon_factory.rs`, `hud/item_icons.rs`, `ui_theme.rs` |
 | **Partículas 2D + squash** (harvest juice) | `ha-game/render/particles.rs` |
-| **Assets 2D drop-in** (PNG packs sobre arte procedural; `sync:art` genera el manifest) | `ha-game/art2d.rs`, `assets/art/` (+README), `scripts/sync-art.mjs` |
+| **Assets 2D drop-in** (PNG packs sobre arte procedural; editor `ha-asset-tools` cura el manifest — §13-terdecies) | `ha-game/art2d.rs`, `assets/art/` (+README), `crates/ha-asset-tools`, `scripts/sync-art.mjs` |
 | **Debug/perf + verificación** (perf HUD, screenshots, autodrive end-to-end) | `ha-game/debug/perf.rs` (MENU→PERF / F3 / F12 screenshot), `debug/autodrive.rs` (`HA_AUTODRIVE=1`), `cpu_span.rs` (ha-span), `crash.rs` |
 | **Legado 3D (borrado en rewrite-2d, recuperable en git `main`)** | surface_patch, floating_origin, view_target, flight_celestials, ghibli_atmosphere, materials(toon), earth/moon/planet_world, block/building_world, assets/, space_travel, jetpack_transit, world_travel, sky_clock, solar_lighting, quality, asset_dev |
 
@@ -314,7 +325,7 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro (fa
 ### §13-ter — Assets drop-in + verificación end-to-end (13 jul 2026)
 
 **Capa de arte drop-in (para packs comprados Modern Exteriors/Interiors/UI):**
-- `assets/art/<categoría>/<clave>.png` + `manifest.json` (generado por `npm run sync:art`, embebido en compile-time). `art2d.rs::ArtLibrary` carga y da fallback al arte procedural. `items/<id>.png` reemplaza el ícono en hotbar/bolsa/craft/máquinas. Consumidores conectados: decor (árbol/roca/vetas, variante `_moon`/`_mars`), máquinas, jugador (`player/astronaut`), cohete (`ship/rocket`). Ver `assets/art/README.md`. Tiles/UI/fondos = futuro.
+- `assets/art/<categoría>/<clave>.png` + `manifest.json` (curado con el **editor `ha-asset-tools`** — ver §13-terdecies; el viejo `npm run sync:art` sigue para import masivo). Embebido en compile-time. `art2d.rs::ArtLibrary` carga y da fallback al arte procedural. `items/<id>.png` reemplaza el ícono en hotbar/bolsa/craft/máquinas. Consumidores conectados: decor (árbol/roca/vetas, variante `_moon`/`_mars`), máquinas, jugador (`player/character`, con poses), cohete (`ship/rocket`). Ver `assets/art/README.md`.
 
 **Arnés de verificación runtime (`debug/autodrive.rs`, gate `HA_AUTODRIVE=1`+`HA_AUTOPLAY=1`):**
 - Maneja el juego por el pipeline REAL de input (ButtonInput virtual en PreUpdate) y loguea `ha-verify: <sistema> PASS/FAIL`. Capturas: `debug_screenshot` (auto a ~7s + F12). `HA_AUTOPLAY` saltea PLAY y fuerza updates continuos (winit no throttlea sin foco).
@@ -484,6 +495,11 @@ Necesario para poder testear salida/aterrizaje.
 
 ### §13-nonies — Transición superficie↔espacio unificada (19 jul 2026)
 
+> ⚠ **SUPERADO por §13-septendecies (29 jul 2026).** El swap superficie↔órbita
+> y la cobertura opaca que lo tapaba ya no existen: hay un solo marco continuo.
+> Se conserva como historia — no implementes nada de acá.
+
+
 Plan aprobado en `PLAN_TRANSICION_ORBITAL.md` (raíz). Problema: el cohete cambiaba a
 `RegionId::Space` **en el primer frame de ignición** (corte instantáneo tiles→disco;
 `surface_flight`/`surface_ref_s` estaban muertos), el aterrizaje era un teleport seco,
@@ -533,6 +549,11 @@ y la coreografía buena solo existía en el creativo con números de la Tierra h
   `cover_full→clear_start` en el perfil (un solo lugar).
 
 ### §13-decies — Vuelo libre sin cortes, cámara continua, sombras (20 jul 2026)
+
+> ⚠ **SUPERADO por §13-septendecies (29 jul 2026).** El swap superficie↔órbita
+> y la cobertura opaca que lo tapaba ya no existen: hay un solo marco continuo.
+> Se conserva como historia — no implementes nada de acá.
+
 
 Plan en `PLAN_VUELO_LIBRE_Y_CAMARA.md` (raíz). 4 correcciones puntuales en el vuelo
 creativo del player + sombras, reportadas jugando en device. **La física de vuelo
@@ -593,6 +614,11 @@ deliberadamente fuera de esta tanda de fixes.
 
 ### §13-undecies — Fix vuelo creativo roto + cap de velocidad (20 jul 2026)
 
+> ⚠ **SUPERADO por §13-septendecies (29 jul 2026).** El swap superficie↔órbita
+> y la cobertura opaca que lo tapaba ya no existen: hay un solo marco continuo.
+> Se conserva como historia — no implementes nada de acá.
+
+
 Plan en `PLAN_FIX_VUELO_ROTO.md`. El commit `7d7b580` (cámara continua) quitó el
 `entry_alt = clear_end+60` que ponía la entrada a órbita POR ENCIMA de las nubes,
 y entró en `swap_up` para la continuidad de zoom. Eso rompió el vuelo porque
@@ -627,6 +653,11 @@ entrar a Orbit), `HA_MOONTEST` (Luna despejada sin loop), rockettest + smoke PAS
 
 ### §13-duodecies — Zoom continuo que revela los planetas (20 jul 2026)
 
+> ⚠ **SUPERADO por §13-septendecies (29 jul 2026).** El swap superficie↔órbita
+> y la cobertura opaca que lo tapaba ya no existen: hay un solo marco continuo.
+> Se conserva como historia — no implementes nada de acá.
+
+
 Plan en `PLAN_ZOOM_CONTINUO_PLANETAS.md`. El commit `de037a3` dejó el zoom
 orbital demasiado cerrado (~300 m) → al despejar las nubes el disco del planeta
 quedaba FUERA de pantalla (veías negro). El usuario: "me gustaba cómo estaba
@@ -659,6 +690,367 @@ azul + halo al despejar, disco Luna gris que crece al acercarse (lejos/cerca),
 cohete ve la Tierra. Continuidad visible x1.4 (zoom-out tapado). 98 tests +
 flytest + moontest + rockettest + smoke PASS.
 
+### §13-terdecies — Editor de assets: frames multi-celda + slots completos (22 jul 2026)
+
+Herramienta de dev `ha-asset-tools` (egui, `native/crates/ha-asset-tools`, corre
+SOLA, nunca con el juego). Flujo: elegís un slot del juego → elegís un PNG fuente →
+recortás la hoja (grilla + arrastre) → Guardar. Escribe `crates/ha-game/assets/art/
+manifest.json` (round-trip verificado en disco). El juego lo lee en boot (`art2d.rs`).
+
+**Bug de animación corregido (lo que pidió el usuario):** el modelo tomaba **cada
+celda** de la selección como un frame (`frames = strip.cells()`). Si un frame ocupaba
+un bloque de 3×3 celdas, lo reproducía como 9 frames. Ahora la selección del canvas es
+**UN frame** (su tamaño w×h en celdas) y la **cantidad** de frames es un número aparte;
+los frames son bloques contiguos del mismo tamaño que avanzan a la derecha (→) o hacia
+abajo (↓) — campo `StripDir`. Modelo de datos en `ha-assets/art_manifest.rs`
+(`ArtEntry.strip` = rect del primer frame, `strip_dir`, `anim.frames` = cantidad; ídem
+`Pose` con `dir`). Reproducción en `art2d.rs` (`StripInfo.step`, `strip_info()`); el
+atlas avanza por `step` (soporta multi-celda + vertical). Preview del editor 1:1 con el
+juego. Compat: los formatos viejos (string suelto / anim de imagen completa) siguen.
+
+**Slots completados** (`ha-assets/slots.rs`) — el editor ahora lista TODO lo que el
+juego dibuja: `player/character` (clave REAL del jugador, con poses idle/walk × 4 dir;
+antes solo estaba el alias `player/astronaut`), las 8 especies de árbol
+(`decor/tree_{roble,pino,abedul,arce,sauce,palmera,arbusto,seco}`), `decor/ladder`,
+`decor/mine_hole`, `decor/cockpit_seat`, `decor/fuel_source`, + tiles/UI/items/máquinas
+ya presentes. Variantes por cuerpo (`_moon`/`_mars`) se agregan a mano con "＋ nuevo
+slot" (caen a la genérica si faltan).
+
+**Editor UX (4ª ola — fixes de poses):** el preview "actual (juego)" ahora muestra
+una **pose representativa ANIMADA** (idle_down o la 1ª) recortada del atlas
+(`bound_preview`) — antes mostraba la hoja cruda y parecía "no actualizado" tras
+guardar poses. **"Asignar PNG entero" pide confirmación** (2 clicks + cancelar) si el
+slot ya tiene poses, porque las BORRA (usaba toda la imagen). Secciones del panel
+central **colapsables** (vista previa, poses guardadas, preview animado) para
+minimizar lo que no querés ver. Contadores de anim separados candidato/actual.
+
+**Editor UX (3ª ola):** navegación con **flechas ↑/↓** en la lista de PNGs (panel
+derecho) con preview en vivo y auto-scroll (gate: sólo si ningún campo tiene foco);
+**lienzo redimensionable por arrastre** (`egui::Resize`, esquina ⤡) + preview de la
+tira con tamaño ajustable (`preview_px`); y **persistencia inmediata**: cada guardado
+del slicer (recorte/animación/pose/autotile/quitar) escribe `manifest.json` al toque
+(`persist_manifest`), no sólo el botón "Guardar" de arriba — corrés el `.sh` y se ve.
+
+**Editor UX (2ª ola, mismo día):** paneles laterales **redimensionables**
+(arrastrás el borde para el ancho de cada sección); lienzo del slicer con **alto
+ajustable** (`canvas_h`, default 520) para no dejar la pantalla vacía; **matriz de
+animaciones nombradas** (`anim_matrix`): atlas de personaje con FILAS = animaciones
+(idle/walk × 4 dir + acciones custom), botón **"toda la fila →"** que autocompleta
+los frames = celdas restantes de la fila/columna. Guardado unificado 💾 (animada =
+frames>1). Autotile: cada variante (centro/borde/esquina convexa|cóncava) puede ser
+animada; el ORDEN de las casillas 3×3 = la posición de la pieza.
+
+**Render game-side cableado (22 jul, decisión del usuario "todo"):**
+- **Autotile de tiles con arte** (`world2d.rs::spawn_chunk_tile_art` + `autotile_shape`
+  + `art2d::tile_sprite`/`tile_has_art`): por cada tile de un material con arte "vivo"
+  (poses o animación), spawnea un sprite eligiendo la variante por vecinos
+  (`center`/`edge_*`/`corner_*`/`inner_*` — los MISMOS nombres que el editor). Capa de
+  suelo z=1 (encima del vertex-color, debajo del decor). Animado vía `ArtAnimated`.
+  **Perf-safe:** cero overhead hasta asignar arte; el suelo base sin arte sigue siendo
+  el quad vertex-color barato. `tile_art_key` mapea Water/Grass/Sand/Regolith→slot.
+  Los sprites llevan `SurfaceDecor` → despawnean con el streaming. (Editar un tile no
+  re-evalúa las formas hasta re-stream — v1.)
+- **Colonos/NPCs** (`world2d.rs::sync_colonists` + slot `npc/colonist`): un sprite idle
+  por colono (`colony.state.colonists`) junto a los hábitats en la Luna, con el MISMO
+  esquema de poses del jugador (`idle_down`; cápsula si no hay arte). Sólo en superficie
+  lunar; respawnea al cambiar la cuenta/cuerpo.
+- **Sigue pendiente:** suelo base texturizado sin autotile (hoy vertex-color), NPCs con
+  locomoción/IA (los colonos sólo están parados). Medir en el Redmi (§6, sensible a perf
+  si hay mucha agua visible).
+
+**Otro fix:** `orbital2d.rs` tenía una llave `}` sobrante (WIP) que rompía TODA la
+compilación de `ha-game`. Quitada. `cargo check -p ha-game` verde.
+
+**Build manual sin tokens:** `native/COMO_COMPILAR.md` + `./build-y-publicar.sh` (un
+solo script: build APK aarch64 + copia a landing + levanta server y landing; abrís la
+URL en el celu y descargás). Reemplaza depender de la IA para `npm run play`.
+
+### §13-quaterdecies — Assets masivos + edificios techo-translúcido + prefabs + verticalidad (23 jul 2026)
+
+Ejecución completa de `PLAN_ASSETS_Y_CONSTRUCCION.md` (F1–F7; F8 pende del Redmi):
+
+- **F1 Taxonomía** (`ha-assets/slots.rs`): +~75 slots curados por atlas LimeZu:
+  `prop/*` (14), `furniture/*` (16), `building/*` (5), `vehicle/*` (5, anim),
+  `nature/*` (8), `floor|wall|door|window|stairs/*` (autotile), `room/*` (4 prefabs),
+  `ui/*` audit completo (survival hambre/sed/oxígeno, tabs, close, lantern, hold,
+  íconos acción, menú/mapa), `npc/aldeano|comerciante`. Aprobado por el usuario.
+- **F2 Capas del editor** (`ArtLayer { Floor, Wall, Object, Roof }` en `Pose`,
+  opcional/retro-compat): selector Suelo/Pared/Objeto/Techo en `gui.rs` junto al
+  guardado de poses; tag visible en la lista. Para un edificio: pose `base` (Pared)
+  + pose `roof` (Techo). `art2d` expone `pose_layer`/`pose_with_layer`/`pose_sprite`.
+- **F3 Props/flora** (`world2d.rs`): `nature_decor_at` (~4% celdas Tierra) +
+  `prop_decor_at` (patio ±6 tiles de casas generadas, ~3%). SOLO si el slot tiene
+  arte (cero entidades sin textura), determinista por `hash_cell`, despawn con
+  streaming. `surface_decor_at` ya no siembra árboles dentro de edificios.
+- **F4 Edificios techo-translúcido** (`building.rs` nuevo): asentamientos
+  deterministas en Tierra (`ha-shared::building_site_in`, 1 sitio candidato por
+  celda 48×48, ~20%, gated por `body_generates_buildings` — tabla ampliable). Los
+  tiles del edificio salen de `topdown_tile` (colisión/cavar/persistir gratis).
+  Techo = sprite (pose capa Techo del slot `building/*` o quad oscuro) con
+  `BuildingRoof`; jugador dentro del footprint ±1 → alpha 0.15 con fade exp.
+  Puertas transitables; con poses `open`/`closed` en `door/wood` se abren por
+  proximidad (`DoorArt`). MISMA escena/cámara, cero loading.
+- **F5 Prefabs** (`ha-shared::PREFABS` + `build.rs` + tab CONSTRUIR): paleta
+  combinada = piezas sueltas (piso, muro madera/piedra, puerta, **ventana**,
+  **gradas ↓/↑** — nuevas) + prefabs `room_small 5×4`/`room_medium 7×6`/
+  `room_large 9×8`/`casa_1 9×7` (con división interior). Stamp del área completa
+  en un hold, ghost del footprint verde/rojo, costo = Σ piezas (`prefab_cost`),
+  refund cavando. **Agnóstico al cuerpo.** El prefab registra su techo en
+  `BuiltRoofs` (persiste en `roofs.json`, mismo debounce que tiles).
+- **F6 Verticalidad**: `Tile::StairsDown/Up` = portal del jugador →
+  `layer_transition` hace el MISMO swap instantáneo de `tiles.z` que la mina y
+  talla (`carve_stair_room`, idempotente, respeta ediciones) una sala 7×7 con la
+  grada de vuelta. `z>0` = Bedrock (void) hasta 3 pisos; sin portales fantasma
+  arriba (`portal_here` guarda `z>0 → None`). Transiciones existentes intactas.
+- **Autotile por vecinos (pedido del usuario)**: `TileWorld::edit_log` +
+  `rebuild_edited_tile_art` — al colocar/cavar, el arte de tile de los chunks
+  tocados (±1 celda, cruza bordes de chunk) se re-spawnea y cada tile re-elige
+  su forma (center/edge/corner/inner). El arte de tile ahora corre en TODAS las
+  z (subsuelos con `floor/wood` etc.); muros/puertas van Y-sorted (el suelo a
+  z=1.0 como antes). Marker `TileArt` los separa del resto del decor.
+- **F7 Reskin UI**: `ArtLibrary::ui_image_node` (respeta recorte de atlas) +
+  `skin_ui_from_art` en `hud.rs` (`Added<>`, costo cero en reposo): hotbar,
+  botones USE/JUMP, linterna, cerrar paneles, tabs de la bolsa. Sin arte → HUD
+  procedural intacto. Joystick ya consumía `ui/joystick_*`.
+- **Tests**: ha-shared 101/101 (nuevos: patrón/costo prefab, asentamientos
+  deterministas Tierra-only, tiles nuevos, sin portales z>0), ha-assets 16/16
+  (round-trip `layer` + compat). `cargo check` verde en ha-game y ha-asset-tools.
+- **Pendiente**: F8 perf en Redmi (avisar al conectar el celu); texturas reales
+  (el usuario recorta en `./editor_assets`); muebles `furniture/*` aún sin
+  spawner de interiores (los slots ya existen).
+
+### §13-quindecies — Pinch-zoom, césped que rebrota, pulido orbital, etiquetas y SONIDO (23 jul 2026)
+
+Cinco pedidos del usuario, ejecutados:
+
+1. **Pinch-zoom a pie** (`camera.rs` + `input/joystick.rs`): pellizco con dos
+   dedos en la BANDA SUPERIOR de la pantalla (arriba de `layout.zone_top`) →
+   zoom personal↔panorama (`view_h` 12–45, cap para no salir del anillo de
+   chunks streameados). `PinchActive` (resource) publica los ids del gesto y los
+   sticks los sueltan/ignoran — cero interferencia con el twin-stick por diseño
+   espacial (los sticks viven abajo). En espacio sigue el pinch de siempre.
+2. **Césped que rebrota** (`world2d.rs`): tierra expuesta (cavar, demoler piso,
+   tierra colocada) sobre césped NATURAL → `TileWorld::regrow` con delay 45–120 s
+   por celda (hash); al expirar se borra el edit → Grass natural reaparece con
+   rebuild de mesh + autotile. Se reprograma al cargar `tiles.json`. No rebrota
+   sobre edificios generados ni donde el jugador construyó encima.
+3. **Pulido entrada/salida de planetas**: (a) el vuelo creativo ya NO aterriza
+   en cuerpos no aterrizables — `body_landable` gate (antes "aterrizabas" en el
+   Sol y la región quedaba rota); (b) cerca de cuerpos no aterrizables la
+   cortina no se cierra (altitud clampeada fuera de la banda de cover — no más
+   pantalla tapada sin transición posible); (c) `user_zoom_mult` vuelve a 1.0 al
+   completar el aterrizaje (la próxima entrada arranca con el encuadre
+   automático). La coreografía compartida (`transition.rs` + perfiles por
+   cuerpo, tests verdes) ya cubría todos los cuerpos.
+4. **Órbitas + etiquetas** (`orbital2d.rs`): las órbitas YA estaban vivas
+   (ephemeris compartida: Luna→Tierra, planetas→Sol, Fobos/Deimos→Marte; Tierra
+   fija por continuidad fase 1 — decisión §13). Nuevo: `OrbitalLabel` — nombre
+   ASCII del catálogo (EARTH, MOON…) flotando sobre cada disco, tamaño de
+   pantalla CONSTANTE (re-escala con `view_h`), gris discreto 55% alpha, fade
+   out al acercarte (el disco llena la pantalla y la etiqueta estorba).
+5. **SONIDO COMPLETO** (`audio.rs` nuevo + `PLAN_SONIDO.md`; feature
+   `bevy_audio`+`wav` en el workspace): TODO sintetizado en memoria al arrancar
+   (8/16-bit, cero assets, cero peso APK). 22 SFX (cavar, colocar, stamp, pasos
+   suaves/duros ×2 por material, bolsa, craft, comer/beber/daño, salto,
+   puertas, gradas, despegue/aterrizaje, loop de empuje, click UI, pickup) via
+   evento `PlaySfx` con pitch ±5%. MÚSICA estilo Minecraft/C418: pentatónica
+   procedural determinista, 3 pistas superficie + espacio + subsuelo, director
+   por contexto con 90–240 s de SILENCIO entre pistas. Observadores sin acople:
+   pasos (velocidad+material), survival (deltas hp/hambre/sed), vuelo
+   (flancos), clicks (cualquier `Button`). Hooks de 1 línea en world2d/build/
+   building. `AudioSettings { sfx, music }` listo para menú de ajustes.
+
+Tests: ha-shared 101/101, ha-assets 16/16, `cargo check` verde. Pendiente
+device: sentir el pinch, cadencia de pasos y mezcla de volúmenes en el Redmi.
+
+### §13-sexdecies — Construcción por BORDES estilo Last Day on Earth (29 jul 2026)
+
+**Qué cambió (el modelo, no un parche):** la pared dejó de ser una CELDA y pasó a
+vivir en el **borde** entre dos celdas. Antes un cuarto 5×4 tenía 6 tiles útiles
+rodeados de 14 de muro; ahora tiene 20 y el muro es una línea fina.
+
+- **Dos capas:** piso/escaleras = celda (`TileWorld`, `Tile::WoodFloor`, autotile
+  ya existente) · pared/puerta/ventana = arista `(tx, tz, axis)` donde
+  `H` = línea `z = tz` (tramo `x∈[tx,tx+1]`) y `V` = línea `x = tx`.
+- **Reglas puras** en `ha-shared/src/build_grid.rs` (7 tests): `nearest_edge`
+  (snapping del dedo al borde), `wall_supported` (necesita piso construido de
+  algún lado — la regla LDoE), `wall_capsule_hits` (colisión contra rectángulos
+  finos, `WALL_THICK = 0.26 m`), `prefab_edges` (los prefabs estampan piso en
+  toda la huella + anillo de paredes con su puerta), catálogo `EDGE_PIECES`.
+- **Estado + sprites** en `ha-game/src/walls.rs`: `BuiltWalls` (persiste
+  `walls.json`, pieza guardada por **id**, no por índice), streaming a 5 Hz
+  alrededor del jugador, Y-sort por el pie del borde, puertas que se abren por
+  proximidad. La puerta NO corta el paso; pared y ventana sí.
+- **Colisión** vía `topdown::step_topdown_movement_ex` (el viejo
+  `step_topdown_movement` es ahora un wrapper): la usa el jugador (`sim.rs`) y la
+  fauna (`fauna.rs`) — el corral del vivario por fin encierra de verdad.
+- **UX de construcción:** apuntar a un borde vacío = colocar (ghost verde/rojo);
+  apuntar a uno ocupado = **demoler** (ghost naranja) devolviendo el material.
+  `BUILD_PIECES` quedó sólo con piso y escaleras.
+- **Editor de assets:** sección "🧱 partes de construcción" en los slots
+  `wall/*`, `door/*`, `window/*` — recortás del atlas cuál es la pared de
+  FRENTE, la de ADELANTE (baja) y las LATERALES (`front`/`back`/`left`/`right`),
+  y el juego elige sola según dónde esté el piso. `floor/*` ahora abre por
+  defecto el autotile (mismo pipeline que el agua).
+- **Verificación:** driver `HA_BUILDTEST=1 HA_FORCE_TOUCH=1` — levanta un cuarto
+  por el camino real del jugador (hold → `apply_build_hold`) y comprueba piso,
+  anillo de paredes, rechazo de pared sin piso y que el muro FRENA al jugador.
+
+⚠ Anti-regresión: NO volver a colocar paredes como tiles de celda. Los tiles
+`WoodWall`/`Door`/`Window`/`StoneBrick` siguen existiendo SÓLO para los
+asentamientos generados y las partidas viejas.
+
+### §13-septendecies — ⭐ EL UNIVERSO, REESCRITO: un solo marco continuo (29 jul 2026)
+
+**Reemplaza a §13-nonies, §13-decies, §13-undecies y §13-duodecies.** Todo lo que
+esas secciones describen (el "swap" superficie↔órbita, la cobertura opaca que lo
+tapaba, `orbital2d`, `ORBIT_REVEAL_FACTOR`, `transition_profile.swap_up/down`)
+**ya no existe en el código**. Se conservan como historia; no las sigas.
+
+Reporte del usuario: *"salgo al espacio, la cámara está rota, no veo ningún
+planeta, el personaje no responde y ya no puedo regresar a la Tierra. Borralo
+todo y rehacelo como Space Flight Simulator, sin cortes."*
+
+**Causa raíz (confirmada con capturas antes de tocar nada):** había DOS marcos de
+coordenadas. Al despegar, el jugador se teletransportaba del marco de tiles (con
+origen en 0,0) al marco de efemérides (la Tierra a decenas de km del origen
+porque orbita al Sol). La cámara seguía la posición orbital, el sprite se quedaba
+en la de tiles, y el "swap" se tapaba con nubes 100 % opacas. Encima: la
+velocidad radial en órbita era `alt * 3.5` — exponencial, te disparaba a 11 km en
+segundos — y el campo de estrellas escalaba su TAMAÑO con el zoom pero no su
+POSICIÓN, así que las 320 estrellas colapsaban en un punto de 2 px en el centro.
+
+**El modelo nuevo — `native/crates/ha-game/src/universe.rs`:**
+
+1. **UN SOLO MARCO.** El origen de render es el centro del `ref_body`. El mundo
+   de tiles de ese cuerpo ya vive ahí, así que el disco del planeta cae
+   exactamente encima del terreno caminable. **El jugador NUNCA cambia de
+   coordenadas al despegar o aterrizar.**
+2. **ALTURA = ZOOM.** La superficie es cenital, así que la altura es
+   perpendicular a la pantalla: subir no mueve el sprite, abre el encuadre
+   (`view_h_for_alt`, continua y monótona de 30 m a 135 km).
+3. **ALTURA EFECTIVA = hipotenusa(vertical, hueco lateral al cuerpo).** Es lo que
+   hace que la aproximación se regule sola: cuanto más te acercás, menor la
+   altura, más cierra el encuadre y más despacio vas, hasta posarte. Sin esto,
+   bajar del todo a 30 km de la Luna te dejaba "a ras de suelo" sobre la nada.
+4. **TRES LOD del suelo que se funden** — tiles de 1 m → mapa satelital de 8 m
+   (`TerrainLod`) → disco del planeta, los tres muestreados del MISMO
+   `topdown_tile`, así que el color y la forma coinciden. **Esa es la
+   continuidad**: no hay nada que tapar.
+5. **REBASE del marco** al acercarte a otro cuerpo: jugador y discos se desplazan
+   el mismo delta ⇒ en pantalla no pasa nada, y tus coordenadas pasan a ser las
+   de la superficie del cuerpo nuevo. Así se viaja y se aterriza en cualquier
+   parte sin un solo teletransporte.
+6. **Región y contexto se DERIVAN** de la altura cada frame
+   (`creative_fly::sync_frame_region`). La clase entera de soft-locks
+   ("aterricé pero sigo en el espacio") deja de ser representable: no hay estado
+   que sincronizar, hay una función.
+
+**Consecuencias de reglas:**
+- `transition.rs` quedó reducido a la BRUMA atmosférica, con techo `MAX_HAZE =
+  0.45`. ⚠ **Anti-regresión: la cobertura NUNCA vuelve a ser opaca.** Si algo
+  necesita esconderse detrás de una pantalla, es un bug de continuidad.
+- Las estrellas guardan posición y tamaño NORMALIZADOS y van en `z = -400`
+  (detrás de los discos). Antes iban delante del suelo: pisando la Luna se
+  dibujaban encima del regolito.
+- El satelital se RECORTA al radio del cuerpo. Sin eso, en cuerpos chicos
+  (Luna r=420 < los ±1024 m del mapa) el suelo desbordaba el planeta y la Luna
+  se quedaba sin borde.
+- La decoración fina sólo se puebla en el anillo cercano (`CHUNK_RANGE`); los
+  chunks lejanos son sólo malla de suelo y reciben decoración al acercarse
+  (`TileChunk::decorated`). Entidades volando: **16 700 → 3 100**.
+- `Flight::vertical_speed/horizontal_speed` son RELATIVAS al cuerpo. En absoluto
+  arrastraban los ~565 m/s de la traslación terrestre y el HUD marcaba eso
+  estando quieto en el suelo.
+
+**Verificado con los drivers (capturas + invariantes, ver skill `swarm-sim`):**
+`HA_FLYTEST` (zoom continuo x1.12 + invariantes de aterrizaje), `HA_MOONTEST`,
+`HA_CYCLETEST` (Luna/Venus/Marte × 2 aterrizajes por el camino real), y el nuevo
+**`HA_TRIPTEST`** — el reporte del usuario convertido en test: despegar de la
+Tierra, cruzar hasta la Luna, aterrizar, volver a despegar y regresar a la
+Tierra, todo con teclas, exigiendo cero saltos de encuadre. 125 tests unitarios +
+los 4 drivers PASS.
+
+### §13-duodevicies — ⭐ ESCALA GTA + GEOGRAFÍA + ESPACIO VIVO (29 jul 2026)
+
+Segunda ola sobre §13-septendecies. El marco continuo ya funcionaba; lo que
+faltaba era que el mundo MERECIERA recorrerse y que el espacio fuera un sitio.
+
+**1 · Escala (`cosmic_scale`, `celestial_bodies`, `solar_ephemeris`).**
+Radio de la Tierra 1 500 → **30 000 m** (60 km de punta a punta), radios ×20 y
+distancias ×8; el Sol a 4 M. Cruzar el planeta a altura de crucero (~1.4 km, donde
+todavía se distingue el terreno) son **~10 minutos**. Períodos orbitales
+recalibrados a 30–100 min: clave, la velocidad tangencial de un planeta (~4 km/s)
+quedó por DEBAJO del techo de crucero del jugador (30 km/s), porque si no un
+destino se te escapa y no hay forma de llegar.
+
+**2 · Geografía (`ha-shared/src/geography.rs`, módulo nuevo).**
+Relieve en cuatro escalas (continentes 9 km, cordilleras 1.4 km, colinas 110 m,
+textura 22 m), humedad en dos, frío por latitud y altura. De ahí salen biomas
+como REGIONES que se atraviesan: océano, playa, **río**, **pantano**, pradera,
+bosque, sabana, desierto, sierra, cumbre, nieve, basalto, hielo, regolito. Y
+civilización: asentamientos por rango (**aldea / pueblo / ciudad**), trama urbana
+con calles y manzanas, edificios con fachada a la calle, **carreteras** que unen
+núcleos vecinos con trazado curvo y **puentes** donde cruzan agua — así es como
+terminan conectados dos continentes sin colocar nada a mano.
+
+**Arquetipos por cuerpo**: Terran (Tierra), Oceanic (Titán, Neptuno), Desert
+(Marte, Urano), Icy (Europa), Volcanic (Venus, Ío), Barren (Luna, Mercurio,
+lunitas). Cada uno con su nivel del mar y su paleta — no la Tierra repintada.
+⚠ Un arquetipo NO puede salir casi todo sólido: aterrizar ahí sería quedar
+enterrado (`every_world_is_walkable_somewhere` lo vigila).
+
+**Mundo FINITO**: más allá del radio caminable no hay mundo. La plataforma se
+hunde hacia el borde, así el planeta termina en océano abierto en vez de
+cortarse a pico, y el disco que ves desde el espacio es literalmente todo el
+terreno que existe.
+
+**3 · Cuevas y pisos SIN portales.** La mina única junto al origen (que a 60 km
+es no tener ninguna) pasó a **bocas de cueva repartidas por todo el mundo**, una
+cada ~900 m donde hay galería debajo y suelo pisable. Se entra caminando sobre
+el agujero: no hay prompt, ni carga, ni teletransporte — conservás tus
+coordenadas y sólo cambia la capa que se dibuja, con un fundido de 0.28 s
+(`world2d::LayerFade`) para que el piso nuevo aparezca en vez de saltar.
+⚠ Anti-regresión: **nada de cambios de escena para bajar a una cueva o subir un
+piso.** Si hace falta una pantalla, la continuidad está rota.
+
+**4 · Espacio vivo (`space_fx.rs`, módulo nuevo).**
+Las atmósferas dejaron de ser dos aros 2D planos: ahora todo lo que brilla usa un
+**halo radial translúcido** (misma pieza para atmósfera, corona solar y cabeza de
+cometa). Cada cuerpo tiene su **terminador** (cara nocturna) girando con su
+órbita. **Cinturón de asteroides** (220 rocas) y **cometas** en elipses reales,
+con la cola siempre en contra del Sol y encendida al acercarse. **Polvo con
+parallax** y **calentamiento de reentrada** (destello naranja + sacudida al bajar
+rápido dentro de una atmósfera).
+
+⚠ Dos trampas de render que costaron horas y no se ven venir:
+- Las texturas generadas necesitan **muestreo LINEAL** (`ImageSampler::linear`).
+  Un halo de 256 px estirado a 150 km con vecino-más-próximo cuantiza su
+  degradado en **anillos concéntricos** grises alrededor del planeta.
+- Y aun con filtrado, el alfa de 8 bits **banda**: hace falta **tramado** al
+  generar el degradado, o cada escalón de 1/255 se ve como un aro.
+
+**5 · Coste.** La geografía nueva es ~10× más cara por celda; sin cuidado el
+juego se cuelga en el arranque. Las pruebas de "¿esto es tierra?" (asentamientos,
+bocas de cueva) usan una sola octava (`continental_at`), y los pozos de cueva se
+calculan UNA vez por celda y los comparten `portal_here` y el anillo de
+seguridad. Lo vigila `generating_a_chunk_is_cheap` (< 8 µs/celda).
+
+**6 · Cámara y vuelo.** Encuadre de **aproximación**: volando, la cámara se
+adelanta hacia el cuerpo al que vas (hasta ¼ de pantalla), así el planeta crece
+DE FRENTE y entrás en él en vez de orbitar su centro fuera de cuadro. El
+pellizco del usuario es cámara pura: mueve el encuadre vivo pero el personaje se
+dimensiona con el encuadre AUTOMÁTICO, así hacer zoom te ACERCA al personaje sin
+que parezca que descendés. La velocidad de vuelo se ató a la ALTURA, no al zoom
+(hacer zoom no puede acelerarte). Ki recalibrado a 0.30/s: una carga da ~5.5 min
+de vuelo — la ida y vuelta a la Luna entra holgada, Marte exige recargar.
+⚠ El presupuesto de Ki y la escala del sistema están ACOPLADOS; lo verifica
+`a_full_ki_charge_covers_a_moon_round_trip`, no la próxima partida.
+
+**Verificado**: 122 tests de `ha-shared` + 17 de `ha-game` y los cuatro drivers
+(`HA_FLYTEST` zoom continuo x1.15 · `HA_MOONTEST` · `HA_CYCLETEST` Luna/Venus/
+Marte × 2 · `HA_TRIPTEST` Tierra→Luna→Tierra volando, x1.22).
+
 ## §13 Estado del plan maestro + CONTINUACIÓN (12 jul 2026 — leer si retomás a mitad)
 
 **Hecho y shipeado (v1.0.147, commits 792b98d..793be81):** F0 tests verdes · F1 survival core (§12) · F2 ship builder Fase 1 (contadores) · F3 base lunar (taladro/antena/monitoreo, máquinas por cuerpo) · F4 gamepad · F6 APK publicado. F5 perf: **medición bloqueada hasta conectar el Redmi** (plan en memoria del agente + §6).
@@ -676,3 +1068,43 @@ flytest + moontest + rockettest + smoke PASS.
 5. **Ship Builder Fase 3** (bisagras/pistones) — al final, pesado.
 
 **Al cerrar cada fase:** tests ambos lados + `UPDATE_CATALOG_PARITY=1 npm test` si tocaste catálogos + fila en §4 + `graphify update .` + commit. Publicar con `npm run ship:android` (URLs LAN :5173/:2567; servers ya corren).
+
+## §14 Estado reciente (23–24 jul 2026 — audio, agua, escalas, colisión)
+
+**Editor de sonido / mini-DAW** (v1.0.186+): audio ahora data-driven. Crate
+`ha-audio` (spec `native/assets/audio.json` + synth 8/16-bit + efectos
+reverb/eco/filtro/bitcrush) que el juego embebe con `include_str!` (fallback al
+default si el JSON rompe). Editor UI: `./build-y-publicar.sh sonido`. Plan:
+`PLAN_EDITOR_SONIDO.md`. Pendiente pedido: piano + más instrumentos + grabación.
+
+**Agua/autotile arreglado** (v1.0.188): el agua se veía como rayas — bug de
+CÓDIGO, no del pintado. En `art2d.rs` la animación de una POSE autotile avanzaba
+1 subcelda, pero cada frame del agua es un BLOQUE 3×3 (8 frames) → leía celdas
+vecinas. Fix: el `step` de la pose sale del `strip` del entry (bloque). Aplica a
+todo autotile 3×3 animado (agua, cascadas).
+
+**Escalas reales**: jugador 3.2 m → **1.9 m** (era casi un árbol); árboles 5.6–8 m
+de alto y anchos (no apretados). Casas siguen siendo prefabs por tiles (1 m/tile,
+coherentes). Cohete de vuelo 6 m, prefab del pad ~3 m: ya > jugador.
+
+**Colisión de decor**: el jugador ya NO atraviesa troncos. Nuevo flag por asset
+`collides` en el manifest, editable en el editor ("🚧 bloquea el paso":
+default/sólido/se pisa). Hoy bloquea 1 celda. Colisión por-celda precisa
+(cráteres/montañas) + assets grandes + mini-ciudades: TEORÍA en
+`PLAN_COLISIONES_Y_CIUDADES.md` (aún no implementado).
+
+**⚠ Regla aprendida (§11 sigue vigente, NO tocar):** las bandas de transición
+(cover/swap/clear) alimentan el zoom de cámara y el frame-swap, no sólo las
+nubes. Ensancharlas por estética (24 jul) rompió la ilusión del ascenso (cámara
+se iba sin el jugador) — **revertido**. La "atmósfera ancha" que gustó vive
+ahora como **halo cosmético** en `orbital2d.rs`, desacoplado de las bandas.
+
+**Herramienta de QA visual**: el juego corre en la compu y saca capturas —
+`HA_FLYTEST=1 HA_AUTOPLAY=1 WGPU_BACKEND=gl ./target/debug/ha-game` (también
+`HA_ROCKETTEST`/`HA_MOONTEST`). PNGs al scratchpad (`FLYTEST_DIR` en
+`debug/autodrive.rs`). Sirve para depurar sin el Redmi.
+
+**Pendiente prioritario:** bugs del cohete (entrar/salir/atascarse, jugador
+desaparece↔cohete, trabarse al entrar a un planeta) — sesión dedicada con
+`HA_ROCKETTEST`. Panel UI 9-slice: el editor lo arma pero el juego aún no lo
+consume (no cableado al HUD) — feature, no bug de colocación.

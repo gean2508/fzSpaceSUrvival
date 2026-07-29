@@ -49,7 +49,15 @@ impl Plugin for TargetingPlugin {
     }
 }
 
-fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool {
+/// Decor that a harvest physically removes from the world (and persists as
+/// removed): trees, rocks and surface ore/gem deposits. Machines, containers,
+/// launch modules etc. have their own lifecycle and are NOT removed this way.
+pub fn is_removable_decor(kind: InteractTargetKind) -> bool {
+    use InteractTargetKind::*;
+    matches!(kind, Tree | Rock | OreIron | OreGold | GemBlue | GemRed)
+}
+
+pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool {
     match region {
         RegionId::Overworld { .. } => matches!(
             kind,
@@ -58,6 +66,7 @@ fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool 
                 | InteractTargetKind::Tree
                 | InteractTargetKind::Rock
                 | InteractTargetKind::Container
+                | InteractTargetKind::Chest
                 | InteractTargetKind::OreIron
                 | InteractTargetKind::OreGold
                 | InteractTargetKind::GemBlue
@@ -72,6 +81,7 @@ fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool 
                 | InteractTargetKind::LaunchIgnition
                 | InteractTargetKind::Rock
                 | InteractTargetKind::Container
+                | InteractTargetKind::Chest
                 | InteractTargetKind::OreIron
                 | InteractTargetKind::OreGold
                 | InteractTargetKind::GemBlue
@@ -140,9 +150,10 @@ fn update_look_target(
     }
 
     if let Some((entity, kind, distance, hit, id)) = best {
-        // Trees/rocks use a flat per-body removed set at chunk key (0,0);
-        // `id` = packed global cell.
-        let flora_cell = (kind == InteractTargetKind::Tree).then_some((0, 0, id));
+        // Harvestable decor (trees, rocks, ore, gems) use a flat per-body removed
+        // set at chunk key (0,0); `id` = packed global cell. Setting `flora_cell`
+        // is what tells the HUD to REMOVE the prop from the world on harvest.
+        let flora_cell = is_removable_decor(kind).then_some((0, 0, id));
         *current = LookTarget {
             entity: Some(entity),
             kind: Some(kind),

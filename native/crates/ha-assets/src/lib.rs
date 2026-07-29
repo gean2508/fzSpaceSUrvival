@@ -16,7 +16,10 @@ pub mod slots;
 #[cfg(feature = "scan")]
 pub mod scan;
 
-pub use art_manifest::{ArtAnim, ArtEntry, ArtManifest, ArtValue, CellRect, Pose};
+pub use art_manifest::{
+    ArtAnim, ArtEntry, ArtLayer, ArtManifest, ArtValue, CellRect, CollisionFootprint, Emission,
+    Pose, StripDir,
+};
 pub use catalog::generate_catalog;
 pub use manifest::{
     AnchorKind, Anim, AnimLayout, Asset, Brush, Flags, Footprint, Hitbox, Manifest, ManifestError,

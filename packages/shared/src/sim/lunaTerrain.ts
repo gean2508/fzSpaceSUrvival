@@ -17,7 +17,7 @@ import {
   STEP_HEIGHT,
 } from "./constants.js";
 import { MOON_GAMEPLAY_RADIUS_M } from "./cosmic_scale.js";
-import type { MovementBody } from "./movement.js";
+import type { MovementBody } from "./parkour.js";
 import type { InputState } from "./types.js";
 
 export const LUNA_TANGENT_HALF = Math.PI * MOON_GAMEPLAY_RADIUS_M * 0.5;
@@ -63,7 +63,7 @@ function craterCatalog(): LunaCrater[] {
       Math.cos(phi),
       Math.sin(phi) * Math.sin(theta),
     ];
-    const scale = h3 & 3 === 0 ? 1.35 : 1.0;
+    const scale = (h3 & 3) === 0 ? 1.35 : 1.0;
     const angularR = (0.012 + ((h2 & 0xff) / 255) * 0.045) * scale;
     const depth = (2.5 + ((h3 & 0x7f) / 127) * 9.0) * scale;
     out.push({ dir, angularR, depth, rim: depth * 0.22 });

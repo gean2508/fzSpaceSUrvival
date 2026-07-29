@@ -7,6 +7,9 @@ pub enum InteractTargetKind {
     Water,
     Entity,
     Container,
+    /// Cofre colocado por el jugador — abre su panel de almacenamiento
+    /// (`ha-game/src/chests.rs`), no se "recoge" como un contenedor de worldgen.
+    Chest,
     OreIron,
     OreGold,
     GemBlue,
@@ -146,6 +149,16 @@ pub static INTERACTION_RULES: &[InteractionRule] = &[
         InteractActionKind::Gather,
         900,
         Some("supply"),
+        None,
+    ),
+    // Abrir un cofre es instantáneo-ish y NO produce ítem: lo consume
+    // `chests.rs` (registrado en `hold_target_handled_elsewhere`).
+    rule(
+        "hand",
+        InteractTargetKind::Chest,
+        InteractActionKind::Collect,
+        320,
+        None,
         None,
     ),
     rule(
@@ -339,8 +352,9 @@ mod tests {
 
     #[test]
     fn rule_count_stable() {
-        // 28 base + 10 tiered tool rules (wood/stone axe + pickaxe, jul 2026).
-        assert_eq!(INTERACTION_RULES.len(), 38);
+        // 28 base + 10 tiered tool rules (wood/stone axe + pickaxe, jul 2026)
+        // + 1 abrir cofre (`InteractTargetKind::Chest`).
+        assert_eq!(INTERACTION_RULES.len(), 39);
     }
 
     #[test]

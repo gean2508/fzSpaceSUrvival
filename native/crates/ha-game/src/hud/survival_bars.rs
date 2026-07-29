@@ -12,6 +12,8 @@ pub enum SurvivalBarKind {
     Hunger,
     Thirst,
     Oxygen,
+    /// Ki reserve — only shown while flying/charging (Saiyan flight).
+    Ki,
 }
 
 #[derive(Component)]
@@ -25,7 +27,9 @@ pub struct SurvivalBarsCache {
     hunger_pct: f32,
     thirst_pct: f32,
     oxygen_pct: f32,
+    ki_pct: f32,
     oxygen_visible: bool,
+    ki_visible: bool,
     initialized: bool,
 }
 
@@ -34,6 +38,7 @@ fn bar_color(kind: SurvivalBarKind) -> Color {
         SurvivalBarKind::Hunger => Color::srgb(0.94, 0.63, 0.25), // amber — food
         SurvivalBarKind::Thirst => Color::srgb(0.30, 0.65, 0.95), // water blue
         SurvivalBarKind::Oxygen => Color::srgb(0.78, 0.93, 0.98), // suit white-cyan
+        SurvivalBarKind::Ki => Color::srgb(1.0, 0.82, 0.22),      // Saiyan gold
     }
 }
 
@@ -45,6 +50,7 @@ pub fn spawn_survival_bars(parent: &mut ChildBuilder, heart: f32, gap: f32) {
         SurvivalBarKind::Hunger,
         SurvivalBarKind::Thirst,
         SurvivalBarKind::Oxygen,
+        SurvivalBarKind::Ki,
     ] {
         parent
             .spawn((
@@ -61,6 +67,7 @@ pub fn spawn_survival_bars(parent: &mut ChildBuilder, heart: f32, gap: f32) {
                     SurvivalBarKind::Hunger => "HungerBar",
                     SurvivalBarKind::Thirst => "ThirstBar",
                     SurvivalBarKind::Oxygen => "OxygenBar",
+                    SurvivalBarKind::Ki => "KiBar",
                 }),
             ))
             .with_children(|bar| {
@@ -80,6 +87,7 @@ pub fn spawn_survival_bars(parent: &mut ChildBuilder, heart: f32, gap: f32) {
 pub fn update_survival_bars(
     player: Query<&SimState, With<Player>>,
     world_ctx: Res<crate::scene::WorldContextRuntime>,
+    flight: Res<crate::flight::Flight>,
     mut cache: ResMut<SurvivalBarsCache>,
     mut fills: Query<(&SurvivalBarFill, &mut Node), Without<SurvivalBarRow>>,
     mut rows: Query<(&SurvivalBarRow, &mut Node), Without<SurvivalBarFill>>,
@@ -90,17 +98,22 @@ pub fn update_survival_bars(
     let hunger_pct = (sim.survival.hunger / HUNGER_MAX * 100.0).clamp(0.0, 100.0);
     let thirst_pct = (sim.survival.thirst / THIRST_MAX * 100.0).clamp(0.0, 100.0);
     let oxygen_pct = (sim.survival.oxygen / OXYGEN_MAX * 100.0).clamp(0.0, 100.0);
+    let ki_pct = flight.ki_pct();
     // O₂ row earns its pixels only when the suit is in play.
     let oxygen_visible = !matches!(
         world_ctx.active,
         ha_shared::WorldContext::Overworld | ha_shared::WorldContext::Mission
     ) || oxygen_pct < 99.5;
+    // Ki row shows while flying/charging, or when not fully recovered.
+    let ki_visible = flight.active || flight.charging || ki_pct < 99.5;
 
     let changed = !cache.initialized
         || (cache.hunger_pct - hunger_pct).abs() > 0.4
         || (cache.thirst_pct - thirst_pct).abs() > 0.4
         || (cache.oxygen_pct - oxygen_pct).abs() > 0.4
-        || cache.oxygen_visible != oxygen_visible;
+        || (cache.ki_pct - ki_pct).abs() > 0.4
+        || cache.oxygen_visible != oxygen_visible
+        || cache.ki_visible != ki_visible;
     if !changed {
         return;
     }
@@ -108,22 +121,27 @@ pub fn update_survival_bars(
     cache.hunger_pct = hunger_pct;
     cache.thirst_pct = thirst_pct;
     cache.oxygen_pct = oxygen_pct;
+    cache.ki_pct = ki_pct;
     cache.oxygen_visible = oxygen_visible;
+    cache.ki_visible = ki_visible;
 
     for (fill, mut node) in &mut fills {
         node.width = Val::Percent(match fill.0 {
             SurvivalBarKind::Hunger => hunger_pct,
             SurvivalBarKind::Thirst => thirst_pct,
             SurvivalBarKind::Oxygen => oxygen_pct,
+            SurvivalBarKind::Ki => ki_pct,
         });
     }
     for (row, mut node) in &mut rows {
-        if row.0 == SurvivalBarKind::Oxygen {
-            node.display = if oxygen_visible {
-                Display::Flex
-            } else {
-                Display::None
-            };
+        match row.0 {
+            SurvivalBarKind::Oxygen => {
+                node.display = if oxygen_visible { Display::Flex } else { Display::None };
+            }
+            SurvivalBarKind::Ki => {
+                node.display = if ki_visible { Display::Flex } else { Display::None };
+            }
+            _ => {}
         }
     }
 }

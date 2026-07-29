@@ -75,6 +75,7 @@ fn colony_button_system(
     mut inv: ResMut<PlayerInventory>,
     mut inv_ui: ResMut<InventoryUiState>,
     mut inv_persist: ResMut<InventoryPersistState>,
+    mut soc: ResMut<crate::society::Society>,
     mut buttons: Query<
         (&Interaction, &ColonyButton, &mut BackgroundColor, &mut Visibility),
         With<Button>,
@@ -114,6 +115,10 @@ fn colony_button_system(
                 }
                 ColonyAction::SendSupplies => {
                     colony.state.food_stock += SUPPLY_SEND_APPLES as f32;
+                    // Alimenta la economía REAL de los NPCs lunares (`society.rs`), no
+                    // sólo el contador abstracto — si no, los colonos que se VEN nunca
+                    // reciben lo que mandás.
+                    soc.add_stock(CelestialBody::Moon as u8, SUPPLY_SEND_APPLES as f32, 0.0, 0.0);
                     eprintln!("ha-colony: supplies sent (stock {:.0})", colony.state.food_stock);
                 }
             }

@@ -1,0 +1,11 @@
+[package]
+name = "iafz-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FFI a la IA frugal IAFZ-64 (HIVE_OS): Deep BNN binaria (XNOR+popcount), sin backprop, para cerebros de NPC/fauna en el juego."
+
+[lib]
+
+[build-dependencies]
+cc = "1"

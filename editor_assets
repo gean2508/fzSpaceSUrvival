@@ -3,6 +3,9 @@
 # del juego). Envuelve `ha-asset-tools` para que no tengas que recordar rutas.
 #
 #   ./editor_assets                       abre el editor visual (GUI)
+#   ./editor_assets sonido                abre el editor de sonido (mini-DAW)
+#   ./editor_assets mundo                 abre el editor de MUNDO (WYSIWYG, overrides)
+#   ./editor_assets gym-gui                visor de ADN: lista genomas .adn, evalua/muta/cruza
 #   ./editor_assets play                  recompila el juego y lo publica (npm run play)
 #   ./editor_assets scan <carpeta> [pref] escanea un pack LimeZu → manifest.ron
 #   ./editor_assets catalog               regenera CATALOGO.md desde el manifest
@@ -38,6 +41,28 @@ case "$cmd" in
     echo "▶ abriendo editor… (en la barra: poné la carpeta de arte → Escanear;" >&2
     echo "  el manifest por defecto es native/$MANIFEST)" >&2
     run gui
+    ;;
+
+  sonido|sound)
+    build
+    echo "▶ abriendo editor de sonido… (edita native/assets/audio.json;" >&2
+    echo "  guardá y recompilá con ./build-y-publicar.sh para oírlo en el juego)" >&2
+    run sound
+    ;;
+
+  mundo|world|mapa)
+    build
+    echo "▶ abriendo editor de MUNDO (WYSIWYG)… pintás overrides sobre el mundo" >&2
+    echo "  procedural; Guardar escribe native/crates/ha-game/assets/world_edits.json;" >&2
+    echo "  recompilá el juego (./build-y-publicar.sh) para verlo aplicado)" >&2
+    run mundo
+    ;;
+
+  gym-gui|gym_gui|npc-gym)
+    build
+    echo "▶ abriendo visor de ADN (NPC gym)… lista los .adn de society/vivarium/genomes," >&2
+    echo "  corré 'Evaluar' para ver el rastro, 'Mutar'/'Cruzar' para experimentar" >&2
+    run gym-gui
     ;;
 
   scan)

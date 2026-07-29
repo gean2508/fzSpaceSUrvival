@@ -25,6 +25,7 @@ pub fn desktop_keyboard_actions(
     keys: Res<ButtonInput<KeyCode>>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
+    flight: Res<crate::flight::Flight>,
     mut buffer: ResMut<ActionInputBuffer>,
     mut actions: ResMut<super::TouchActions>,
 ) {
@@ -35,6 +36,12 @@ pub fn desktop_keyboard_actions(
         buffer.tap_use();
         actions.action = true;
         actions.use_edge = true;
+    }
+    // Hold F (or Shift) to DESCEND while airborne — the flight controller reads
+    // continuous `actions.action` (mobile's USE button held). Airborne-only so the
+    // ground tap-to-interact behaviour is untouched.
+    if flight.active && (keys.pressed(KeyCode::KeyF) || keys.pressed(KeyCode::ShiftLeft)) {
+        actions.action = true;
     }
     if keys.just_pressed(KeyCode::Space) {
         buffer.hold_jump();
@@ -54,7 +61,7 @@ pub fn desktop_mouse_capture_toggle(
     keys: Res<ButtonInput<KeyCode>>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
-    flight: Res<crate::rocket_flight::RocketFlight>,
+    flight: Res<crate::flight::Flight>,
     mut capture: ResMut<DesktopMouseCapture>,
 ) {
     // Flight uses the mouse to AIM the ship, so don't treat the flight-caused
@@ -76,7 +83,7 @@ pub fn desktop_mouse_look(
     mut motion: EventReader<MouseMotion>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
-    flight: Res<crate::rocket_flight::RocketFlight>,
+    flight: Res<crate::flight::Flight>,
     capture: Res<DesktopMouseCapture>,
     mut look: ResMut<CameraLookIntent>,
 ) {
@@ -139,6 +146,7 @@ pub fn desktop_hold_interact(
         hold.placing_block = false;
         hold.flight_hold = false;
         hold.eating = false;
+        hold.placing_chest = false;
         hold.locked_kind = None;
 
         if place_pressed {
@@ -151,6 +159,10 @@ pub fn desktop_hold_interact(
                 hold.active = true;
                 hold.duration_ms = 300;
                 hold.placing_block = true;
+            } else if equipped.item_id == crate::chests::CHEST_ITEM && target.kind.is_none() {
+                hold.active = true;
+                hold.duration_ms = 450;
+                hold.placing_chest = true;
             } else if ha_shared::food_restore(&equipped.item_id).is_some()
                 && target.kind.is_none()
             {
@@ -202,7 +214,7 @@ pub fn desktop_aim_cursor(
     mut cursor: ResMut<super::AimCursor>,
 ) {
     // When the touch UI is forced on desktop, the right stick owns the cursor.
-    if std::env::var("HA_FORCE_TOUCH").is_ok() {
+    if std::env::var("HA_FORCE_TOUCH").is_ok() || cursor.locked {
         return;
     }
     let Ok(win) = window.get_single() else {
@@ -233,7 +245,7 @@ pub fn desktop_aim_cursor(
 pub fn desktop_cursor_grab(
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
-    flight: Res<crate::rocket_flight::RocketFlight>,
+    flight: Res<crate::flight::Flight>,
     capture: Res<DesktopMouseCapture>,
     mut window: Query<&mut Window, With<PrimaryWindow>>,
 ) {

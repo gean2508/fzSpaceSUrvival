@@ -1,0 +1,10 @@
+{
+  "name": "FZ",
+  "sheet": "art/player/character.png",
+  "tint": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ]
+}

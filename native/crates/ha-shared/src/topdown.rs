@@ -10,7 +10,7 @@
 //! underground mine floors, each its own deterministic top-down grid. Space is
 //! NOT a z-level — it is the orbital mode. See `MIGRATION_PLAN.md` §1–§2.
 
-use crate::celestial_bodies::{body_terrain_seed, CelestialBody};
+use crate::celestial_bodies::{body_atmo_top, body_terrain_seed, CelestialBody};
 use crate::constants::{FRICTION, SPRINT_MULT, STAMINA_SPRINT_DRAIN};
 use crate::input::InputState;
 use crate::movement::MovementBody;
@@ -25,7 +25,7 @@ pub const MIN_Z_LEVEL: i32 = -8;
 // Tiles
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tile {
     // Surface (z=0)
     Grass,
@@ -33,6 +33,14 @@ pub enum Tile {
     Sand,
     Water,
     Regolith,
+    /// Hielo: superficie helada CAMINABLE — casquetes polares, cumbres nevadas
+    /// y los mundos de hielo (Europa). Resbala a la vista, no en el paso.
+    Ice,
+    /// Basalto: llanura oscura de roca volcánica. CAMINABLE — es suelo, no
+    /// muro. Es lo que dibuja los mares de la Luna y las planicies oscuras de
+    /// Marte, que son justo los rasgos que hacen reconocible a cada cuerpo
+    /// desde el espacio.
+    Basalt,
     RockRed,
     // Underground (z<0)
     Stone,
@@ -42,10 +50,17 @@ pub enum Tile {
     // Player-placed / shared
     WoodFloor,
     Wall,
-    // Build pieces (construction system) — placed only, never generated.
+    // Build pieces (construction system) — placed only, never generated
+    // (except Door/WoodWall/WoodFloor, reused by generated settlements).
     WoodWall,
     StoneBrick,
     Door,
+    /// Window: blocks walking like a wall, but art shows through (see `window/basic`).
+    Window,
+    /// Stairs placed by the player: stepping on them swaps `tiles.z` one level
+    /// down/up (building basements / upper floors — see `layer_transition`).
+    StairsDown,
+    StairsUp,
     Air,
 }
 
@@ -63,6 +78,7 @@ impl Tile {
                 | Tile::RockRed
                 | Tile::WoodWall
                 | Tile::StoneBrick
+                | Tile::Window
         )
     }
 
@@ -73,9 +89,12 @@ impl Tile {
             Tile::Grass | Tile::Dirt => Some("dirt"),
             Tile::Sand => Some("sand"),
             Tile::Regolith => Some("regolith"),
+            Tile::Basalt => Some("stone"),
+            Tile::Ice => Some("stone"),
             Tile::Stone | Tile::RockRed => Some("stone"),
             Tile::RockDark => Some("stone"),
             Tile::WoodFloor | Tile::Wall | Tile::WoodWall | Tile::Door => Some("wood"),
+            Tile::Window | Tile::StairsDown | Tile::StairsUp => Some("wood"),
             Tile::StoneBrick => Some("stone"),
             _ => None,
         }
@@ -89,6 +108,8 @@ impl Tile {
             Tile::Sand => [0.78, 0.70, 0.45],
             Tile::Water => [0.25, 0.47, 0.70],
             Tile::Regolith => [0.62, 0.62, 0.64],
+            Tile::Basalt => [0.29, 0.28, 0.31],
+            Tile::Ice => [0.82, 0.88, 0.93],
             Tile::RockRed => [0.60, 0.34, 0.24],
             Tile::Stone => [0.46, 0.47, 0.50],
             Tile::RockDark => [0.30, 0.30, 0.34],
@@ -99,6 +120,9 @@ impl Tile {
             Tile::WoodWall => [0.45, 0.31, 0.17],
             Tile::StoneBrick => [0.55, 0.55, 0.58],
             Tile::Door => [0.30, 0.20, 0.10],
+            Tile::Window => [0.55, 0.65, 0.75],
+            Tile::StairsDown => [0.32, 0.24, 0.16],
+            Tile::StairsUp => [0.62, 0.50, 0.32],
             Tile::Air => [0.0, 0.0, 0.0],
         }
     }
@@ -123,34 +147,32 @@ pub struct BuildPiece {
 }
 
 /// Ordered palette of build pieces (index = palette slot).
+///
+/// **Sólo piezas de CELDA**: pisos y escaleras. Paredes, puertas y ventanas
+/// dejaron de ser celdas — viven en el borde entre celdas (`build_grid::
+/// EDGE_PIECES`, estilo Last Day on Earth). Los tiles `WoodWall`/`Door`/… siguen
+/// existiendo para los asentamientos generados y las partidas viejas.
 pub static BUILD_PIECES: &[BuildPiece] = &[
     BuildPiece {
         id: "build_wood_floor",
-        label: "Piso",
+        label: "Piso madera",
         tile: Tile::WoodFloor,
         cost_item: "wood",
         cost_qty: 1,
     },
     BuildPiece {
-        id: "build_wood_wall",
-        label: "Muro madera",
-        tile: Tile::WoodWall,
+        id: "build_stairs_down",
+        label: "Gradas abajo",
+        tile: Tile::StairsDown,
         cost_item: "wood",
-        cost_qty: 2,
+        cost_qty: 4,
     },
     BuildPiece {
-        id: "build_stone_brick",
-        label: "Muro piedra",
-        tile: Tile::StoneBrick,
-        cost_item: "stone",
-        cost_qty: 2,
-    },
-    BuildPiece {
-        id: "build_door",
-        label: "Puerta",
-        tile: Tile::Door,
+        id: "build_stairs_up",
+        label: "Gradas arriba",
+        tile: Tile::StairsUp,
         cost_item: "wood",
-        cost_qty: 3,
+        cost_qty: 4,
     },
 ];
 
@@ -162,6 +184,191 @@ pub fn build_piece_count() -> usize {
 /// Palette piece by index (clamped-safe: returns None if out of range).
 pub fn build_piece(idx: usize) -> Option<&'static BuildPiece> {
     BUILD_PIECES.get(idx)
+}
+
+// ---------------------------------------------------------------------------
+// Prefabs — multi-tile stamps (rooms/houses placed in ONE hold). Body-agnostic:
+// they place wherever building is allowed (Earth, Moon, Mars, stations). Art is
+// optional (`room/*` slots + autotile `floor/*`/`wall/*`); logic is tiles only.
+// ---------------------------------------------------------------------------
+
+/// A rectangular room prefab: perimeter = wall, interior = floor, one door on
+/// the south wall. `interior_walls` adds inner partitions (offsets rel. to the
+/// prefab min corner); an inner `Door` splits rooms without leaving the house.
+#[derive(Clone, Copy, Debug)]
+pub struct Prefab {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// Footprint in tiles (w along +x, h along +z).
+    pub w: i64,
+    pub h: i64,
+    /// Door offset on the perimeter (rel. to min corner).
+    pub door: (i64, i64),
+    /// Inner partition cells (rel. offsets) stamped as `WoodWall`.
+    pub interior_walls: &'static [(i64, i64)],
+    /// Inner door cells (rel. offsets) stamped as `Door`.
+    pub interior_doors: &'static [(i64, i64)],
+    /// Material charged per wall cell (floors cost 1 of the same item).
+    pub cost_item: &'static str,
+}
+
+/// Curated presets — small enough to read on a phone screen. `casa_1` derives
+/// from the LimeZu `Home_Designs` layout: two rooms split by a partition.
+pub static PREFABS: &[Prefab] = &[
+    Prefab {
+        id: "room_small",
+        label: "Cuarto 5x4",
+        w: 5,
+        h: 4,
+        door: (2, 3),
+        interior_walls: &[],
+        interior_doors: &[],
+        cost_item: "wood",
+    },
+    Prefab {
+        id: "room_medium",
+        label: "Cuarto 7x6",
+        w: 7,
+        h: 6,
+        door: (3, 5),
+        interior_walls: &[],
+        interior_doors: &[],
+        cost_item: "wood",
+    },
+    Prefab {
+        id: "room_large",
+        label: "Salon 9x8",
+        w: 9,
+        h: 8,
+        door: (4, 7),
+        interior_walls: &[],
+        interior_doors: &[],
+        cost_item: "wood",
+    },
+    Prefab {
+        id: "casa_1",
+        label: "Casa 9x7",
+        w: 9,
+        h: 7,
+        door: (4, 6),
+        // Partition wall at x=5 splitting living room / bedroom…
+        interior_walls: &[(5, 1), (5, 2), (5, 4), (5, 5)],
+        // …with an inner doorway at (5,3).
+        interior_doors: &[(5, 3)],
+        cost_item: "wood",
+    },
+];
+
+pub fn prefab_count() -> usize {
+    PREFABS.len()
+}
+
+pub fn prefab(idx: usize) -> Option<&'static Prefab> {
+    PREFABS.get(idx)
+}
+
+/// Tile stamped at offset `(dx, dz)` of the prefab, or `None` outside the
+/// footprint. Perimeter → wall, door offsets → `Door`, interior → floor.
+pub fn prefab_cell(p: &Prefab, dx: i64, dz: i64) -> Option<Tile> {
+    if dx < 0 || dz < 0 || dx >= p.w || dz >= p.h {
+        return None;
+    }
+    if p.door == (dx, dz) || p.interior_doors.contains(&(dx, dz)) {
+        return Some(Tile::Door);
+    }
+    if p.interior_walls.contains(&(dx, dz)) {
+        return Some(Tile::WoodWall);
+    }
+    let perimeter = dx == 0 || dz == 0 || dx == p.w - 1 || dz == p.h - 1;
+    Some(if perimeter { Tile::WoodWall } else { Tile::WoodFloor })
+}
+
+/// Total material cost of stamping the prefab: 2 per wall cell, 3 per door,
+/// 1 per floor cell (mirrors the single-piece prices).
+pub fn prefab_cost(p: &Prefab) -> u32 {
+    let mut qty = 0;
+    for dz in 0..p.h {
+        for dx in 0..p.w {
+            qty += match prefab_cell(p, dx, dz) {
+                Some(Tile::WoodWall) => 2,
+                Some(Tile::Door) => 3,
+                Some(Tile::WoodFloor) => 1,
+                _ => 0,
+            };
+        }
+    }
+    qty
+}
+
+/// Un "asset grande" colocable: un sprite ÚNICO (p.ej. 4×4) con footprint de
+/// colisión. A diferencia de un prefab (que estampa tiles), esto coloca UNA
+/// estructura-sprite que se registra en `BuiltStructures` (juego); su colisión
+/// sale de la huella del art (manifest A1) o, si no hay huella pintada, de la
+/// base completa `w×h`. El jugador camina ALREDEDOR (Y-sort), no adentro.
+/// Agnóstico al cuerpo. (A2, `PLAN_MAESTRO §3.A2`.)
+#[derive(Clone, Copy, Debug)]
+pub struct LargeAsset {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// Slot de arte lógico (el usuario le asigna la textura en el editor). Sin
+    /// arte, cae a un quad de color (como el resto del decor).
+    pub art: &'static str,
+    /// Footprint en tiles (`w` en +x, `h` en +z) — tamaño visual y base de
+    /// colisión por defecto.
+    pub w: i64,
+    pub h: i64,
+    pub cost_item: &'static str,
+    pub cost_qty: u32,
+}
+
+/// Catálogo curado de assets grandes colocables (el usuario asigna el pixel a
+/// cada `art` en el editor; la huella fina se pinta con la sección "🗺 huella").
+pub static LARGE_ASSETS: &[LargeAsset] = &[
+    LargeAsset { id: "boulder", label: "Roca grande 2x2", art: "structure/boulder", w: 2, h: 2, cost_item: "stone", cost_qty: 6 },
+    LargeAsset { id: "statue", label: "Estatua 2x3", art: "structure/statue", w: 2, h: 3, cost_item: "stone", cost_qty: 12 },
+    LargeAsset { id: "monument", label: "Monumento 4x4", art: "structure/monument", w: 4, h: 4, cost_item: "stone", cost_qty: 40 },
+];
+
+pub fn large_asset_count() -> usize {
+    LARGE_ASSETS.len()
+}
+
+pub fn large_asset(idx: usize) -> Option<&'static LargeAsset> {
+    LARGE_ASSETS.get(idx)
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic settlements — auto-generated houses (per-body gated table).
+// Building MECHANICS are body-agnostic; only this auto-generation is gated.
+// ---------------------------------------------------------------------------
+
+/// Una posible aldea por celda de SITE_PERIOD×SITE_PERIOD tiles.
+///
+/// ESCALA GTA-V (29 jul 2026): con un mundo de 60 km de lado, una aldea cada
+/// 48 m era una calle continua de casas. A 1.8 km salen ~1 100 asentamientos
+/// repartidos por el planeta — se cruzan volando cada tanto, que es lo que
+/// hace que el mapa se sienta habitado en vez de saturado.
+pub use crate::geography::SITE_PERIOD;
+
+/// Which bodies auto-generate settlements (easy to extend: add a match arm).
+pub fn body_generates_buildings(body: CelestialBody) -> bool {
+    matches!(body, CelestialBody::Earth)
+}
+
+pub use crate::geography::{building_at, building_tile, BuildingSite};
+
+/// Compat: el "sitio" de una celda de asentamiento es ahora el primer edificio
+/// del núcleo que la ocupa. La generación de verdad vive en `crate::geography`
+/// (manzanas dentro de la trama urbana) — esto sólo mantiene en pie a los
+/// llamadores antiguos.
+pub fn building_site_in(body: CelestialBody, sx: i64, sz: i64) -> Option<BuildingSite> {
+    let s = crate::geography::settlement_in(body, sx, sz)?;
+    crate::geography::building_in_block(body, s, 0, 0)
+}
+
+/// El tile de edificio generado en esta celda, si lo hay.
+pub fn building_cell(body: CelestialBody, tx: i64, tz: i64) -> Option<Tile> {
+    crate::geography::building_tile(body, tx, tz)
 }
 
 // ---------------------------------------------------------------------------
@@ -216,33 +423,11 @@ fn fbm2(seed: u32, tx: i64, tz: i64, period: i64) -> f32 {
 // Terrain generation per (body, z_level)
 // ---------------------------------------------------------------------------
 
+/// El tile natural de una celda de superficie. La geografía (relieve, clima,
+/// biomas, ríos) vive en `crate::geography` — ÚNICA fuente de verdad, compartida
+/// con la decoración y con el mapa satelital del cliente.
 fn surface_tile(body: CelestialBody, tx: i64, tz: i64) -> Tile {
-    let seed = body_terrain_seed(body);
-    let elevation = fbm2(seed, tx, tz, 22);
-    let moisture = fbm2(seed ^ 0x1234_abcd, tx + 900, tz - 400, 30);
-    match body {
-        CelestialBody::Earth => {
-            if elevation < 0.30 {
-                Tile::Water
-            } else if elevation < 0.36 {
-                Tile::Sand
-            } else if moisture > 0.55 {
-                Tile::Grass
-            } else if moisture > 0.40 {
-                Tile::Dirt
-            } else {
-                Tile::Sand
-            }
-        }
-        CelestialBody::Moon => Tile::Regolith,
-        _ => {
-            if elevation < 0.34 {
-                Tile::RockRed
-            } else {
-                Tile::Sand
-            }
-        }
-    }
+    crate::geography::natural_tile(body, tx, tz)
 }
 
 /// True where an underground floor has an open (walkable) cave cell.
@@ -255,14 +440,52 @@ fn cave_open(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
     fbm2(seed, tx, tz, 9) > threshold
 }
 
+
+/// Fuera del cuerpo: la celda cae más allá del radio caminable. La orilla se
+/// ondula un poco con ruido para que la costa no sea un círculo perfecto.
+pub fn beyond_world_edge(body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let r = crate::celestial_bodies::body_walk_radius(body);
+    if r <= 0.0 {
+        return false;
+    }
+    let d = ((tx * tx + tz * tz) as f64).sqrt() as f32 * TILE_M;
+    let wobble = (fbm2(body_terrain_seed(body) ^ 0xC0A5_7000, tx / 24, tz / 24, 3) - 0.5) * r * 0.03;
+    d > r * 0.985 + wobble
+}
+
 /// The natural (un-edited) tile at a grid cell of a given z_level.
 pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
     // Portals + a 1-ring around them are always open so you never arrive stuck.
-    if portal_here(body, z, tx, tz).is_some() || portal_adjacent(body, z, tx, tz) {
+    let shafts = shafts_around(body, z, tx, tz);
+    if portal_from(&shafts, tx, tz).is_some() || portal_ring(&shafts, tx, tz) {
         return if z == 0 { Tile::Dirt } else { Tile::CaveFloor };
     }
     if z == 0 {
+        // MUNDO FINITO (29 jul 2026): más allá del radio caminable del cuerpo no
+        // hay más mundo. El mapa es procedural pero ACOTADO — 60 km de punta a
+        // punta en la Tierra —, así que el disco que ves desde el espacio es
+        // literalmente todo el terreno que existe, y el borde es agua (o roca en
+        // los cuerpos sin aire) en vez de una llanura infinita.
+        if beyond_world_edge(body, tx, tz) {
+            return if body_atmo_top(body) > 0.0 { Tile::Water } else { Tile::RockDark };
+        }
+        // Generated settlements override the natural ground (Earth-only table;
+        // the tiles behave like any other — collide, dig, persist edits).
+        if let Some(t) = building_cell(body, tx, tz) {
+            return t;
+        }
+        // OBRA CIVIL: carreteras, puentes y suelo urbano. Va por encima del
+        // terreno y por debajo de los edificios — un puente sobre el mar es
+        // simplemente calzada donde había agua, así que se cruza andando.
+        if let Some(c) = crate::geography::civil_at(body, tx, tz) {
+            return crate::geography::civil_tile(c);
+        }
         return surface_tile(body, tx, tz);
+    }
+    if z > 0 {
+        // Upper floors are void (solid, undiggable): rooms exist only where a
+        // staircase carved them (player edits) — see `layer_transition`.
+        return Tile::Bedrock;
     }
     if z <= MIN_Z_LEVEL {
         return Tile::Bedrock;
@@ -290,32 +513,71 @@ pub enum Portal {
 }
 
 /// Anchor cell of the surface mine entrance (findable, near the origin/pad).
-fn mine_entrance(body: CelestialBody) -> (i64, i64) {
-    let seed = body_terrain_seed(body);
-    let ox = 6 + (hash2(seed, 1, 1) % 6) as i64;
-    let oz = 4 + (hash2(seed, 2, 2) % 6) as i64;
-    (ox, oz)
+/// Lado de la celda de sistema de cuevas, en tiles. Una boca cada ~900 m donde
+/// el terreno lo permite: en un mundo de 60 km te cruzás con una cada tanto
+/// caminando, igual que en Minecraft, en vez de tener UNA sola mina junto al
+/// origen (que a esta escala es no tener ninguna).
+pub const CAVE_PERIOD: i64 = 900;
+
+/// Boca de cueva de una celda de cuevas, si el terreno la admite: un agujero
+/// visible en el suelo por el que se BAJA andando — sin prompt, sin pantalla de
+/// carga, sin cambio de escena. Sólo se abre donde hay galería debajo y donde
+/// el suelo es pisable (nada de bocas en mitad del océano).
+pub fn cave_mouth_in(body: CelestialBody, rx: i64, rz: i64) -> Option<(i64, i64)> {
+    let seed = body_terrain_seed(body) ^ 0x0cae_5000;
+    let h = hash2(seed, rx, rz);
+    // ~2 de cada 3 celdas tienen boca; el resto son macizos sin entrada.
+    if h % 3 == 0 {
+        return None;
+    }
+    let margin = 24;
+    let span = (CAVE_PERIOD - margin * 2).max(1);
+    let tx = rx * CAVE_PERIOD + margin + ((h >> 7) as i64).rem_euclid(span);
+    let tz = rz * CAVE_PERIOD + margin + ((h >> 17) as i64).rem_euclid(span);
+    // Tierra firme arriba y galería abierta abajo: si no, la boca sería un
+    // agujero a roca maciza o al fondo del mar. Prueba CONTINENTAL barata — esto
+    // se consulta para cuatro celdas de cada tile del mundo.
+    let sea = 0.46; // por encima del nivel del mar de cualquier arquetipo con agua
+    let h = crate::geography::continental_at(body, tx, tz);
+    if h < sea || h > 0.74 {
+        return None;
+    }
+    if !cave_open(body, -1, tx, tz) {
+        return None;
+    }
+    Some((tx, tz))
 }
 
-/// The "go down" hole on floor `z` (surface 0 → deepest+1). Deterministic;
-/// each floor's hole is a short walk from the ladder you arrived at.
-pub fn descend_portal(body: CelestialBody, z: i32) -> (i64, i64) {
-    let mut cell = mine_entrance(body);
-    let seed = body_terrain_seed(body) ^ 0x5afe_0001u32;
-    // Walk the shaft downward, offsetting a few tiles per floor.
+/// El pozo de bajada del piso `z` para la celda de cuevas `(rx, rz)`. Cada piso
+/// desplaza el pozo unos tiles, así bajar es recorrer galería, no caer por un
+/// tubo recto.
+fn shaft_cell(body: CelestialBody, z: i32, rx: i64, rz: i64) -> Option<(i64, i64)> {
+    let mut cell = cave_mouth_in(body, rx, rz)?;
+    let seed = body_terrain_seed(body) ^ 0x5afe_0001;
     let mut f = 0;
     while f > z {
         f -= 1;
-        let h = hash2(seed, f as i64, 77);
-        let dx = (h % 13) as i64 - 6;
-        let dz = ((h >> 8) % 13) as i64 - 6;
-        cell = (cell.0 + dx, cell.1 + dz);
+        let h = hash2(seed, rx * 31 + f as i64, rz * 17 + 77);
+        cell = (cell.0 + (h % 13) as i64 - 6, cell.1 + ((h >> 8) % 13) as i64 - 6);
     }
-    cell
+    Some(cell)
 }
 
-/// The "go up" ladder on floor `z` (only floors below the surface). Placed
-/// where you arrive from `z+1` — i.e. the descend hole of the floor above.
+/// La celda de cuevas a la que pertenece un tile (y sus vecinas, porque los
+/// pozos se desplazan y pueden cruzar el borde).
+fn cave_regions(tx: i64, tz: i64) -> [(i64, i64); 4] {
+    let (rx, rz) = (tx.div_euclid(CAVE_PERIOD), tz.div_euclid(CAVE_PERIOD));
+    [(rx, rz), (rx - 1, rz), (rx, rz - 1), (rx - 1, rz - 1)]
+}
+
+/// El pozo de bajada del piso `z` más cercano al origen — compatibilidad con
+/// código viejo que pedía "la mina" en singular.
+pub fn descend_portal(body: CelestialBody, z: i32) -> (i64, i64) {
+    shaft_cell(body, z, 0, 0).unwrap_or((6, 4))
+}
+
+/// Escalera de subida del piso `z` (sólo bajo la superficie): está donde caés
+/// desde `z+1`, o sea en el pozo del piso de arriba.
 pub fn ascend_portal(body: CelestialBody, z: i32) -> Option<(i64, i64)> {
     if z >= 0 {
         return None;
@@ -323,28 +585,50 @@ pub fn ascend_portal(body: CelestialBody, z: i32) -> Option<(i64, i64)> {
     Some(descend_portal(body, z + 1))
 }
 
-/// Portal at this exact cell, if any.
-pub fn portal_here(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Portal> {
-    if z > MIN_Z_LEVEL && descend_portal(body, z) == (tx, tz) {
-        return Some(Portal::Descend);
+/// Los pozos relevantes alrededor de un tile: bajada de este piso y subida al
+/// de arriba, para las cuatro celdas de cuevas vecinas.
+///
+/// Se calcula UNA vez y lo comparten `portal_here` y `portal_adjacent`: antes
+/// cada tile del mundo repetía este trabajo diez veces (una por vecino), y con
+/// la geografía nueva eso hacía que generar un chunk tardara una eternidad.
+fn shafts_around(body: CelestialBody, z: i32, tx: i64, tz: i64) -> [Option<(i64, i64)>; 8] {
+    let mut out = [None; 8];
+    if z > 0 {
+        return out;
     }
-    if let Some(a) = ascend_portal(body, z) {
-        if a == (tx, tz) {
-            return Some(Portal::Ascend);
+    for (i, (rx, rz)) in cave_regions(tx, tz).into_iter().enumerate() {
+        if z > MIN_Z_LEVEL {
+            out[i] = shaft_cell(body, z, rx, rz);
+        }
+        if z < 0 {
+            out[4 + i] = shaft_cell(body, z + 1, rx, rz);
+        }
+    }
+    out
+}
+
+/// Portal en esta celda exacta, si lo hay. Bocas de cueva en superficie y pozos
+/// escalonados hacia abajo, repartidos por todo el mundo.
+pub fn portal_here(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Portal> {
+    portal_from(&shafts_around(body, z, tx, tz), tx, tz)
+}
+
+fn portal_from(shafts: &[Option<(i64, i64)>; 8], tx: i64, tz: i64) -> Option<Portal> {
+    for (i, s) in shafts.iter().enumerate() {
+        if *s == Some((tx, tz)) {
+            return Some(if i < 4 { Portal::Descend } else { Portal::Ascend });
         }
     }
     None
 }
 
-fn portal_adjacent(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
-    for dx in -1..=1 {
-        for dz in -1..=1 {
-            if (dx != 0 || dz != 0) && portal_here(body, z, tx + dx, tz + dz).is_some() {
-                return true;
-            }
-        }
-    }
-    false
+/// ¿Hay un portal en el anillo de 1 celda alrededor? (Se deja abierto para no
+/// llegar nunca atrapado.) Comparte los pozos ya calculados.
+fn portal_ring(shafts: &[Option<(i64, i64)>; 8], tx: i64, tz: i64) -> bool {
+    shafts
+        .iter()
+        .flatten()
+        .any(|&(sx, sz)| (sx - tx).abs() <= 1 && (sz - tz).abs() <= 1 && (sx, sz) != (tx, tz))
 }
 
 pub fn solid_at(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
@@ -412,6 +696,20 @@ pub fn step_topdown_movement(
     dt: f32,
     solid: &dyn Fn(i64, i64) -> bool,
 ) {
+    step_topdown_movement_ex(body, input, dt, solid, &|_x, _z| false)
+}
+
+/// Igual que `step_topdown_movement`, pero además contra las **paredes de
+/// borde** (`build_grid`): `walls(x, z)` responde si la cápsula centrada ahí
+/// pisa una pared que corta el paso. Separado del grid de celdas porque una
+/// pared vive en la ARISTA entre dos celdas, no en una celda.
+pub fn step_topdown_movement_ex(
+    body: &mut MovementBody,
+    input: &InputState,
+    dt: f32,
+    solid: &dyn Fn(i64, i64) -> bool,
+    walls: &dyn Fn(f32, f32) -> bool,
+) {
     let mut mx = input.move_x;
     let mut mz = input.move_z;
     let len = (mx * mx + mz * mz).sqrt();
@@ -436,13 +734,13 @@ pub fn step_topdown_movement(
 
     // X axis then Z axis, resolving against solid tiles (slide along walls).
     let new_x = body.x + body.vx * dt;
-    if !capsule_hits(new_x, body.z, solid) {
+    if !capsule_hits(new_x, body.z, solid) && !walls(new_x, body.z) {
         body.x = new_x;
     } else {
         body.vx = 0.0;
     }
     let new_z = body.z + body.vz * dt;
-    if !capsule_hits(body.x, new_z, solid) {
+    if !capsule_hits(body.x, new_z, solid) && !walls(body.x, new_z) {
         body.z = new_z;
     } else {
         body.vz = 0.0;
@@ -486,20 +784,105 @@ mod tests {
         let a = topdown_tile(CelestialBody::Earth, 0, 12, -7);
         let b = topdown_tile(CelestialBody::Earth, 0, 12, -7);
         assert_eq!(a, b);
-        assert_eq!(topdown_tile(CelestialBody::Moon, 0, 3, 3), Tile::Regolith);
+        // La Luna ya no es un gris uniforme: regolito, mares de basalto y algún
+        // pico. Lo que importa es que sea determinista y lunar.
+        assert!(matches!(
+            topdown_tile(CelestialBody::Moon, 0, 3, 3),
+            Tile::Regolith | Tile::Basalt | Tile::Stone
+        ));
         assert_eq!(topdown_tile(CelestialBody::Earth, -20, 0, 0), Tile::Bedrock);
     }
 
     #[test]
     fn surface_has_variety() {
-        // Across a patch there should be more than one tile kind on Earth.
+        // Los biomas ahora son REGIONES de kilómetros (continentes, cordilleras,
+        // desiertos), no manchas de un tile: hay que barrer el planeta, no un
+        // cuadrado de 40 m, para verlos. Que un patch chico sea homogéneo es la
+        // intención, no un fallo.
         let mut kinds = std::collections::HashSet::new();
-        for tx in 0..40 {
-            for tz in 0..40 {
-                kinds.insert(topdown_tile(CelestialBody::Earth, 0, tx, tz));
+        for i in -14..14 {
+            for j in -14..14 {
+                kinds.insert(topdown_tile(CelestialBody::Earth, 0, i * 1_000, j * 1_000));
             }
         }
-        assert!(kinds.len() >= 3, "expected biome variety, got {kinds:?}");
+        assert!(kinds.len() >= 4, "expected biome variety, got {kinds:?}");
+        assert!(kinds.contains(&Tile::Water), "un planeta sin oceanos");
+        assert!(kinds.contains(&Tile::Grass), "un planeta sin praderas");
+    }
+
+    /// GUARDA DE COSTE, medida en RELATIVO.
+    ///
+    /// Un chunk son 256 celdas y el streaming construye decenas por segundo,
+    /// además del mapa satelital (miles de muestras por reconstrucción). Cuando
+    /// la geografía nueva entró sin optimizar, cada celda repetía diez veces el
+    /// cálculo de los pozos de cueva y el juego se quedaba colgado arrancando.
+    ///
+    /// Se compara contra el coste de UNA evaluación de relieve medida en la
+    /// misma pasada, no contra un número de microsegundos: así el test dice
+    /// "generar una celda no puede costar más que unas pocas consultas de
+    /// terreno" y no depende de lo rápida ni de lo cargada que esté la máquina
+    /// (un umbral absoluto se volvía intermitente en el pipeline de publicación).
+    #[test]
+    fn generating_a_cell_costs_only_a_few_terrain_probes() {
+        use std::time::Instant;
+        let body = CelestialBody::Earth;
+        const N: i64 = 4_000;
+        // Precalentar ambos caminos.
+        for i in 0..256 {
+            let _ = topdown_tile(body, 0, i, i);
+            let _ = crate::geography::elevation_at(body, i, i);
+        }
+
+        let t0 = Instant::now();
+        let mut sink = 0.0f32;
+        for i in 0..N {
+            sink += crate::geography::elevation_at(body, i * 7, i * 13);
+        }
+        let base = t0.elapsed().as_nanos().max(1) as f64;
+
+        let t1 = Instant::now();
+        for i in 0..N {
+            sink += topdown_tile(body, 0, i * 7, i * 13) as u8 as f32;
+        }
+        let cell = t1.elapsed().as_nanos() as f64;
+        assert!(sink.is_finite());
+
+        let ratio = cell / base;
+        // Una celda mira relieve, humedad, río, obra civil y pozos de cueva: seis
+        // consultas de terreno es caro pero razonable. Doce significa que algo
+        // volvió a repetir trabajo por vecino.
+        assert!(ratio < 12.0, "una celda cuesta {ratio:.1}x una consulta de relieve");
+    }
+
+    #[test]
+    fn cave_mouths_are_scattered_and_lead_somewhere() {
+        // En un mundo de 60 km tiene que haber MUCHAS bocas, no una sola mina
+        // junto al origen — y cada una tiene que caer en galería abierta y en
+        // suelo pisable, o sería un agujero a roca maciza.
+        let body = CelestialBody::Earth;
+        let mut mouths = 0;
+        for rx in -20..20 {
+            for rz in -20..20 {
+                let Some((tx, tz)) = cave_mouth_in(body, rx, rz) else { continue };
+                mouths += 1;
+                assert_eq!(portal_here(body, 0, tx, tz), Some(Portal::Descend));
+                assert!(!topdown_tile(body, 0, tx, tz).solid(), "boca sobre roca maciza");
+                assert!(!solid_at(body, -1, tx, tz), "boca sin galeria debajo");
+            }
+        }
+        assert!(mouths > 200, "solo {mouths} bocas de cueva en 40x40 celdas");
+    }
+
+    #[test]
+    fn every_descend_has_a_way_back_up() {
+        // Bajar sin poder subir es el soft-lock clásico de las cuevas.
+        let body = CelestialBody::Earth;
+        for rx in -6..6 {
+            for rz in -6..6 {
+                let Some(mouth) = cave_mouth_in(body, rx, rz) else { continue };
+                assert_eq!(portal_here(body, -1, mouth.0, mouth.1), Some(Portal::Ascend));
+            }
+        }
     }
 
     #[test]
@@ -530,7 +913,7 @@ mod tests {
 
     #[test]
     fn walks_in_8_directions_no_gravity() {
-        let solid = natural_solid(CelestialBody::Moon, 0); // regolith = all walkable
+        let solid = |_tx: i64, _tz: i64| false; // terreno despejado: se prueba el MOVIMIENTO
         let mut b = MovementBody::new(5.0, PLAYER_RADIUS);
         b.x = 100.0;
         b.z = 100.0;
@@ -561,6 +944,106 @@ mod tests {
         }
         assert!(b.x < 105.0, "player must not pass into solid tiles, x={}", b.x);
         assert!(b.x > 103.0, "player should reach near the wall, x={}", b.x);
+    }
+
+    #[test]
+    fn prefab_pattern_and_cost() {
+        for p in PREFABS {
+            // Door sits on the perimeter (or inner partition) and is walkable.
+            assert_eq!(prefab_cell(p, p.door.0, p.door.1), Some(Tile::Door), "{}", p.id);
+            // Corners are walls; strictly interior (non-partition) cells are floor.
+            assert_eq!(prefab_cell(p, 0, 0), Some(Tile::WoodWall));
+            assert_eq!(prefab_cell(p, p.w - 1, p.h - 1), Some(Tile::WoodWall));
+            assert_eq!(prefab_cell(p, 1, 1), Some(Tile::WoodFloor), "{}", p.id);
+            // Outside the footprint: nothing.
+            assert_eq!(prefab_cell(p, -1, 0), None);
+            assert_eq!(prefab_cell(p, p.w, 0), None);
+            // Cost = walls×2 + doors×3 + floors×1 and is stable/deterministic.
+            assert!(prefab_cost(p) > 0);
+        }
+        // room_small 5×4: perimeter 14 cells − 1 door = 13 walls (26) + door (3)
+        // + 6 floors = 35.
+        let small = &PREFABS[0];
+        assert_eq!((small.w, small.h), (5, 4));
+        assert_eq!(prefab_cost(small), 35);
+        // casa_1 has an inner doorway connecting both rooms.
+        let casa = PREFABS.iter().find(|p| p.id == "casa_1").unwrap();
+        assert_eq!(prefab_cell(casa, 5, 3), Some(Tile::Door));
+        assert_eq!(prefab_cell(casa, 5, 2), Some(Tile::WoodWall));
+    }
+
+    #[test]
+    fn tile_serde_roundtrip() {
+        // world_edits.json (editor de mundo H0) serializa tiles → deben ir y volver.
+        for t in [Tile::Water, Tile::WoodFloor, Tile::Grass, Tile::StoneBrick, Tile::Door] {
+            let j = serde_json::to_string(&t).unwrap();
+            let back: Tile = serde_json::from_str(&j).unwrap();
+            assert_eq!(t, back);
+        }
+    }
+
+    #[test]
+    fn large_assets_catalog_sane() {
+        assert!(large_asset_count() >= 1);
+        for i in 0..large_asset_count() {
+            let a = large_asset(i).unwrap();
+            assert!(a.w > 0 && a.h > 0, "{}", a.id);
+            assert!(!a.art.is_empty() && a.cost_qty > 0, "{}", a.id);
+        }
+        assert!(large_asset(large_asset_count()).is_none());
+    }
+
+    #[test]
+    fn settlements_are_deterministic_and_earth_only() {
+        // Same site cell → same site, twice (pure function of the seed).
+        for sx in -8..8 {
+            for sz in -8..8 {
+                assert_eq!(
+                    building_site_in(CelestialBody::Earth, sx, sz),
+                    building_site_in(CelestialBody::Earth, sx, sz)
+                );
+                assert!(building_site_in(CelestialBody::Moon, sx, sz).is_none());
+                assert!(building_site_in(CelestialBody::Mars, sx, sz).is_none());
+            }
+        }
+        // Find a generated house and sanity-check its tiles + door.
+        let mut found = false;
+        for sx in -20..20 {
+            for sz in -20..20 {
+                let Some(site) = building_site_in(CelestialBody::Earth, sx, sz) else {
+                    continue;
+                };
+                found = true;
+                let (ox, oz) = site.min;
+                assert_eq!(building_cell(CelestialBody::Earth, ox, oz), Some(Tile::WoodWall));
+                assert_eq!(
+                    building_cell(CelestialBody::Earth, ox + 1, oz + 1),
+                    Some(Tile::WoodFloor)
+                );
+                assert_eq!(
+                    building_cell(CelestialBody::Earth, site.door.0, site.door.1),
+                    Some(Tile::Door)
+                );
+                // The door is walkable through topdown_tile too.
+                assert!(!solid_at(CelestialBody::Earth, 0, site.door.0, site.door.1));
+                // Outside the footprint: natural terrain.
+                assert_eq!(building_cell(CelestialBody::Earth, ox - 1, oz - 1), None);
+            }
+        }
+        assert!(found, "some settlement should generate in a 40×40-site sweep");
+    }
+
+    #[test]
+    fn new_build_tiles_behave() {
+        assert!(Tile::Window.solid());
+        assert!(!Tile::StairsDown.solid());
+        assert!(!Tile::StairsUp.solid());
+        for t in [Tile::Window, Tile::StairsDown, Tile::StairsUp] {
+            assert_eq!(t.dug_item(), Some("wood"), "build pieces refund material");
+        }
+        // Upper floors are void until carved; no phantom mine portals up there.
+        assert_eq!(topdown_tile(CelestialBody::Earth, 1, 3, 3), Tile::Bedrock);
+        assert!(portal_here(CelestialBody::Earth, 1, 3, 3).is_none());
     }
 
     #[test]
