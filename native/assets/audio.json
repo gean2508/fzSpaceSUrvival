@@ -126,6 +126,33 @@
         }
       ]
     },
+    "climb_ledge": {
+      "dur": 0.22,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.16,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.2,
+          "attack": 0.35,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "sine",
+          "at": 0.05,
+          "dur": 0.12,
+          "f0": 150.0,
+          "f1": 210.0,
+          "amp": 0.16,
+          "attack": 0.3,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
+    },
     "craft": {
       "dur": 0.4,
       "rate": 22050,
@@ -304,6 +331,33 @@
           "mix": 0.3
         }
       ]
+    },
+    "drop_ledge": {
+      "dur": 0.2,
+      "rate": 22050,
+      "tones": [
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.14,
+          "f0": 130.0,
+          "f1": 55.0,
+          "amp": 0.42,
+          "attack": 0.01,
+          "vibrato": 0.0
+        },
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.22,
+          "attack": 0.02,
+          "vibrato": 0.0
+        }
+      ],
+      "effects": []
     },
     "eat": {
       "dur": 0.42,

@@ -16,7 +16,7 @@
 #   ./build-y-publicar.sh editor       # abre SOLO el editor de assets (no compila el juego)
 #   ./build-y-publicar.sh sonido       # abre SOLO el editor de sonido / mini-DAW
 #
-# Requisitos (una vez): ver COMO_COMPILAR.md — Node + Rust + Android NDK/SDK + `cargo ndk`.
+# Requisitos (una vez): ver biblia.md §9 — Node + Rust + Android NDK/SDK + `cargo ndk`.
 #
 set -euo pipefail
 

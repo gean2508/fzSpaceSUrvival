@@ -29,4 +29,3 @@ pub fn set_app_paused_jni(paused: bool) {
     set_app_paused(paused);
 }
 
-pub fn jni_on_load_insets() {}

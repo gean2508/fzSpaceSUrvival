@@ -92,23 +92,131 @@ pub(crate) fn build_crash_report(message: &str, location: &str, ctx: &CrashConte
     report.to_string()
 }
 
-fn persist_crash_report(payload: &str) {
+/// Dónde queda el último reporte. En Android va al cache de la app (lo único
+/// escribible sin permisos); en escritorio, al lado del binario.
+fn crash_report_paths() -> &'static [&'static str] {
     #[cfg(target_os = "android")]
     {
-        let paths = [
-            "/data/data/com.hungerarena.app/cache/ha-last-crash.json",
-            "./ha-last-crash.json",
-        ];
-        for p in paths {
-            if std::fs::write(p, payload).is_ok() {
-                eprintln!("ha-crash persisted={p}");
-                break;
-            }
-        }
+        &["/data/data/com.hungerarena.app/cache/ha-last-crash.json", "./ha-last-crash.json"]
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = std::fs::write("./ha-last-crash.json", payload);
+        &["./ha-last-crash.json"]
+    }
+}
+
+/// El HISTORIAL, al lado del reporte: una línea JSON por cierre.
+///
+/// El reporte de arriba lo borra el menú apenas lo muestra —vale para el cierre
+/// que acabás de sufrir, no para siempre—, y eso deja sin rastro justo el caso
+/// que más cuesta diagnosticar: "se me cerró jugando y no me acuerdo qué decía".
+/// El historial no se borra nunca solo, así que el motivo se puede recuperar días
+/// después aunque ya nadie recuerde la línea.
+///
+/// **Primero el almacenamiento EXTERNO de la app**
+/// (`/sdcard/Android/data/<pkg>/files/`), y no el cache interno, por una razón
+/// práctica: el cache vive en `/data/data/…`, que sin root ni un APK debuggable
+/// **no se puede bajar** — o sea que el archivo existía y seguía siendo
+/// inalcanzable, que es el problema que este historial vino a resolver. El
+/// externo no pide permisos, lo lee `adb pull` de una y se lo puede mirar con un
+/// explorador de archivos. El cache queda de respaldo por si el externo falla.
+fn crash_history_paths() -> &'static [&'static str] {
+    #[cfg(target_os = "android")]
+    {
+        &[
+            "/sdcard/Android/data/com.hungerarena.app/files/ha-crashes.log",
+            "/data/data/com.hungerarena.app/cache/ha-crashes.log",
+            "./ha-crashes.log",
+        ]
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        &["./ha-crashes.log"]
+    }
+}
+
+fn persist_crash_report(payload: &str) {
+    for p in crash_report_paths() {
+        if std::fs::write(p, payload).is_ok() {
+            eprintln!("ha-crash persisted={p}");
+            break;
+        }
+    }
+    append_crash_history(payload);
+}
+
+fn append_crash_history(payload: &str) {
+    use std::io::Write;
+    for p in crash_history_paths() {
+        // El directorio externo puede no existir todavía (app recién instalada):
+        // sin esto el `append` falla y el historial se caía al cache inalcanzable.
+        if let Some(dir) = std::path::Path::new(p).parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let opened = std::fs::OpenOptions::new().create(true).append(true).open(p);
+        if let Ok(mut f) = opened {
+            if writeln!(f, "{payload}").is_ok() {
+                eprintln!("ha-crash history={p}");
+                return;
+            }
+        }
+    }
+}
+
+/// Una línea legible del último cierre, o `None` si la partida anterior terminó
+/// bien. La lee el menú principal.
+///
+/// **Por qué se muestra en pantalla y no sólo en logcat.** En Android el hook de
+/// pánico termina en `std::process::exit(1)`: la app se cierra **de golpe y sin
+/// diálogo**, que es exactamente el reporte "se cierra solito". Con el flujo de
+/// este proyecto (APK por URL, sin cable) el motivo era invisible. Ahora al
+/// volver a abrir el juego el menú lo dice.
+pub fn last_crash_line() -> Option<String> {
+    let raw = crash_report_paths().iter().find_map(|p| std::fs::read_to_string(p).ok())?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let msg = v.get("message")?.as_str()?;
+    let loc = v.get("location").and_then(|l| l.as_str()).unwrap_or("?");
+    // El archivo sólo dice "la vez pasada": ASCII y recortado, la fuente del
+    // juego no dibuja acentos (regla 6) y el menú no es un visor de JSON.
+    let short = loc.rsplit('/').next().unwrap_or(loc);
+    let line = format!("ULTIMO CIERRE: {msg} ({short})");
+    Some(line.chars().filter(|c| c.is_ascii()).take(120).collect())
+}
+
+/// Las últimas líneas del HISTORIAL, de la más nueva a la más vieja. Las muestra
+/// el panel de AJUSTES.
+///
+/// **Por qué en pantalla y no sólo en el archivo.** El flujo de este proyecto es
+/// APK por URL y sin cable: `adb pull` no existe para quien juega. El renglón del
+/// menú se borra apenas se muestra —así se perdió el motivo del cierre que dio
+/// origen a todo esto—, así que el historial tiene que poder leerse en el
+/// teléfono, cuando a uno se le ocurra preguntarlo y no sólo al arrancar.
+pub fn crash_history_lines(max: usize) -> Vec<String> {
+    let raw = crash_history_paths()
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
+    raw.lines()
+        .rev()
+        .take(max)
+        .filter_map(|l| {
+            let v: serde_json::Value = serde_json::from_str(l).ok()?;
+            let msg = v.get("message")?.as_str()?;
+            let loc = v.get("location").and_then(|l| l.as_str()).unwrap_or("?");
+            let short = loc.rsplit('/').next().unwrap_or(loc);
+            let frame = v.get("frame").and_then(|f| f.as_u64()).unwrap_or(0);
+            let line = format!("f{frame} {msg} ({short})");
+            Some(line.chars().filter(|c| c.is_ascii()).take(110).collect())
+        })
+        .collect()
+}
+
+/// Borra el reporte. Lo llama el menú tras mostrarlo: la línea vale para el
+/// cierre que acabás de sufrir, no para siempre. El HISTORIAL
+/// (`ha-crashes.log`) no se toca — es el que queda para diagnosticar después.
+pub fn clear_last_crash() {
+    for p in crash_report_paths() {
+        let _ = std::fs::remove_file(p);
     }
 }
 

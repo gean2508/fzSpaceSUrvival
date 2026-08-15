@@ -1,0 +1,13 @@
+{
+ "sprites": [
+  "road/linea",
+  "road/cordon",
+  "road/cordon_2",
+  "road/cordon_3",
+  "road/cordon_4",
+  "road/cordon_5",
+  "road/senda_ns",
+  "road/senda_ew"
+ ],
+ "objects": []
+}

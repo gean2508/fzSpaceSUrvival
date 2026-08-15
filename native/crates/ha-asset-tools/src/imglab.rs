@@ -305,6 +305,21 @@ impl ImageLab {
             }
             ui.separator();
             ui.color_edit_button_srgba(&mut self.brush);
+            // Las dos formas silenciosas de "pinto y no pasa nada": la capa
+            // activa está oculta, o el color es transparente. Se avisan acá
+            // mismo en vez de dejarte creyendo que el pincel está roto.
+            let capa_oculta = self.layers.get(self.active).is_some_and(|l| !l.visible);
+            if capa_oculta || self.brush.a() == 0 {
+                ui.label(
+                    egui::RichText::new(if capa_oculta {
+                        "la capa activa está OCULTA: pintás y no se ve"
+                    } else {
+                        "el color es transparente (alfa 0)"
+                    })
+                    .color(egui::Color32::from_rgb(235, 190, 40))
+                    .small(),
+                );
+            }
             ui.label("tam");
             ui.add(egui::DragValue::new(&mut self.brush_size).range(1..=64));
             if self.tool == Tool::Bucket {
@@ -530,18 +545,23 @@ impl ImageLab {
                 }
             }
             Tool::Brush | Tool::Eraser => {
-                if resp.drag_started() || (resp.clicked() && !self.stroke_open) {
+                // El trazo arranca en el frame en que APRETÁS: esperar a que
+                // egui declare el arrastre se come el primer píxel (y con él la
+                // sensación de que el pincel no responde).
+                let apretado =
+                    resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
+                if (apretado || resp.clicked()) && !self.stroke_open {
                     self.push_undo();
                     self.stroke_open = true;
                     self.last_paint = None;
                 }
-                if resp.dragged() || resp.clicked() {
+                if apretado || resp.clicked() {
                     if let Some(p) = resp.interact_pointer_pos() {
                         let (x, y) = to_img(p);
                         self.paint_stroke_to(x, y);
                     }
                 }
-                if resp.drag_stopped() || resp.clicked() {
+                if !apretado {
                     self.stroke_open = false;
                     self.last_paint = None;
                 }

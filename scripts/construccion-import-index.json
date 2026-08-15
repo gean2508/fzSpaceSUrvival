@@ -1,0 +1,59 @@
+{
+ "sprites": [
+  "wall/wood",
+  "wall/stone",
+  "door/stone",
+  "window/basic",
+  "window/stone",
+  "doorway/wood",
+  "doorway/stone",
+  "railing/madera",
+  "floor/stone",
+  "ceiling/madera",
+  "ceiling/piedra",
+  "stairs/up",
+  "stairs/down",
+  "roof/teja",
+  "roof/chapa",
+  "floor/vereda#p1",
+  "floor/vereda#p2",
+  "floor/vereda#p3",
+  "floor/vereda#p4",
+  "floor/vereda#p5",
+  "floor/vereda#p6",
+  "floor/asfalto#p1",
+  "floor/asfalto#p2",
+  "floor/asfalto#p3",
+  "floor/asfalto#p4",
+  "floor/asfalto#p5",
+  "floor/asfalto#p6",
+  "floor/asfalto#p7",
+  "floor/asfalto#p8",
+  "floor/asfalto#p9",
+  "floor/asfalto#p10",
+  "floor/asfalto#p11"
+ ],
+ "variantes": {
+  "floor/vereda": [
+   "p1",
+   "p2",
+   "p3",
+   "p4",
+   "p5",
+   "p6"
+  ],
+  "floor/asfalto": [
+   "p1",
+   "p2",
+   "p3",
+   "p4",
+   "p5",
+   "p6",
+   "p7",
+   "p8",
+   "p9",
+   "p10",
+   "p11"
+  ]
+ }
+}

@@ -15,11 +15,12 @@ bevy = { version = "0.15", default-features = false, features = [
   "wav",
   "bevy_color",
   "bevy_core_pipeline",
-  "bevy_pbr",
   "bevy_render",
-  "bevy_scene",
   "bevy_state",
-  "bevy_gltf",
+  # Sin `bevy_pbr`, `bevy_scene` ni `bevy_gltf`: son el pipeline 3D, que este
+  # juego tiene vedado (regla 6 de CLAUDE.md / §1 anti-regresión de la biblia).
+  # Se arrastraban de la época del render esférico. Compilarlos metía shaders y
+  # tipos 3D en el binario que nadie instancia.
   "bevy_sprite",
   "bevy_text",
   "bevy_ui",

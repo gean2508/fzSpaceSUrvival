@@ -1,4 +1,4 @@
-//! Gym de NEUROEVOLUCIÓN para la fauna (B4.1b, `ANALISIS_IA_FRUGAL.md`).
+//! Gym de NEUROEVOLUCIÓN para la fauna (`biblia.md` §6).
 //!
 //! "Fase Cámara" de HIVE_OS: evoluciona OFFLINE (a toda velocidad, sin render) un
 //! genoma IAFZ-64 que aprende a FORRAJEAR en el mundo REAL del juego
@@ -87,7 +87,27 @@ fn run_episode(id: i32, seed: u32) -> f32 {
             all_dead = false;
             let s = sense(BODY, x[k], z[k], heading[k], energy[k], &foods, &neigh);
             let steer = iafz_sys::think(SCRATCH + k as i32, s).tanh();
-            heading[k] += steer * TURN * dt;
+            // CAPA DE LOCOMOCION — tiene que ser IDENTICA a la de fauna.rs, o
+            // el gym entrena una accion y el juego ejecuta otra.
+            // `heading += steer * TURN * dt` es un integrador: steer constante
+            // = circulo perfecto. Con rumbo de referencia + persecucion, steer
+            // constante = recta.
+            let referencia = {
+                let mut mejor = f32::MAX;
+                let mut rumbo = heading[k];
+                for &(fx, fz) in &foods {
+                    let d = d2(fx, fz, x[k], z[k]);
+                    if d < mejor {
+                        mejor = d;
+                        rumbo = (fz - z[k]).atan2(fx - x[k]);
+                    }
+                }
+                rumbo
+            };
+            let deseado = referencia + steer * 2.1;
+            let diff = (deseado - heading[k] + std::f32::consts::PI).rem_euclid(TAU)
+                - std::f32::consts::PI;
+            heading[k] += diff.clamp(-1.0, 1.0) * TURN * dt;
             let (nx, nz) = (x[k] + heading[k].cos() * SPEED * dt, z[k] + heading[k].sin() * SPEED * dt);
             if solid_at(nx, nz) {
                 heading[k] += 1.3;

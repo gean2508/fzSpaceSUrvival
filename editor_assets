@@ -2,28 +2,27 @@
 # editor_assets — lanzador del editor de assets (programa de DEV, corre aparte
 # del juego). Envuelve `ha-asset-tools` para que no tengas que recordar rutas.
 #
-#   ./editor_assets                       abre el editor visual (GUI)
-#   ./editor_assets sonido                abre el editor de sonido (mini-DAW)
-#   ./editor_assets mundo                 abre el editor de MUNDO (WYSIWYG, overrides)
-#   ./editor_assets gym-gui                visor de ADN: lista genomas .adn, evalua/muta/cruza
+#   ./editor_assets                       abre HA STUDIO: TODOS los editores en una
+#                                         sola ventana (Assets · Imagen · Mundo ·
+#                                         Sonido · Fauna; F1..F5 cambian de espacio)
+#   ./editor_assets assets                sólo el editor de assets/objetos (ventana aparte)
+#   ./editor_assets sonido                sólo el editor de sonido (mini-DAW)
+#   ./editor_assets mundo                 sólo el editor de MUNDO (WYSIWYG, overrides)
+#   ./editor_assets gym-gui                sólo el visor de ADN (fauna/NPC)
+#   ./editor_assets chargen --capas       hornea la gente: 20 aldeanos + jugador, y
+#                                         las capas + retratos del creador de personaje
 #   ./editor_assets play                  recompila el juego y lo publica (npm run play)
-#   ./editor_assets scan <carpeta> [pref] escanea un pack LimeZu → manifest.ron
-#   ./editor_assets catalog               regenera CATALOGO.md desde el manifest
 #   ./editor_assets help                  esta ayuda
 #
-# Rutas por defecto (relativas a native/):
-#   manifest → native/assets/manifest.ron
-#   catálogo → native/assets/CATALOGO.md
+# Lo que escribe cada espacio: ver biblia.md §8. El arte va a
+# native/crates/ha-game/assets/art/manifest.json y el sonido a
+# native/assets/audio.json; los dos se embeben al compilar.
 set -euo pipefail
 
 # Raíz del repo = carpeta de este script; el crate vive en native/.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SELF="$ROOT/$(basename "${BASH_SOURCE[0]}")"
 NATIVE="$ROOT/native"
-MANIFEST="assets/manifest.ron"   # relativo a native/
-CATALOGO="assets/CATALOGO.md"
-GRID=32                          # el juego es 32×32
-
 cd "$NATIVE"
 mkdir -p assets
 
@@ -34,12 +33,18 @@ build() {
 
 run() { ./target/debug/ha-asset-tools "$@"; }
 
-cmd="${1:-gui}"
+cmd="${1:-studio}"
 case "$cmd" in
-  gui|"")
+  studio|todo|"")
     build
-    echo "▶ abriendo editor… (en la barra: poné la carpeta de arte → Escanear;" >&2
-    echo "  el manifest por defecto es native/$MANIFEST)" >&2
+    echo "▶ abriendo HA Studio — un solo programa, cinco espacios de trabajo:" >&2
+    echo "  F1 Assets (objetos + variantes)  F2 Imagen  F3 Mundo  F4 Sonido  F5 Fauna" >&2
+    run studio
+    ;;
+
+  assets|gui)
+    build
+    echo "▶ abriendo sólo el editor de assets… (ventana aparte del Studio)" >&2
     run gui
     ;;
 
@@ -65,28 +70,15 @@ case "$cmd" in
     run gym-gui
     ;;
 
-  scan)
-    src="${2:-}"
-    prefix="${3:-art}"
-    if [[ -z "$src" ]]; then
-      echo "uso: ./editor_assets scan <carpeta-de-arte> [prefijo]" >&2
-      echo "ej:  ./editor_assets scan PRUEBAS-CODIGOS/moderninteriors-win/1_Interiors/32x32 interiores" >&2
-      exit 2
-    fi
-    # Permite pasar la carpeta relativa a la raíz del repo (más natural).
-    [[ -d "$src" ]] || src="$ROOT/$src"
+  chargen|personajes)
+    # Hornea la gente desde los packs de LimeZu: los 20 aldeanos + el jugador
+    # default, y con `--capas` también las capas sueltas y los retratos que come
+    # el creador de personaje y el menú de NPC (ver biblia §8).
     build
-    merge=""
-    [[ -f "$MANIFEST" ]] && merge="--merge"   # respeta lo ya curado
-    run scan --root "$src" --out "$MANIFEST" --prefix "$prefix" --grid "$GRID" $merge
-    echo "▶ regenerando catálogo…" >&2
-    run catalog --manifest "$MANIFEST" --out "$CATALOGO"
-    echo "✓ listo. Editá con: ./editor_assets" >&2
-    ;;
-
-  catalog)
-    build
-    run catalog --manifest "$MANIFEST" --out "$CATALOGO"
+    shift
+    echo "▶ horneando personajes desde PRUEBAS-CODIGOS/Character_Generator…" >&2
+    cd "$ROOT"
+    "$NATIVE/target/debug/ha-asset-tools" chargen "$@"
     ;;
 
   play|build-run)
@@ -97,7 +89,7 @@ case "$cmd" in
     ;;
 
   help|-h|--help)
-    sed -n '2,14p' "$SELF" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$SELF" | sed 's/^# \{0,1\}//'
     ;;
 
   *)

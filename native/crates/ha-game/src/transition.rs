@@ -4,7 +4,7 @@
 //! capa opaca de nubes. Ese salto ya no existe (`universe.rs`: un solo marco,
 //! altura = zoom, terreno con LOD continuo), así que este módulo se quedó con lo
 //! único que sigue teniendo sentido: **cuánta atmósfera hay entre la cámara y el
-//! suelo**, y qué encuadre pide la altura actual.
+//! suelo**.
 //!
 //! Reglas nuevas:
 //! - `cover` es BRUMA, no una persiana: nunca llega a opaca (`MAX_HAZE`), así que
@@ -12,17 +12,21 @@
 //!   pantalla opaca, es un bug de continuidad, no algo para tapar.
 //! - Los cuerpos sin aire no tienen bruma: su disco ya está pintado con el mismo
 //!   terreno que pisás, así que no hay nada que disimular.
-//! - `view_h` sale de `universe::view_h_for_alt` — una sola función para todos.
+//! - El ENCUADRE no vive acá: lo calcula la cámara a partir de la altura
+//!   (`universe::view_h_for_alt`). Este módulo tuvo una copia y esa duplicación fue el
+//!   bug del despegue — ver el comentario en el struct.
 
 use bevy::prelude::*;
 use ha_shared::{body_atmo_top, CelestialBody};
 
-use crate::universe::{space_alt, view_h_for_alt};
+use crate::universe::space_alt;
 
 
-/// Opacidad máxima de la bruma atmosférica. Deliberadamente < 1: la continuidad
-/// se logra con LOD, no cegando al jugador.
-const MAX_HAZE: f32 = 0.28;
+/// Opacidad máxima de la bruma atmosférica, en el techo del aire. Deliberadamente
+/// < 1: la continuidad se logra con LOD, no cegando al jugador. Bajada de 0.28 a
+/// 0.16 — a 0.28 el mundo entero se leía a través de un velo lechoso y el color
+/// del terreno (lo que hace que reconozcas dónde estás) se perdía.
+const MAX_HAZE: f32 = 0.16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum TransitionMode {
@@ -49,8 +53,11 @@ pub struct FlightTransition {
     pub cover_color: [f32; 3],
     /// Desvanecido del cielo 0 (cielo de superficie) → 1 (vacío) → `sky2d`.
     pub sky_blend: f32,
-    /// Encuadre que pide la altura (`None` = manda el usuario, a pie).
-    pub view_h: Option<f32>,
+    // Acá vivía `view_h: Option<f32>`, una SEGUNDA copia de `view_h_for_alt`. Se fue: el
+    // encuadre lo calcula la cámara, y tener la misma curva escrita en dos recursos fue
+    // exactamente el origen del bug del despegue —uno de los dos machacaba al otro cada
+    // frame y el gesto del jugador movía el que no mandaba. Si algo necesita saber qué
+    // encuadre pide una altura, que llame a `universe::view_h_for_alt`, que es la función.
 }
 
 impl Default for FlightTransition {
@@ -62,7 +69,6 @@ impl Default for FlightTransition {
             cover: 0.0,
             cover_color: [1.0, 1.0, 1.0],
             sky_blend: 0.0,
-            view_h: None,
         }
     }
 }
@@ -88,7 +94,6 @@ impl FlightTransition {
         self.cover = haze_at(body, alt);
         self.cover_color = ha_shared::transition_profile(body).cover_color;
         self.sky_blend = sky_blend_at(body, alt);
-        self.view_h = Some(view_h_for_alt(body, alt));
     }
 
     /// De vuelta en el suelo: el cielo, la bruma y la cámara vuelven al jugador.
@@ -105,10 +110,21 @@ pub fn haze_at(body: CelestialBody, alt: f32) -> f32 {
     if atmo <= 0.0 {
         return 0.0;
     }
-    // Campana sobre [0, 2·atmo] con el pico en el techo de la atmósfera.
+    // Campana sobre [0, 2·atmo] con el pico en el techo de la atmósfera, pero la
+    // subida es CÚBICA, no lineal.
+    //
+    // Con la subida lineal, volar a 1.4 km sobre tu propio mundo ya te ponía un
+    // 17 % de bruma encima —y a esa altura la capa de tiles finos ya se apagó, o
+    // sea que estabas mirando el mapa satelital a través de un velo—. El
+    // resultado era la queja: "salgo de la Tierra, vuelvo, y sólo se ve una
+    // niebla café o verde". La atmósfera tiene que notarse cuando estás ALTO,
+    // no mientras sobrevolás tu casa: cúbica deja el vuelo bajo y medio
+    // limpios (a media atmósfera, 2 % en vez de 14 %) y sigue cerrando la vista
+    // al asomarte al espacio, que es donde de verdad aporta.
     let x = (alt / atmo.max(1.0)).clamp(0.0, 2.0);
-    let bell = 1.0 - (x - 1.0).abs();
-    MAX_HAZE * bell.clamp(0.0, 1.0)
+    let up = x.min(1.0).powi(3);
+    let down = (2.0 - x).clamp(0.0, 1.0);
+    MAX_HAZE * up.min(down)
 }
 
 /// Cielo de superficie → vacío estrellado. Completo un poco por encima del

@@ -6,7 +6,8 @@
 //! Elegís un slot → elegís un PNG del arte fuente (LimeZu singles) → se **copia**
 //! al árbol de assets del juego y se registra en `manifest.json`. Marcás si es
 //! animado (agua/personajes: tira de N frames a F fps). Guardás → el juego se
-//! reskinea en el próximo build. "Catálogo" regenera `CATALOGO.md` para Claude.
+//! reskinea en el próximo build. "📄 Catálogo" vuelca la lista de slots con arte
+//! a `native/assets/CATALOGO.md` (artefacto regenerable, para dárselo a la IA).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -60,6 +61,79 @@ impl DirMode {
         }
     }
 }
+
+/// Qué pinta el lienzo de la huella de colisión.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FpBrush {
+    /// Frena el paso.
+    Solid,
+    /// Desnivel que se sube y se baja a pie (no frena a quien camina).
+    Step,
+    /// **Desde donde se puede interactuar.** No frena: es el area donde el juego
+    /// muestra el boton. Se pinta aparte de la colision porque casi nunca
+    /// coinciden — al muelle se le pinta la PUNTA para pescar, y a la casa el
+    /// umbral de la puerta, no la pared entera.
+    Zona,
+    /// Deja la celda libre.
+    Erase,
+}
+
+impl FpBrush {
+    /// Color con el que se pinta y se muestra en la leyenda. Uno solo por
+    /// material: el lienzo y los botones no pueden decir cosas distintas.
+    fn color(self) -> egui::Color32 {
+        match self {
+            FpBrush::Solid => egui::Color32::from_rgb(210, 50, 40),
+            FpBrush::Step => egui::Color32::from_rgb(235, 190, 40),
+            FpBrush::Zona => egui::Color32::from_rgb(60, 150, 245),
+            FpBrush::Erase => egui::Color32::from_gray(160),
+        }
+    }
+}
+
+/// **Cómo** se pinta. El material dice QUÉ queda en la celda; la herramienta,
+/// cómo la elegís. Separarlos es lo que hace que la pluma sirva igual para la
+/// colisión y para la zona de interacción, en vez de tener un solo modo
+/// "celda por celda" que obliga a pintar una casa de 8×6 a razón de 192 clics.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FpTool {
+    /// A mano alzada: arrastrás y pinta, con grosor.
+    Libre,
+    /// Rectángulo: arrastrás de esquina a esquina.
+    Rect,
+    /// Pluma tipo Photoshop: un clic por vértice, se cierra y se rellena.
+    Pluma,
+    /// Balde: rellena de una toda la región contigua que está igual.
+    Balde,
+}
+
+/// Lo que se está editando en el lienzo de la huella, junto. Existe como struct
+/// (y no como seis variables sueltas dentro del panel) porque el mismo lienzo se
+/// dibuja en dos sitios — en línea y en la ventana grande.
+struct FpEdit {
+    /// Tamaño en TILES.
+    w: u32,
+    h: u32,
+    /// Sub-celdas por tile (1 · 2 · 4).
+    res: u32,
+    /// Ancla: el tile que queda bajo el cursor al colocar el objeto.
+    ax: u32,
+    az: u32,
+    /// Frena el paso.
+    solid: FpSet,
+    /// Se sube y se baja a pie.
+    step: FpSet,
+    /// Desde dónde se puede interactuar (eje aparte: una celda puede ser sólida
+    /// Y zona a la vez — el frente de una heladera frena y se abre desde ahí).
+    zona: FpSet,
+}
+
+type FpSet = std::collections::HashSet<(u32, u32)>;
+
+/// Píxeles por tile: el mínimo deja ver una casa entera, el máximo deja pintar
+/// sub-celda por sub-celda sin apuntar con lupa.
+const FP_ZOOM_MIN: f32 = 8.0;
+const FP_ZOOM_MAX: f32 = 400.0;
 
 /// Una línea del plan de importación por lote: un PNG suelto que va a entrar como
 /// UNA animación del slot. Todo es editable antes de escribir.
@@ -130,6 +204,23 @@ fn sanitize_pose_name(s: &str) -> String {
         .join("_")
 }
 
+/// Nombre en castellano de una dirección, para la cabecera de la matriz. El
+/// sufijo del manifest sigue siendo el inglés (`down`, `up_left`) — lo que
+/// cambia es lo que LEÉS.
+fn dir_label(d: &str) -> &'static str {
+    match d {
+        "down" => "abajo",
+        "up" => "arriba",
+        "left" => "izq.",
+        "right" => "der.",
+        "down_left" => "abajo-izq.",
+        "down_right" => "abajo-der.",
+        "up_left" => "arriba-izq.",
+        "up_right" => "arriba-der.",
+        _ => "sin dir.",
+    }
+}
+
 /// Nombre canónico de una pose: `accion_direccion`, o sólo `accion` si no tiene
 /// dirección. Es EXACTAMENTE lo que busca el juego (`sim::face_player_sprite`,
 /// `fauna::apply_pose`).
@@ -139,6 +230,15 @@ fn pose_name_of(action: &str, dir: &str) -> String {
     } else {
         format!("{action}_{dir}")
     }
+}
+
+/// Acción pedida en la barra de variantes. Se aplica DESPUÉS de dibujar la barra
+/// (dentro del closure de egui no se puede tocar `self.manifest` mutable).
+enum VariantOp {
+    Activate(Option<String>),
+    Add { id: String, label: String },
+    Move(String, i32),
+    Remove(String),
 }
 
 /// Orden en que un atlas dispone sus filas — lo que decide qué nombre le toca a
@@ -223,7 +323,7 @@ pub fn run_gui() -> ExitCode {
     }
 }
 
-struct EditorApp {
+pub(crate) struct EditorApp {
     slots: Vec<SlotDef>,
     manifest: ArtManifest,
     /// Carpeta con los PNG fuente (LimeZu singles ya purgados).
@@ -243,8 +343,26 @@ struct EditorApp {
 
     /// Claves de los slots nativos del juego (no borrables desde el CRUD).
     core_keys: std::collections::BTreeSet<String>,
+    /// Orden de categorías tal como las declara el catálogo (`slots.rs`):
+    /// construcción primero, interfaz al final. Manda en el árbol de la izquierda.
+    category_rank: Vec<&'static str>,
     /// Buffer del CRUD "añadir slot".
     new_slot_key: String,
+
+    /// **Variantes** — variante activa por objeto (`"floor/piso"` → `"madera"`).
+    /// Mientras hay una activa, TODO lo que editás abajo (PNG, recorte, poses,
+    /// colisión, luz…) se guarda en la entrada de esa variante, no en la base.
+    /// Pegajosa por objeto: volvés al slot y seguís donde estabas.
+    active_variant: std::collections::HashMap<String, String>,
+    /// Buffer "＋ nueva variante" (nombre lindo; el id sale de sanitizarlo).
+    new_variant: String,
+    /// Se acaba de cambiar de variante en la barra → hay que re-sincronizar el
+    /// preview y los buffers de animación con la entrada de la variante nueva.
+    variant_switched: bool,
+    /// Cache de claves de variante filtradas a `&'static str` (una por variante
+    /// distinta, no una por frame) — así `SlotDef` sigue siendo `Copy` y todo el
+    /// editor de abajo funciona sin tocar una línea.
+    variant_keys: std::collections::HashMap<String, &'static str>,
 
     // buffers de animación del slot seleccionado
     anim_on: bool,
@@ -281,11 +399,57 @@ struct EditorApp {
     tex_cache: std::collections::HashMap<String, egui::TextureHandle>,
     /// Plan del importador por lote (varios PNG → varias animaciones de un slot).
     import_plan: Vec<ImportItem>,
+    /// Pincel activo del lienzo de la huella. Existe como BOTONES a la vista
+    /// porque "Ctrl+arrastre para borrar" no lo descubre nadie.
+    fp_brush: FpBrush,
+    /// Herramienta activa del lienzo (libre · rectángulo · pluma · balde).
+    fp_tool: FpTool,
+    /// Píxeles por TILE del lienzo de la huella. Ya no está atado al ancho del
+    /// panel: el lienzo es un visor con zoom y desplazamiento propios, así que
+    /// esto llega hasta [`FP_ZOOM_MAX`] y el sprite se ve como en un editor.
+    fp_zoom: f32,
+    /// Desplazamiento del lienzo dentro del visor (arrastre con el botón del
+    /// medio o con Shift).
+    fp_pan: egui::Vec2,
+    /// Pedido de reencuadre: el asset entero, centrado. Se activa al abrir otro
+    /// slot y con el botón «ajustar».
+    fp_fit: bool,
+    /// Slot que está mostrando el lienzo, para reencuadrar al cambiar.
+    fp_key: String,
+    /// Grosor del pincel libre, en sub-celdas.
+    fp_size: i32,
+    /// Vértices de la pluma en coordenadas de sub-celda (sobreviven al zoom).
+    fp_pen: Vec<(f32, f32)>,
+    /// Esquina inicial del rectángulo en curso.
+    fp_rect0: Option<(u32, u32)>,
+    /// Última sub-celda pintada del trazo libre: se interpola hasta la actual
+    /// para que arrastrar rápido no deje agujeros.
+    fp_last: Option<(i32, i32)>,
+    /// Hay cambios de huella sin escribir al disco. El guardado espera a que
+    /// sueltes el botón: antes escribía el manifest ENTERO en cada frame del
+    /// arrastre, y de ahí venía buena parte de lo pegajoso que se sentía.
+    fp_dirty: bool,
+    /// Alto del visor en línea (el de la ventana grande manda el suyo).
+    fp_view_h: f32,
+    /// El lienzo abierto en una ventana grande y redimensionable.
+    fp_big: bool,
+    /// Tamaño en TILES de los PNG sueltos (ruta → celdas), para no leer la
+    /// cabecera del archivo en cada frame.
+    png_cells: std::collections::HashMap<String, (u32, u32)>,
+    /// Frames que quedan de "traé la huella a la vista" (gancho de QA `HA_SLOT`).
+    fp_scroll_qa: u32,
     tile_inner_corner: bool,          // esquina cóncava (interior) vs convexa
     anim_preview_frame: usize,        // frame en curso del preview del CANDIDATO
     anim_preview_t: f32,              // acumulador de tiempo del preview del candidato
     bound_preview_frame: usize,       // frame en curso del preview del binding ACTUAL
     bound_preview_t: f32,             // acumulador de tiempo del preview actual
+
+    // ── ficha del asset (lo que se ve al clickearlo en la lista) ────────────
+    /// Dibujar la huella/zona sobre el sprite de la ficha. Encendido: la ficha
+    /// tiene que contestar "¿con qué me choco?" sin abrir nada.
+    ficha_colision: bool,
+    /// Dibujar la grilla de tiles sobre el sprite de la ficha (1 tile = 1 m).
+    ficha_grilla: bool,
 
     status: String,
 
@@ -295,9 +459,15 @@ struct EditorApp {
 }
 
 impl EditorApp {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let slots = game_slots();
         let core_keys = slots.iter().map(|s| s.key.to_string()).collect();
+        let mut category_rank: Vec<&'static str> = Vec::new();
+        for s in &slots {
+            if !category_rank.contains(&s.category) {
+                category_rank.push(s.category);
+            }
+        }
         // Rutas ancladas a `CARGO_MANIFEST_DIR` (constante de COMPILACIÓN) en vez
         // de relativas al cwd: si el binario se lanza desde un directorio distinto
         // al esperado (doble-click, otra terminal, cargo run desde la raíz del
@@ -324,7 +494,12 @@ impl EditorApp {
             selected: None,
             pngs: Vec::new(),
             core_keys,
+            category_rank,
             new_slot_key: String::new(),
+            active_variant: std::collections::HashMap::new(),
+            new_variant: String::new(),
+            variant_switched: false,
+            variant_keys: std::collections::HashMap::new(),
             anim_on: false,
             anim_frames: 4,
             anim_fps: 6.0,
@@ -351,11 +526,28 @@ impl EditorApp {
             bulk_rows: 8,
             tex_cache: std::collections::HashMap::new(),
             import_plan: Vec::new(),
+            fp_brush: FpBrush::Solid,
+            fp_tool: FpTool::Libre,
+            fp_zoom: 72.0,
+            fp_pan: egui::Vec2::ZERO,
+            fp_fit: true,
+            fp_key: String::new(),
+            fp_size: 1,
+            fp_pen: Vec::new(),
+            fp_rect0: None,
+            fp_last: None,
+            fp_dirty: false,
+            fp_view_h: 420.0,
+            fp_big: false,
+            png_cells: std::collections::HashMap::new(),
+            fp_scroll_qa: 0,
             tile_inner_corner: false,
             anim_preview_frame: 0,
             anim_preview_t: 0.0,
             bound_preview_frame: 0,
             bound_preview_t: 0.0,
+            ficha_colision: true,
+            ficha_grilla: true,
             status: String::new(),
             mode: EditorMode::Slots,
             lab: ImageLab::new(),
@@ -367,20 +559,59 @@ impl EditorApp {
     /// Asegura que exista un slot con esa clave (para claves del manifest que no
     /// son nativas, y para el CRUD "añadir slot"). Categoría = prefijo de la clave.
     fn ensure_slot(&mut self, key: &str) {
-        if key.is_empty() || self.slots.iter().any(|s| s.key == key) {
+        // Las claves de VARIANTE (`objeto#variante`) no son slots de la lista: viven
+        // dentro de su objeto, en la barra de variantes.
+        if key.is_empty()
+            || key.contains(ha_assets::VARIANT_SEP)
+            || self.slots.iter().any(|s| s.key == key)
+        {
             return;
         }
         let category: &'static str = leak(key.split('/').next().unwrap_or("custom").to_string());
-        self.slots.push(SlotDef { key: leak(key.to_string()), category, animated: false });
-        self.slots.sort_by(|a, b| a.category.cmp(b.category).then(a.key.cmp(b.key)));
+        // Un slot añadido a mano no tiene nombre curado: usamos la hoja de la clave
+        // como nombre provisorio (mejor eso que vacío) — al agregarlo al catálogo
+        // de `slots.rs` recibe el nombre humano definitivo.
+        let leaf = key.split_once('/').map(|(_, n)| n).unwrap_or(key);
+        let label: &'static str = leak(leaf.replace('_', " "));
+        self.slots.push(SlotDef { key: leak(key.to_string()), label, category, animated: false });
+        // Ordena por el ORDEN DE CATEGORÍA del catálogo (construcción primero…), no
+        // alfabético: si no, un slot añadido a mano reordenaba toda la lista y la
+        // construcción se iba al fondo.
+        let rank = self.category_rank.clone();
+        let pos = move |c: &'static str| rank.iter().position(|r| *r == c).unwrap_or(usize::MAX);
+        self.slots.sort_by(|a, b| {
+            pos(a.category).cmp(&pos(b.category)).then(a.category.cmp(b.category)).then(a.key.cmp(b.key))
+        });
+    }
+
+    /// ¿Este objeto ya tiene arte? Cuenta el arte genérico **o** el de cualquiera
+    /// de sus variantes: un "piso" que sólo tiene madera y piedra está resuelto,
+    /// aunque no tenga PNG genérico.
+    fn slot_has_art(&self, key: &str) -> bool {
+        self.manifest.get(key).is_some() || !self.manifest.variants_with_art(key).is_empty()
+    }
+
+    /// El Studio manda al editor a su modo Image Lab (pestaña "Imagen") y de
+    /// vuelta a la lista de objetos, y necesita saber en cuál está para pintar la
+    /// pestaña activa correcta.
+    pub(crate) fn focus_lab(&mut self) {
+        self.mode = EditorMode::Lab;
+    }
+
+    pub(crate) fn focus_slots(&mut self) {
+        self.mode = EditorMode::Slots;
+    }
+
+    pub(crate) fn in_lab(&self) -> bool {
+        self.mode == EditorMode::Lab
     }
 
     /// Cantidad de slots sin PNG asignado (arte procedural en el juego).
     fn unbound_count(&self) -> usize {
-        self.slots.iter().filter(|s| self.manifest.get(s.key).is_none()).count()
+        self.slots.iter().filter(|s| !self.slot_has_art(s.key)).count()
     }
 
-    fn ui(&mut self, ctx: &egui::Context) {
+    pub(crate) fn ui(&mut self, ctx: &egui::Context) {
         self.top_bar(ctx);
         match self.mode {
             EditorMode::Slots => {
@@ -414,21 +645,20 @@ impl EditorApp {
                     // Necesita que el slot ya tenga PNG (la emisión vive en su
                     // entrada del manifest).
                     LabAction::SetEmission(em) => {
-                        self.status = match self.selected.map(|i| self.slots[i]) {
-                            Some(slot) if self.manifest.get(slot.key).is_some() => {
-                                self.manifest.set_emission(slot.key, Some(em));
+                        self.status = match self.current_key() {
+                            Some(key) if self.manifest.get(key).is_some() => {
+                                self.manifest.set_emission(key, Some(em));
                                 let saved = self.persist_manifest();
                                 self.mode = EditorMode::Slots;
                                 format!(
                                     "luz aplicada a {} (radio {:.1} m) {}",
-                                    slot.key,
+                                    key,
                                     em.radius,
                                     if saved { "· guardado" } else { "· ⚠ no guardó" }
                                 )
                             }
-                            Some(slot) => format!(
-                                "{} todavía no tiene PNG — asignáselo primero y volvé a aplicar la luz",
-                                slot.key
+                            Some(key) => format!(
+                                "{key} todavía no tiene PNG — asignáselo primero y volvé a aplicar la luz"
                             ),
                             None => "elegí un slot a la izquierda antes de aplicarle la luz".into(),
                         };
@@ -512,12 +742,21 @@ impl EditorApp {
                     }
                 }
             });
-            let bound = self.manifest.sprites.len();
+            // Los assets de variante no son slots: se cuentan aparte para que el
+            // total de "slots con PNG" siga significando lo mismo que siempre.
+            let variant_assets = self
+                .manifest
+                .sprites
+                .keys()
+                .filter(|k| k.contains(ha_assets::VARIANT_SEP))
+                .count();
+            let bound = self.manifest.sprites.len() - variant_assets;
             ui.label(format!(
-                "{} slots · {} con PNG · {} SIN PNG (procedural) · {} PNGs fuente",
+                "{} objetos · {} con PNG · {} SIN PNG (procedural) · {} assets de variante · {} PNGs fuente",
                 self.slots.len(),
                 bound,
                 self.unbound_count(),
+                variant_assets,
                 self.pngs.len()
             ));
             if !self.status.is_empty() {
@@ -533,9 +772,14 @@ impl EditorApp {
             .width_range(180.0..=620.0)
             .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("🔎 slot");
+                ui.label("🔎 buscar");
                 ui.text_edit_singleline(&mut self.slot_filter);
             });
+            ui.label(
+                egui::RichText::new("buscá por nombre («puerta», «pared») o por clave")
+                    .weak()
+                    .small(),
+            );
             ui.checkbox(&mut self.only_unbound, "solo sin PNG (a asignar)");
             ui.separator();
             let filter = self.slot_filter.to_lowercase();
@@ -543,10 +787,15 @@ impl EditorApp {
             // Agrupar índices por categoría (respetando filtros) → árbol.
             let mut groups: Vec<(&'static str, Vec<usize>)> = Vec::new();
             for (i, slot) in self.slots.iter().enumerate() {
-                if !filter.is_empty() && !slot.key.to_lowercase().contains(&filter) {
+                // El filtro mira el NOMBRE primero: quien busca escribe "puerta",
+                // no "door/wood". La clave sigue matcheando para quien la sabe.
+                if !filter.is_empty()
+                    && !slot.label.to_lowercase().contains(&filter)
+                    && !slot.key.to_lowercase().contains(&filter)
+                {
                     continue;
                 }
-                if only_unbound && self.manifest.get(slot.key).is_some() {
+                if only_unbound && self.slot_has_art(slot.key) {
                     continue;
                 }
                 match groups.last_mut() {
@@ -557,13 +806,10 @@ impl EditorApp {
             let mut clicked: Option<usize> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for (cat, idxs) in &groups {
-                    let bound = idxs
-                        .iter()
-                        .filter(|&&i| self.manifest.get(self.slots[i].key).is_some())
-                        .count();
+                    let bound = idxs.iter().filter(|&&i| self.slot_has_art(self.slots[i].key)).count();
                     let header = egui::RichText::new(format!(
                         "▸ {}  ({}/{})",
-                        cat.to_uppercase(),
+                        ha_assets::category_label(cat),
                         bound,
                         idxs.len()
                     ))
@@ -575,16 +821,40 @@ impl EditorApp {
                             let n = idxs.len();
                             for (row, &i) in idxs.iter().enumerate() {
                                 let slot = self.slots[i];
-                                let leaf = slot.key.split_once('/').map(|(_, n)| n).unwrap_or(slot.key);
                                 let branch = if row + 1 == n { "└─" } else { "├─" };
-                                let has = self.manifest.get(slot.key).is_some();
+                                let has = self.slot_has_art(slot.key);
                                 let dot = if has { "●" } else { "○" };
-                                let mut txt = egui::RichText::new(format!("{branch} {dot} {leaf}")).monospace();
+                                // Sufijo de variantes: `⟨2/3⟩` = 3 declaradas, 2 con
+                                // asset. Así ves de un vistazo qué objetos son
+                                // multi-material y cuánto les falta.
+                                let nvar = self.manifest.variants(slot.key).len();
+                                let tail = if nvar == 0 {
+                                    String::new()
+                                } else {
+                                    format!(
+                                        " ⟨{}/{nvar}⟩",
+                                        self.manifest.variants_with_art(slot.key).len()
+                                    )
+                                };
+                                // Se lee el NOMBRE ("Puerta"), no la jerga
+                                // ("door/wood"). La clave va abajo, chiquita, para
+                                // quien la necesite al leer el código.
+                                let mut txt = egui::RichText::new(format!(
+                                    "{branch} {dot} {}{tail}",
+                                    slot.label
+                                ));
                                 if has {
                                     txt = txt.color(egui::Color32::from_rgb(120, 230, 140));
                                 }
                                 let sel = self.selected == Some(i);
-                                if ui.selectable_label(sel, txt).clicked() {
+                                let resp = ui.selectable_label(sel, txt);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(18.0);
+                                    ui.label(
+                                        egui::RichText::new(slot.key).weak().small().monospace(),
+                                    );
+                                });
+                                if resp.clicked() {
                                     clicked = Some(i);
                                 }
                             }
@@ -613,51 +883,235 @@ impl EditorApp {
         });
     }
 
-    fn central_detail_content(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, i: usize) {
-            let slot = self.slots[i];
-            ui.heading(slot.key);
+    /// Clave que el usuario está editando AHORA: el objeto seleccionado, o su
+    /// variante activa. Todo lo que actúa "sobre lo seleccionado" (preview, buffers
+    /// de animación, la luz que llega del Image Lab) tiene que pasar por acá, si no
+    /// escribiría en el objeto genérico mientras vos ves una variante.
+    fn current_key(&mut self) -> Option<&'static str> {
+        let i = self.selected?;
+        let base = self.slots[i].key;
+        match self.active_variant.get(base).cloned() {
+            Some(v) => Some(self.variant_slot_key(base, &v)),
+            None => Some(base),
+        }
+    }
 
-            // Binding actual + preview.
-            match self.manifest.get(slot.key) {
-                Some(v) => {
-                    ui.label(format!("PNG actual: {}", v.png()));
-                    if let Some(a) = v.anim() {
-                        ui.label(format!("animado: {} frames @ {} fps", a.frames, a.fps));
+    /// Clave `&'static str` de una variante (`"floor/piso#madera"`), cacheada.
+    fn variant_slot_key(&mut self, base: &str, variant: &str) -> &'static str {
+        let key = ha_assets::variant_key(base, variant);
+        if let Some(k) = self.variant_keys.get(&key) {
+            return k;
+        }
+        let leaked = leak(key.clone());
+        self.variant_keys.insert(key, leaked);
+        leaked
+    }
+
+    /// **Barra de variantes** del objeto: `[genérico] [Madera ●] [Piedra ●] [Metal ○]`
+    /// + crear/renombrar/reordenar/borrar. Un objeto (piso, pared, techo…) puede
+    /// tener N materiales y cada uno su asset, sin multiplicar objetos en la lista.
+    /// El objeto que no necesite variantes simplemente no tiene ninguna y la barra
+    /// se queda en una sola línea ("＋ variante") — no molesta.
+    ///
+    /// Devuelve la variante activa (`None` = estás editando el arte genérico, el
+    /// que se usa como fallback cuando una variante no tiene PNG propio).
+    fn variant_bar(&mut self, ui: &mut egui::Ui, base: &str) -> Option<String> {
+        let declared: Vec<(String, String, bool)> = self
+            .manifest
+            .variants(base)
+            .iter()
+            .map(|v| {
+                let has_art = self.manifest.get(&ha_assets::variant_key(base, &v.id)).is_some();
+                (v.id.clone(), v.display().to_string(), has_art)
+            })
+            .collect();
+        let mut active = self.active_variant.get(base).cloned();
+        // Una variante que ya no existe (la borraste) no puede quedar activa.
+        if active.as_ref().is_some_and(|a| !declared.iter().any(|(id, _, _)| id == a)) {
+            self.active_variant.remove(base);
+            active = None;
+        }
+        let mut pending: Option<VariantOp> = None;
+
+        egui::Frame::group(ui.style())
+            .fill(ui.visuals().faint_bg_color)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new("VARIANTES").small().strong())
+                        .on_hover_text(
+                            "Un mismo objeto con varios materiales/skins: piso de madera, de \
+                             piedra… Cada variante tiene SU asset; el juego pide \
+                             objeto+variante y cae al genérico si esa variante no tiene arte.",
+                        );
+                    if !declared.is_empty()
+                        && ui
+                            .selectable_label(active.is_none(), "◻ genérico")
+                            .on_hover_text("el arte base: fallback de las variantes sin PNG propio")
+                            .clicked()
+                    {
+                        pending = Some(VariantOp::Activate(None));
                     }
+                    for (id, label, has_art) in &declared {
+                        let dot = if *has_art { "●" } else { "○" };
+                        let mut txt = egui::RichText::new(format!("{dot} {label}"));
+                        if *has_art {
+                            txt = txt.color(egui::Color32::from_rgb(120, 230, 140));
+                        }
+                        let sel = active.as_deref() == Some(id.as_str());
+                        if ui
+                            .selectable_label(sel, txt)
+                            .on_hover_text(format!(
+                                "{}\n{}",
+                                ha_assets::variant_key(base, id),
+                                if *has_art { "tiene asset" } else { "sin asset todavía" }
+                            ))
+                            .clicked()
+                        {
+                            pending = Some(VariantOp::Activate(Some(id.clone())));
+                        }
+                    }
+                });
+                // Crear una variante nueva. El id sale de sanitizar el nombre
+                // (Madera Vieja → madera_vieja) — vos escribís en humano.
+                ui.horizontal(|ui| {
+                    ui.label("＋ variante:");
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(&mut self.new_variant)
+                            .desired_width(160.0)
+                            .hint_text("madera, piedra, metal…"),
+                    );
+                    let go = ui.button("Añadir").clicked()
+                        || (resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                    if go {
+                        let label = self.new_variant.trim().to_string();
+                        let id = sanitize_pose_name(&label);
+                        if !id.is_empty() {
+                            pending = Some(VariantOp::Add { id, label });
+                        }
+                    }
+                    // Acciones sobre la variante activa.
+                    if let Some(a) = active.clone() {
+                        ui.separator();
+                        if ui.small_button("◀").on_hover_text("mover antes").clicked() {
+                            pending = Some(VariantOp::Move(a.clone(), -1));
+                        }
+                        if ui.small_button("▶").on_hover_text("mover después").clicked() {
+                            pending = Some(VariantOp::Move(a.clone(), 1));
+                        }
+                        if ui
+                            .small_button("🗑 borrar variante")
+                            .on_hover_text("borra la variante y su asset (el objeto queda)")
+                            .clicked()
+                        {
+                            pending = Some(VariantOp::Remove(a));
+                        }
+                    }
+                });
+            });
+
+        match pending {
+            Some(VariantOp::Activate(None)) => {
+                self.active_variant.remove(base);
+                active = None;
+                self.variant_switched = true;
+            }
+            Some(VariantOp::Activate(Some(id))) => {
+                self.active_variant.insert(base.to_string(), id.clone());
+                active = Some(id);
+                self.variant_switched = true;
+            }
+            Some(VariantOp::Add { id, label }) => {
+                self.manifest.declare_variant(base, &id, &label);
+                self.new_variant.clear();
+                self.active_variant.insert(base.to_string(), id.clone());
+                active = Some(id.clone());
+                self.variant_switched = true;
+                let saved = self.persist_manifest();
+                self.status = format!(
+                    "variante «{label}» de {base} creada{} — asignale un PNG abajo",
+                    if saved { " · guardado" } else { " · ⚠ no guardó" }
+                );
+            }
+            Some(VariantOp::Move(id, dir)) => {
+                self.manifest.move_variant(base, &id, dir);
+                self.persist_manifest();
+            }
+            Some(VariantOp::Remove(id)) => {
+                self.manifest.remove_variant(base, &id);
+                self.active_variant.remove(base);
+                active = None;
+                self.variant_switched = true;
+                self.tex = None;
+                let saved = self.persist_manifest();
+                self.status =
+                    format!("variante «{id}» de {base} borrada{}", if saved { " · guardado" } else { "" });
+            }
+            None => {}
+        }
+        active
+    }
+
+    fn central_detail_content(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, i: usize) {
+            // El objeto elegido en la lista y, si tiene variantes, la variante
+            // activa. `slot` se REDIRIGE a la clave de la variante: de acá para
+            // abajo el editor entero (PNG, recorte, tira, poses, autotile,
+            // colisión, huella, luz) escribe en la variante — un solo objeto en la
+            // UI, un asset por variante en el manifest.
+            let mut slot = self.slots[i];
+            let base_key = slot.key;
+            let variant = self.variant_bar(ui, base_key);
+            if let Some(v) = &variant {
+                slot.key = self.variant_slot_key(base_key, v);
+            }
+            // Cambiar de variante = cambiar de entrada: el preview y los buffers de
+            // animación se releen de la variante nueva (si no, verías el arte de la
+            // anterior y "Aplicar anim" escribiría los frames de otra).
+            if std::mem::take(&mut self.variant_switched) {
+                self.select_slot(ctx, i);
+            }
+            match &variant {
+                Some(v) => {
+                    let label = self
+                        .manifest
+                        .variants(base_key)
+                        .iter()
+                        .find(|d| &d.id == v)
+                        .map(|d| d.display().to_string())
+                        .unwrap_or_else(|| v.clone());
+                    ui.heading(format!("{}  ▸  {label}", self.slots[i].label));
+                    ui.label(
+                        egui::RichText::new(format!("editando la variante «{label}» → {}", slot.key))
+                            .weak()
+                            .small(),
+                    );
                 }
                 None => {
-                    ui.label(egui::RichText::new("sin PNG (usa arte procedural en el juego)").weak());
+                    ui.heading(self.slots[i].label);
+                    ui.label(
+                        egui::RichText::new(format!("clave del juego: {}", slot.key))
+                            .weak()
+                            .small()
+                            .monospace(),
+                    );
                 }
             }
-            // Previews lado a lado (colapsable). "actual" muestra lo que verá el
-            // juego: con poses, una representativa ANIMADA (idle_down o la 1ª) —
-            // así confirmás al instante que tus poses quedaron, no la hoja cruda.
-            egui::CollapsingHeader::new("👁 vista previa (actual / candidato)")
-                .default_open(true)
-                .show(ui, |ui| {
-                    ui.horizontal_top(|ui| {
-                        ui.vertical(|ui| {
-                            ui.label(egui::RichText::new("actual (juego)").weak());
-                            self.bound_preview(ui, slot, 220.0);
-                        });
-                        ui.separator();
-                        ui.vertical(|ui| {
-                            ui.label(egui::RichText::new("candidato").weak());
-                            match self.src_tex.as_ref() {
-                                Some((_, tex)) => {
-                                    let sz = preview_size(tex, 220.0);
-                                    ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), sz)));
-                                }
-                                None => { ui.label(egui::RichText::new("(elegí un PNG abajo)").weak()); }
-                            }
-                        });
-                    });
-                });
+
+            // FICHA del asset: lo primero que ves al clickearlo en la lista —
+            // qué sprite usa, de qué hoja lo recorta, y con qué colisión va a
+            // llegar al juego. Ver §8 de la biblia.
+            self.ficha_panel(ctx, ui, slot);
+            // 🎚 CAPA: en qué banda de profundidad se dibuja el asset en el mundo.
+            // Es el eje HERMANO de la colisión de abajo y hay que leerlos juntos:
+            // la capa dice QUÉ TE TAPA, la huella dice QUÉ TE FRENA. Un piso no
+            // te tapa aunque te frene (el agua), y un techo te tapa sin frenarte.
+            if self.manifest.get(slot.key).is_some() {
+                self.layer_panel(ui, slot.key);
+            }
             // Colisión de caminado del asset (relieve básico): el juego bloquea el
             // paso del jugador en la celda de este decor. Default por tipo
             // (árboles bloquean, resto no); acá lo FIJÁS por asset. La colisión
             // por-celda precisa (cráteres) es un plan aparte
-            // (PLAN_COLISIONES_Y_CIUDADES.md).
+            // (biblia.md §8).
             if self.manifest.get(slot.key).is_some() {
                 egui::CollapsingHeader::new("🚧 colisión (bloquea el paso)")
                     .default_open(false)
@@ -697,146 +1151,12 @@ impl EditorApp {
             if self.manifest.get(slot.key).is_some() {
                 self.light_panel(ui, slot.key);
             }
-            // (A1) Huella de colisión multi-celda: grilla cenital del SUELO donde
-            // se pinta qué celdas son sólidas y cuál es el ancla. Habilita montañas
-            // sólidas, cráteres caminables (anillo sólido + centro libre) y assets
-            // grandes que bloquean su base. Vacío = colisión de 1 celda (arriba).
+            // (A1) Huella de colisión multi-celda: se PINTA sobre el propio
+            // sprite. Habilita montañas sólidas, cráteres caminables (anillo
+            // sólido + centro libre), assets grandes que bloquean sólo su base y
+            // escalones que se trepan. Vacío = colisión de 1 celda (arriba).
             if self.manifest.get(slot.key).is_some() {
-                egui::CollapsingHeader::new("🗺 huella (colisión — DIBUJALA sobre el sprite)")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        ui.label(egui::RichText::new(
-                            "Pintás la colisión JUSTO sobre el sprite: clic = alterna sólido \
-                             (rojo); clic-derecho = fija el ancla (borde cyan). Ajustá ancho/alto \
-                             a las celdas que ocupa el asset. Vacío = colisión de 1 celda (arriba).",
-                        ).weak().small());
-                        let cur = self.manifest.footprint(slot.key).cloned().unwrap_or_default();
-                        // Default de dimensiones: las celdas que ocupa el recorte del asset.
-                        let slot_grid = self.manifest.get(slot.key).map(|v| v.grid()).unwrap_or((32, 32));
-                        let slot_rect = self.manifest.get(slot.key).and_then(|v| v.rect());
-                        let def = slot_rect
-                            .map(|r| (r.w.clamp(1, 9), r.h.clamp(1, 9)))
-                            .unwrap_or((1, 1));
-                        let mut w = if cur.w == 0 { def.0 } else { cur.w.clamp(1, 9) };
-                        let mut h = if cur.h == 0 { def.1 } else { cur.h.clamp(1, 9) };
-                        let mut solid: std::collections::HashSet<(u32, u32)> =
-                            cur.solid.iter().copied().collect();
-                        let mut ax = cur.ax;
-                        let mut az = cur.az;
-                        let mut changed = false;
-                        ui.horizontal(|ui| {
-                            ui.label("ancho");
-                            if ui.add(egui::DragValue::new(&mut w).range(1..=9)).changed() {
-                                changed = true;
-                            }
-                            ui.label("alto");
-                            if ui.add(egui::DragValue::new(&mut h).range(1..=9)).changed() {
-                                changed = true;
-                            }
-                        });
-                        // Reajustar a las dimensiones nuevas.
-                        solid.retain(|&(c, r)| c < w && r < h);
-                        ax = ax.min(w.saturating_sub(1));
-                        az = az.min(h.saturating_sub(1));
-
-                        // Fondo = imagen del asset (su recorte si es sheet, o el PNG entero).
-                        let img_uv: Option<(egui::TextureId, egui::Rect)> =
-                            self.tex.as_ref().map(|(_, tex)| {
-                                let img = tex.size_vec2();
-                                let uv = match slot_rect {
-                                    Some(r) => egui::Rect::from_min_max(
-                                        egui::pos2(
-                                            (r.col * slot_grid.0) as f32 / img.x,
-                                            (r.row * slot_grid.1) as f32 / img.y,
-                                        ),
-                                        egui::pos2(
-                                            ((r.col + r.w) * slot_grid.0) as f32 / img.x,
-                                            ((r.row + r.h) * slot_grid.1) as f32 / img.y,
-                                        ),
-                                    ),
-                                    None => egui::Rect::from_min_max(
-                                        egui::pos2(0.0, 0.0),
-                                        egui::pos2(1.0, 1.0),
-                                    ),
-                                };
-                                (tex.id(), uv)
-                            });
-
-                        // Canvas: celdas grandes para pintar cómodo, con la imagen debajo.
-                        let cell_px = 40.0_f32;
-                        let (canvas, painter) = ui.allocate_painter(
-                            egui::vec2(w as f32 * cell_px, h as f32 * cell_px),
-                            egui::Sense::click(),
-                        );
-                        let origin = canvas.rect.min;
-                        if let Some((id, uv)) = img_uv {
-                            painter.image(id, canvas.rect, uv, egui::Color32::WHITE);
-                        }
-                        for r in 0..h {
-                            for c in 0..w {
-                                let cr = egui::Rect::from_min_size(
-                                    origin + egui::vec2(c as f32 * cell_px, r as f32 * cell_px),
-                                    egui::vec2(cell_px, cell_px),
-                                );
-                                if solid.contains(&(c, r)) {
-                                    painter.rect_filled(
-                                        cr,
-                                        0.0,
-                                        egui::Color32::from_rgba_unmultiplied(210, 50, 40, 110),
-                                    );
-                                }
-                                painter.rect_stroke(
-                                    cr,
-                                    0.0,
-                                    egui::Stroke::new(1.0, egui::Color32::from_gray(90)),
-                                );
-                                if c == ax && r == az {
-                                    painter.rect_stroke(
-                                        cr,
-                                        0.0,
-                                        egui::Stroke::new(2.5, egui::Color32::from_rgb(60, 200, 220)),
-                                    );
-                                }
-                            }
-                        }
-                        if let Some(pos) = canvas.interact_pointer_pos() {
-                            let rel = pos - origin;
-                            let c = (rel.x / cell_px).floor() as i64;
-                            let r = (rel.y / cell_px).floor() as i64;
-                            if c >= 0 && r >= 0 && (c as u32) < w && (r as u32) < h {
-                                let key = (c as u32, r as u32);
-                                if canvas.clicked() {
-                                    if solid.contains(&key) {
-                                        solid.remove(&key);
-                                    } else {
-                                        solid.insert(key);
-                                    }
-                                    changed = true;
-                                }
-                                if canvas.secondary_clicked() {
-                                    ax = key.0;
-                                    az = key.1;
-                                    changed = true;
-                                }
-                            }
-                        }
-                        if ui.button("limpiar huella").clicked() {
-                            solid.clear();
-                            changed = true;
-                        }
-                        if changed {
-                            let fp = if solid.is_empty() {
-                                None
-                            } else {
-                                let mut v: Vec<(u32, u32)> = solid.into_iter().collect();
-                                v.sort_unstable();
-                                Some(ha_assets::CollisionFootprint { w, h, ax, az, solid: v })
-                            };
-                            self.manifest.set_footprint(slot.key, fp);
-                            self.status =
-                                format!("huella de {} actualizada — Guardá para aplicar al juego", slot.key);
-                        }
-                    });
+                self.footprint_panel(ui, slot);
             }
             // Poses guardadas del slot — SIEMPRE visibles (no dependen de tener un
             // candidato elegido), con thumbnail recortado del sheet ya asignado y
@@ -1001,17 +1321,52 @@ impl EditorApp {
                             ui.label(format!("sel: col{} row{} · {}×{}", sr.col, sr.row, sr.w, sr.h));
                         }
                     });
-                    // Lienzo REDIMENSIONABLE: arrastrá el borde inferior-derecho (⤡)
-                    // para agrandarlo y ver mejor la grilla / el recorte.
-                    ui.label(egui::RichText::new("↕ arrastrá la esquina ⤡ de abajo-derecha para redimensionar el lienzo").weak().small());
-                    egui::Resize::default()
-                        .id_salt("canvas_resize")
-                        .default_size([ui.available_width().min(900.0), 520.0])
-                        .min_size([220.0, 200.0])
-                        .show(ui, |ui| {
-                            let h = ui.available_height().max(160.0);
-                            self.sheet_canvas(ui, h);
-                        });
+                    // ── Lienzo + preview, LADO A LADO ────────────────────────
+                    //
+                    // El preview estaba debajo del lienzo y de los controles de
+                    // frames, o sea fuera de pantalla: para verlo había que hacer
+                    // scroll, y entonces ya no veías el sprite que estabas
+                    // recortando. Puestos uno al lado del otro, ves a la vez de
+                    // dónde sale cada frame y cómo queda la animación.
+                    //
+                    // Y el alto del lienzo lo pide EL SPRITE: una hoja de 4 filas
+                    // ya no abre una ventana de 520 px con 400 de vacío al que
+                    // había que hacerle scroll. `Resize` sigue estando por si lo
+                    // querés más grande, pero arranca en la medida justa.
+                    let sheet_h = (self.sheet_rows.max(1) as f32
+                        * self.sheet_grid.max(1) as f32
+                        * self.sheet_zoom.max(0.25))
+                        + 24.0;
+                    let canvas_h = sheet_h.clamp(180.0, 560.0);
+                    let has_preview = self.sel_rect.is_some();
+                    let canvas_w = if has_preview {
+                        (ui.available_width() - self.preview_px.max(48.0) - 40.0).max(260.0)
+                    } else {
+                        ui.available_width()
+                    };
+                    ui.label(
+                        egui::RichText::new(
+                            "↕ el lienzo se ajusta al sprite — arrastrá la esquina ⤡ para agrandarlo",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    ui.horizontal_top(|ui| {
+                        egui::Resize::default()
+                            .id_salt("canvas_resize")
+                            .default_size([canvas_w.min(900.0), canvas_h])
+                            .min_size([220.0, 160.0])
+                            .show(ui, |ui| {
+                                let h = ui.available_height().max(150.0);
+                                self.sheet_canvas(ui, h);
+                            });
+                        if let Some(sr) = self.sel_rect {
+                            ui.vertical(|ui| {
+                                let (frames, dir) = (self.anim_frames.max(1), self.strip_dir);
+                                self.anim_strip_preview(ui, sr, frames, dir);
+                            });
+                        }
+                    });
 
                     // La SELECCIÓN de arriba es UN frame (su tamaño w×h en celdas).
                     // Acá elegís CUÁNTOS frames tiene la animación y en qué dirección
@@ -1060,14 +1415,59 @@ impl EditorApp {
                                 self.anim_frames = (avail / extent).max(1);
                             }
                         });
-                        // Preview reproducido con la MISMA semántica que el juego —
-                        // COLAPSABLE: minimizalo si no lo querés ver ni ocupar espacio.
-                        egui::CollapsingHeader::new("▶ preview animado")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                let (frames, dir) = (self.anim_frames.max(1), self.strip_dir);
-                                self.anim_strip_preview(ui, sr, frames, dir);
+                        // ── RANGO de frames: "del 1 al 6 abre, del 7 al 12 cierra" ──
+                        //
+                        // Una tira suele traer VARIAS animaciones seguidas en la
+                        // misma fila. Se podía hacer moviendo la selección a mano
+                        // hasta el frame 7 y contando seis; ahora se escribe el
+                        // rango y la selección salta sola. Es el caso de la puerta:
+                        // un solo PNG con la apertura y el cierre pegados.
+                        {
+                            let step = match self.strip_dir {
+                                StripDir::Right => sr.w.max(1),
+                                StripDir::Down => sr.h.max(1),
+                            };
+                            let base = match self.strip_dir {
+                                StripDir::Right => sr.col,
+                                StripDir::Down => sr.row,
+                            };
+                            let mut first = base / step + 1; // 1-based, como se cuenta a ojo
+                            let mut last = first + self.anim_frames.max(1) - 1;
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(egui::RichText::new("rango de frames:").strong())
+                                    .on_hover_text(
+                                        "Contando bloques del tamaño de la selección desde el \
+                                         principio de la fila/columna. Poné 1→6 y guardá como \
+                                         'abriéndose'; después 7→12 y guardá como 'cerrándose'.",
+                                    );
+                                ui.label("del");
+                                let a = ui.add(egui::DragValue::new(&mut first).range(1..=256));
+                                ui.label("al");
+                                let b = ui.add(egui::DragValue::new(&mut last).range(1..=256));
+                                if a.changed() || b.changed() {
+                                    let last = last.max(first);
+                                    self.anim_frames = last - first + 1;
+                                    let off = (first - 1) * step;
+                                    self.sel_rect = Some(match self.strip_dir {
+                                        StripDir::Right => CellRect { col: off, ..sr },
+                                        StripDir::Down => CellRect { row: off, ..sr },
+                                    });
+                                }
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "= {} frames desde la celda {}",
+                                        self.anim_frames.max(1),
+                                        match self.strip_dir {
+                                            StripDir::Right => sr.col,
+                                            StripDir::Down => sr.row,
+                                        }
+                                    ))
+                                    .weak()
+                                    .small(),
+                                );
                             });
+                        }
+                        // (El preview animado va ARRIBA, al lado del lienzo.)
                     }
 
                     let grid = (self.sheet_grid.max(1), self.sheet_grid.max(1));
@@ -1085,8 +1485,15 @@ impl EditorApp {
                                     );
                                 }
                             }
-                            if ui.button("Guardar como animación (strip)")
-                                .on_hover_text("cada frame = la selección; 'frames' = cuántos bloques contiguos hay")
+                            if ui.button("Guardar como animación ÚNICA (strip)")
+                                .on_hover_text(
+                                    "La animación BASE del objeto: hay UNA sola por asset, así que \
+                                     volver a guardar acá REEMPLAZA la anterior.\n\n\
+                                     Si tu objeto tiene varios estados (puerta cerrada / \
+                                     abriéndose / abierta), NO uses este botón: usá el panel de \
+                                     estados o la matriz de animaciones de abajo, donde cada \
+                                     estado se guarda con su nombre y conviven todos.",
+                                )
                                 .clicked()
                             {
                                 if let Some(rel) = self.ensure_sheet_copied(slot, &png) {
@@ -1110,6 +1517,17 @@ impl EditorApp {
                                 }
                             }
                         });
+                        // ── ESTADOS / PARTES del objeto ──────────────────
+                        // Para `door/*`, `wall/*`, `window/*`: el juego pide una
+                        // pose distinta según el estado (puerta cerrada,
+                        // abriéndose, abierta…) o según de qué lado del cuarto
+                        // está la pared. Cada una es una animación APARTE y
+                        // conviven todas: guardar una nunca pisa a las otras.
+                        //
+                        // Va ANTES de la matriz de personaje a propósito: para
+                        // una puerta, esto es el trabajo, y estaba enterrado al
+                        // fondo del panel.
+                        self.states_panel(ui, slot);
                         // ── Animaciones nombradas (personaje/NPC/estados) ──
                         // Para un atlas con FILAS = animaciones (idle, walk × 4 dir,
                         // acciones). Matriz guiada abajo; cada celda es una animación
@@ -1130,52 +1548,6 @@ impl EditorApp {
                         // Para `wall/*`, `door/*`, `window/*`: el juego pide una
                         // pose distinta según de qué lado del cuarto está la
                         // pared. Acá elegís CUÁL estás recortando del atlas.
-                        let build_parts = build_part_poses(slot.key);
-                        if !build_parts.is_empty() {
-                            egui::CollapsingHeader::new(
-                                "🧱 partes de construcción (pared de frente / lateral / puerta)",
-                            )
-                            .default_open(self.manifest.poses(slot.key).is_none())
-                            .show(ui, |ui| {
-                                ui.label(egui::RichText::new(
-                                    "Marcá en el lienzo DESDE DÓNDE HASTA DÓNDE está esta parte en \
-                                     el atlas, elegí acá cuál es, y guardá con 💾. El juego elige \
-                                     sola la pose según dónde esté el piso: la pared del fondo se \
-                                     ve de frente, la de adelante baja, y las de los costados de \
-                                     perfil. Con sólo 'frente' ya funciona todo."
-                                ).weak());
-                                let defined: std::collections::BTreeSet<String> = self
-                                    .manifest
-                                    .poses(slot.key)
-                                    .map(|m| m.keys().cloned().collect())
-                                    .unwrap_or_default();
-                                egui::Grid::new("build_parts").spacing([4.0, 4.0]).show(ui, |ui| {
-                                    for (i, (pose, label)) in build_parts.iter().enumerate() {
-                                        let done = defined.contains(*pose);
-                                        let mut txt = egui::RichText::new(format!(
-                                            "{label}{}",
-                                            if done { " ●" } else { "" }
-                                        ))
-                                        .small();
-                                        if done {
-                                            txt = txt.color(egui::Color32::from_rgb(120, 230, 140));
-                                        }
-                                        let active = self.pose_name == *pose;
-                                        let hint = format!(
-                                            "el juego la busca como '{pose}'\n{}",
-                                            if done { "ya guardada — guardar la reemplaza" } else { "sin definir" }
-                                        );
-                                        if ui.selectable_label(active, txt).on_hover_text(hint).clicked() {
-                                            self.pose_name = (*pose).to_string();
-                                        }
-                                        if i % 2 == 1 {
-                                            ui.end_row();
-                                        }
-                                    }
-                                });
-                                self.pose_save_row(ui, slot);
-                            });
-                        }
                         // El piso (`floor/*`) usa el MISMO autotile por vecinos que
                         // el agua: centro, bordes y esquinas.
                         let is_tile = slot.category == "tiles" || slot.key.starts_with("floor/");
@@ -1277,7 +1649,13 @@ impl EditorApp {
                     self.persist_manifest();
                     self.status = format!("{} → procedural · guardado", slot.key);
                 }
-                if !self.core_keys.contains(slot.key) && ui.button("❌ Eliminar slot").clicked() {
+                // Sólo el objeto se elimina acá; una variante se borra con su
+                // botón en la barra de variantes (evita borrar el objeto entero
+                // creyendo que borrás el material).
+                if variant.is_none()
+                    && !self.core_keys.contains(slot.key)
+                    && ui.button("❌ Eliminar slot").clicked()
+                {
                     self.manifest.clear(slot.key);
                     self.slots.retain(|x| x.key != slot.key);
                     self.selected = None;
@@ -1292,6 +1670,1361 @@ impl EditorApp {
     /// aura. Escribe `emission` en el manifest; el juego (`light2d`) le cuelga un
     /// halo difuminado al sprite. Es lo mismo que calcula el pincel de LUZ del
     /// Image Lab — este panel te deja retocarlo a mano después.
+    /// **Capa de dibujo del slot**: en qué banda de profundidad se planta el
+    /// asset en el mundo. Es lo que decide si el asset te TAPA o no, y es
+    /// independiente de la colisión (que decide si te FRENA).
+    ///
+    /// Sin esto, todo lo que se colocaba desde el editor de mundo se ordenaba por
+    /// su fila del pie y terminaba tapando al jugador: un charco pintado ocluía
+    /// igual que un roble. Ver `ha-game::layers` para la escalera completa.
+    fn layer_panel(&mut self, ui: &mut egui::Ui, key: &str) {
+        let current = self.manifest.slot_layer(key);
+        let header = match current {
+            Some(ArtLayer::Floor) => "🎚 capa — SUELO (bajo el jugador)",
+            Some(ArtLayer::Basement) => "🎚 capa — SUBSUELO",
+            Some(ArtLayer::Wall) => "🎚 capa — PARED",
+            Some(ArtLayer::Roof) => "🎚 capa — TECHO (se transparenta)",
+            Some(ArtLayer::Light) => "🎚 capa — LUZ",
+            Some(ArtLayer::Object) => "🎚 capa — OBJETO",
+            None => "🎚 capa (qué tapa a qué)",
+        };
+        egui::CollapsingHeader::new(header).default_open(current.is_some()).show(ui, |ui| {
+            ui.label(
+                egui::RichText::new(
+                    "La CAPA decide qué te TAPA; la huella de abajo decide qué te FRENA. \
+                     Son ejes distintos a propósito: el agua te frena y no te tapa; un techo \
+                     te tapa y no te frena. Si algo que dibujás en el editor de mundo se \
+                     dibuja ENCIMA del jugador y no debería, marcalo Suelo.",
+                )
+                .weak()
+                .small(),
+            );
+            // 0 = sin etiquetar (compat: se comporta como Objeto).
+            let mut sel = match current {
+                None => 0u8,
+                Some(ArtLayer::Floor) => 1,
+                Some(ArtLayer::Basement) => 2,
+                Some(ArtLayer::Object) => 3,
+                Some(ArtLayer::Wall) => 4,
+                Some(ArtLayer::Roof) => 5,
+                Some(ArtLayer::Light) => 6,
+            };
+            let before = sel;
+            ui.radio_value(&mut sel, 0u8, "sin etiquetar (= Objeto)")
+                .on_hover_text("Compatibilidad: Y-sort de siempre.");
+            ui.radio_value(&mut sel, 1, "Suelo — SIEMPRE bajo el jugador")
+                .on_hover_text("Agua, pisos, caminos, alfombras, plataformas, decals.");
+            ui.radio_value(&mut sel, 2, "Subsuelo — bajo el piso actual")
+                .on_hover_text("Sótanos asomando por un hueco.");
+            ui.radio_value(&mut sel, 3, "Objeto — Y-sort (te tapa desde el sur)")
+                .on_hover_text("Muebles, props, árboles, rocas.");
+            ui.radio_value(&mut sel, 4, "Pared — Y-sort por su fila del pie")
+                .on_hover_text(
+                    "Pintá sólida SÓLO la fila de la base en la huella: caminás por detrás \
+                     de la parte alta (que te tapa) sin atravesar la base.",
+                );
+            ui.radio_value(&mut sel, 5, "Techo — encima de todo, se transparenta")
+                .on_hover_text(
+                    "Se desvanece cuando el jugador camina bajo su huella. Un edificio de \
+                     varios pisos = varios assets: los de abajo Pared/Objeto, los de arriba Techo.",
+                );
+            ui.radio_value(&mut sel, 6, "Luz — glow, no tapa nada")
+                .on_hover_text("Ventanas encendidas, halos.");
+            if sel != before {
+                let v = match sel {
+                    1 => Some(ArtLayer::Floor),
+                    2 => Some(ArtLayer::Basement),
+                    3 => Some(ArtLayer::Object),
+                    4 => Some(ArtLayer::Wall),
+                    5 => Some(ArtLayer::Roof),
+                    6 => Some(ArtLayer::Light),
+                    _ => None,
+                };
+                self.manifest.set_slot_layer(key, v);
+                self.status =
+                    format!("capa de {key} actualizada — Guardá para aplicar al juego");
+            }
+        });
+    }
+
+    /// 🎬 **Los ESTADOS del objeto**: puerta cerrada / abriéndose / abierta /
+    /// cerrándose / bloqueada, o las caras de una pared.
+    ///
+    /// Cada estado es una animación aparte con su nombre, y **conviven todas**:
+    /// guardar "abriéndose" no toca a "cerrada". Ése era el bug —guardar la
+    /// segunda animación de un objeto pisaba la primera— y tenía dos causas: el
+    /// botón "Guardar como animación (strip)" escribe la ÚNICA animación base
+    /// del asset (por diseño, hay una sola), y además cambiar de hoja reseteaba
+    /// la entrada entera (arreglado en `ArtManifest::full_mut`).
+    ///
+    /// La tabla muestra qué estados ya guardaste, con miniatura y cantidad de
+    /// frames, para que se vea de un vistazo qué falta.
+    fn states_panel(&mut self, ui: &mut egui::Ui, slot: SlotDef) {
+        let states = build_part_poses(slot.key);
+        if states.is_empty() {
+            return;
+        }
+        let is_door = slot.key.starts_with("door/");
+        let defined: std::collections::BTreeMap<String, Pose> = self
+            .manifest
+            .poses(slot.key)
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default();
+        let done = states.iter().filter(|(p, _)| defined.contains_key(*p)).count();
+        let header = if is_door {
+            format!("🚪 estados de la puerta ({done}/{})", states.len())
+        } else {
+            format!("🧱 partes de la construcción ({done}/{})", states.len())
+        };
+        egui::CollapsingHeader::new(header)
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(if is_door {
+                        "Marcá en el lienzo los frames de un estado (usá «rango de frames» si \
+                         están todos en el mismo PNG), tocá acá el estado, y 💾. Cada estado se \
+                         guarda por separado — guardar uno NO borra los otros.\n\
+                         El juego encadena: cerrada → abriéndose → abierta → cerrándose → \
+                         cerrada. Las transiciones son opcionales; sin ellas la puerta salta \
+                         directo de cerrada a abierta."
+                    } else {
+                        "Marcá en el lienzo de dónde a dónde está esta parte, elegí acá cuál es, \
+                         y guardá con 💾. El juego elige sola la pose según dónde esté el piso: \
+                         la pared del fondo se ve de frente, la de adelante baja, y las de los \
+                         costados de perfil. Con sólo «frente» ya funciona todo."
+                    })
+                    .weak()
+                    .small(),
+                );
+                if is_door {
+                    ui.label(
+                        egui::RichText::new(
+                            "🚧 Colisión: la puerta NUNCA frena — ni cerrada. Es a propósito: en \
+                             el sistema de bordes la celda de una puerta es transitable siempre, \
+                             así que la animación es sólo cómo se ve, y abrirla no puede dejarte \
+                             encerrado ni atravesar una pared. Si querés que una puerta bloquee \
+                             de verdad, marcala «bloquea SIEMPRE» arriba y usá el estado \
+                             🔒 bloqueada.",
+                        )
+                        .color(egui::Color32::from_rgb(255, 200, 100))
+                        .small(),
+                    );
+                }
+                let mut pick: Option<(String, Option<Pose>)> = None;
+                let mut wipe: Option<String> = None;
+                egui::Grid::new("states_grid").striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
+                    for (pose_name, label) in states {
+                        let existing = defined.get(*pose_name).cloned();
+                        // Miniatura de lo guardado — el "ya está" que se ve, no
+                        // un puntito verde que hay que interpretar.
+                        match &existing {
+                            Some(p) => {
+                                let thumb = self.pose_thumb(ui.ctx(), slot.key, p);
+                                match thumb {
+                                    Some((id, uv)) => {
+                                        ui.add(
+                                            egui::Image::new(egui::load::SizedTexture::new(
+                                                id,
+                                                egui::vec2(40.0, 40.0),
+                                            ))
+                                            .uv(uv),
+                                        );
+                                    }
+                                    None => {
+                                        ui.label("●");
+                                    }
+                                }
+                            }
+                            None => {
+                                ui.label(egui::RichText::new("—").weak());
+                            }
+                        }
+                        let mut txt = egui::RichText::new(*label);
+                        if existing.is_some() {
+                            txt = txt.color(egui::Color32::from_rgb(120, 230, 140));
+                        }
+                        let active = self.pose_name == *pose_name;
+                        let hint = match &existing {
+                            Some(p) => format!(
+                                "el juego la busca como '{pose_name}'\n{} frames · guardar la reemplaza",
+                                p.anim.map(|a| a.frames).unwrap_or(1)
+                            ),
+                            None => format!("el juego la busca como '{pose_name}' — sin definir"),
+                        };
+                        if ui.selectable_label(active, txt).on_hover_text(hint).clicked() {
+                            pick = Some(((*pose_name).to_string(), existing.clone()));
+                        }
+                        match &existing {
+                            Some(p) => {
+                                ui.label(
+                                    egui::RichText::new(match p.anim {
+                                        Some(a) => format!("{} frames @ {:.0} fps", a.frames, a.fps),
+                                        None => "estática".to_string(),
+                                    })
+                                    .weak()
+                                    .small(),
+                                );
+                                if ui.small_button("✖").on_hover_text("borrar este estado").clicked() {
+                                    wipe = Some((*pose_name).to_string());
+                                }
+                            }
+                            None => {
+                                ui.label(egui::RichText::new("sin definir").weak().small());
+                                ui.label("");
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+                if let Some(name) = wipe {
+                    self.manifest.remove_pose(slot.key, &name);
+                    self.persist_manifest();
+                    self.status = format!("{}: estado '{name}' borrado · guardado", slot.key);
+                }
+                // Elegir un estado ya guardado lo trae AL LIENZO para reajustarlo.
+                if let Some((name, pose)) = pick {
+                    self.pose_name = name;
+                    if let Some(p) = pose {
+                        self.sel_rect = Some(p.rect);
+                        match p.anim {
+                            Some(a) => {
+                                self.anim_frames = a.frames;
+                                self.anim_fps = a.fps;
+                                self.strip_dir = p.dir.unwrap_or_default();
+                            }
+                            None => self.anim_frames = 1,
+                        }
+                        if let Some(rel) = &p.png {
+                            self.load_candidate_rel(ui.ctx(), &rel.clone());
+                        }
+                        if let Some(g) = p.grid {
+                            self.sheet_grid = g.0.max(1);
+                        }
+                        self.status = "estado cargado en el lienzo — ajustalo y volvé a 💾".into();
+                    }
+                }
+                self.pose_save_row(ui, slot);
+            });
+    }
+
+    /// Miniatura (textura + UV del primer frame) de una pose guardada.
+    fn pose_thumb(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        pose: &Pose,
+    ) -> Option<(egui::TextureId, egui::Rect)> {
+        let slot_grid = self.manifest.get(key).map(|v| v.grid()).unwrap_or((32, 32));
+        let slot_png = self.manifest.get(key)?.png().to_string();
+        let grid = pose.grid_or(slot_grid);
+        let tex = self.tex_for(ctx, pose.png_or(&slot_png))?;
+        let img = tex.size_vec2();
+        let r = pose.rect;
+        Some((
+            tex.id(),
+            egui::Rect::from_min_max(
+                egui::pos2((r.col * grid.0) as f32 / img.x, (r.row * grid.1) as f32 / img.y),
+                egui::pos2(
+                    ((r.col + r.w) * grid.0) as f32 / img.x,
+                    ((r.row + r.h) * grid.1) as f32 / img.y,
+                ),
+            ),
+        ))
+    }
+
+    /// 🗺 **La huella de colisión y la zona de interacción, pintadas sobre el
+    /// sprite.**
+    ///
+    /// Es un editor de dibujo chico, no un formulario: visor con zoom y
+    /// desplazamiento propios (el sprite se ve GRANDE), cuatro herramientas
+    /// —libre, rectángulo, pluma y balde— y tres materiales —sólido, escalón y
+    /// zona—. Lo que había antes fallaba en cuatro cosas concretas, y las cuatro
+    /// están arregladas acá:
+    ///
+    /// 1. **El lienzo no podía crecer.** El zoom estaba topado por el ancho del
+    ///    panel (`fp_zoom.min(ancho/w)`), así que arrastrar la barra a la derecha
+    ///    no hacía nada. Ahora el lienzo es un visor: el zoom llega a
+    ///    [`FP_ZOOM_MAX`] px por tile, se desplaza con el botón del medio o con
+    ///    Shift, hay Ctrl+rueda anclado al cursor y una ventana grande aparte.
+    /// 2. **La zona de interacción no se veía.** Se pintaba en el conjunto pero
+    ///    NUNCA se dibujaba, y encima se descartaba al guardar si el objeto no
+    ///    tenía verbo: pintabas 🟦 y no pasaba absolutamente nada. Ahora se
+    ///    dibuja en azul y pintarla marca el objeto como interactuable sola.
+    /// 3. **«Proponer del sprite» leía el PNG del árbol equivocado**
+    ///    (`art_root`, que es la carpeta de PNGs sueltos del usuario, cuando las
+    ///    rutas del manifest cuelgan de `game_assets`): fallaba siempre salvo
+    ///    casualidad.
+    /// 4. **Guardaba el manifest entero en cada frame del arrastre.** Ahora se
+    ///    escribe al soltar el botón (`fp_dirty`).
+    ///
+    /// El fondo sigue siendo EL RECORTE que va a ver el juego
+    /// (`footprint_backdrop`): recorte estático, primer frame de la tira o la
+    /// pose representativa — nunca la hoja entera.
+    fn footprint_panel(&mut self, ui: &mut egui::Ui, slot: SlotDef) {
+        let cur = self.manifest.footprint(slot.key).cloned().unwrap_or_default();
+        let inter_actual = self.manifest.interaccion(slot.key).cloned();
+        let n_zona = inter_actual.as_ref().map(|i| i.zona.len()).unwrap_or(0);
+        let title = if cur.is_empty() && cur.step.is_empty() && n_zona == 0 {
+            "huella y zona — pintalas sobre el sprite".to_string()
+        } else {
+            format!(
+                "huella y zona — {} sólidas · {} escalón · {} zona",
+                cur.solid.len(),
+                cur.step.len(),
+                n_zona
+            )
+        };
+        let cabecera = egui::CollapsingHeader::new(title).default_open(true).show(ui, |ui| {
+            // Dimensiones. El default sale del tamaño REAL del asset en celdas
+            // (recorte, tira o pose), no de 1×1: una casa de 5×4 abre su grilla
+            // de 5×4 sin que tengas que adivinarla.
+            let def = self.slot_cells_for_footprint(slot.key);
+            // **El detalle arranca en ¼, no en «tile».** A un sub-celda por tile
+            // la huella NO PUEDE seguir la silueta: la unidad de pintura es el
+            // cuadrado entero donde se coloca el objeto, así que "perfilar al
+            // sprite" devolvía el rectángulo del sprite y pintar a mano tampoco
+            // daba otra cosa. Sólo se hereda el detalle viejo si ya hay huella
+            // pintada (no se toca lo que el usuario guardó).
+            let sin_pintar = cur.w == 0 && inter_actual.as_ref().is_none_or(|i| i.zona.is_empty());
+            let old_res = if sin_pintar { 4 } else { cur.res() };
+            let mut ed = FpEdit {
+                w: if cur.w == 0 { def.0 } else { cur.w.clamp(1, 12) },
+                h: if cur.h == 0 { def.1 } else { cur.h.clamp(1, 12) },
+                res: old_res,
+                ax: cur.ax,
+                az: cur.az,
+                solid: cur.solid.iter().copied().collect(),
+                step: cur.step.iter().copied().collect(),
+                zona: inter_actual
+                    .as_ref()
+                    .map(|i| i.zona.iter().copied().collect())
+                    .unwrap_or_default(),
+            };
+            let mut verbo = inter_actual.as_ref().map(|i| i.verbo.clone()).unwrap_or_default();
+            let mut requiere: Vec<ha_assets::Requisito> =
+                inter_actual.as_ref().map(|i| i.requiere.clone()).unwrap_or_default();
+            let mut changed = false;
+
+            // ── Interactuable ────────────────────────────────────────────────
+            // Es lo que decide si al acercarte aparece el boton. Antes esto no
+            // existia: lo interactuable era un enum fijo de siete cosas en el
+            // codigo, asi que un banco o un surtidor nunca podian serlo.
+            ui.horizontal_wrapped(|ui| {
+                let mut es = !verbo.is_empty();
+                if ui
+                    .checkbox(&mut es, "se puede interactuar")
+                    .on_hover_text(
+                        "Una piedra se pica, un banco se sienta, un poste no hace nada.\n                         Sin tildar, el objeto no muestra boton al acercarse.",
+                    )
+                    .changed()
+                {
+                    verbo = if es { ha_assets::VERBOS[0].to_string() } else { String::new() };
+                    changed = true;
+                }
+                if !verbo.is_empty() {
+                    egui::ComboBox::from_id_salt("verbo_interaccion")
+                        .selected_text(verbo.clone())
+                        .show_ui(ui, |ui| {
+                            for v in ha_assets::VERBOS {
+                                if ui.selectable_label(verbo == *v, *v).clicked() {
+                                    verbo = v.to_string();
+                                    changed = true;
+                                }
+                            }
+                        });
+                    ui.label(
+                        egui::RichText::new(if ed.zona.is_empty() {
+                            "zona: todo el asset (pintala para acotarla)".to_string()
+                        } else {
+                            format!("zona: {} sub-celdas pintadas", ed.zona.len())
+                        })
+                        .weak()
+                        .small(),
+                    );
+                }
+            });
+
+            // ── Requisitos ───────────────────────────────────────────────────
+            // Sin requisitos el boton sale siempre. Con ellos, sale solo cuando
+            // se cumplen TODOS: es lo que separa "hay una cocina" de "puedo
+            // cocinar".
+            if !verbo.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new("hace falta:").strong());
+                    let mut borrar = None;
+                    for (i, r) in requiere.iter().enumerate() {
+                        let txt = match r {
+                            ha_assets::Requisito::EnMano(k) => format!("en mano: {k}"),
+                            ha_assets::Requisito::EnMochila(k) => format!("en mochila: {k}"),
+                            ha_assets::Requisito::Receta(k) => format!("receta: {k}"),
+                            ha_assets::Requisito::DeNoche(true) => "de noche".into(),
+                            ha_assets::Requisito::DeNoche(false) => "de dia".into(),
+                            ha_assets::Requisito::Estado(e) => format!("estado: {e}"),
+                        };
+                        if ui.button(format!("{txt}  ✖")).on_hover_text("quitar").clicked() {
+                            borrar = Some(i);
+                        }
+                    }
+                    if let Some(i) = borrar {
+                        requiere.remove(i);
+                        changed = true;
+                    }
+                    egui::ComboBox::from_id_salt("add_requisito")
+                        .selected_text("+ agregar")
+                        .show_ui(ui, |ui| {
+                            if ui.selectable_label(false, "en mano...").clicked() {
+                                requiere.push(ha_assets::Requisito::EnMano("hacha".into()));
+                                changed = true;
+                            }
+                            if ui.selectable_label(false, "en mochila...").clicked() {
+                                requiere.push(ha_assets::Requisito::EnMochila("hacha".into()));
+                                changed = true;
+                            }
+                            if ui.selectable_label(false, "receta...").clicked() {
+                                requiere.push(ha_assets::Requisito::Receta("pan".into()));
+                                changed = true;
+                            }
+                            if ui.selectable_label(false, "de noche").clicked() {
+                                requiere.push(ha_assets::Requisito::DeNoche(true));
+                                changed = true;
+                            }
+                            for e in ha_assets::ESTADOS {
+                                if ui.selectable_label(false, format!("estado: {e}")).clicked() {
+                                    requiere.push(ha_assets::Requisito::Estado((*e).into()));
+                                    changed = true;
+                                }
+                            }
+                        });
+                });
+            }
+
+            // ── Herramienta + material ────────────────────────────────────────
+            // Dos ejes separados: CÓMO se elige la celda y QUÉ queda en ella.
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("herramienta:").strong());
+                for (t, label, hint) in [
+                    (
+                        FpTool::Libre,
+                        "libre",
+                        "A mano alzada: arrastrás y pinta. El grosor es de al lado.",
+                    ),
+                    (
+                        FpTool::Rect,
+                        "rectángulo",
+                        "Arrastrás de esquina a esquina. Lo más rápido para una pared o una base.",
+                    ),
+                    (
+                        FpTool::Pluma,
+                        "pluma",
+                        "Como la pluma de Photoshop: un clic por vértice y la figura se cierra \
+                         sola y se rellena. Enter cierra, Esc cancela, clic derecho quita el \
+                         último vértice. Ideal para perfilar un techo torcido o una zona en L.",
+                    ),
+                    (
+                        FpTool::Balde,
+                        "balde",
+                        "Rellena de una toda la región contigua que está igual: clic dentro de \
+                         un hueco y queda todo el hueco.",
+                    ),
+                ] {
+                    if ui.selectable_label(self.fp_tool == t, label).on_hover_text(hint).clicked() {
+                        self.fp_tool = t;
+                        self.fp_pen.clear();
+                    }
+                }
+                if self.fp_tool == FpTool::Libre {
+                    ui.separator();
+                    ui.label("grosor").on_hover_text("en sub-celdas");
+                    ui.add(egui::DragValue::new(&mut self.fp_size).range(1..=8));
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("pinta:").strong());
+                for (b, label, hint) in [
+                    (
+                        FpBrush::Solid,
+                        "sólido",
+                        "Frena el paso. El tronco de un árbol, el muro de una casa, la roca.",
+                    ),
+                    (
+                        FpBrush::Step,
+                        "escalón",
+                        "Desnivel que se SUBE y se BAJA a pie: no frena a quien camina, pero \
+                         queda marcado como borde para lo que no puede treparlo (vehículos). \
+                         Se sube y se baja por el mismo sitio a propósito — un escalón de una \
+                         sola dirección te dejaría encerrado abajo.",
+                    ),
+                    (
+                        FpBrush::Zona,
+                        "zona",
+                        "DESDE DÓNDE se interactúa. No frena. La punta del muelle para pescar, \
+                         el umbral de la puerta. Pintarla marca el objeto como interactuable \
+                         sola: no hace falta tildar nada antes.",
+                    ),
+                    (
+                        FpBrush::Erase,
+                        "borrar",
+                        "Deja la celda limpia de todo (sólido, escalón y zona). También borra \
+                         con Ctrl+arrastre desde cualquier material.",
+                    ),
+                ] {
+                    // El nombre va DEL COLOR con el que pinta, y al lado una
+                    // muestra del color: los cuadraditos de emoji (🟥🟨🟦) salían
+                    // caja en la fuente de egui, así que el botón decía "□ zona"
+                    // y no se entendía nada.
+                    let (rect, resp) =
+                        ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect.shrink(1.0), 2.0, b.color());
+                    let _ = resp;
+                    if ui
+                        .selectable_label(
+                            self.fp_brush == b,
+                            egui::RichText::new(label).color(b.color()),
+                        )
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        self.fp_brush = b;
+                        if b == FpBrush::Zona && verbo.is_empty() {
+                            verbo = ha_assets::VERBOS[0].to_string();
+                            changed = true;
+                        }
+                    }
+                }
+            });
+
+            // ── Visor: zoom, encuadre, ventana grande ─────────────────────────
+            ui.horizontal_wrapped(|ui| {
+                ui.label("zoom");
+                ui.add(
+                    egui::Slider::new(&mut self.fp_zoom, FP_ZOOM_MIN..=FP_ZOOM_MAX)
+                        .show_value(false),
+                )
+                .on_hover_text("px por tile · también Ctrl+rueda sobre el lienzo");
+                if ui.button("  -  ").on_hover_text("alejar").clicked() {
+                    self.fp_zoom = (self.fp_zoom / 1.25).max(FP_ZOOM_MIN);
+                }
+                if ui.button("  +  ").on_hover_text("acercar").clicked() {
+                    self.fp_zoom = (self.fp_zoom * 1.25).min(FP_ZOOM_MAX);
+                }
+                if ui.button("ajustar").on_hover_text("el asset entero, centrado").clicked() {
+                    self.fp_fit = true;
+                }
+                ui.separator();
+                ui.label("alto");
+                ui.add(egui::Slider::new(&mut self.fp_view_h, 200.0..=900.0).show_value(false))
+                    .on_hover_text("alto del visor");
+                ui.separator();
+                let txt = if self.fp_big { "cerrar la ventana grande" } else { "ventana grande" };
+                if ui
+                    .button(txt)
+                    .on_hover_text("abre el lienzo en una ventana aparte, redimensionable")
+                    .clicked()
+                {
+                    self.fp_big = !self.fp_big;
+                    self.fp_fit = true;
+                }
+            });
+
+            // ── Tamaño y detalle ──────────────────────────────────────────────
+            ui.horizontal_wrapped(|ui| {
+                ui.label("ancho");
+                let a = ui.add(egui::DragValue::new(&mut ed.w).range(1..=12)).changed();
+                ui.label("alto");
+                let b = ui.add(egui::DragValue::new(&mut ed.h).range(1..=12)).changed();
+                if a || b {
+                    changed = true;
+                    self.fp_fit = true;
+                }
+                ui.separator();
+                ui.label("detalle").on_hover_text(
+                    "Sub-celdas por tile. ¼ perfila la silueta: un poste delgado deja de \
+                     bloquear el metro entero.",
+                );
+                for (v, name) in [(1u32, "tile"), (2, "½"), (4, "¼")] {
+                    ui.selectable_value(&mut ed.res, v, name);
+                }
+                if ed.res == 1 {
+                    ui.label(
+                        egui::RichText::new("OJO — a «tile» sólo podés pintar el cuadrado entero")
+                            .color(egui::Color32::from_rgb(235, 190, 40))
+                            .small(),
+                    )
+                    .on_hover_text(
+                        "Con un sub-celda por tile la unidad de pintura ES la casilla donde se \
+                         coloca el objeto: no hay forma de seguir la silueta del dibujo. Pasá \
+                         a ¼ para perfilarlo.",
+                    );
+                }
+            });
+            // La grilla tiene que ser la del sprite: si no, el dibujo se aplasta
+            // dentro del lienzo y lo que pintás no cae donde creés.
+            if (ed.w, ed.h) != def {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "OJO — la grilla es {}×{} y el sprite mide {}×{} tiles",
+                            ed.w, ed.h, def.0, def.1
+                        ))
+                        .color(egui::Color32::from_rgb(235, 190, 40))
+                        .small(),
+                    );
+                    if ui.button(format!("usar {}×{}", def.0, def.1)).clicked() {
+                        ed.solid = rescale_grid(&ed.solid, (ed.w, ed.h), def, ed.res);
+                        ed.step = rescale_grid(&ed.step, (ed.w, ed.h), def, ed.res);
+                        ed.zona = rescale_grid(&ed.zona, (ed.w, ed.h), def, ed.res);
+                        ed.w = def.0;
+                        ed.h = def.1;
+                        self.fp_fit = true;
+                        changed = true;
+                    }
+                });
+            }
+            // Cambiar el detalle conserva lo pintado (se re-escala) — la zona
+            // también: vive en la misma grilla.
+            if ed.res != old_res {
+                ed.solid = rescale_solid(&ed.solid, old_res, ed.res);
+                ed.step = rescale_solid(&ed.step, old_res, ed.res);
+                ed.zona = rescale_solid(&ed.zona, old_res, ed.res);
+                changed = true;
+            }
+
+            // ── Atajos: sacar la forma del propio dibujo ──────────────────────
+            // Nadie pinta 400 assets a mano. Esto lee el ALFA del recorte que ve
+            // el juego y propone; después lo corregís con la pluma.
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("del sprite:").strong());
+                let silueta = ui
+                    .button("sólido = silueta")
+                    .on_hover_text("marca sólido donde el dibujo no es transparente")
+                    .clicked();
+                let base = ui
+                    .button("sólido = sólo la base")
+                    .on_hover_text(
+                        "sólo la fila de tiles del pie: el tronco frena, la copa se atraviesa",
+                    )
+                    .clicked();
+                let borde = ui
+                    .button("zona = borde de lo sólido")
+                    .on_hover_text(
+                        "pinta 🟦 el anillo de celdas libres pegadas a lo sólido: es \
+                         literalmente «desde dónde lo alcanzo». Necesita algo sólido pintado.",
+                    )
+                    .clicked();
+                if silueta || base {
+                    // Perfilar al sprite exige que la grilla SEA la del sprite y
+                    // que el detalle sea fino. Si no, lo que sale es justo lo que
+                    // se veía mal: el cuadrado donde se coloca el objeto, no su
+                    // silueta — a un sub-celda por tile no hay silueta posible, y
+                    // con una grilla de 1×1 sobre un sprite de 5×4 el dibujo
+                    // entero se aplasta en un tile.
+                    let mut aviso = Vec::new();
+                    if (ed.w, ed.h) != def {
+                        ed.solid = rescale_grid(&ed.solid, (ed.w, ed.h), def, ed.res);
+                        ed.step = rescale_grid(&ed.step, (ed.w, ed.h), def, ed.res);
+                        ed.zona = rescale_grid(&ed.zona, (ed.w, ed.h), def, ed.res);
+                        aviso.push(format!("grilla ajustada a {}×{} (la del sprite)", def.0, def.1));
+                        ed.w = def.0;
+                        ed.h = def.1;
+                        self.fp_fit = true;
+                    }
+                    if ed.res < 4 {
+                        ed.solid = rescale_solid(&ed.solid, ed.res, 4);
+                        ed.step = rescale_solid(&ed.step, ed.res, 4);
+                        ed.zona = rescale_solid(&ed.zona, ed.res, 4);
+                        aviso.push("detalle ajustado a ¼".to_string());
+                        ed.res = 4;
+                    }
+                    match self.huella_desde_alfa(slot.key, ed.w, ed.h, ed.res, 0.2) {
+                        Some(cov) => {
+                            let base_from = (ed.h * ed.res).saturating_sub(ed.res);
+                            ed.solid =
+                                cov.into_iter().filter(|&(_, r)| !(base && r < base_from)).collect();
+                            ed.step.retain(|c| !ed.solid.contains(c));
+                            self.status = format!(
+                                "huella de {} perfilada al sprite: {} sub-celdas{}{}",
+                                slot.key,
+                                ed.solid.len(),
+                                if aviso.is_empty() { "" } else { " · " },
+                                aviso.join(" · ")
+                            );
+                            changed = true;
+                        }
+                        None => {
+                            self.status =
+                                "no pude leer los píxeles del sprite (¿PNG asignado?)".into()
+                        }
+                    }
+                }
+                if borde {
+                    let (cols, rows) = (ed.w * ed.res, ed.h * ed.res);
+                    ed.zona = borde_de(&ed.solid, cols, rows);
+                    if ed.zona.is_empty() {
+                        self.status = "pintá algo sólido primero: la zona sale de su borde".into();
+                    } else {
+                        if verbo.is_empty() {
+                            verbo = ha_assets::VERBOS[0].to_string();
+                        }
+                        changed = true;
+                    }
+                }
+                ui.menu_button("limpiar...", |ui| {
+                    if ui.button("todo").clicked() {
+                        ed.solid.clear();
+                        ed.step.clear();
+                        ed.zona.clear();
+                        changed = true;
+                        ui.close_menu();
+                    }
+                    if ui.button("sólo lo sólido").clicked() {
+                        ed.solid.clear();
+                        changed = true;
+                        ui.close_menu();
+                    }
+                    if ui.button("sólo los escalones").clicked() {
+                        ed.step.clear();
+                        changed = true;
+                        ui.close_menu();
+                    }
+                    if ui.button("sólo la zona").clicked() {
+                        ed.zona.clear();
+                        changed = true;
+                        ui.close_menu();
+                    }
+                });
+            });
+
+            // Reajustar a las dimensiones nuevas.
+            let (cols, rows) = (ed.w * ed.res, ed.h * ed.res);
+            ed.solid.retain(|&(c, r)| c < cols && r < rows);
+            ed.step.retain(|&(c, r)| c < cols && r < rows);
+            ed.zona.retain(|&(c, r)| c < cols && r < rows);
+            ed.ax = ed.ax.min(ed.w.saturating_sub(1));
+            ed.az = ed.az.min(ed.h.saturating_sub(1));
+
+            // ── Lienzo ────────────────────────────────────────────────────────
+            // Reencuadre al cambiar de slot: cada asset abre entero y centrado,
+            // no con el zoom que dejaste en el anterior.
+            if self.fp_key != slot.key {
+                self.fp_key = slot.key.to_string();
+                self.fp_pen.clear();
+                self.fp_rect0 = None;
+                self.fp_fit = true;
+            }
+            let backdrop = self.footprint_backdrop(ui.ctx(), slot.key);
+            if self.fp_big {
+                let ctx = ui.ctx().clone();
+                let mut abierta = true;
+                egui::Window::new(format!("huella y zona — {}", slot.key))
+                    .default_size([900.0, 700.0])
+                    .min_size([320.0, 240.0])
+                    .resizable(true)
+                    .open(&mut abierta)
+                    .show(&ctx, |ui| {
+                        let view = ui.available_size() - egui::vec2(0.0, 28.0);
+                        changed |= self.fp_canvas(ui, &mut ed, backdrop, view.max(egui::vec2(320.0, 200.0)));
+                        ui.label(egui::RichText::new(fp_hint()).weak().small());
+                    });
+                if !abierta {
+                    self.fp_big = false;
+                }
+                ui.label(
+                    egui::RichText::new("(el lienzo está abierto en la ventana grande)")
+                        .weak()
+                        .small(),
+                );
+            } else {
+                let view = egui::vec2(ui.available_width().max(240.0), self.fp_view_h);
+                changed |= self.fp_canvas(ui, &mut ed, backdrop, view);
+            }
+            let tiles = ed
+                .solid
+                .iter()
+                .chain(ed.step.iter())
+                .map(|&(c, r)| (c / ed.res, r / ed.res))
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} sólidas · {} escalón · {} zona · {tiles} tiles frenan",
+                    ed.solid.len(),
+                    ed.step.len(),
+                    ed.zona.len()
+                ))
+                .weak()
+                .small(),
+            );
+            ui.label(egui::RichText::new(fp_hint()).weak().small());
+
+            if changed {
+                // Pintar la ZONA ES declarar el objeto interactuable: si no, la zona se
+                // tiraba a la basura al guardar y pintarla no hacía nada.
+                if !ed.zona.is_empty() && verbo.is_empty() {
+                    verbo = ha_assets::VERBOS[0].to_string();
+                }
+                let fp = if ed.solid.is_empty() && ed.step.is_empty() {
+                    None
+                } else {
+                    let mut sv: Vec<(u32, u32)> = ed.solid.iter().copied().collect();
+                    let mut tv: Vec<(u32, u32)> = ed.step.iter().copied().collect();
+                    sv.sort_unstable();
+                    tv.sort_unstable();
+                    Some(ha_assets::CollisionFootprint {
+                        w: ed.w,
+                        h: ed.h,
+                        ax: ed.ax,
+                        az: ed.az,
+                        solid: sv,
+                        step: tv,
+                        res: ed.res,
+                    })
+                };
+                self.manifest.set_footprint(slot.key, fp);
+                // La interaccion va por su cuenta: sin verbo no es interactuable
+                // y se borra; con verbo se guarda con su zona (vacia = todo el
+                // asset).
+                let inter = if verbo.is_empty() {
+                    None
+                } else {
+                    let mut zv: Vec<(u32, u32)> = ed.zona.iter().copied().collect();
+                    zv.sort_unstable();
+                    Some(ha_assets::Interaccion {
+                        verbo: verbo.clone(),
+                        requiere: requiere.clone(),
+                        zona: zv,
+                    })
+                };
+                self.manifest.set_interaccion(slot.key, inter);
+                self.fp_dirty = true;
+            }
+            // El disco espera a que sueltes: escribir el manifest entero en cada
+            // frame del arrastre es lo que hacía que pintar se sintiera pegajoso.
+            if self.fp_dirty && !ui.input(|i| i.pointer.any_down()) {
+                let saved = self.persist_manifest();
+                self.fp_dirty = false;
+                self.status = format!(
+                    "huella de {} actualizada {}",
+                    slot.key,
+                    if saved { "· guardado" } else { "· ⚠ no guardó" }
+                );
+            }
+        });
+        // Gancho de QA (`HA_SLOT`): traer el panel a la vista unos frames.
+        if self.fp_scroll_qa > 0 {
+            self.fp_scroll_qa -= 1;
+            cabecera.header_response.scroll_to_me(Some(egui::Align::TOP));
+        }
+    }
+
+    /// El lienzo en sí. Vive aparte del panel porque se dibuja en dos sitios —en
+    /// línea y en la ventana grande— con el mismo estado. Devuelve `true` si el
+    /// usuario cambió algo.
+    fn fp_canvas(
+        &mut self,
+        ui: &mut egui::Ui,
+        ed: &mut FpEdit,
+        backdrop: Option<(egui::TextureId, egui::Rect)>,
+        view: egui::Vec2,
+    ) -> bool {
+        let mut changed = false;
+        let (resp, painter) = ui.allocate_painter(view, egui::Sense::click_and_drag());
+        let rect = resp.rect;
+        let painter = painter.with_clip_rect(rect);
+        painter.rect_filled(rect, 0.0, egui::Color32::from_gray(24));
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(70)));
+        let (cols, rows) = (ed.w * ed.res, ed.h * ed.res);
+
+        // ── encuadre ──────────────────────────────────────────────────────────
+        if self.fp_fit {
+            self.fp_zoom = ((rect.width() - 24.0) / ed.w as f32)
+                .min((rect.height() - 24.0) / ed.h as f32)
+                .clamp(FP_ZOOM_MIN, FP_ZOOM_MAX);
+            self.fp_pan = egui::Vec2::ZERO;
+            self.fp_fit = false;
+        }
+        // Ctrl+rueda: zoom ANCLADO AL CURSOR — el punto que estás mirando no se
+        // mueve, que es lo que hace que un zoom se sienta bien.
+        if resp.hovered() {
+            let (scroll, ctrl) =
+                ui.input(|i| (i.raw_scroll_delta.y, i.modifiers.command || i.modifiers.ctrl));
+            if ctrl && scroll.abs() > 0.5 {
+                let z = self.fp_zoom;
+                let nz = (z * if scroll > 0.0 { 1.1 } else { 1.0 / 1.1 })
+                    .clamp(FP_ZOOM_MIN, FP_ZOOM_MAX);
+                if let Some(p) = resp.hover_pos() {
+                    let min = rect.center() + self.fp_pan
+                        - egui::vec2(ed.w as f32 * z, ed.h as f32 * z) / 2.0;
+                    let u = (p - min) / z; // punto bajo el cursor, en tiles
+                    let nmin = p - u * nz;
+                    self.fp_pan = (nmin + egui::vec2(ed.w as f32 * nz, ed.h as f32 * nz) / 2.0)
+                        - rect.center();
+                }
+                self.fp_zoom = nz;
+            }
+        }
+        // Desplazar: botón del medio, o Shift+arrastre (portátiles sin rueda).
+        let shift = ui.input(|i| i.modifiers.shift);
+        let panning = resp.dragged_by(egui::PointerButton::Middle)
+            || (shift && resp.dragged_by(egui::PointerButton::Primary));
+        if panning {
+            self.fp_pan += resp.drag_delta();
+        }
+        let tile = self.fp_zoom;
+        let sub = tile / ed.res as f32;
+        let img = egui::Rect::from_center_size(
+            rect.center() + self.fp_pan,
+            egui::vec2(ed.w as f32 * tile, ed.h as f32 * tile),
+        );
+
+        // ── fondo ─────────────────────────────────────────────────────────────
+        // Damero: sin él, una zona transparente del sprite y una zona sin pintar
+        // se ven exactamente igual.
+        for r in 0..ed.h {
+            for c in 0..ed.w {
+                if (c + r) % 2 == 0 {
+                    continue;
+                }
+                painter.rect_filled(
+                    egui::Rect::from_min_size(
+                        img.min + egui::vec2(c as f32 * tile, r as f32 * tile),
+                        egui::vec2(tile, tile),
+                    ),
+                    0.0,
+                    egui::Color32::from_gray(48),
+                );
+            }
+        }
+        if let Some((id, uv)) = backdrop {
+            painter.image(id, img, uv, egui::Color32::WHITE);
+        }
+        let cell_rect = |c: u32, r: u32| {
+            egui::Rect::from_min_size(
+                img.min + egui::vec2(c as f32 * sub, r as f32 * sub),
+                egui::vec2(sub, sub),
+            )
+        };
+        let fill = |set: &FpSet, color: egui::Color32| {
+            for &(c, r) in set {
+                painter.rect_filled(cell_rect(c, r), 0.0, color);
+            }
+        };
+        // La zona va DEBAJO: es contexto, no le tapa la cara a la colisión.
+        let a = |c: egui::Color32, alpha: u8| {
+            egui::Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), alpha)
+        };
+        fill(&ed.zona, a(FpBrush::Zona.color(), 90));
+        fill(&ed.solid, a(FpBrush::Solid.color(), 120));
+        fill(&ed.step, a(FpBrush::Step.color(), 120));
+
+        // ── grilla ────────────────────────────────────────────────────────────
+        // La fina (sub-celdas) tenue, la del TILE marcada: un tile es un metro
+        // del mundo. Por debajo de 4 px por sub-celda la fina es ruido.
+        if ed.res > 1 && sub >= 4.0 {
+            let fino = egui::Stroke::new(0.5, egui::Color32::from_gray(80));
+            for i in 1..cols {
+                let x = img.min.x + i as f32 * sub;
+                painter.line_segment([egui::pos2(x, img.min.y), egui::pos2(x, img.max.y)], fino);
+            }
+            for i in 1..rows {
+                let y = img.min.y + i as f32 * sub;
+                painter.line_segment([egui::pos2(img.min.x, y), egui::pos2(img.max.x, y)], fino);
+            }
+        }
+        for r in 0..ed.h {
+            for c in 0..ed.w {
+                let cr = egui::Rect::from_min_size(
+                    img.min + egui::vec2(c as f32 * tile, r as f32 * tile),
+                    egui::vec2(tile, tile),
+                );
+                painter.rect_stroke(cr, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(120)));
+                if c == ed.ax && r == ed.az {
+                    painter.rect_stroke(
+                        cr,
+                        0.0,
+                        egui::Stroke::new(2.5, egui::Color32::from_rgb(60, 200, 220)),
+                    );
+                }
+            }
+        }
+
+        // ── interacción ───────────────────────────────────────────────────────
+        let to_cell = |p: egui::Pos2| -> Option<(u32, u32)> {
+            let (c, r) = ((p.x - img.min.x) / sub, (p.y - img.min.y) / sub);
+            (c >= 0.0 && r >= 0.0 && (c as u32) < cols && (r as u32) < rows)
+                .then(|| (c as u32, r as u32))
+        };
+        let to_sub = |p: egui::Pos2| ((p.x - img.min.x) / sub, (p.y - img.min.y) / sub);
+        let brush = self.fp_brush;
+        let erase = brush == FpBrush::Erase || ui.input(|i| i.modifiers.command && !shift);
+        let color = if erase { FpBrush::Erase.color() } else { brush.color() };
+
+        // Marca la celda bajo el cursor: sin esto no sabés dónde vas a pintar
+        // cuando el sprite es oscuro.
+        if let Some(p) = resp.hover_pos() {
+            if let Some((c, r)) = to_cell(p) {
+                painter.rect_stroke(cell_rect(c, r), 0.0, egui::Stroke::new(1.5, color));
+            }
+        }
+
+        if !panning {
+            match self.fp_tool {
+                FpTool::Libre => {
+                    // Se pinta desde el frame en que APRETÁS, no desde el
+                    // primero en que egui decide que es un arrastre: si no, la
+                    // celda donde hiciste clic se queda sin pintar y el trazo
+                    // empieza dos celdas más allá.
+                    let apretado = resp.is_pointer_button_down_on()
+                        && ui.input(|i| i.pointer.primary_down())
+                        && !shift; // Shift es desplazar la vista, no pintar
+                    if !apretado && !resp.clicked() {
+                        self.fp_last = None;
+                    }
+                    if let Some(p) = resp.interact_pointer_pos() {
+                        if (apretado || resp.clicked()) && !resp.secondary_clicked() {
+                            let (fc, fr) = to_sub(p);
+                            let now = (fc.floor() as i32, fr.floor() as i32);
+                            let from = self.fp_last.unwrap_or(now);
+                            let grosor = self.fp_size.max(1);
+                            for (c, r) in line_cells(from, now) {
+                                for dy in 0..grosor {
+                                    for dx in 0..grosor {
+                                        let (px, py) =
+                                            (c + dx - grosor / 2, r + dy - grosor / 2);
+                                        if px < 0 || py < 0 {
+                                            continue;
+                                        }
+                                        let cell = (px as u32, py as u32);
+                                        if cell.0 < cols && cell.1 < rows {
+                                            changed |= fp_apply(ed, cell, brush, erase);
+                                        }
+                                    }
+                                }
+                            }
+                            self.fp_last = Some(now);
+                        }
+                    }
+                }
+                FpTool::Rect => {
+                    // La esquina se fija al APRETAR (igual que arriba), así un
+                    // clic suelto es un rectángulo de una celda y no un gesto
+                    // perdido.
+                    if self.fp_rect0.is_none()
+                        && resp.is_pointer_button_down_on()
+                        && ui.input(|i| i.pointer.primary_down())
+                        && !shift
+                    {
+                        self.fp_rect0 = resp.interact_pointer_pos().and_then(to_cell);
+                    }
+                    if let (Some(a0), Some(p)) = (self.fp_rect0, resp.interact_pointer_pos()) {
+                        if let Some(b0) = to_cell(p) {
+                            let (c0, c1) = (a0.0.min(b0.0), a0.0.max(b0.0));
+                            let (r0, r1) = (a0.1.min(b0.1), a0.1.max(b0.1));
+                            let vista = egui::Rect::from_min_max(
+                                cell_rect(c0, r0).min,
+                                cell_rect(c1, r1).max,
+                            );
+                            painter.rect_stroke(vista, 0.0, egui::Stroke::new(2.0, color));
+                            if resp.drag_stopped() || resp.clicked() {
+                                for r in r0..=r1 {
+                                    for c in c0..=c1 {
+                                        changed |= fp_apply(ed, (c, r), brush, erase);
+                                    }
+                                }
+                                self.fp_rect0 = None;
+                            }
+                        }
+                    }
+                    if resp.drag_stopped() {
+                        self.fp_rect0 = None;
+                    }
+                }
+                FpTool::Pluma => {
+                    // Vértices en coordenadas de sub-celda: sobreviven al zoom y
+                    // al desplazamiento mientras dibujás.
+                    let mut cerrar = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        self.fp_pen.clear();
+                    }
+                    if resp.secondary_clicked() {
+                        self.fp_pen.pop();
+                    } else if resp.double_clicked() {
+                        cerrar = true;
+                    } else if resp.clicked() {
+                        if let Some(p) = resp.interact_pointer_pos() {
+                            let v = to_sub(p);
+                            // Clic sobre el primer vértice = cerrar, como en
+                            // cualquier editor vectorial.
+                            let sobre_inicio = self.fp_pen.first().is_some_and(|f| {
+                                (f.0 - v.0).abs() < 0.75 && (f.1 - v.1).abs() < 0.75
+                            });
+                            if sobre_inicio && self.fp_pen.len() >= 3 {
+                                cerrar = true;
+                            } else {
+                                self.fp_pen.push(v);
+                            }
+                        }
+                    }
+                    if cerrar && self.fp_pen.len() >= 3 {
+                        for cell in poly_cells(&self.fp_pen, cols, rows) {
+                            changed |= fp_apply(ed, cell, brush, erase);
+                        }
+                        self.fp_pen.clear();
+                    }
+                    // Trazo en curso: vértices, lados y la línea de goma hasta el
+                    // cursor.
+                    let to_screen =
+                        |v: (f32, f32)| img.min + egui::vec2(v.0 * sub, v.1 * sub);
+                    let trazo = egui::Stroke::new(2.0, color);
+                    for par in self.fp_pen.windows(2) {
+                        painter.line_segment([to_screen(par[0]), to_screen(par[1])], trazo);
+                    }
+                    if let (Some(&ultimo), Some(p)) = (self.fp_pen.last(), resp.hover_pos()) {
+                        painter.line_segment(
+                            [to_screen(ultimo), p],
+                            egui::Stroke::new(1.0, a(color, 140)),
+                        );
+                        if self.fp_pen.len() >= 2 {
+                            painter.line_segment(
+                                [p, to_screen(self.fp_pen[0])],
+                                egui::Stroke::new(1.0, a(color, 70)),
+                            );
+                        }
+                    }
+                    for (i, &v) in self.fp_pen.iter().enumerate() {
+                        painter.circle_filled(
+                            to_screen(v),
+                            if i == 0 { 5.0 } else { 3.5 },
+                            if i == 0 { egui::Color32::WHITE } else { color },
+                        );
+                    }
+                }
+                FpTool::Balde => {
+                    if resp.clicked() && !resp.secondary_clicked() {
+                        if let Some(cell) = resp.interact_pointer_pos().and_then(to_cell) {
+                            // "Igual" se mide en el eje que estás pintando: con
+                            // 🟦 rellenás la región sin zona, con 🟥 la región
+                            // que no frena.
+                            let semilla = fp_state(ed, cell, brush);
+                            let region = flood_cells(cell, cols, rows, |c| {
+                                fp_state(ed, c, brush) == semilla
+                            });
+                            for c in region {
+                                changed |= fp_apply(ed, c, brush, erase);
+                            }
+                        }
+                    }
+                }
+            }
+            // El ancla es un TILE (la celda que apuntás al colocar el objeto). La
+            // pluma se queda el clic derecho para quitar vértices.
+            if resp.secondary_clicked() && self.fp_tool != FpTool::Pluma {
+                if let Some(cell) = resp.interact_pointer_pos().and_then(to_cell) {
+                    ed.ax = cell.0 / ed.res;
+                    ed.az = cell.1 / ed.res;
+                    changed = true;
+                }
+            }
+        }
+        changed
+    }
+
+    /// Tamaño en celdas con el que abrir la huella de un slot: su recorte, su
+    /// tira, su pose representativa — o, si el arte es un PNG suelto, el tamaño
+    /// de la imagen medido en tiles.
+    ///
+    /// Los dos casos que faltaban dolían igual: los assets con POSES no tienen
+    /// `rect`, y un PNG suelto no tiene ninguno de los tres. Ambos abrían en 1×1,
+    /// y una grilla de 1×1 aplasta un dibujo de 5×4 dentro de una sola casilla:
+    /// lo único que podías pintar era el cuadrado donde se coloca el objeto, que
+    /// es justo lo que se veía mal. El tamaño del PNG se mide leyendo la cabecera
+    /// (no la imagen entera) y se cachea: esto se llama en cada frame.
+    fn slot_cells_for_footprint(&mut self, key: &str) -> (u32, u32) {
+        let Some(v) = self.manifest.get(key) else { return (1, 1) };
+        let cells = match v {
+            ha_assets::ArtValue::Full(e) => e
+                .rect
+                .map(|r| (r.w, r.h))
+                .or_else(|| e.strip.map(|s| (s.w, s.h)))
+                .or_else(|| {
+                    let m = e.poses.as_ref()?;
+                    let p = m
+                        .get("idle_down")
+                        .or_else(|| m.get("center"))
+                        .or_else(|| m.get("closed"))
+                        .or_else(|| m.values().next())?;
+                    Some((p.rect.w, p.rect.h))
+                }),
+            _ => None,
+        };
+        let cells = match cells {
+            Some(c) => c,
+            // PNG suelto: el sprite ES la imagen, así que sus tiles salen de los
+            // píxeles.
+            None => {
+                let (png, grid) = (v.png().to_string(), v.grid());
+                match self.png_cells.get(&png) {
+                    Some(&c) => c,
+                    None => {
+                        let c = image::image_dimensions(
+                            PathBuf::from(&self.game_assets).join(&png),
+                        )
+                        .map(|(pw, ph)| {
+                            (
+                                pw.div_ceil(grid.0.max(1)).max(1),
+                                ph.div_ceil(grid.1.max(1)).max(1),
+                            )
+                        })
+                        .unwrap_or((1, 1));
+                        self.png_cells.insert(png, c);
+                        c
+                    }
+                }
+            }
+        };
+        (cells.0.clamp(1, 12), cells.1.clamp(1, 12))
+    }
+
+    /// Textura + UV del recorte que el JUEGO va a dibujar para este slot, para
+    /// usarlo de fondo del lienzo de la huella. Cubre los tres casos: recorte
+    /// estático, primer frame de una tira, y pose representativa (que puede
+    /// vivir en otra hoja).
+    /// **Propone la huella leyendo el ALFA del sprite.**
+    ///
+    /// Pintar 400 assets a mano no lo hace nadie, y una huella "de un tile" para
+    /// todo es lo que produce las colisiones que se sienten mal: una gasolinera
+    /// bloqueando el pasadizo que su propio dibujo muestra abierto. Esto mira los
+    /// pixeles: una sub-celda se propone SOLIDA si al menos `umbral` de sus
+    /// pixeles son opacos.
+    ///
+    /// No inventa nada — sale del grafico, que es la unica fuente honesta — y es
+    /// una PROPUESTA: se pinta sobre el lienzo y la corregis a mano (borrar el
+    /// techo, abrir un paso). Por eso no toca el manifest hasta que aceptes.
+    ///
+    /// **Ojo con la raíz.** Las rutas del manifest cuelgan de `game_assets`
+    /// (`.../ha-game/assets`), no de `art_root` (la carpeta de PNGs sueltos que
+    /// mirás en el navegador). Esto leía de `art_root` y por eso el botón fallaba
+    /// con un "no pude leer el PNG" en casi todos los slots.
+    fn huella_desde_alfa(
+        &mut self,
+        key: &str,
+        w: u32,
+        h: u32,
+        res: u32,
+        umbral: f32,
+    ) -> Option<std::collections::HashSet<(u32, u32)>> {
+        let v = self.manifest.get(key)?.clone();
+        // El mismo recorte que ve el juego: estatico, tira, pose representativa
+        // — o el PNG entero si el arte es un archivo suelto (ese caso devolvía
+        // None, y por eso "perfilar al sprite" no hacía nada en esos slots).
+        let recorte = match &v {
+            ha_assets::ArtValue::Full(e) => {
+                let grid = e.grid.unwrap_or((32, 32));
+                if let Some(r) = e.rect {
+                    Some((r, e.png.clone(), grid))
+                } else if let Some(s) = e.strip {
+                    Some((s, e.png.clone(), grid))
+                } else if let Some(m) = &e.poses {
+                    let p = m
+                        .get("idle_down")
+                        .or_else(|| m.get("center"))
+                        .or_else(|| m.get("closed"))
+                        .or_else(|| m.values().next())?;
+                    Some((
+                        p.rect,
+                        p.png.clone().unwrap_or_else(|| e.png.clone()),
+                        p.grid.unwrap_or(grid),
+                    ))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let png = recorte.as_ref().map(|(_, p, _)| p.clone()).unwrap_or_else(|| v.png().to_string());
+        let ruta = std::path::Path::new(&self.game_assets).join(&png);
+        let img = image::open(&ruta).ok()?.to_rgba8();
+        let (x0, y0, pw, ph) = match recorte {
+            Some((rect, _, grid)) => {
+                (rect.col * grid.0, rect.row * grid.1, rect.w * grid.0, rect.h * grid.1)
+            }
+            None => (0, 0, img.width(), img.height()),
+        };
+        if pw == 0 || ph == 0 {
+            return None;
+        }
+        let (sub_w, sub_h) = (w * res, h * res);
+        let mut out = std::collections::HashSet::new();
+        for sy in 0..sub_h {
+            for sx in 0..sub_w {
+                // Rectangulo de pixeles que le toca a esta sub-celda.
+                let px0 = x0 + pw * sx / sub_w;
+                let px1 = x0 + pw * (sx + 1) / sub_w;
+                let py0 = y0 + ph * sy / sub_h;
+                let py1 = y0 + ph * (sy + 1) / sub_h;
+                let (mut opacos, mut total) = (0u32, 0u32);
+                for py in py0..py1.max(py0 + 1) {
+                    for px in px0..px1.max(px0 + 1) {
+                        if px >= img.width() || py >= img.height() {
+                            continue;
+                        }
+                        total += 1;
+                        if img.get_pixel(px, py).0[3] > 24 {
+                            opacos += 1;
+                        }
+                    }
+                }
+                if total > 0 && (opacos as f32 / total as f32) >= umbral {
+                    out.insert((sx, sy));
+                }
+            }
+        }
+        Some(out)
+    }
+
+    fn footprint_backdrop(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+    ) -> Option<(egui::TextureId, egui::Rect)> {
+        let v = self.manifest.get(key)?.clone();
+        let ha_assets::ArtValue::Full(e) = &v else {
+            let (_, tex) = self.tex.clone()?;
+            return Some((tex.id(), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0))));
+        };
+        let slot_grid = e.grid.unwrap_or((32, 32));
+        // Rect en celdas + la hoja de la que sale.
+        let (rect, sheet, grid) = if let Some(r) = e.rect {
+            (r, e.png.clone(), slot_grid)
+        } else if let Some(s) = e.strip {
+            (s, e.png.clone(), slot_grid)
+        } else if let Some(m) = &e.poses {
+            let p = m
+                .get("idle_down")
+                .or_else(|| m.get("center"))
+                .or_else(|| m.get("closed"))
+                .or_else(|| m.values().next())?;
+            (
+                p.rect,
+                p.png.clone().unwrap_or_else(|| e.png.clone()),
+                p.grid.unwrap_or(slot_grid),
+            )
+        } else {
+            // PNG suelto: la imagen entera es el sprite.
+            let (_, tex) = self.tex.clone()?;
+            return Some((tex.id(), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0))));
+        };
+        let tex = self.tex_for(ctx, &sheet)?;
+        let img = tex.size_vec2();
+        let uv = egui::Rect::from_min_max(
+            egui::pos2((rect.col * grid.0) as f32 / img.x, (rect.row * grid.1) as f32 / img.y),
+            egui::pos2(
+                ((rect.col + rect.w) * grid.0) as f32 / img.x,
+                ((rect.row + rect.h) * grid.1) as f32 / img.y,
+            ),
+        );
+        Some((tex.id(), uv))
+    }
+
     fn light_panel(&mut self, ui: &mut egui::Ui, key: &str) {
         let current = self.manifest.emission(key).copied();
         let mut on = current.is_some();
@@ -1449,13 +3182,30 @@ impl EditorApp {
             }
         }
         // Claves del manifest que no son slots nativos → agregarlas (custom persist).
+        // Una clave de variante (`objeto#variante`) siembra su OBJETO en la lista y
+        // se declara como variante si venía sin declarar (manifest escrito a mano o
+        // por un script): así nada del archivo queda invisible en el editor.
         let keys: Vec<String> = self.manifest.sprites.keys().cloned().collect();
         for k in keys {
-            self.ensure_slot(&k);
+            match ha_assets::split_variant(&k) {
+                (base, Some(v)) => {
+                    let base = base.to_string();
+                    self.ensure_slot(&base);
+                    if !self.manifest.variants(&base).iter().any(|d| d.id == v) {
+                        self.manifest.declare_variant(&base, v, "");
+                    }
+                }
+                (base, None) => self.ensure_slot(base),
+            }
+        }
+        // Un objeto declarado con variantes también entra en la lista aunque no
+        // tenga ni un PNG todavía.
+        let bases: Vec<String> = self.manifest.objects.keys().cloned().collect();
+        for b in bases {
+            self.ensure_slot(&b);
         }
         if let Some(ctx) = ctx {
-            if let Some(i) = self.selected {
-                let key = self.slots[i].key;
+            if let Some(key) = self.current_key() {
                 self.tex = self.preview_bound(ctx, key);
             }
         }
@@ -1474,7 +3224,12 @@ impl EditorApp {
     fn select_slot(&mut self, ctx: &egui::Context, i: usize) {
         self.selected = Some(i);
         self.confirm_full_png = false; // limpiar confirmación pendiente al cambiar de slot
-        let slot = self.slots[i];
+        // Con una variante activa, lo que se sincroniza es SU entrada (cada
+        // variante puede tener su propia animación).
+        let mut slot = self.slots[i];
+        if let Some(key) = self.current_key() {
+            slot.key = key;
+        }
         // Sincronizar buffers de animación desde el binding (o el hint del slot).
         match self.manifest.get(slot.key).and_then(|v| v.anim()) {
             Some(a) => {
@@ -1497,8 +3252,11 @@ impl EditorApp {
     }
 
     fn bind_png(&mut self, ctx: &egui::Context, slot: SlotDef, src: &Path) {
-        // Copiar el PNG fuente al árbol del juego como art/<key>.png.
-        let rel = format!("art/{}.png", slot.key);
+        // Copiar el PNG fuente al árbol del juego como art/<key>.png. En una
+        // variante la clave trae `#` (`floor/piso#madera`): en el NOMBRE de archivo
+        // va como `__` (hay shells/herramientas que tratan `#` como comentario), la
+        // clave del manifest sí lo conserva.
+        let rel = format!("art/{}.png", slot.key.replace(ha_assets::VARIANT_SEP, "__"));
         let dest = PathBuf::from(&self.game_assets).join(&rel);
         if let Some(parent) = dest.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
@@ -1710,9 +3468,14 @@ impl EditorApp {
             .max_height(320.0)
             .show(ui, |ui| {
                 egui::Grid::new("anim_matrix").spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
-                    ui.label("");
-                    for (_d, arrow) in dirs {
-                        ui.label(egui::RichText::new(*arrow).strong());
+                    // Cabecera con FLECHA Y NOMBRE. Sólo con la flecha, las
+                    // columnas se leían como cuadraditos vacíos y no había forma
+                    // de saber cuál era cuál sin pasar el mouse por encima.
+                    ui.label(egui::RichText::new("acción").strong());
+                    for (d, arrow) in dirs {
+                        let name = dir_label(d);
+                        ui.label(egui::RichText::new(format!("{arrow} {name}")).strong())
+                            .on_hover_text(format!("la animación se guarda como accion_{d}"));
                     }
                     ui.label(egui::RichText::new("").weak());
                     ui.end_row();
@@ -1907,13 +3670,39 @@ impl EditorApp {
                     .weak()
                     .small(),
                 );
+                // LOS PNG YA ESTÁN CARGADOS: no hay que volver a importarlos por
+                // un diálogo. Los de la lista de la derecha (con el filtro que
+                // tengas puesto) entran directo. Escribís "puerta" en el buscador
+                // de la derecha y tomás las tres animaciones de una.
+                let picked = self.filtered_pngs();
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button("📁 Elegir carpeta…").clicked() {
+                    let take_list = format!("⬅ Tomar los {} PNG de la lista", picked.len());
+                    if ui
+                        .add_enabled(!picked.is_empty(), egui::Button::new(take_list))
+                        .on_hover_text(
+                            "Los PNG del panel derecho tal como los estás filtrando ahora. \
+                             Filtrá por el nombre de tu objeto y entran todos sus estados juntos.",
+                        )
+                        .clicked()
+                    {
+                        self.plan_import(&picked);
+                    }
+                    if let Some(p) = self.selected_png.clone() {
+                        if ui
+                            .button("＋ añadir el candidato")
+                            .on_hover_text("el PNG que tenés seleccionado a la derecha")
+                            .clicked()
+                        {
+                            self.add_to_import_plan(&[p]);
+                        }
+                    }
+                    ui.separator();
+                    if ui.button("📁 carpeta…").clicked() {
                         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
                             self.plan_import(&list_pngs(&dir));
                         }
                     }
-                    if ui.button("🖼 Elegir archivos…").clicked() {
+                    if ui.button("🖼 archivos…").clicked() {
                         if let Some(files) =
                             rfd::FileDialog::new().add_filter("PNG", &["png"]).pick_files()
                         {
@@ -1966,11 +3755,36 @@ impl EditorApp {
             });
     }
 
+    /// Los PNG de la lista de la derecha con el filtro que hay puesto ahora. Es
+    /// la MISMA lista que ves, así que "tomar los de la lista" hace exactamente
+    /// lo que promete.
+    fn filtered_pngs(&self) -> Vec<PathBuf> {
+        let pf = self.png_filter.to_lowercase();
+        self.pngs
+            .iter()
+            .filter(|p| {
+                pf.is_empty()
+                    || p.file_name()
+                        .map(|n| n.to_string_lossy().to_lowercase().contains(&pf))
+                        .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Arma el plan de importación: nombre deducido + frames/grilla detectados de
     /// las dimensiones de cada PNG. No escribe nada todavía.
     fn plan_import(&mut self, paths: &[PathBuf]) {
         self.import_plan.clear();
+        self.add_to_import_plan(paths);
+    }
+
+    /// Suma PNG al plan que ya haya (sin duplicar), para ir armándolo de a poco.
+    fn add_to_import_plan(&mut self, paths: &[PathBuf]) {
         for p in paths {
+            if self.import_plan.iter().any(|i| &i.path == p) {
+                continue;
+            }
             let Ok(img) = image::open(p) else { continue };
             let (grid, frames, dir) = detect_strip(img.width(), img.height());
             let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
@@ -2094,14 +3908,53 @@ impl EditorApp {
                 });
 
                 let names = bulk_names(actions, dirs, self.bulk_order, self.bulk_rows as usize);
-                ui.label(
-                    egui::RichText::new(format!(
-                        "se escribirán: {}",
-                        names.join(", ")
-                    ))
-                    .weak()
-                    .small(),
-                );
+                // TABLA, no una lista de nombres pegados con comas: acá se ve
+                // fila por fila del atlas qué animación le va a tocar y de qué
+                // celda va a salir. Es lo que hay que poder comprobar ANTES de
+                // escribir 32 poses de un botonazo.
+                let defined: std::collections::BTreeSet<String> = self
+                    .manifest
+                    .poses(slot.key)
+                    .map(|m| m.keys().cloned().collect())
+                    .unwrap_or_default();
+                egui::ScrollArea::vertical().id_salt("bulk_preview").max_height(200.0).show(ui, |ui| {
+                    egui::Grid::new("bulk_grid").striped(true).spacing([10.0, 2.0]).show(ui, |ui| {
+                        ui.label(egui::RichText::new("fila").strong().small());
+                        ui.label(egui::RichText::new("animación").strong().small());
+                        ui.label(egui::RichText::new("sale de").strong().small());
+                        ui.label(egui::RichText::new("").strong().small());
+                        ui.end_row();
+                        for (i, name) in names.iter().enumerate() {
+                            let i = i as u32;
+                            let rect = match self.strip_dir {
+                                StripDir::Right => CellRect { row: sr.row + i * sr.h.max(1), ..sr },
+                                StripDir::Down => CellRect { col: sr.col + i * sr.w.max(1), ..sr },
+                            };
+                            ui.label(egui::RichText::new(format!("{}", i + 1)).weak().small());
+                            ui.label(egui::RichText::new(name).small());
+                            ui.label(
+                                egui::RichText::new(format!("col{} row{}", rect.col, rect.row))
+                                    .weak()
+                                    .small()
+                                    .monospace(),
+                            );
+                            ui.label(
+                                egui::RichText::new(if defined.contains(name) {
+                                    "⚠ ya existe — se reemplaza"
+                                } else {
+                                    "nueva"
+                                })
+                                .small()
+                                .color(if defined.contains(name) {
+                                    egui::Color32::from_rgb(255, 200, 100)
+                                } else {
+                                    egui::Color32::from_gray(140)
+                                }),
+                            );
+                            ui.end_row();
+                        }
+                    });
+                });
                 let Some(png) = self.selected_png.clone() else {
                     ui.label(egui::RichText::new("(elegí un PNG candidato)").weak());
                     return;
@@ -2176,12 +4029,20 @@ impl EditorApp {
         let base = self.preview_px.max(48.0);
         let aspect = fw as f32 / fh as f32;
         let (dw, dh) = if aspect >= 1.0 { (base, base / aspect) } else { (base * aspect, base) };
-        ui.horizontal(|ui| {
-            ui.label("▶ preview animado:");
+        // En COLUMNA: vive a la derecha del lienzo, así que crece hacia abajo y no
+        // se come el ancho del sprite que estás recortando.
+        ui.vertical(|ui| {
+            ui.label(egui::RichText::new("▶ preview animado").strong());
             ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), egui::vec2(dw, dh))).uv(uv));
-            ui.label("tamaño").on_hover_text("agrandá el preview para ver mejor la animación");
-            ui.add(egui::DragValue::new(&mut self.preview_px).range(48.0..=640.0).speed(4.0));
-            ui.label(format!("· {frames} frames de {fw}×{fh} @ {:.0} fps", self.anim_fps));
+            ui.label(
+                egui::RichText::new(format!("{frames} frames de {fw}×{fh} @ {:.0} fps", self.anim_fps))
+                    .weak()
+                    .small(),
+            );
+            ui.horizontal(|ui| {
+                ui.label("tamaño").on_hover_text("agrandá el preview para ver mejor la animación");
+                ui.add(egui::DragValue::new(&mut self.preview_px).range(48.0..=640.0).speed(4.0));
+            });
         });
         ui.ctx().request_repaint(); // sigue animando
     }
@@ -2190,61 +4051,521 @@ impl EditorApp {
     /// muestra una representativa (idle_down o la 1ª) ANIMADA y recortada del atlas
     /// — así confirmás al toque que tus poses quedaron guardadas, en vez de la hoja
     /// cruda. Sin poses, la imagen tal cual (recorte estático / tira / plano).
-    fn bound_preview(&mut self, ui: &mut egui::Ui, slot: SlotDef, max_px: f32) {
-        let Some((_, tex)) = self.tex.clone() else {
-            ui.label(egui::RichText::new("— procedural —").weak());
-            return;
+    // ── ficha del asset ─────────────────────────────────────────────────────
+    // Lo primero que aparece al clickear el objeto en la lista de la izquierda:
+    // el sprite tal como lo dibuja el juego, la hoja de la que sale (con el
+    // recorte marcado) y los datos que el juego va a leer. La promesa es que lo
+    // que se ve acá es lo que pasa allá — sobre todo la COLISIÓN, que es lo que
+    // se viene a dibujar.
+
+    /// **Qué va a hacer el juego con este asset**: texto humano + si frena o no.
+    /// Vive aparte de la UI porque es la promesa que la ficha le hace al usuario
+    /// y eso se testea. Espeja `ha-game::world2d::decor_blocks`: primero la
+    /// huella pintada, después el override de la casilla, y al final el default
+    /// por capa (`Pared` frena, el resto no) o por tipo (árbol frena, roca no).
+    fn resumen_colision(&self, key: &str) -> (String, bool) {
+        if let Some(fp) = self.manifest.footprint(key).filter(|f| !f.is_empty()) {
+            let tiles = fp
+                .solid
+                .iter()
+                .map(|&(c, r)| (c / fp.res(), r / fp.res()))
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            return (
+                format!(
+                    "huella pintada — {} sub-celdas sólidas ({tiles} tiles frenan) · {} de escalón",
+                    fp.solid.len(),
+                    fp.step.len()
+                ),
+                !fp.solid.is_empty(),
+            );
+        }
+        match self.manifest.collides(key) {
+            Some(true) => ("sólido: frena en toda su celda (casilla del editor)".into(), true),
+            Some(false) => ("se pisa: no frena a nadie (casilla del editor)".into(), false),
+            None => {
+                // Default del juego. El de la capa es el que aplica a lo que se
+                // planta desde el editor de mundo; el de tipo, a lo procedural.
+                let (base, _) = ha_assets::split_variant(key);
+                if self.manifest.slot_layer(key) == Some(ArtLayer::Wall) {
+                    ("default de capa Pared: frena en su celda".into(), true)
+                } else if base.contains("tree") {
+                    ("default de árbol: el tronco frena en su celda".into(), true)
+                } else {
+                    ("default: no frena (pintale la huella si tiene que frenar)".into(), false)
+                }
+            }
+        }
+    }
+
+    /// Hoja de la que sale el sprite y su recorte EN PÍXELES — lo mismo que
+    /// elige el juego (`rect` → pose representativa → tira → imagen entera).
+    /// `None` en el recorte = la hoja entera ES el sprite.
+    fn atlas_vista(&mut self, ctx: &egui::Context, key: &str) -> Option<(String, egui::TextureHandle, Option<[u32; 4]>, (u32, u32))> {
+        let v = self.manifest.get(key)?.clone();
+        let ha_assets::ArtValue::Full(e) = &v else {
+            let rel = v.png().to_string();
+            let tex = self.tex_for(ctx, &rel)?;
+            return Some((rel, tex, None, (32, 32)));
         };
-        // Pose representativa (idle_down si existe, si no la primera).
-        let rep: Option<(String, Pose)> = self.manifest.poses(slot.key).and_then(|m| {
-            m.get("idle_down")
-                .map(|p| ("idle_down".to_string(), p.clone()))
-                .or_else(|| m.iter().next().map(|(k, v)| (k.clone(), v.clone())))
-        });
-        let Some((name, pose)) = rep else {
-            // Sin poses: la imagen entera (recorte estático / tira / plano).
-            let sz = preview_size(&tex, max_px);
-            ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), sz)));
-            return;
+        let slot_grid = e.grid.unwrap_or((32, 32));
+        let (rect, sheet, grid) = if let Some(r) = e.rect {
+            (Some(r), e.png.clone(), slot_grid)
+        } else if let Some(m) = &e.poses {
+            match m
+                .get("idle_down")
+                .or_else(|| m.get("center"))
+                .or_else(|| m.get("closed"))
+                .or_else(|| m.values().next())
+            {
+                Some(p) => (
+                    Some(p.rect),
+                    p.png.clone().unwrap_or_else(|| e.png.clone()),
+                    p.grid.unwrap_or(slot_grid),
+                ),
+                None => (None, e.png.clone(), slot_grid),
+            }
+        } else if let Some(s) = e.strip {
+            (Some(s), e.png.clone(), slot_grid)
+        } else {
+            (None, e.png.clone(), slot_grid)
         };
-        let slot_grid = self.manifest.get(slot.key).map(|v| v.grid()).unwrap_or((32, 32));
-        let slot_png = self.manifest.get(slot.key).map(|v| v.png().to_string()).unwrap_or_default();
-        // La pose representativa puede vivir en su propia hoja.
-        let grid = pose.grid_or(slot_grid);
-        let tex = match self.tex_for(ui.ctx(), pose.png_or(&slot_png)) {
-            Some(t) => t,
-            None => tex,
+        let tex = self.tex_for(ctx, &sheet)?;
+        let px = rect.map(|r| [r.col * grid.0, r.row * grid.1, r.w * grid.0, r.h * grid.1]);
+        Some((sheet, tex, px, grid))
+    }
+
+    /// El recorte del slot **en el frame que toca ahora**: si el arte se dibujó
+    /// animado, la ficha lo muestra animado (regla del proyecto: nunca congelado).
+    /// Sin animación cae al recorte fijo de `footprint_backdrop`.
+    fn ficha_backdrop(
+        &mut self,
+        ui: &egui::Ui,
+        key: &str,
+    ) -> Option<(egui::TextureId, egui::Rect)> {
+        let v = self.manifest.get(key)?.clone();
+        let ha_assets::ArtValue::Full(e) = &v else { return self.footprint_backdrop(ui.ctx(), key) };
+        let slot_grid = e.grid.unwrap_or((32, 32));
+        // Misma elección que el juego: pose representativa, si no la tira.
+        let (rect, sheet, grid, anim, dir) = if let Some(m) = &e.poses {
+            let p = m
+                .get("idle_down")
+                .or_else(|| m.get("center"))
+                .or_else(|| m.get("closed"))
+                .or_else(|| m.values().next())?;
+            (
+                p.rect,
+                p.png.clone().unwrap_or_else(|| e.png.clone()),
+                p.grid.unwrap_or(slot_grid),
+                p.anim,
+                p.dir.unwrap_or_default(),
+            )
+        } else if let Some(s) = e.strip {
+            (s, e.png.clone(), slot_grid, e.anim, e.strip_dir.unwrap_or_default())
+        } else {
+            return self.footprint_backdrop(ui.ctx(), key);
+        };
+        let Some(a) = anim.filter(|a| a.frames > 1) else {
+            return self.footprint_backdrop(ui.ctx(), key);
+        };
+        // Reloj del preview (compartido con el resto de las vistas animadas).
+        let dt = ui.input(|i| i.stable_dt).min(0.1);
+        self.bound_preview_t += dt * a.fps.max(0.1);
+        if self.bound_preview_t >= 1.0 {
+            let pasos = self.bound_preview_t.floor() as usize;
+            self.bound_preview_frame = (self.bound_preview_frame + pasos) % a.frames as usize;
+            self.bound_preview_t = self.bound_preview_t.fract();
+        }
+        ui.ctx().request_repaint();
+        let f = (self.bound_preview_frame as u32) % a.frames;
+        let (fw, fh) = (rect.w.max(1), rect.h.max(1));
+        let (fc, fr) = match dir {
+            StripDir::Right => (rect.col + f * fw, rect.row),
+            StripDir::Down => (rect.col, rect.row + f * fh),
+        };
+        let tex = self.tex_for(ui.ctx(), &sheet)?;
+        let img = tex.size_vec2();
+        Some((
+            tex.id(),
+            egui::Rect::from_min_max(
+                egui::pos2((fc * grid.0) as f32 / img.x, (fr * grid.1) as f32 / img.y),
+                egui::pos2(
+                    ((fc + fw) * grid.0) as f32 / img.x,
+                    ((fr + fh) * grid.1) as f32 / img.y,
+                ),
+            ),
+        ))
+    }
+
+    /// El sprite del slot con su huella encima, del porte que le corresponde en
+    /// tiles. Es el mismo dibujo que el lienzo de la huella, pero de sólo lectura
+    /// y sin desplegar nada: la respuesta a "¿qué va a haber en el juego?".
+    fn ficha_sprite(&mut self, ui: &mut egui::Ui, key: &str, max: f32) {
+        let backdrop = self.ficha_backdrop(ui, key);
+        let fp = self.manifest.footprint(key).cloned();
+        let zona = self
+            .manifest
+            .interaccion(key)
+            .map(|i| i.zona.clone())
+            .unwrap_or_default();
+        let (cw, ch) = match &fp {
+            Some(f) if f.w > 0 && f.h > 0 => (f.w, f.h),
+            _ => self.slot_cells_for_footprint(key),
+        };
+        let (cw, ch) = (cw.max(1), ch.max(1));
+        let aspect = cw as f32 / ch as f32;
+        let size = if aspect >= 1.0 {
+            egui::vec2(max, max / aspect)
+        } else {
+            egui::vec2(max * aspect, max)
+        };
+        let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+        let p = ui.painter_at(rect);
+        let tile = egui::vec2(rect.width() / cw as f32, rect.height() / ch as f32);
+        // Damero: una zona transparente del sprite y una zona vacía no se ven
+        // igual (es la misma razón que en el lienzo de la huella).
+        p.rect_filled(rect, 0.0, egui::Color32::from_gray(28));
+        for r in 0..ch {
+            for c in 0..cw {
+                if (c + r) % 2 == 0 {
+                    continue;
+                }
+                p.rect_filled(
+                    egui::Rect::from_min_size(
+                        rect.min + egui::vec2(c as f32 * tile.x, r as f32 * tile.y),
+                        tile,
+                    ),
+                    0.0,
+                    egui::Color32::from_gray(44),
+                );
+            }
+        }
+        match backdrop {
+            Some((id, uv)) => {
+                p.image(id, rect, uv, egui::Color32::WHITE);
+            }
+            None => {
+                p.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "— procedural —",
+                    egui::FontId::proportional(13.0),
+                    egui::Color32::from_gray(150),
+                );
+            }
+        }
+        if self.ficha_colision {
+            let res = fp.as_ref().map(|f| f.res()).unwrap_or(1).max(1);
+            let sub = egui::vec2(tile.x / res as f32, tile.y / res as f32);
+            let pinta = |set: &[(u32, u32)], color: egui::Color32, alpha: u8| {
+                for &(c, r) in set {
+                    p.rect_filled(
+                        egui::Rect::from_min_size(
+                            rect.min + egui::vec2(c as f32 * sub.x, r as f32 * sub.y),
+                            sub,
+                        ),
+                        0.0,
+                        egui::Color32::from_rgba_unmultiplied(
+                            color.r(),
+                            color.g(),
+                            color.b(),
+                            alpha,
+                        ),
+                    );
+                }
+            };
+            pinta(&zona, FpBrush::Zona.color(), 80);
+            if let Some(f) = &fp {
+                pinta(&f.solid, FpBrush::Solid.color(), 120);
+                pinta(&f.step, FpBrush::Step.color(), 120);
+            }
+        }
+        if self.ficha_grilla {
+            let st = egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(140, 140, 140, 110));
+            for c in 1..cw {
+                let x = rect.min.x + c as f32 * tile.x;
+                p.line_segment([egui::pos2(x, rect.min.y), egui::pos2(x, rect.max.y)], st);
+            }
+            for r in 1..ch {
+                let y = rect.min.y + r as f32 * tile.y;
+                p.line_segment([egui::pos2(rect.min.x, y), egui::pos2(rect.max.x, y)], st);
+            }
+            // Celda ANCLA: la que queda bajo el cursor al plantarlo en el mundo.
+            let (ax, az) = match &fp {
+                Some(f) => (f.ax, f.az),
+                None => ha_assets::CollisionFootprint::default_anchor(cw, ch),
+            };
+            p.rect_stroke(
+                egui::Rect::from_min_size(
+                    rect.min + egui::vec2(ax as f32 * tile.x, az as f32 * tile.y),
+                    tile,
+                ),
+                0.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 200, 220)),
+            );
+        }
+        p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(90)));
+    }
+
+    /// La HOJA de la que sale el sprite, entera, con el recorte marcado y el
+    /// resto apagado. Es lo que faltaba para poder dibujar la colisión mirando
+    /// el mismo pixel que ve el juego. Un clic la deja de candidata para
+    /// recortarla de nuevo abajo.
+    fn ficha_atlas(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, key: &str, max: f32) {
+        let Some((rel, tex, crop, grid)) = self.atlas_vista(ctx, key) else {
+            ui.label(egui::RichText::new("sin hoja asignada").weak());
+            return;
         };
         let img = tex.size_vec2();
-        let (frames, dir, fps) = match pose.anim {
-            Some(a) => (a.frames.max(1), pose.dir.unwrap_or_default(), a.fps),
-            None => (1, StripDir::Right, 1.0),
-        };
-        if frames > 1 {
-            let dt = ui.input(|i| i.stable_dt).min(0.1);
-            self.bound_preview_t += dt * fps.max(0.1);
-            if self.bound_preview_t >= 1.0 {
-                let steps = self.bound_preview_t.floor() as usize;
-                self.bound_preview_frame = (self.bound_preview_frame + steps) % frames as usize;
-                self.bound_preview_t = self.bound_preview_t.fract();
-            }
-            ui.ctx().request_repaint();
-        }
-        let f = if frames > 1 { (self.bound_preview_frame as u32) % frames } else { 0 };
-        let (fw, fh) = (pose.rect.w.max(1), pose.rect.h.max(1));
-        let (fc, fr) = match dir {
-            StripDir::Right => (pose.rect.col + f * fw, pose.rect.row),
-            StripDir::Down => (pose.rect.col, pose.rect.row + f * fh),
-        };
-        let uv = egui::Rect::from_min_max(
-            egui::pos2((fc * grid.0) as f32 / img.x, (fr * grid.1) as f32 / img.y),
-            egui::pos2(((fc + fw) * grid.0) as f32 / img.x, ((fr + fh) * grid.1) as f32 / img.y),
+        let escala = (max / img.x.max(1.0)).min(max / img.y.max(1.0)).min(4.0);
+        let size = img * escala;
+        let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+        let p = ui.painter_at(rect);
+        p.rect_filled(rect, 0.0, egui::Color32::from_gray(20));
+        p.image(
+            tex.id(),
+            rect,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
         );
-        let aspect = (fw * grid.0) as f32 / (fh * grid.1).max(1) as f32;
-        let (dw, dh) = if aspect >= 1.0 { (max_px, max_px / aspect) } else { (max_px * aspect, max_px) };
-        ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), egui::vec2(dw, dh))).uv(uv));
-        let tag = if frames > 1 { format!("▶ {name} ({frames}f)") } else { format!("{name}") };
-        ui.label(egui::RichText::new(tag).weak().small());
+        match crop {
+            Some([x, y, w, h]) => {
+                let sel = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(x as f32 * escala, y as f32 * escala),
+                    egui::vec2(w as f32 * escala, h as f32 * escala),
+                );
+                // Apagar TODO lo que no se usa: en un atlas de 40 tiles, saber
+                // cuál es el tuyo es la mitad del trabajo.
+                let velo = egui::Color32::from_rgba_unmultiplied(10, 10, 14, 170);
+                for r in [
+                    egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, sel.min.y)),
+                    egui::Rect::from_min_max(egui::pos2(rect.min.x, sel.max.y), rect.max),
+                    egui::Rect::from_min_max(
+                        egui::pos2(rect.min.x, sel.min.y),
+                        egui::pos2(sel.min.x, sel.max.y),
+                    ),
+                    egui::Rect::from_min_max(
+                        egui::pos2(sel.max.x, sel.min.y),
+                        egui::pos2(rect.max.x, sel.max.y),
+                    ),
+                ] {
+                    if r.width() > 0.0 && r.height() > 0.0 {
+                        p.rect_filled(r, 0.0, velo);
+                    }
+                }
+                p.rect_stroke(sel, 0.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 220, 60)));
+            }
+            None => {
+                p.rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 220, 60)),
+                );
+            }
+        }
+        p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(90)));
+        let hoja = rel.rsplit('/').next().unwrap_or(&rel).to_string();
+        ui.label(
+            egui::RichText::new(format!(
+                "{hoja} · {}×{} px · grilla {}×{}",
+                img.x as u32, img.y as u32, grid.0, grid.1
+            ))
+            .weak()
+            .small()
+            .monospace(),
+        );
+        ui.label(
+            egui::RichText::new(match crop {
+                Some([x, y, w, h]) => format!("recorte: {w}×{h} px en ({x}, {y})"),
+                None => "recorte: la hoja entera".to_string(),
+            })
+            .weak()
+            .small()
+            .monospace(),
+        );
+        if resp.clicked() {
+            self.load_candidate_rel(ctx, &rel);
+            self.status = format!("{hoja} cargada como candidato — recortala abajo");
+        }
+        resp.on_hover_text("clic = cargar esta hoja abajo para recortarla de nuevo");
+    }
+
+    /// Los datos que el juego va a leer de este slot, en una tabla. Nada de
+    /// abrir cinco desplegables para saber si algo frena o si emite luz.
+    fn ficha_datos(&mut self, ui: &mut egui::Ui, key: &str) {
+        let (colision, frena) = self.resumen_colision(key);
+        let capa = match self.manifest.slot_layer(key) {
+            Some(ArtLayer::Floor) => "Suelo (nunca te tapa)",
+            Some(ArtLayer::Basement) => "Subsuelo",
+            Some(ArtLayer::Wall) => "Pared (Y-sort por su base)",
+            Some(ArtLayer::Roof) => "Techo (se transparenta)",
+            Some(ArtLayer::Light) => "Luz (glow)",
+            Some(ArtLayer::Object) => "Objeto (Y-sort)",
+            None => "sin etiquetar (= Objeto)",
+        };
+        let (cw, ch) = self.slot_cells_for_footprint(key);
+        let anim = self
+            .manifest
+            .get(key)
+            .and_then(|v| v.anim())
+            .map(|a| format!("{} frames @ {:.1} fps", a.frames, a.fps));
+        let poses = self.manifest.poses(key).map(|m| m.len()).unwrap_or(0);
+        let hojas = self.manifest.sheets(key).len();
+        let luz = self
+            .manifest
+            .emission(key)
+            .filter(|e| !e.is_off())
+            .map(|e| format!("radio {:.1} m", e.radius));
+        let inter = self.manifest.interaccion(key).map(|i| {
+            let zona = if i.zona.is_empty() {
+                "todo el asset".to_string()
+            } else {
+                format!("{} sub-celdas", i.zona.len())
+            };
+            if i.requiere.is_empty() {
+                format!("{} (desde {zona})", i.verbo)
+            } else {
+                format!("{} (desde {zona}, {} requisito/s)", i.verbo, i.requiere.len())
+            }
+        });
+        egui::Grid::new("ficha_datos").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            let fila = |ui: &mut egui::Ui, k: &str, v: String, color: Option<egui::Color32>| {
+                ui.label(egui::RichText::new(k).weak().small());
+                let mut t = egui::RichText::new(v).small();
+                if let Some(c) = color {
+                    t = t.color(c);
+                }
+                ui.label(t);
+                ui.end_row();
+            };
+            fila(ui, "clave", key.to_string(), None);
+            fila(ui, "tamaño", format!("{cw}×{ch} tiles ({cw} m × {ch} m)"), None);
+            fila(ui, "capa", capa.to_string(), None);
+            fila(
+                ui,
+                "colisión",
+                colision,
+                Some(if frena {
+                    egui::Color32::from_rgb(240, 120, 100)
+                } else {
+                    egui::Color32::from_rgb(140, 200, 140)
+                }),
+            );
+            fila(ui, "animación", anim.unwrap_or_else(|| "quieto".into()), None);
+            if poses > 0 {
+                fila(ui, "poses", format!("{poses} ({hojas} hoja/s)"), None);
+            }
+            if let Some(l) = luz {
+                fila(ui, "luz", l, Some(egui::Color32::from_rgb(250, 220, 130)));
+            }
+            if let Some(i) = inter {
+                fila(ui, "interacción", i, Some(egui::Color32::from_rgb(120, 180, 245)));
+            }
+        });
+    }
+
+    /// La ficha entera: sprite del juego · hoja fuente · datos. Es lo que
+    /// aparece al clickear el objeto en la lista, sin desplegar nada.
+    fn ficha_panel(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, slot: SlotDef) {
+        let tiene_arte = self.manifest.get(slot.key).is_some();
+        egui::Frame::group(ui.style())
+            .fill(ui.visuals().faint_bg_color)
+            .show(ui, |ui| {
+                if !tiene_arte {
+                    ui.label(
+                        egui::RichText::new(
+                            "Sin PNG: en el juego se dibuja con el fallback procedural. Elegí \
+                             una hoja a la derecha y recortala abajo para asignarle arte.",
+                        )
+                        .weak(),
+                    );
+                }
+                ui.horizontal_top(|ui| {
+                    // 1 — lo que verá el juego.
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(250.0, 0.0),
+                        egui::Layout::top_down(egui::Align::LEFT),
+                        |ui| {
+                            ui.label(egui::RichText::new("EN EL JUEGO").small().strong());
+                            self.ficha_sprite(ui, slot.key, 210.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.checkbox(&mut self.ficha_colision, "colisión")
+                                    .on_hover_text(
+                                        "rojo = frena · amarillo = escalón · azul = desde dónde \
+                                         se interactúa. Es la huella que el juego va a usar.",
+                                    );
+                                ui.checkbox(&mut self.ficha_grilla, "grilla")
+                                    .on_hover_text(
+                                        "1 cuadro = 1 tile = 1 metro. El borde celeste es la \
+                                         celda ancla (donde cae el cursor al plantarlo).",
+                                    );
+                            });
+                        },
+                    );
+                    ui.separator();
+                    // 2 — de dónde sale ese sprite.
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(280.0, 0.0),
+                        egui::Layout::top_down(egui::Align::LEFT),
+                        |ui| {
+                            ui.label(egui::RichText::new("HOJA FUENTE (ATLAS)").small().strong());
+                            if tiene_arte {
+                                self.ficha_atlas(ctx, ui, slot.key, 240.0);
+                            } else {
+                                ui.label(egui::RichText::new("—").weak());
+                            }
+                        },
+                    );
+                    ui.separator();
+                    // 3 — los datos que lee el juego + el candidato.
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new("DATOS DEL JUEGO").small().strong());
+                        if tiene_arte {
+                            self.ficha_datos(ui, slot.key);
+                        }
+                        ui.add_space(4.0);
+                        ui.horizontal_wrapped(|ui| {
+                            if tiene_arte
+                                && ui
+                                    .button("✏ Dibujar colisión")
+                                    .on_hover_text(
+                                        "abre el lienzo grande de la huella sobre este mismo sprite",
+                                    )
+                                    .clicked()
+                            {
+                                self.fp_big = true;
+                                self.fp_fit = true;
+                                self.fp_brush = FpBrush::Solid;
+                            }
+                            if ui
+                                .button("🖌 Image Lab")
+                                .on_hover_text("retocar/componer el PNG y volver")
+                                .clicked()
+                            {
+                                if let Some(v) = self.manifest.get(slot.key) {
+                                    let png = PathBuf::from(&self.game_assets).join(v.png());
+                                    self.lab.open_file_as_canvas(&png);
+                                }
+                                self.mode = EditorMode::Lab;
+                            }
+                        });
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new("CANDIDATO (lo que estás por asignar)").small().strong());
+                        match self.src_tex.as_ref() {
+                            Some((_, tex)) => {
+                                let sz = preview_size(tex, 120.0);
+                                ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                                    tex.id(),
+                                    sz,
+                                )));
+                            }
+                            None => {
+                                ui.label(egui::RichText::new("(elegí un PNG a la derecha)").weak().small());
+                            }
+                        }
+                    });
+                });
+            });
     }
 
     /// Canvas de la hoja candidata: dibuja el PNG con grilla y deja seleccionar
@@ -2345,8 +4666,7 @@ impl EditorApp {
                         match std::fs::read_to_string(&self.game_manifest).ok().map(|s| ArtManifest::from_json(&s)) {
                             Some(Ok(m)) => {
                                 self.manifest = m;
-                                if let Some(i) = self.selected {
-                                    let key = self.slots[i].key;
+                                if let Some(key) = self.current_key() {
                                     self.tex = self.preview_bound(ctx, key);
                                 }
                                 self.status = format!(
@@ -2371,10 +4691,31 @@ impl EditorApp {
 
     fn write_catalog(&mut self) {
         // Catálogo simple de los bindings actuales (para contexto de Claude).
-        let mut md = String::from("# CATÁLOGO de arte del juego (autogenerado)\n\n| slot | PNG | animado |\n|------|-----|---------|\n");
+        let mut md = String::from(
+            "# CATÁLOGO de arte del juego (autogenerado)\n\n\
+             Los slots con `#` son **variantes** de un objeto: el juego las pide como\n\
+             `(objeto, variante)` y cae al objeto genérico si esa variante no tiene arte.\n\n\
+             | slot | PNG | animado |\n|------|-----|---------|\n",
+        );
         for (key, v) in &self.manifest.sprites {
             let a = v.anim().map(|a| format!("{}f@{}fps", a.frames, a.fps)).unwrap_or_else(|| "no".into());
             md.push_str(&format!("| `{}` | {} | {} |\n", key, v.png(), a));
+        }
+        // Tabla de objetos con variantes: es la que le dice al juego/IA qué
+        // materiales existen para cada objeto (piso, pared…) y cómo se llaman.
+        if !self.manifest.objects.is_empty() {
+            md.push_str("\n## Objetos con variantes\n\n| objeto | variante | nombre | asset |\n|--------|----------|--------|-------|\n");
+            for (base, obj) in &self.manifest.objects {
+                for v in &obj.variants {
+                    let vk = ha_assets::variant_key(base, &v.id);
+                    let png = self
+                        .manifest
+                        .get(&vk)
+                        .map(|e| e.png().to_string())
+                        .unwrap_or_else(|| "— (cae al genérico)".into());
+                    md.push_str(&format!("| `{base}` | `{}` | {} | {png} |\n", v.id, v.display()));
+                }
+            }
         }
         if let Some(parent) = PathBuf::from(&self.catalog_path).parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -2410,6 +4751,11 @@ impl EditorApp {
         Some(tex)
     }
 
+    // (`sprite_alpha_cells` se borró: hacía lo mismo que `huella_desde_alfa`
+    // pero mirando sólo `rect`, así que en los slots con POSES perfilaba la hoja
+    // entera en vez del recorte. Una sola lectura del alfa, la que entiende
+    // recorte, tira y pose.)
+
     /// Deja como candidato del lienzo una hoja que YA está en el árbol del juego
     /// (ruta relativa) — para editar una pose que vino de otro PNG.
     fn load_candidate_rel(&mut self, ctx: &egui::Context, rel: &str) {
@@ -2423,6 +4769,20 @@ impl EditorApp {
 
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Gancho de QA: `HA_SLOT=decor/tree` abre el editor con ese objeto ya
+        // elegido, para poder mirar (y capturar) una pantalla concreta sin
+        // navegar la lista a mano. Mismo espíritu que `HA_FLYTEST` en el juego.
+        if self.selected.is_none() {
+            if let Ok(pedido) = std::env::var("HA_SLOT") {
+                if let Some(i) = self.slots.iter().position(|s| s.key.contains(pedido.trim())) {
+                    self.select_slot(ctx, i);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+                    // Unos frames trayendo la huella a la vista: el panel vive
+                    // abajo del todo y una captura no puede scrollear sola.
+                    self.fp_scroll_qa = 45;
+                }
+            }
+        }
         EditorApp::ui(self, ctx);
     }
 }
@@ -2571,11 +4931,19 @@ fn build_part_poses(key: &str) -> &'static [(&'static str, &'static str)] {
         ("left", "◧ pared IZQUIERDA (lateral)"),
         ("right", "◨ pared DERECHA (lateral)"),
     ];
+    // ESTADOS de la puerta, en el orden en que ocurren. El juego los encadena:
+    // cerrada → (abriéndose) → abierta → (cerrándose) → cerrada. Las dos
+    // transiciones son OPCIONALES: si no las guardás, la puerta salta de un
+    // estado al otro como siempre. `bloqueada` es un estado aparte, con su
+    // propia animación en bucle (la cerradura que no cede).
     const DOOR: &[(&str, &str)] = &[
-        ("closed", "🚪 puerta CERRADA"),
-        ("open", "🚪 puerta ABIERTA"),
-        ("left", "◧ puerta lateral izquierda"),
-        ("right", "◨ puerta lateral derecha"),
+        ("closed", "🚪 CERRADA (reposo)"),
+        ("opening", "▶ ABRIÉNDOSE (transición)"),
+        ("open", "🚪 ABIERTA (reposo)"),
+        ("closing", "◀ CERRÁNDOSE (transición)"),
+        ("locked", "🔒 BLOQUEADA (no se abre)"),
+        ("left", "◧ lateral izquierda"),
+        ("right", "◨ lateral derecha"),
     ];
     if key.starts_with("door/") {
         DOOR
@@ -2584,6 +4952,224 @@ fn build_part_poses(key: &str) -> &'static [(&'static str, &'static str)] {
     } else {
         &[]
     }
+}
+
+/// La línea de ayuda del lienzo. Es la misma en línea y en la ventana grande, y
+/// dice los cuatro gestos que no se adivinan.
+fn fp_hint() -> &'static str {
+    "Ctrl+rueda = zoom · botón del medio o Shift+arrastre = mover · Ctrl+arrastre = borrar · \
+     clic derecho = fijar el ancla (con la pluma, quitar vértice)"
+}
+
+/// Deja `cell` con el material pedido. Devuelve si algo cambió de verdad.
+///
+/// Sólido y escalón se excluyen (una celda frena o se trepa, no las dos); la
+/// zona es un eje APARTE, así que puede convivir con cualquiera de los dos — el
+/// frente de una heladera frena y se abre desde ahí.
+fn fp_apply(ed: &mut FpEdit, cell: (u32, u32), brush: FpBrush, erase: bool) -> bool {
+    if erase || brush == FpBrush::Erase {
+        let a = ed.solid.remove(&cell);
+        let b = ed.step.remove(&cell);
+        let c = ed.zona.remove(&cell);
+        return a || b || c;
+    }
+    match brush {
+        FpBrush::Zona => ed.zona.insert(cell),
+        FpBrush::Step => {
+            ed.solid.remove(&cell);
+            ed.step.insert(cell)
+        }
+        FpBrush::Solid | FpBrush::Erase => {
+            ed.step.remove(&cell);
+            ed.solid.insert(cell)
+        }
+    }
+}
+
+/// Qué hay en la celda MIRADO DESDE el material que estás pintando: es lo que el
+/// balde considera "igual". Con 🟦 sólo importa si hay zona; con 🟥/🟨, si frena.
+fn fp_state(ed: &FpEdit, cell: (u32, u32), brush: FpBrush) -> u8 {
+    match brush {
+        FpBrush::Zona => u8::from(ed.zona.contains(&cell)),
+        _ => {
+            if ed.solid.contains(&cell) {
+                1
+            } else if ed.step.contains(&cell) {
+                2
+            } else {
+                0
+            }
+        }
+    }
+}
+
+/// Celdas que toca un trazo recto entre dos sub-celdas. Sin esto, arrastrar
+/// rápido deja el trazo lleno de agujeros: el ratón salta ocho celdas por frame.
+fn line_cells(a: (i32, i32), b: (i32, i32)) -> Vec<(i32, i32)> {
+    let pasos = (a.0 - b.0).abs().max((a.1 - b.1).abs()).max(1);
+    (0..=pasos)
+        .map(|i| {
+            let t = i as f32 / pasos as f32;
+            (
+                (a.0 as f32 + (b.0 - a.0) as f32 * t).round() as i32,
+                (a.1 as f32 + (b.1 - a.1) as f32 * t).round() as i32,
+            )
+        })
+        .collect()
+}
+
+/// ¿El punto cae dentro del polígono? Regla par-impar (la de siempre): se cuenta
+/// cuántos lados cruza un rayo horizontal hacia la derecha.
+fn point_in_poly(p: (f32, f32), v: &[(f32, f32)]) -> bool {
+    let mut dentro = false;
+    let n = v.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (xi, yi) = v[i];
+        let (xj, yj) = v[j];
+        if (yi > p.1) != (yj > p.1) && p.0 < (xj - xi) * (p.1 - yi) / (yj - yi) + xi {
+            dentro = !dentro;
+        }
+        j = i;
+    }
+    dentro
+}
+
+/// Las celdas que encierra la pluma: las de centro adentro MÁS las que pisa el
+/// contorno. Sin el contorno, una figura fina (el borde de un muro de una sola
+/// sub-celda) no encerraría ningún centro y no marcaría nada.
+fn poly_cells(v: &[(f32, f32)], cols: u32, rows: u32) -> FpSet {
+    let mut out = FpSet::default();
+    if v.len() < 3 || cols == 0 || rows == 0 {
+        return out;
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for &(x, y) in v {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    let c0 = x0.floor().max(0.0) as u32;
+    let r0 = y0.floor().max(0.0) as u32;
+    let c1 = (x1.ceil().max(0.0) as u32).min(cols);
+    let r1 = (y1.ceil().max(0.0) as u32).min(rows);
+    for r in r0..r1 {
+        for c in c0..c1 {
+            if point_in_poly((c as f32 + 0.5, r as f32 + 0.5), v) {
+                out.insert((c, r));
+            }
+        }
+    }
+    for i in 0..v.len() {
+        let a = v[i];
+        let b = v[(i + 1) % v.len()];
+        for (c, r) in line_cells(
+            (a.0.floor() as i32, a.1.floor() as i32),
+            (b.0.floor() as i32, b.1.floor() as i32),
+        ) {
+            if c >= 0 && r >= 0 && (c as u32) < cols && (r as u32) < rows {
+                out.insert((c as u32, r as u32));
+            }
+        }
+    }
+    out
+}
+
+/// Región contigua (4 vecinos) que comparte estado con la semilla — el balde.
+fn flood_cells(seed: (u32, u32), cols: u32, rows: u32, igual: impl Fn((u32, u32)) -> bool) -> FpSet {
+    let mut out = FpSet::default();
+    if seed.0 >= cols || seed.1 >= rows || !igual(seed) {
+        return out;
+    }
+    let mut pila = vec![seed];
+    out.insert(seed);
+    while let Some((c, r)) = pila.pop() {
+        for (dc, dr) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+            let (nc, nr) = (c as i32 + dc, r as i32 + dr);
+            if nc < 0 || nr < 0 || nc as u32 >= cols || nr as u32 >= rows {
+                continue;
+            }
+            let n = (nc as u32, nr as u32);
+            if igual(n) && out.insert(n) {
+                pila.push(n);
+            }
+        }
+    }
+    out
+}
+
+/// El anillo de celdas LIBRES pegadas a algo sólido (8 vecinos). Es la zona de
+/// interacción por defecto: "desde dónde alcanzo este objeto".
+fn borde_de(solid: &FpSet, cols: u32, rows: u32) -> FpSet {
+    let mut out = FpSet::default();
+    for r in 0..rows {
+        for c in 0..cols {
+            if solid.contains(&(c, r)) {
+                continue;
+            }
+            let pegado = (-1i32..=1).any(|dr| {
+                (-1i32..=1).any(|dc| {
+                    let (nc, nr) = (c as i32 + dc, r as i32 + dr);
+                    nc >= 0 && nr >= 0 && solid.contains(&(nc as u32, nr as u32))
+                })
+            });
+            if pegado {
+                out.insert((c, r));
+            }
+        }
+    }
+    out
+}
+
+/// Reescala las sub-celdas sólidas de una huella al cambiar el DETALLE: subir de
+/// resolución subdivide cada celda (no perdés lo pintado), bajar conserva el tile
+/// si alguna de sus sub-celdas era sólida.
+fn rescale_solid(
+    solid: &std::collections::HashSet<(u32, u32)>,
+    from: u32,
+    to: u32,
+) -> std::collections::HashSet<(u32, u32)> {
+    let (from, to) = (from.max(1), to.max(1));
+    if from == to {
+        return solid.clone();
+    }
+    let mut out = std::collections::HashSet::new();
+    for &(c, r) in solid {
+        // Rango de sub-celdas destino que cubre esta celda origen.
+        let (c0, c1) = (c * to / from, ((c + 1) * to).div_ceil(from));
+        let (r0, r1) = (r * to / from, ((r + 1) * to).div_ceil(from));
+        for rr in r0..r1.max(r0 + 1) {
+            for cc in c0..c1.max(c0 + 1) {
+                out.insert((cc, rr));
+            }
+        }
+    }
+    out
+}
+
+/// Reescala lo pintado cuando cambia el TAMAÑO de la grilla (no el detalle):
+/// cada celda se estira a la posición proporcional que le toca en la grilla
+/// nueva. Es lo que hace que corregir «esto era 1×1 y el sprite mide 5×4» no te
+/// borre lo que ya habías pintado.
+fn rescale_grid(set: &FpSet, from: (u32, u32), to: (u32, u32), res: u32) -> FpSet {
+    let res = res.max(1);
+    let (fc, fr) = (from.0.max(1) * res, from.1.max(1) * res);
+    let (tc, tr) = (to.0.max(1) * res, to.1.max(1) * res);
+    if (fc, fr) == (tc, tr) {
+        return set.clone();
+    }
+    let mut out = FpSet::default();
+    for &(c, r) in set {
+        let (c0, c1) = (c * tc / fc, ((c + 1) * tc).div_ceil(fc));
+        let (r0, r1) = (r * tr / fr, ((r + 1) * tr).div_ceil(fr));
+        for rr in r0..r1.max(r0 + 1).min(tr) {
+            for cc in c0..c1.max(c0 + 1).min(tc) {
+                out.insert((cc, rr));
+            }
+        }
+    }
+    out
 }
 
 /// Escala la textura para que su lado mayor sea `max_px` (preserva aspecto), así
@@ -2635,6 +5221,54 @@ fn load_texture(ctx: &egui::Context, path: &Path, id: &str) -> Option<(String, e
 mod tests {
     use super::*;
 
+    /// La ficha del asset promete "lo que ves acá es lo que vas a tener en el
+    /// juego". Esta es esa promesa, escrita: el mismo orden de decisión que
+    /// `ha-game::world2d::decor_blocks` (huella → casilla → default).
+    #[test]
+    fn la_ficha_dice_la_colision_que_va_a_haber_en_el_juego() {
+        let mut app = EditorApp::new();
+        app.manifest = ArtManifest::default();
+
+        // Nada declarado: no frena. Un prop suelto no levanta un muro.
+        let (txt, frena) = app.resumen_colision("prop/farol");
+        assert!(!frena, "{txt}");
+
+        // La casilla del editor manda sobre el default.
+        app.manifest.set("prop/farol", "art/prop/farol.png".into(), None);
+        app.manifest.set_collides("prop/farol", Some(true));
+        let (txt, frena) = app.resumen_colision("prop/farol");
+        assert!(frena, "{txt}");
+
+        // Y la HUELLA pintada manda sobre la casilla: es más precisa.
+        app.manifest.set_collides("prop/farol", Some(false));
+        app.manifest.set_footprint(
+            "prop/farol",
+            Some(ha_assets::CollisionFootprint {
+                w: 1,
+                h: 2,
+                ax: 0,
+                az: 1,
+                solid: vec![(1, 6), (2, 6)],
+                step: Vec::new(),
+                res: 4,
+            }),
+        );
+        let (txt, frena) = app.resumen_colision("prop/farol");
+        assert!(frena, "{txt}");
+        assert!(txt.contains("huella"), "y dice de dónde sale: {txt}");
+
+        // Default por CAPA: una pared frena aunque no le pintes nada.
+        app.manifest.set("wall/prueba", "art/wall/prueba.png".into(), None);
+        app.manifest.set_slot_layer("wall/prueba", Some(ArtLayer::Wall));
+        let (txt, frena) = app.resumen_colision("wall/prueba");
+        assert!(frena, "{txt}");
+
+        // Default por TIPO: el tronco del árbol ocupa su celda.
+        app.manifest.set("decor/tree_roble", "art/decor/tree.png".into(), None);
+        let (txt, frena) = app.resumen_colision("decor/tree_roble");
+        assert!(frena, "{txt}");
+    }
+
     #[test]
     fn pose_names_are_deduced_from_file_names() {
         // El caso del pack: un PNG por dirección.
@@ -2677,6 +5311,214 @@ mod tests {
         // Orden por dirección: todas las acciones de una dirección primero.
         let by_dir = bulk_names(&actions, dirs, BulkOrder::ByDirection, 4);
         assert_eq!(by_dir, ["idle_down", "walk_down", "idle_up", "walk_up"]);
+    }
+
+    /// La pluma tiene que RELLENAR, no dejar sólo el contorno: es lo que separa
+    /// "dibujé la silueta de la casa" de "tengo que pintar 40 celdas a mano".
+    #[test]
+    fn la_pluma_rellena_lo_que_encierra() {
+        // Un cuadrado de 4×4 sub-celdas dentro de una grilla de 8×8.
+        let v = [(1.0, 1.0), (5.0, 1.0), (5.0, 5.0), (1.0, 5.0)];
+        let dentro = poly_cells(&v, 8, 8);
+        assert!(dentro.contains(&(2, 2)), "el interior se rellena");
+        assert!(dentro.contains(&(1, 1)), "el contorno también");
+        assert!(!dentro.contains(&(6, 6)), "y nada de afuera");
+        assert!(!dentro.contains(&(0, 0)));
+        // Una L: el hueco de la escuadra NO se rellena.
+        let l = [(0.0, 0.0), (4.0, 0.0), (4.0, 1.0), (1.0, 1.0), (1.0, 4.0), (0.0, 4.0)];
+        let ele = poly_cells(&l, 8, 8);
+        assert!(ele.contains(&(0, 3)) && ele.contains(&(3, 0)), "los brazos sí");
+        assert!(!ele.contains(&(3, 3)), "el hueco de la escuadra no");
+        // Menos de tres vértices no es una figura.
+        assert!(poly_cells(&[(0.0, 0.0), (2.0, 2.0)], 8, 8).is_empty());
+    }
+
+    /// Arrastrar rápido salta celdas: el trazo se interpola o queda punteado.
+    #[test]
+    fn el_trazo_libre_no_deja_agujeros() {
+        let t = line_cells((0, 0), (4, 2));
+        assert_eq!(t.first(), Some(&(0, 0)));
+        assert_eq!(t.last(), Some(&(4, 2)));
+        for par in t.windows(2) {
+            let d = (par[1].0 - par[0].0).abs().max((par[1].1 - par[0].1).abs());
+            assert!(d <= 1, "dos celdas seguidas del trazo tienen que tocarse");
+        }
+    }
+
+    #[test]
+    fn el_balde_llena_la_region_contigua_y_para_en_el_borde() {
+        // Pared vertical en la columna 2: el balde a la izquierda no la cruza.
+        let pared: FpSet = (0..4).map(|r| (2u32, r)).collect();
+        let izq = flood_cells((0, 0), 4, 4, |c| !pared.contains(&c));
+        assert!(izq.contains(&(1, 3)));
+        assert!(!izq.contains(&(3, 0)), "la pared corta la región");
+        assert_eq!(izq.len(), 8);
+    }
+
+    /// La zona de interacción por defecto es el anillo de alrededor: "desde
+    /// dónde alcanzo esto".
+    #[test]
+    fn el_borde_rodea_lo_solido_sin_pisarlo() {
+        let solid: FpSet = [(1u32, 1u32)].into_iter().collect();
+        let borde = borde_de(&solid, 3, 3);
+        assert!(!borde.contains(&(1, 1)), "lo sólido no es zona");
+        assert_eq!(borde.len(), 8, "las ocho de alrededor");
+        assert!(borde_de(&FpSet::default(), 3, 3).is_empty(), "sin sólido no hay borde");
+    }
+
+    /// Sólido y escalón se excluyen; la zona convive con los dos y la goma
+    /// limpia todo — incluida la zona, que antes se quedaba pegada.
+    #[test]
+    fn los_materiales_no_se_pisan_y_la_goma_limpia_todo() {
+        let mut ed = FpEdit {
+            w: 2,
+            h: 2,
+            res: 1,
+            ax: 0,
+            az: 0,
+            solid: FpSet::default(),
+            step: FpSet::default(),
+            zona: FpSet::default(),
+        };
+        assert!(fp_apply(&mut ed, (0, 0), FpBrush::Solid, false));
+        assert!(fp_apply(&mut ed, (0, 0), FpBrush::Step, false));
+        assert!(ed.step.contains(&(0, 0)) && !ed.solid.contains(&(0, 0)));
+        // La zona es un eje aparte: puede estar con el escalón a la vez.
+        fp_apply(&mut ed, (0, 0), FpBrush::Zona, false);
+        assert!(ed.zona.contains(&(0, 0)) && ed.step.contains(&(0, 0)));
+        assert!(fp_apply(&mut ed, (0, 0), FpBrush::Erase, false));
+        assert!(ed.zona.is_empty() && ed.step.is_empty() && ed.solid.is_empty());
+        assert!(!fp_apply(&mut ed, (0, 0), FpBrush::Erase, false), "borrar el vacío no cambia nada");
+    }
+
+    /// Un lienzo donde arrastrar no pinta es lo que hace que el editor se sienta
+    /// roto, así que el gesto se prueba de verdad: eventos de puntero contra
+    /// `fp_canvas`, no sólo las funciones puras de abajo.
+    #[test]
+    fn arrastrar_por_el_lienzo_pinta_las_celdas_del_trazo() {
+        let mut app = EditorApp::new();
+        app.fp_fit = false;
+        app.fp_zoom = 40.0;
+        app.fp_pan = egui::Vec2::ZERO;
+        app.fp_tool = FpTool::Libre;
+        app.fp_brush = FpBrush::Solid;
+        let mut ed = FpEdit {
+            w: 4,
+            h: 4,
+            res: 1,
+            ax: 0,
+            az: 0,
+            solid: FpSet::default(),
+            step: FpSet::default(),
+            zona: FpSet::default(),
+        };
+        // Lienzo de 400×400 pegado al (0,0) de la pantalla: la grilla de 4×4 a
+        // 40 px queda centrada, o sea de (120,120) a (280,280).
+        let vista = egui::vec2(400.0, 400.0);
+        let centro = |c: f32, r: f32| egui::pos2(120.0 + c * 40.0 + 20.0, 120.0 + r * 40.0 + 20.0);
+        let ctx = egui::Context::default();
+        let pantalla = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(400.0, 400.0));
+        let frame = |eventos: Vec<egui::Event>, app: &mut EditorApp, ed: &mut FpEdit| {
+            let entrada = egui::RawInput {
+                screen_rect: Some(pantalla),
+                events: eventos,
+                ..Default::default()
+            };
+            let _ = ctx.run(entrada, |ctx| {
+                egui::Area::new(egui::Id::new("lienzo_test")).fixed_pos(egui::pos2(0.0, 0.0)).show(
+                    ctx,
+                    |ui| {
+                        app.fp_canvas(ui, ed, None, vista);
+                    },
+                );
+            });
+        };
+        // egui hace el hit-test con los rects del frame ANTERIOR, así que cada
+        // gesto necesita un par de frames en blanco para asentarse (en la app
+        // real eso pasa solo, a 60 por segundo).
+        let paso = |eventos: Vec<egui::Event>, app: &mut EditorApp, ed: &mut FpEdit| {
+            frame(eventos, app, ed);
+            frame(Vec::new(), app, ed);
+            frame(Vec::new(), app, ed);
+        };
+        let boton = |pos: egui::Pos2, pressed: bool| {
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::default(),
+            }]
+        };
+        let p0 = centro(1.0, 1.0);
+        let p1 = centro(3.0, 1.0);
+        paso(vec![egui::Event::PointerMoved(p0)], &mut app, &mut ed);
+        paso(boton(p0, true), &mut app, &mut ed);
+        paso(vec![egui::Event::PointerMoved(p1)], &mut app, &mut ed);
+        paso(boton(p1, false), &mut app, &mut ed);
+        assert!(ed.solid.contains(&(1, 1)), "pinta donde apretaste");
+        assert!(ed.solid.contains(&(3, 1)), "y donde soltaste");
+        assert!(ed.solid.contains(&(2, 1)), "y la celda del medio: el trazo se interpola");
+        assert!(!ed.solid.contains(&(1, 2)), "sin manchar la fila de al lado");
+
+        // Y la ZONA de interacción se pinta igual que lo demás: era el pincel
+        // que no dibujaba nada porque ni se guardaba ni se veía.
+        app.fp_brush = FpBrush::Zona;
+        let pz = centro(0.0, 3.0);
+        paso(vec![egui::Event::PointerMoved(pz)], &mut app, &mut ed);
+        paso(boton(pz, true), &mut app, &mut ed);
+        paso(boton(pz, false), &mut app, &mut ed);
+        assert!(ed.zona.contains(&(0, 3)), "la zona se pinta");
+        assert!(!ed.solid.contains(&(0, 3)), "y no frena a nadie");
+
+        // La goma limpia las dos capas en la misma pasada.
+        app.fp_brush = FpBrush::Erase;
+        paso(boton(pz, true), &mut app, &mut ed);
+        paso(boton(pz, false), &mut app, &mut ed);
+        assert!(!ed.zona.contains(&(0, 3)), "la goma también borra la zona");
+    }
+
+    /// Perfilar al sprite a un sub-celda por tile es imposible por definición:
+    /// la unidad de pintura es el cuadrado entero. Por eso una huella nueva abre
+    /// en ¼ y estirar la grilla conserva lo pintado.
+    #[test]
+    fn el_detalle_fino_es_lo_que_permite_seguir_la_silueta() {
+        // Grilla de 1×1 con la celda pintada → grilla de 2×2: se estira, no se
+        // pierde ni se queda en la esquina.
+        let una: FpSet = [(0u32, 0u32)].into_iter().collect();
+        let estirada = rescale_grid(&una, (1, 1), (2, 2), 1);
+        assert_eq!(estirada.len(), 4, "la celda cubría todo el sprite y lo sigue cubriendo");
+        // Con detalle ¼ la misma celda son 16 sub-celdas: recién ahí hay silueta.
+        let fina = rescale_solid(&una, 1, 4);
+        assert_eq!(fina.len(), 16);
+        // Y media grilla no invade la otra mitad.
+        let izq: FpSet = [(0u32, 0u32)].into_iter().collect();
+        let en_dos = rescale_grid(&izq, (2, 1), (4, 1), 1);
+        assert!(en_dos.contains(&(0, 0)) && en_dos.contains(&(1, 0)));
+        assert!(!en_dos.contains(&(2, 0)), "lo de la izquierda se queda a la izquierda");
+    }
+
+    /// El lienzo se dibuja de verdad (en línea y en la ventana grande) sin
+    /// romperse, y dibujarlo sin tocar nada NO ensucia el manifest: el guardado
+    /// tiene que salir de un gesto del usuario, no de que la pantalla exista.
+    #[test]
+    fn el_lienzo_de_la_huella_se_dibuja_sin_tocar_el_disco() {
+        let mut app = EditorApp::new();
+        // Por las dudas: si algo marcara cambios, que escriba en /tmp y no en el
+        // manifest del juego.
+        app.game_manifest =
+            std::env::temp_dir().join("ha_huella_smoke.json").display().to_string();
+        let slot = app.slots[0];
+        for grande in [false, true] {
+            app.fp_big = grande;
+            egui::__run_test_ctx(|ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    app.footprint_panel(ui, slot);
+                });
+            });
+        }
+        assert!(!app.fp_dirty, "dibujar el panel no cambia nada por sí solo");
+        assert!(app.fp_zoom >= FP_ZOOM_MIN && app.fp_zoom <= FP_ZOOM_MAX, "el zoom queda en rango");
+        assert!(!std::path::Path::new(&app.game_manifest).exists(), "no escribió nada");
     }
 
     #[test]

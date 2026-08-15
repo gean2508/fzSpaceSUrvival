@@ -15,6 +15,10 @@ release:
 
 test:
 	cargo test -p ha-shared
+	cargo test -p ha-assets
+	# Auditoría de cobertura de slots: que toda pieza de construcción tenga
+	# su slot con nombre humano en el editor (crates/ha-asset-tools/src/slot_audit.rs).
+	cargo test -p ha-asset-tools
 	cargo test -p $(CRATE) 2>/dev/null || true
 
 clean:

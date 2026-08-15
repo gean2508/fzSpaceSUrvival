@@ -3,7 +3,7 @@
 //! con memoria recurrente de 32 bits. Entrenado por neuroevolución OFFLINE; en el
 //! juego se corre sólo **inferencia** (`think`) a costo casi nulo → mil agentes
 //! pensando en el Redmi. Es la capa de INSTINTO/locomoción del cerebro colmena de
-//! NPCs/fauna/enemigos (ver `ANALISIS_IA_FRUGAL.md` y PLAN_MAESTRO §3.B / FASE 8).
+//! NPCs/fauna/enemigos (ver `biblia.md` §6).
 //!
 //! El estado de los cerebros vive en un array global en C (`swarm[MAX_AGENTS]`),
 //! indexado por `id`. No es thread-safe: llamalo desde UN sistema (o serializá el

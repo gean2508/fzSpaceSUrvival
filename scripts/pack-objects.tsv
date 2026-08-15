@@ -1,0 +1,178 @@
+camping	Apples	manzanas_camping	Manzanas del bosque	Naturaleza	Planta
+camping	Armchair	sillon_camping	Sillon de camping	Parcela	Tela
+camping	Backpack	mochila	Mochila	Parcela	Tela
+camping	Ball	pelota	Pelota	Parcela	Tela
+camping	Barbecue	barbacoa	Barbacoa	Parcela	Metal
+camping	Basket	canasto	Canasto	Parcela	Madera
+camping	Benched_Table	mesa_con_bancos	Mesa con bancos	Parcela	Madera
+camping	Binoculars	binoculares	Binoculares	Parcela	Metal
+camping	Bottle	botella	Botella	Parcela	Metal
+camping	Bucket	balde	Balde	Parcela	Metal
+camping	Buoy	boya_rio	Boya de rio	Agua	Tela
+camping	Campfire	fogata	Fogata	Parcela	Madera
+camping	Campfire_Marshmallow	fogata_malvaviscos	Fogata con malvaviscos	Parcela	Madera
+camping	Chair	silla_camping	Silla de camping	Parcela	Metal
+camping	Cut_Wood	lenia_cortada	Lenia cortada	Parcela	Madera
+camping	Cut_Wood_Bench	banco_lenia	Banco de lenia	Parcela	Madera
+camping	Electric_Plate	anafe_electrico	Anafe electrico	Parcela	Metal
+camping	Fish_Bucket	balde_pescado	Balde con pescado	Agua	Metal
+camping	Fish_Crate	cajon_pescado	Cajon de pescado	Agua	Madera
+camping	Fishing_Spot	pesquero	Pesquero	Agua	Madera
+camping	Floating_Wood	madera_flotante	Madera flotante	Agua	Madera
+camping	Hanging_Cooking_Pot	olla_colgante	Olla colgante	Parcela	Metal
+camping	Lantern	farol_camping	Farol de camping	Parcela	Metal
+camping	Life_Buoy	salvavidas	Salvavidas	Agua	Tela
+camping	Mobile_House_Big	casilla_grande	Casilla rodante grande	Edificio	Metal
+camping	Mobile_House_Medium	casilla_mediana	Casilla rodante mediana	Edificio	Metal
+camping	Mobile_House_Small	casilla_chica	Casilla rodante chica	Edificio	Metal
+camping	Moss	musgo	Musgo	Naturaleza	Planta
+camping	Mushrooms	hongos_bosque	Hongos del bosque	Naturaleza	Planta
+camping	Pier	muelle_camping	Muelle de tablones	Agua	Madera
+camping	Pier_Barrel	barril_muelle	Barril de muelle	Agua	Madera
+camping	Pier_Bin	tacho_muelle	Tacho de muelle	Agua	Metal
+camping	Pier_Bridge	pasarela_muelle	Pasarela de muelle	Agua	Madera
+camping	Pier_Crates	cajones_muelle	Cajones de muelle	Agua	Madera
+camping	Pier_Pole	poste_muelle	Poste de muelle	Agua	Madera
+camping	Pine_Cone	pinia	Pinia	Naturaleza	Planta
+camping	Plate	plato	Plato	Parcela	Metal
+camping	Rock	roca_bosque	Roca del bosque	Naturaleza	Piedra
+camping	Rope	soga	Soga	Parcela	Tela
+camping	Signboard	cartelera_camping	Cartelera de camping	Parcela	Madera
+camping	Sleeping_Bag	bolsa_dormir	Bolsa de dormir	Parcela	Tela
+camping	Sprout	brote	Brote	Naturaleza	Planta
+camping	Stump	tocon_bosque	Tocon del bosque	Naturaleza	Planta
+camping	Table	mesa_camping	Mesa de camping	Parcela	Madera
+camping	Tent	carpa	Carpa de campamento	Parcela	Tela
+camping	Tiny_Table	mesita_camping	Mesita de camping	Parcela	Madera
+camping	Tire	cubierta	Cubierta usada	Parcela	Tela
+camping	Tree	arbol_bosque	Arbol del bosque	Naturaleza	Planta
+camping	Tree_Dead	arbol_muerto	Arbol muerto	Naturaleza	Planta
+camping	Wood_Board	tablon	Tablon	Parcela	Madera
+vehicles	Ambulance	ambulancia	Ambulancia	Vehiculo	Metal
+vehicles	Boat_1	bote	Bote	Vehiculo	Madera
+vehicles	Bus	colectivo	Colectivo	Vehiculo	Metal
+vehicles	Bus_Stop	parada_colectivo	Parada de colectivo	Calle	Metal
+vehicles	Bus_Stop_Sign	cartel_parada	Cartel de parada	Calle	Metal
+vehicles	Camper	casa_rodante	Casa rodante	Vehiculo	Metal
+vehicles	Car	auto	Auto	Vehiculo	Metal
+vehicles	Fruit_Flowers_Cart	carro_frutas	Carro de frutas y flores	Calle	Madera
+vehicles	Gas_Station	estacion_servicio	Estacion de servicio	Edificio	Metal
+vehicles	Gas_Station_Petrol_Pump	surtidor	Surtidor de nafta	Calle	Metal
+vehicles	Gas_Station_Price_Signboard	cartel_precios	Cartel de precios	Calle	Metal
+vehicles	Helicopter	helicoptero	Helicoptero	Vehiculo	Metal
+vehicles	Helicopter_Landing_Pad	helipuerto	Helipuerto	Vehiculo	Metal
+vehicles	Hot_Dog_Cart	carro_panchos	Carro de panchos	Calle	Metal
+vehicles	Ice_Cream_Truck	camion_helados	Camion de helados	Vehiculo	Metal
+vehicles	Pizza_Tuk_Tuk	tuk_tuk_pizza	Tuk tuk de pizza	Vehiculo	Metal
+vehicles	Public_Phone	telefono_publico	Telefono publico	Calle	Metal
+vehicles	Street_Food_Cart	carro_comida	Carro de comida	Calle	Madera
+vehicles	Street_Food_Chair	silla_puesto	Silla de puesto	Calle	Metal
+vehicles	Street_Food_Table	mesa_puesto	Mesa de puesto	Calle	Metal
+vehicles	Tacos_Truck	camion_tacos	Camion de tacos	Vehiculo	Metal
+city	ATM	cajero	Cajero automatico	Calle	Metal
+city	Antenna	antena_ciudad	Antena de ciudad	Calle	Metal
+city	Barrel	barril_ciudad	Barril de ciudad	Calle	Metal
+city	Bench	banco_ciudad	Banco de ciudad	Calle	Madera
+city	Billboard	cartelera	Cartelera publicitaria	Calle	Metal
+city	Black_Closed_Trash_Can	tacho_negro	Tacho negro	Calle	Metal
+city	Blue_Closed_Trash_Can	tacho_azul	Tacho azul	Calle	Metal
+city	Green_Closed_Trash_Can	tacho_verde	Tacho verde	Calle	Metal
+city	Brick	ladrillos	Pila de ladrillos	Calle	Piedra
+city	Broken_Ladder	escalera_rota	Escalera rota	Calle	Metal
+city	Brown_Barrel	barril_marron	Barril marron	Calle	Madera
+city	Candies_Cart	carro_golosinas	Carro de golosinas	Calle	Metal
+city	Car_Wreck	auto_chocado	Auto chocado	Calle	Metal
+city	Cone	cono_transito	Cono de transito	Calle	Tela
+city	Container	contenedor	Contenedor	Calle	Metal
+city	Container_House	casa_contenedor	Casa contenedor	Edificio	Metal
+city	Danger_Sign	cartel_peligro	Cartel de peligro	Calle	Metal
+city	Drinking_Fountain	bebedero	Bebedero	Calle	Metal
+city	Drone	dron	Dron	Calle	Metal
+city	Dumpster	contenedor_basura	Contenedor de basura	Calle	Metal
+city	EV_Charging_Station	cargador_electrico	Cargador electrico	Calle	Metal
+city	Electric_Box	caja_electrica	Caja electrica	Calle	Metal
+city	Electric_Pole	poste_electrico	Poste electrico	Calle	Metal
+city	Flower_Bush	arbusto_flores	Arbusto con flores	Naturaleza	Planta
+city	Flowers	flores_ciudad	Flores de vereda	Naturaleza	Planta
+city	Fountain	fuente	Fuente de plaza	Calle	Piedra
+city	Grate	rejilla	Rejilla de desague	Calle	Metal
+city	Green_Trash_Truck	camion_basura	Camion de basura	Vehiculo	Metal
+city	Hanging_Clothes	ropa_tendida	Ropa tendida	Calle	Tela
+city	Hydrant	hidrante_ciudad	Hidrante de ciudad	Calle	Metal
+city	Info_Sign	cartel_info	Cartel informativo	Calle	Metal
+city	Junk_Shack	casilla_chatarra	Casilla de chatarra	Edificio	Metal
+city	Kiosk_Coffee_Cup	kiosco_cafe	Kiosco de cafe	Edificio	Metal
+city	Kiosk_Icecream	kiosco_helados	Kiosco de helados	Edificio	Metal
+city	Kiosk_Infopoint	kiosco_info	Kiosco de informes	Edificio	Metal
+city	Kiosk_Mushroom	kiosco_hongo	Kiosco hongo	Edificio	Metal
+city	Mailbox	buzon_ciudad	Buzon de ciudad	Calle	Metal
+city	Manhole	tapa_alcantarilla	Tapa de alcantarilla	Calle	Metal
+city	Parking_Meter	parquimetro	Parquimetro	Calle	Metal
+city	Phone_Booth	cabina_telefonica	Cabina telefonica	Calle	Metal
+city	Pole	poste_ciudad	Poste de ciudad	Calle	Metal
+city	Pot	maceta_ciudad	Maceta de vereda	Calle	Piedra
+city	Power_House	casilla_electrica	Casilla electrica	Edificio	Metal
+city	Scrap_Metal	chatarra	Chatarra	Calle	Metal
+city	Scrap_Metal_Pile	pila_chatarra	Pila de chatarra	Calle	Metal
+city	Shrub	arbusto_ciudad	Arbusto de vereda	Naturaleza	Planta
+city	Solar_Panel	panel_solar	Panel solar	Calle	Metal
+city	Stacked_Barrels	barriles_apilados	Barriles apilados	Calle	Metal
+city	Stop_Barrier	barrera	Barrera	Calle	Metal
+city	Street_Lamp	farol_ciudad	Farol de ciudad	Calle	Metal
+city	Traffic_Barrier	valla_transito	Valla de transito	Calle	Metal
+city	Traffic_Lights	semaforo	Semaforo	Calle	Metal
+city	Traffic_Sign	senial_transito	Senial de transito	Calle	Metal
+city	Trash_Pile	pila_basura	Pila de basura	Calle	Metal
+city	Trashbin	tacho_ciudad	Tacho de vereda	Calle	Metal
+city	Tree	arbol_ciudad	Arbol de vereda	Naturaleza	Planta
+city	Underground_Parking	entrada_estacionamiento	Entrada de estacionamiento	Edificio	Piedra
+city	Water_Tower	tanque_agua	Tanque de agua	Edificio	Metal
+city	Wind_Turbine	turbina_eolica	Turbina eolica	Edificio	Metal
+kitchen	181	batidora	Batidora	Mueble	Metal
+kitchen	183	licuadora	Licuadora	Mueble	Metal
+kitchen	185	cafetera	Cafetera	Mueble	Metal
+kitchen	187	microondas	Microondas	Mueble	Metal
+kitchen	189	estante_microondas	Estante con microondas	Mueble	Metal
+kitchen	191	dispensador_agua	Dispensador de agua	Mueble	Metal
+kitchen	192	parrilla_industrial	Parrilla industrial	Mueble	Metal
+kitchen	193	parrilla_reja	Parrilla con reja	Mueble	Metal
+kitchen	194	parrilla_brochetas	Parrilla con brochetas	Mueble	Metal
+kitchen	195	olla_arrocera	Olla arrocera	Mueble	Metal
+kitchen	197	olla_presion	Olla a presion	Mueble	Metal
+kitchen	199	delantal_blanco	Delantal blanco	Mueble	Tela
+kitchen	200	delantal_verde	Delantal verde	Mueble	Tela
+kitchen	201	delantal_azul	Delantal azul	Mueble	Tela
+kitchen	202	delantal_rojo	Delantal rojo	Mueble	Tela
+kitchen	203	lampara_pie	Lampara de pie	Mueble	Metal
+kitchen	205	lampara_pie_alta	Lampara de pie alta	Mueble	Metal
+kitchen	207	tabla_cortar	Tabla de cortar	Mueble	Madera
+kitchen	208	tabla_cortar_larga	Tabla de cortar larga	Mueble	Madera
+living	1	ropero_morado	Ropero morado	Mueble	Madera
+living	4	televisor	Televisor	Mueble	Metal
+living	5	espejo_pie	Espejo de pie	Mueble	Madera
+living	6	banco_tapizado	Banco tapizado	Mueble	Tela
+living	7	mesa_luz	Mesa de luz	Mueble	Madera
+living	8	espejo_pared	Espejo de pared	Mueble	Madera
+living	9	cortina	Cortina	Mueble	Tela
+living	13	planta_maceta_alta	Planta en maceta alta	Mueble	Planta
+living	14	palmera_interior	Palmera de interior	Mueble	Planta
+living	15	planta_chica	Planta chica	Mueble	Planta
+living	16	planta_colgante	Planta colgante	Mueble	Planta
+living	17	planta_alta	Planta alta	Mueble	Planta
+living	18	planta_frondosa	Planta frondosa	Mueble	Planta
+living	19	tocador	Tocador con espejo	Mueble	Madera
+living	27	lampara_mesa	Lampara de mesa	Mueble	Metal
+living	28	almohadon	Almohadon	Mueble	Tela
+living	29	sofa_cama	Sofa cama	Mueble	Tela
+living	30	sofa_lampara	Sofa con lampara	Mueble	Tela
+living	33	sofa_claro	Sofa claro	Mueble	Tela
+living	37	armario_madera	Armario de madera	Mueble	Madera
+living	38	armario_espejo	Armario con espejo	Mueble	Madera
+living	39	alacena	Alacena	Mueble	Madera
+living	40	vitrina	Vitrina	Mueble	Madera
+living	41	placard_angosto	Placard angosto	Mueble	Madera
+living	42	placard_espejo	Placard con espejo	Mueble	Madera
+living	45	estante_plantas	Estante con plantas	Mueble	Madera
+living	46	mesa_con_lampara	Mesa con lampara	Mueble	Madera
+living	47	mesa_con_planta	Mesa con planta	Mueble	Madera
+living	48	canasto_frutas	Canasto de frutas	Mueble	Madera

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * HA_SUITE (B1, PLAN_MAESTRO §3.B1) — corre TODOS los drivers de QA del juego
+ * HA_SUITE (biblia.md §11) — corre TODOS los drivers de QA del juego
  * (autodrive.rs), cada uno en su propio proceso, y AGREGA los bugs que emiten a
  * `bugreport.jsonl` (una línea JSON por invariante roto). Al final imprime un
  * resumen para que la IA (o vos) lea y resuelva uno por uno.
@@ -28,6 +28,12 @@ const DRIVERS = [
   { name: "moon_climb", env: "HA_MOONTEST", secs: 80 },
   { name: "rocket", env: "HA_ROCKETTEST", secs: 80 },
   { name: "landing_cycle", env: "HA_CYCLETEST", secs: 100 },
+  { name: "build_vertical", env: "HA_BUILDTEST", secs: 220 },
+  // Los drivers de OBRA necesitan `HA_FORCE_TOUCH`: sin él el mouse le pisa la
+  // mira y el fantasma se clava donde está el cursor, no donde apunta el driver.
+  { name: "fachada", env: "HA_FACHADATEST", secs: 180, extra: { HA_FORCE_TOUCH: "1" } },
+  { name: "casa_modular", env: "HA_CASATEST", secs: 180, extra: { HA_FORCE_TOUCH: "1" } },
+  { name: "cuevas", env: "HA_CUEVATEST", secs: 90 },
   { name: "smoke", env: "HA_AUTODRIVE", secs: 120 },
 ];
 
@@ -44,7 +50,14 @@ for (const d of DRIVERS) {
   process.stdout.write(`  · ${d.name.padEnd(16)} `);
   const r = spawnSync("timeout", [String(d.secs), BIN], {
     cwd: NATIVE,
-    env: { ...process.env, [d.env]: "1", HA_AUTOPLAY: "1", WGPU_BACKEND: "gl", HA_BUGREPORT: REPORT },
+    env: {
+      ...process.env,
+      [d.env]: "1",
+      HA_AUTOPLAY: "1",
+      WGPU_BACKEND: "gl",
+      HA_BUGREPORT: REPORT,
+      ...(d.extra ?? {}),
+    },
     stdio: ["ignore", "ignore", "ignore"],
   });
   // exit 0 = invariantes OK; ≠0 = algún invariante roto (ya quedó en el reporte).

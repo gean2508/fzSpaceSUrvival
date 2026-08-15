@@ -20,14 +20,24 @@ pub mod planet_surface;
 pub mod machines;
 pub mod movement;
 pub mod palette;
+pub mod partida;
+pub mod rios;
 pub mod ps1_palette;
 pub mod worldgen;
+/// Tablas de siembra del pack (generadas por `scripts/import-pack-masivo.py`).
+pub mod interior_siembra;
+pub mod pack_siembra;
 pub mod rng;
 pub mod types;
 pub mod ui;
 pub mod cosmic_scale;
+pub mod placeables;
 pub mod topdown;
 pub mod build_grid;
+pub mod edificio;
+pub mod escaleras;
+pub mod cuevas;
+pub mod zonas;
 pub mod transition;
 pub mod world_edits;
 pub mod fauna_brain;
@@ -48,6 +58,24 @@ pub mod nav_data;
 pub mod ship_mass;
 pub mod solar_light;
 pub mod geography;
+/// Ecología por REGIÓN: capacidad de carga por bioma + cadena alimenticia
+/// (plantas → herbívoros → carnívoros) que avanza con o sin el jugador delante.
+/// Es lo que reemplazó al anillo de fauna alrededor del jugador.
+pub mod ecology;
+/// Relieve por terrazas: acantilados, rampas y niveles de líquido. Lo consume
+/// `geography` para decidir el tile de cada celda.
+pub mod relief;
+/// Los cuerpos de agua: orilla por bioma, cascadas derivadas del relieve y qué
+/// flota en cada sitio. Ver el módulo.
+pub mod agua;
+/// Plantilla macro de cada cuerpo: continentes, cordilleras, cuencas, islas y
+/// ciudades con nombre. Es la forma del mundo; `relief` es su textura.
+pub mod world_map;
+/// Red vial: jerarquía de vías con anchos reales, puertos de montaña y carriles.
+pub mod cercas;
+pub mod roads;
+/// Barrios: distritos, parcelas de tamaño real y el programa de cada lote.
+pub mod city;
 pub mod minor_bodies;
 pub mod solar_ephemeris;
 pub mod colony;

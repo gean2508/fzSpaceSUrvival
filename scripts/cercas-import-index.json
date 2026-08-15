@@ -1,0 +1,9 @@
+{
+ "sprites": [
+  "fence/alambre",
+  "fence/madera",
+  "fence/piedra",
+  "fence/reja"
+ ],
+ "pagina": "art/pack/cercas.png"
+}

@@ -10,6 +10,7 @@
 
 use bevy::app::AppExit;
 use bevy::prelude::*;
+use ha_shared::Ps1Retro;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::ui::FocusPolicy;
 use bevy::window::{MonitorSelection, PrimaryWindow, WindowMode};
@@ -19,9 +20,9 @@ use crate::input::TouchLayout;
 
 const SPLASH_SECS: f32 = 1.8;
 const BG_FPS: f32 = 8.0;
-const NEON_CYAN: Color = Color::srgb(0.16, 0.94, 1.0);
-const NEON_MAGENTA: Color = Color::srgb(1.0, 0.18, 0.62);
-const VOID: Color = Color::srgb(0.04, 0.05, 0.09);
+const NEON_CYAN: Color = Color::srgb(Ps1Retro::TEXT[0], Ps1Retro::TEXT[1], Ps1Retro::TEXT[2]);
+const NEON_MAGENTA: Color = Color::srgb(Ps1Retro::SELECT[0], Ps1Retro::SELECT[1], Ps1Retro::SELECT[2]);
+const VOID: Color = Color::srgb(Ps1Retro::VOID[0], Ps1Retro::VOID[1], Ps1Retro::VOID[2]);
 const BTN_IDLE: Color = Color::srgb(0.10, 0.14, 0.22);
 
 pub struct BootUiPlugin;
@@ -42,7 +43,14 @@ impl Plugin for BootUiPlugin {
                 (menu_button_system, settings_button_system, menu_screenshot)
                     .run_if(in_state(GamePhase::MainMenu)),
             )
-            .add_systems(Update, (animate_bg, boot_pulse));
+            .add_systems(Update, (animate_bg, boot_pulse))
+            .add_systems(
+                Update,
+                (
+                    void_clear_outside_playing,
+                    crate::game_ui::hide_gameplay_ui_outside_playing,
+                ),
+            );
     }
 }
 
@@ -60,6 +68,7 @@ struct SplashTimer(f32);
 
 /// Carga los frames del fondo animado. En desktop lee `art/ui/menu_bg/` ordenado
 /// por nombre; en Android (sin readdir del APK) queda vacío → fondo sólido.
+#[cfg_attr(target_os = "android", allow(unused_mut, unused_variables))]
 fn load_menu_bg(mut bg: ResMut<MenuBg>, asset_server: Res<AssetServer>) {
     #[cfg(not(target_os = "android"))]
     {
@@ -228,9 +237,11 @@ fn tick_splash(
     mut timer: ResMut<SplashTimer>,
     mut next: ResMut<NextState<GamePhase>>,
 ) {
-    // CI/agente: HA_AUTOPLAY salta el menú y arranca el gameplay directo.
-    if std::env::var("HA_AUTOPLAY").is_ok() {
-        next.set(GamePhase::Playing);
+    // CI/agente: HA_AUTOPLAY salta el menú y arranca el gameplay directo (por
+    // la pantalla de carga, igual que un jugador: así los drivers de QA miden un
+    // mundo YA armado y no el suelo apareciendo a pedazos).
+    if crate::flags::var("HA_AUTOPLAY").is_ok() {
+        next.set(GamePhase::Loading);
         return;
     }
     timer.0 += time.delta_secs();
@@ -246,24 +257,81 @@ fn spawn_main_menu(mut commands: Commands, bg: Res<MenuBg>, touch: Res<TouchLayo
     // (o con notch lateral) 260 px fijos se comían el margen.
     let usable_w = (touch.width - touch.insets.left as f32 - touch.insets.right as f32 - 32.0).max(160.0);
     let btn_w = (260.0 * s).clamp(150.0, 300.0).min(usable_w);
+    // DOS COLUMNAS en apaisado. El teléfono da un lienzo LÓGICO de 873x377 (2400
+    // fisicos / 2.75 de densidad): muy ancho y muy bajo. Apilado en una sola
+    // columna el titulo mas los cuatro botones median ~375 de los 377 de alto —
+    // o sea que vivia a dos pixeles de cortarse, y se corto en cuanto la fuente
+    // nueva trajo metricas un poco mas altas (`SALIR` quedaba sin borde). Con el
+    // titulo a la izquierda y los botones a la derecha el alto necesario se parte
+    // al medio y de paso se usan los 873 de ancho, que antes eran margen muerto.
+    let apaisado = touch.width > touch.height * 1.5;
     root_with_bg(&mut commands, &bg, &touch, s).with_children(|root| {
-        title(root, s);
-        root.spawn((
-            Node {
-                margin: UiRect::top(Val::Px(20.0 * s)),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(10.0 * s),
-                ..default()
-            },
-            Name::new("MainMenuButtons"),
-        ))
-        .with_children(|col| {
+        let botones = |col: &mut ChildBuilder| {
             menu_button(col, "NUEVA PARTIDA", MenuAction::NewGame, NEON_CYAN, btn_w, s);
             menu_button(col, load_label, MenuAction::Load, NEON_CYAN, btn_w, s);
             menu_button(col, "AJUSTES", MenuAction::Settings, NEON_CYAN, btn_w, s);
             menu_button(col, "SALIR", MenuAction::Quit, NEON_MAGENTA, btn_w, s);
-        });
+        };
+        if apaisado {
+            root.spawn(Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceEvenly,
+                column_gap: Val::Px(24.0 * s),
+                ..default()
+            })
+            .with_children(|fila| {
+                fila.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|izq| title(izq, s));
+                fila.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: Val::Px(10.0 * s),
+                        ..default()
+                    },
+                    Name::new("MainMenuButtons"),
+                ))
+                .with_children(botones);
+            });
+        } else {
+            title(root, s);
+            root.spawn((
+                Node {
+                    margin: UiRect::top(Val::Px(20.0 * s)),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    row_gap: Val::Px(10.0 * s),
+                    ..default()
+                },
+                Name::new("MainMenuButtons"),
+            ))
+            .with_children(botones);
+        }
+        // Si la partida anterior se cerró sola, acá se lee POR QUÉ. En Android el
+        // hook de pánico hace `process::exit(1)`: se cierra sin diálogo y sin
+        // rastro visible, y con el APK por URL nadie tiene un cable a mano para
+        // mirar `adb logcat -s ha-crash`.
+        if let Some(line) = crate::debug::last_crash_line() {
+            eprintln!("ha-crash previo: {line}");
+            root.spawn((
+                Text::new(line),
+                TextFont { font_size: (11.0 * s).clamp(9.0, 13.0), ..default() },
+                TextColor(NEON_MAGENTA),
+                Node {
+                    margin: UiRect::top(Val::Px(14.0 * s)),
+                    max_width: Val::Percent(90.0),
+                    ..default()
+                },
+                Name::new("LastCrashLine"),
+            ));
+            crate::debug::clear_last_crash();
+        }
     })
     // Panel de ajustes: overlay CENTRADO propio (oculto hasta tocar AJUSTES).
     // Antes era un hermano más de la columna: al abrirlo empujaba los botones
@@ -307,6 +375,27 @@ fn spawn_main_menu(mut commands: Commands, bg: Res<MenuBg>, touch: Res<TouchLayo
                 ));
                 settings_button(panel, "PANTALLA COMPLETA", SettingsAction::ToggleFullscreen, s);
                 settings_button(panel, "VOLVER", SettingsAction::Close, s);
+                // HISTORIAL DE CIERRES. El renglón del menú se borra apenas se
+                // muestra, y con el APK por URL nadie tiene un cable para hacer
+                // `adb pull`: sin esto, el motivo de un cierre se pierde en
+                // cuanto uno pestañea. Acá queda para leerlo cuando se te ocurra.
+                let historial = crate::debug::crash_history_lines(3);
+                if !historial.is_empty() {
+                    panel.spawn((
+                        Text::new("CIERRES ANTERIORES"),
+                        TextFont { font_size: (11.0 * s).clamp(9.0, 13.0), ..default() },
+                        TextColor(NEON_MAGENTA),
+                        Node { margin: UiRect::top(Val::Px(10.0 * s)), ..default() },
+                    ));
+                    for linea in historial {
+                        panel.spawn((
+                            Text::new(linea),
+                            TextFont { font_size: (10.0 * s).clamp(8.0, 12.0), ..default() },
+                            TextColor(Color::srgb(0.75, 0.75, 0.8)),
+                            Node { max_width: Val::Percent(92.0), ..default() },
+                        ));
+                    }
+                }
             });
         });
     });
@@ -377,13 +466,25 @@ fn menu_button_system(
             Interaction::Pressed => {
                 *bg = BackgroundColor(Color::srgb(0.16, 0.24, 0.36));
                 match action {
-                    MenuAction::NewGame => next.set(GamePhase::CharacterCreate),
+                    // **NUEVA PARTIDA = MUNDO NUEVO.** Se sortea la semilla y se
+                    // tira el estado de la anterior antes de que exista un solo
+                    // tile: si esto corriera después, el mundo ya se habría
+                    // generado con la semilla vieja (ver `crate::partida`).
+                    MenuAction::NewGame => {
+                        crate::partida::nueva();
+                        next.set(GamePhase::CharacterCreate);
+                    }
                     MenuAction::Load => {
                         if let Some(saved) = load_savegame() {
+                            // Cargar recupera la semilla guardada: el mundo que
+                            // dejaste es el que abre.
+                            crate::partida::cargar();
                             *selected = saved;
-                            next.set(GamePhase::Playing);
+                            next.set(GamePhase::Loading);
                         } else {
-                            // Sin partida guardada → arranca creación de personaje.
+                            // Sin partida guardada → arranca creación de personaje,
+                            // y eso es una partida nueva como cualquier otra.
+                            crate::partida::nueva();
                             next.set(GamePhase::CharacterCreate);
                         }
                     }
@@ -451,7 +552,7 @@ struct MenuShot {
 }
 
 fn menu_screenshot(mut shot: ResMut<MenuShot>, mut commands: Commands, mut exit: EventWriter<AppExit>) {
-    let Ok(path) = std::env::var("HA_MENUSHOT") else {
+    let Ok(path) = crate::flags::var("HA_MENUSHOT") else {
         return;
     };
     if shot.done {
@@ -466,6 +567,20 @@ fn menu_screenshot(mut shot: ResMut<MenuShot>, mut commands: Commands, mut exit:
         shot.done = true;
         exit.send(AppExit::Success);
     }
+}
+
+/// Fuera de `Playing`, el color de fondo del render es el void del menú y no el
+/// cielo del mundo. Tercera capa del mismo arreglo: la cámara no mira la capa del
+/// mundo (`camera::WORLD_LAYER`), la UI de gameplay está apagada
+/// ([`crate::game_ui::GameplayUi`]) y lo único que queda debajo del menú es negro
+/// — ni un frame de cielo azul asomando en el arranque.
+fn void_clear_outside_playing(phase: Res<State<GamePhase>>, mut clear: ResMut<ClearColor>) {
+    // En `Loading` el mundo ya existe y el cielo maneja el color: forzar el void
+    // acá sería pelearse con `sky2d` todos los frames debajo de la cortina.
+    if crate::game_phase::world_active(phase) || clear.0 == VOID {
+        return;
+    }
+    clear.0 = VOID;
 }
 
 /// Latido de los acentos neón (subrayado + botones).

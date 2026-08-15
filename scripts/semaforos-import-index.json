@@ -1,0 +1,9 @@
+{
+ "sprites": [
+  "road/semaforo_atras",
+  "road/semaforo_derecha",
+  "road/semaforo_frente",
+  "road/semaforo_izquierda"
+ ],
+ "pagina": "art/pack/semaforos.png"
+}

@@ -37,7 +37,7 @@ impl Default for CameraLookIntent {
 }
 
 #[derive(Resource, Clone, Copy, Default)]
-pub(super) struct RawMovementIntent {
+pub(crate) struct RawMovementIntent {
     pub(super) move_x: f32,
     pub(super) move_z: f32,
     pub(super) aim_x: f32,
@@ -53,49 +53,13 @@ struct JoystickSide {
     current: Vec2,
 }
 
+/// **Un solo stick.** El derecho manejaba la mira; ya no hay mira (el dedo va
+/// directo al objeto — ver `input/world_touch.rs`), así que la mitad derecha de
+/// la pantalla volvió a ser el mundo.
 #[derive(Resource, Default)]
-struct DualJoystickState {
+struct StickState {
     move_stick: JoystickSide,
-    look_stick: JoystickSide,
 }
-
-/// Free aim cursor (top-down): world ground position `(x, z)` the right stick
-/// moves. Targeting + the cell highlight read this; it persists when released
-/// and follows the player within `AIM_MAX_REACH`. Base of the building system.
-#[derive(Resource)]
-pub struct AimCursor {
-    pub world: Vec2,
-    pub initialized: bool,
-    /// Mira FIJADA por código (drivers de QA / autodrive): ni el stick ni el
-    /// mouse la mueven. Mismo idioma que `LookTarget::locked`.
-    pub locked: bool,
-}
-
-impl Default for AimCursor {
-    fn default() -> Self {
-        Self {
-            world: Vec2::ZERO,
-            initialized: false,
-            locked: false,
-        }
-    }
-}
-
-/// How far the aim cursor can sit from the player.
-pub const AIM_MAX_REACH: f32 = 5.2;
-/// How fast the reticle chases the stick's ABSOLUTE position. High enough to
-/// feel instant (near-1:1 within a couple of frames), low enough to filter thumb
-/// jitter so the reticle doesn't shiver while building. See `update_aim_cursor`.
-const AIM_FOLLOW_RATE: f32 = 30.0;
-/// Reticle magnetism: catch radius (m) around the aim point that starts pulling
-/// it toward a nearby interactable. Slightly wider than the pointer pick radius
-/// (`targeting::POINT_PICK_RADIUS`, 1.35 m) so the assist kicks in a bit before
-/// you'd have to land the reticle exactly on the object.
-const MAGNET_RADIUS: f32 = 1.9;
-/// Max blend weight toward the magnet target (of the aim→candidate lerp per
-/// frame). Kept well under 1.0 so it's a soft assist, not a snap: you can still
-/// steer the stick past a caught object toward one right next to it.
-const MAGNET_STRENGTH_MAX: f32 = 0.4;
 
 const DEADZONE: f32 = 0.07; // legacy fallback; runtime uses adaptive_deadzone_norm
 const INPUT_SMOOTH_RATE: f32 = 42.0;
@@ -112,11 +76,10 @@ impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MovementIntent>()
             .init_resource::<CameraLookIntent>()
-            .init_resource::<AimCursor>()
             .init_resource::<RawMovementIntent>()
             .init_resource::<super::gamepad::GamepadActive>()
             .init_resource::<super::gamepad::GamepadHotbarIndex>()
-            .init_resource::<DualJoystickState>()
+            .init_resource::<StickState>()
             .init_resource::<TouchLayout>()
             .init_resource::<TouchBlockRects>()
             .init_resource::<TouchActions>()
@@ -125,6 +88,7 @@ impl Plugin for InputPlugin {
             .init_resource::<actions::ActionButtonRects>()
             .init_resource::<actions::ActionTouchState>()
             .init_resource::<actions::ActionButtonsSpawned>()
+            .init_resource::<actions::UseButtonActive>()
             .add_systems(Startup, (spawn_joystick_ui, actions::spawn_action_ui));
         #[cfg(not(target_os = "android"))]
         app.init_resource::<desktop_input::DesktopMouseCapture>()
@@ -141,12 +105,18 @@ impl Plugin for InputPlugin {
                     desktop_input::desktop_cursor_grab,
                 ),
             );
+        // (Acá se registraba el traductor de teclado de ESCRITORIO también en Android, sólo
+        // porque los drivers de QA sintetizaban `KeyCode` y en el celu no hay teclado que
+        // los traduzca. Ya no hace falta: los drivers escriben `TouchActions` directamente
+        // — ver `debug::autodrive::Accion`, "actuación neutra" —, que es el mismo camino
+        // que recorre el dedo de una persona.)
         app.add_systems(
             Update,
             (
                     layout::sync_touch_layout,
                     sync_stick_anchors,
                     actions::ensure_action_buttons,
+                    actions::sync_use_button_active,
                     actions::layout_action_buttons,
                     actions::poll_action_buttons_held,
                     actions::update_jump_button_label,
@@ -157,11 +127,7 @@ impl Plugin for InputPlugin {
                     touch_move_stick
                         .after(actions::poll_action_buttons_held)
                         .after(crate::hud::append_hud_touch_blocks),
-                    touch_look_stick
-                        .after(actions::poll_action_buttons_held)
-                        .after(crate::hud::append_hud_touch_blocks),
                     smooth_movement_intent,
-                    update_aim_cursor,
                     update_joystick_ui,
                 )
                     .chain(),
@@ -180,14 +146,11 @@ impl Plugin for InputPlugin {
 fn sync_stick_anchors(
     layout: Res<TouchLayout>,
     config: Res<UiLayoutConfig>,
-    mut state: ResMut<DualJoystickState>,
+    mut state: ResMut<StickState>,
 ) {
     let slot = config.slot(UiEditable::MoveStick);
     let size = Vec2::splat(layout.radius * 2.0 * slot.scale);
-    let move_anchor = config.center(&layout, UiEditable::MoveStick, size);
-    state.move_stick.anchor = move_anchor;
-    // Look stick mirrors the move stick to the right edge.
-    state.look_stick.anchor = Vec2::new(layout.width - move_anchor.x, move_anchor.y);
+    state.move_stick.anchor = config.center(&layout, UiEditable::MoveStick, size);
 }
 
 fn apply_deadzone(v: Vec2, deadzone_norm: f32) -> Vec2 {
@@ -224,7 +187,7 @@ fn clamped_delta(side: &JoystickSide, radius: f32) -> Vec2 {
 fn keyboard_input(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
-    state: Res<DualJoystickState>,
+    state: Res<StickState>,
     mut look: ResMut<CameraLookIntent>,
     mut raw: ResMut<RawMovementIntent>,
 ) {
@@ -289,12 +252,19 @@ fn touch_move_stick(
     gameplay_block: Res<UiGameplayBlock>,
     pinch: Res<crate::camera::PinchActive>,
     mut touches: EventReader<TouchInput>,
-    mut state: ResMut<DualJoystickState>,
+    mut state: ResMut<StickState>,
     look: Res<CameraLookIntent>,
     mut raw: ResMut<RawMovementIntent>,
 ) {
     // Desktop: WASD via `keyboard_input` only — never zero stick output over keys.
     if !crate::platform::uses_touch_gameplay_ui() {
+        return;
+    }
+    // Mismo motivo, del otro lado: con un driver de QA manejando, este sistema corre
+    // DESPUÉS de `keyboard_input` en la cadena y, sin dedos en la pantalla, le escribía
+    // ceros encima al movimiento sintético. Nadie está tocando el celu durante una corrida
+    // automática, así que ceder el stick es exactamente lo correcto.
+    if crate::flags::driver_active() {
         return;
     }
     if editor.enabled || editor.menu_open || gameplay_block.blocked {
@@ -379,152 +349,7 @@ fn touch_move_stick(
     raw.aim_z = camera_aim.y;
 }
 
-/// Right joystick: any touch on the right (look) zone, off the action buttons,
-/// drives the aim cursor. Fixed anchor at the lower-right (mirror of move).
-fn touch_look_stick(
-    layout: Res<TouchLayout>,
-    blocks: Res<TouchBlockRects>,
-    button_rects: Res<actions::ActionButtonRects>,
-    editor: Res<UiEditorState>,
-    gameplay_block: Res<UiGameplayBlock>,
-    pinch: Res<crate::camera::PinchActive>,
-    mut touches: EventReader<TouchInput>,
-    mut state: ResMut<DualJoystickState>,
-) {
-    if !crate::platform::uses_touch_gameplay_ui() {
-        return;
-    }
-    if editor.enabled || editor.menu_open || gameplay_block.blocked {
-        return;
-    }
-    // Pinch-zoom activo: soltar/ignorar los dedos del gesto (ver touch_move_stick).
-    let in_pinch = |id: u64| pinch.ids.map(|(a, b)| id == a || id == b).unwrap_or(false);
-    if let Some(id) = state.look_stick.pointer_id {
-        if in_pinch(id) {
-            state.look_stick.active = false;
-            state.look_stick.pointer_id = None;
-            state.look_stick.current = state.look_stick.anchor;
-        }
-    }
-    for ev in touches.read() {
-        let pos = ev.position;
-        match ev.phase {
-            TouchPhase::Started => {
-                if actions::touch_hits_action_button(pos, &button_rects) || in_pinch(ev.id) {
-                    continue;
-                }
-                if layout::touch_in_look_zone(pos, &layout)
-                    && !layout::touch_blocked(pos, &blocks.0)
-                    && !state.look_stick.active
-                {
-                    state.look_stick.active = true;
-                    state.look_stick.pointer_id = Some(ev.id);
-                    state.look_stick.current = pos;
-                }
-            }
-            TouchPhase::Moved => {
-                if state.look_stick.active && state.look_stick.pointer_id == Some(ev.id) {
-                    state.look_stick.current = pos;
-                }
-            }
-            TouchPhase::Ended | TouchPhase::Canceled => {
-                if state.look_stick.pointer_id == Some(ev.id) {
-                    state.look_stick.active = false;
-                    state.look_stick.pointer_id = None;
-                    state.look_stick.current = state.look_stick.anchor;
-                }
-            }
-        }
-    }
-}
-
-/// Integrate the right stick into the free aim cursor (world ground coords),
-/// clamped within `AIM_MAX_REACH` of the player. Persists when released.
-#[allow(clippy::too_many_arguments)]
-fn update_aim_cursor(
-    time: Res<Time>,
-    layout: Res<TouchLayout>,
-    config: Res<UiLayoutConfig>,
-    state: Res<DualJoystickState>,
-    mut cursor: ResMut<AimCursor>,
-    player: Query<&crate::sim::SimState, With<crate::sim::Player>>,
-    region: Res<crate::scene::RegionRuntime>,
-    interactables: Query<(&GlobalTransform, &crate::targeting::InteractTarget)>,
-) {
-    let Ok(sim) = player.get_single() else {
-        return;
-    };
-    if cursor.locked {
-        return;
-    }
-    let p = Vec2::new(sim.body.x, sim.body.z);
-    if !cursor.initialized {
-        cursor.world = p + Vec2::new(0.0, -2.0);
-        cursor.initialized = true;
-    }
-    let r = (layout.radius * config.slot(UiEditable::MoveStick).scale).max(1.0);
-    let v = stick_vector(&state.look_stick, r, config.calibration.stick_curve_exponent);
-    // Where the stick alone would put the reticle this frame (or, released,
-    // where it already sits — magnetism still applies so walking up to an
-    // object nudges a resting reticle onto it).
-    let mut desired = if state.look_stick.active {
-        // DIRECT/absolute aim: the reticle's offset from the player maps 1:1 to
-        // the stick deflection (screen dirs: x = east, y-down = +z south) — no
-        // trackball drift, no per-tile snap, and because the target is anchored
-        // to the player it tracks WITH you as you run (the old velocity model let
-        // the reticle fall behind and only snapped when it hit the reach clamp,
-        // which felt like lag/quantisation).
-        p + Vec2::new(v.x, v.y) * AIM_MAX_REACH
-    } else {
-        cursor.world
-    };
-    if let Some(biased) = magnet_bias(desired, region.active, &interactables) {
-        desired = biased;
-    }
-    // A brief lerp filters thumb jitter (and smooths the magnet pull) without
-    // perceptible latency.
-    let k = 1.0 - (-AIM_FOLLOW_RATE * time.delta_secs()).exp();
-    cursor.world = cursor.world.lerp(desired, k);
-    // Keep the cursor within reach of the player if they walked away.
-    let d = cursor.world - p;
-    let dist = d.length();
-    if dist > AIM_MAX_REACH {
-        cursor.world = p + d / dist * AIM_MAX_REACH;
-    }
-}
-
-/// Soft reticle magnetism: finds the nearest region-valid interactable within
-/// `MAGNET_RADIUS` of `aim` and returns `aim` blended toward it. The blend
-/// weight ramps up the closer `aim` already is (0 at the radius edge, up to
-/// `MAGNET_STRENGTH_MAX` right on top), so the pull is barely-there at the
-/// edge of the catch radius and only firms up once you're basically there —
-/// light enough that steering toward a neighbouring object still wins.
-fn magnet_bias(
-    aim: Vec2,
-    region: crate::scene::RegionId,
-    interactables: &Query<(&GlobalTransform, &crate::targeting::InteractTarget)>,
-) -> Option<Vec2> {
-    let mut best: Option<(Vec2, f32)> = None;
-    for (gtf, target) in interactables.iter() {
-        if !crate::targeting::target_allowed_in_region(target.kind, region) {
-            continue;
-        }
-        let center = gtf.translation().truncate();
-        let d = aim.distance(center);
-        if d >= MAGNET_RADIUS {
-            continue;
-        }
-        if best.map(|(_, bd)| d < bd).unwrap_or(true) {
-            best = Some((center, d));
-        }
-    }
-    best.map(|(center, d)| {
-        let w = MAGNET_STRENGTH_MAX * (1.0 - d / MAGNET_RADIUS);
-        aim.lerp(center, w)
-    })
-}
-
-fn smooth_movement_intent(
+pub(crate) fn smooth_movement_intent(
     time: Res<Time<Virtual>>,
     look: Res<CameraLookIntent>,
     raw: Res<RawMovementIntent>,
@@ -543,19 +368,15 @@ fn smooth_movement_intent(
 struct JoystickKnob;
 
 #[derive(Component)]
-struct JoystickBase;
+pub struct JoystickBase;
 
-#[derive(Component, Clone, Copy)]
-struct MoveStick;
-
-#[derive(Component, Clone, Copy)]
-struct LookStick;
-
-fn spawn_stick<M: Component + Copy>(
+fn spawn_stick(
     commands: &mut Commands,
-    marker: M,
-    base_img: Option<Handle<Image>>,
-    knob_img: Option<Handle<Image>>,
+    // `ImageNode` ya armado (no un handle): así trae el RECORTE del atlas si el
+    // slot `ui/*` se curó desde una hoja — con el handle a secas el joystick se
+    // dibujaba con el atlas entero.
+    base_img: Option<ImageNode>,
+    knob_img: Option<ImageNode>,
 ) {
     let mut base = commands.spawn((
         Node {
@@ -568,11 +389,11 @@ fn spawn_stick<M: Component + Copy>(
         BackgroundColor(ui_theme::joystick_base()),
         BorderRadius::MAX,
         JoystickBase,
-        marker,
+        crate::game_ui::GameplayUi,
     ));
     // Reskin UI: si el pack trae `ui/joystick_base`, se muestra en vez del color.
     if let Some(img) = base_img {
-        base.insert(ImageNode::new(img));
+        base.insert(img);
     }
     base.with_children(|p| {
         let mut knob = p.spawn((
@@ -583,10 +404,9 @@ fn spawn_stick<M: Component + Copy>(
             BackgroundColor(ui_theme::joystick_knob()),
             BorderRadius::MAX,
             JoystickKnob,
-            marker,
         ));
         if let Some(img) = knob_img {
-            knob.insert(ImageNode::new(img));
+            knob.insert(img);
         }
     });
 }
@@ -595,40 +415,17 @@ fn spawn_joystick_ui(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>)
     if !crate::platform::uses_touch_gameplay_ui() {
         return;
     }
-    let base = art.get("ui/joystick_base");
-    let knob = art.get("ui/joystick_knob");
-    spawn_stick(&mut commands, MoveStick, base.clone(), knob.clone());
-    spawn_stick(&mut commands, LookStick, base, knob);
+    let base = art.ui_image_node("ui/joystick_base");
+    let knob = art.ui_image_node("ui/joystick_knob");
+    spawn_stick(&mut commands, base, knob);
 }
 
 fn update_joystick_ui(
     layout: Res<TouchLayout>,
     config: Res<UiLayoutConfig>,
-    state: Res<DualJoystickState>,
-    mut move_bases: Query<
-        (&mut Node, &mut BorderColor),
-        (
-            With<JoystickBase>,
-            With<MoveStick>,
-            Without<JoystickKnob>,
-        ),
-    >,
-    mut move_knobs: Query<
-        &mut Node,
-        (
-            With<JoystickKnob>,
-            With<MoveStick>,
-            Without<JoystickBase>,
-        ),
-    >,
-    mut look_bases: Query<
-        (&mut Node, &mut BorderColor),
-        (With<JoystickBase>, With<LookStick>, Without<JoystickKnob>, Without<MoveStick>),
-    >,
-    mut look_knobs: Query<
-        &mut Node,
-        (With<JoystickKnob>, With<LookStick>, Without<JoystickBase>, Without<MoveStick>),
-    >,
+    state: Res<StickState>,
+    mut bases: Query<(&mut Node, &mut BorderColor), (With<JoystickBase>, Without<JoystickKnob>)>,
+    mut knobs: Query<&mut Node, (With<JoystickKnob>, Without<JoystickBase>)>,
 ) {
     if !crate::platform::uses_touch_gameplay_ui() {
         return;
@@ -638,44 +435,80 @@ fn update_joystick_ui(
     let knob_r = (layout.knob_radius * slot.scale).max(8.0);
     let win_h = layout.height;
 
-    for (mut node, mut border) in &mut move_bases {
-        paint_base(&state.move_stick, r, win_h, &layout, true, &mut node, &mut border);
+    // `bypass_change_detection` + `set_changed` a mano: los pintores escriben los
+    // MISMOS píxeles casi todos los frames, y con el `DerefMut` normal cada
+    // llamada marcaría `Node`/`BorderColor` como cambiado y Bevy relayoutearía el
+    // árbol de UI completo por frame. Ver `set_px`.
+    for (mut node, mut border) in &mut bases {
+        if paint_base(
+            &state.move_stick,
+            r,
+            win_h,
+            node.bypass_change_detection(),
+            border.bypass_change_detection(),
+        ) {
+            node.set_changed();
+            border.set_changed();
+        }
     }
-    for mut node in &mut move_knobs {
-        paint_knob(&state.move_stick, r, knob_r, &mut node);
-    }
-    for (mut node, mut border) in &mut look_bases {
-        paint_base(&state.look_stick, r, win_h, &layout, false, &mut node, &mut border);
-    }
-    for mut node in &mut look_knobs {
-        paint_knob(&state.look_stick, r, knob_r, &mut node);
+    for mut node in &mut knobs {
+        if paint_knob(&state.move_stick, r, knob_r, node.bypass_change_detection()) {
+            node.set_changed();
+        }
     }
 }
 
+/// Escribe un `Val::Px` SÓLO si cambió.
+///
+/// No es micro-optimización: tocar un campo de `Node` marca el componente como
+/// cambiado, y Bevy re-corre el layout (taffy) del árbol de UI entero. Estos
+/// pintores corren cada frame, así que escribir siempre los mismos píxeles
+/// forzaba un relayout completo por frame — con el HUD del juego (barras, hotbar,
+/// botones, paneles) eso es un mordisco de CPU constante, y cuando el frame ya va
+/// justo (volando, en el espacio, con el streaming de chunks trabajando) se ve
+/// como que la UI TIEMBLA. Con esto, un stick quieto no cuesta nada.
+pub(crate) fn set_px(slot: &mut Val, px: f32) -> bool {
+    let next = Val::Px(px);
+    if *slot == next {
+        return false;
+    }
+    *slot = next;
+    true
+}
+
+/// `true` si algo cambió de verdad (el llamador marca el componente).
 fn paint_base(
     side: &JoystickSide,
     r: f32,
     win_h: f32,
-    layout: &TouchLayout,
-    _is_move: bool,
     node: &mut Node,
     border: &mut BorderColor,
-) {
-    node.display = Display::Flex;
+) -> bool {
+    let mut dirty = false;
+    if node.display != Display::Flex {
+        node.display = Display::Flex;
+        dirty = true;
+    }
     let (left, bottom) = layout::base_ui_pos(side.anchor, r, win_h);
-    node.left = Val::Px(left);
-    node.bottom = Val::Px(bottom);
-    node.width = Val::Px(r * 2.0);
-    node.height = Val::Px(r * 2.0);
-    border.0 = ui_theme::joystick_border(side.active);
-    let _ = layout;
+    dirty |= set_px(&mut node.left, left);
+    dirty |= set_px(&mut node.bottom, bottom);
+    dirty |= set_px(&mut node.width, r * 2.0);
+    dirty |= set_px(&mut node.height, r * 2.0);
+    let want = ui_theme::joystick_border(side.active);
+    if border.0 != want {
+        border.0 = want;
+        dirty = true;
+    }
+    dirty
 }
 
-fn paint_knob(side: &JoystickSide, r: f32, knob_r: f32, node: &mut Node) {
+/// `true` si algo cambió de verdad (el llamador marca el componente).
+fn paint_knob(side: &JoystickSide, r: f32, knob_r: f32, node: &mut Node) -> bool {
     let delta = clamped_delta(side, r);
     let (left, bottom) = layout::knob_offset_in_base(delta, r, knob_r);
-    node.width = Val::Px(knob_r * 2.0);
-    node.height = Val::Px(knob_r * 2.0);
-    node.left = Val::Px(left);
-    node.bottom = Val::Px(bottom);
+    let mut dirty = set_px(&mut node.width, knob_r * 2.0);
+    dirty |= set_px(&mut node.height, knob_r * 2.0);
+    dirty |= set_px(&mut node.left, left);
+    dirty |= set_px(&mut node.bottom, bottom);
+    dirty
 }

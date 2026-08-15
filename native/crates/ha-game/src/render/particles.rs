@@ -92,10 +92,10 @@ pub fn spawn_harvest_particles(
 fn tick_particles(
     time: Res<Time>,
     mut commands: Commands,
-    mut q: Query<(Entity, &mut Transform, &mut ProceduralParticle)>,
+    mut q: Query<(Entity, &mut Transform, &mut Sprite, &mut ProceduralParticle)>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut tf, mut p) in &mut q {
+    for (e, mut tf, mut sprite, mut p) in &mut q {
         p.lifetime.tick(time.delta());
         if p.lifetime.finished() {
             commands.entity(e).despawn_recursive();
@@ -105,6 +105,12 @@ fn tick_particles(
         tf.translation += p.velocity * dt;
         let s = (tf.scale.x - p.scale_decay * dt * 0.4).max(0.05);
         tf.scale = Vec3::splat(s);
+        // Y se APAGA, no desaparece de golpe. Encogerse solo alcanzaba para una
+        // astilla, pero el polvo de `vault.rs` es una nube: sin el fundido, la
+        // ráfaga al caer termina en un corte seco que se lee como un glitch.
+        // Al cuadrado, para que la mota viva casi entera y se vaya rápido al final.
+        let k = 1.0 - p.lifetime.fraction();
+        sprite.color.set_alpha(k * k);
     }
 }
 
@@ -137,10 +143,15 @@ fn trigger_impact_squash(
         }
     }
     if let Some((e, base_scale, _)) = best {
-        commands.entity(e).insert(SquashStretch {
-            timer: Timer::from_seconds(0.22, TimerMode::Once),
-            base_scale,
-        });
+        crate::render::try_insert(
+            &mut commands,
+            e,
+            "particulas/squash",
+            SquashStretch {
+                timer: Timer::from_seconds(0.22, TimerMode::Once),
+                base_scale,
+            },
+        );
         shake.send(CameraShakeEvent { trauma: 0.12 });
     }
 }

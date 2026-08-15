@@ -4,7 +4,7 @@
 //! -tz*TILE)` — same `(x, -z)` projection as `orbital2d.rs`. Depth is a
 //! discrete Z-Level (`z`): 0 = surface, negative = mine floors (Fase 3).
 //! Chunks are 2D grids of `Mesh2d` quads (vertex colors); decor/deposits are
-//! y-sorted sprites. See `MIGRATION_PLAN.md`.
+//! y-sorted sprites. Ver `biblia.md` §5.
 //!
 //! Module keeps the old public names (`TileWorld`, `ActivePlanet`,
 //! `active_surface_body`, …) so machines/launch_pad/targeting compile through
@@ -18,7 +18,7 @@ use bevy::render::mesh::{Indices, PrimitiveTopology};
 use serde::{Deserialize, Serialize};
 
 use ha_shared::topdown::{
-    deposit_at, portal_here, topdown_tile, Deposit, Portal, Tile, MIN_Z_LEVEL, TILE_M,
+    deposit_at, topdown_tile, Deposit, Tile, MIN_Z_LEVEL, TILE_M,
 };
 use ha_shared::{CelestialBody, InteractTargetKind, WorldContext};
 
@@ -34,13 +34,154 @@ use crate::targeting::InteractTarget;
 pub const CHUNK: i64 = 16;
 /// Chunks kept alive around the player (Chebyshev radius).
 const CHUNK_RANGE: i64 = 3;
+/// **MARGEN DE CONSTRUCCIÓN — el anillo que se arma FUERA DE CUADRO.**
+///
+/// El bug que cierra: `range` se calcula para llenar exactamente la pantalla
+/// (`live_view_h * 1.25`) y los chunks se construían justo hasta ahí. O sea que
+/// un chunk se armaba **el frame en que ya se veía**, a 2 por frame: caminando,
+/// el jugador miraba los rectángulos de suelo aparecer uno por uno en el borde.
+/// Es el "titila verde" —el pasto es un quad de color plano mientras no tenga
+/// arte asignada, así que cada chunk nuevo es un rectángulo verde que aparece de
+/// la nada.
+///
+/// Con margen, el suelo se arma un anillo ANTES de entrar en cuadro y para
+/// cuando se ve ya está puesto. El envolvente de supervivencia
+/// (`range + BUILD_MARGIN + 1`) queda un paso más afuera para que siga habiendo
+/// histéresis y el borde no se construya/destruya en frames alternos.
+///
+/// Cuesta memoria: con `range` 3 pasa de 7×7 = 49 chunks a 9×9 = 81. Por eso el
+/// margen sólo trae el SUELO y la decoración gruesa (`want_detail` ya daba
+/// `Coarse` hasta `range + 1`, un anillo que hasta ahora no existía); la flora
+/// chica sigue acotada a `DECOR_FULL_RANGE`.
+///
+/// `MAX_CHUNK_RANGE` sigue siendo el techo duro: volando con el zoom al máximo
+/// el margen se come, pero ahí el detalle fino ya se está fundiendo contra el
+/// mapa satelital (`FINE_OFF_VIEW_H`) y no hay rectángulo que mirar.
+const BUILD_MARGIN: i64 = 1;
+/// **Anillo de DETALLE COMPLETO** — donde se puebla la flora chica (matas,
+/// hongos, props de adorno), que el propio `stream_tile_chunks` describe como "lo
+/// MÁS numeroso por chunk". Antes compartía constante con el anillo de suelo
+/// (`CHUNK_RANGE`), que es una decisión distinta: el suelo no puede faltar nunca,
+/// la florecita a 100 m mide un píxel.
+///
+/// En Android baja a 2 (5×5 = 25 chunks en vez de 7×7 = 49, la mitad de sprites
+/// chicos). A la vista de caminata no se nota: con `SURFACE_VIEW_H` de 30 m la
+/// pantalla del Redmi muestra ~30×67 m y este anillo cubre 80×80 m — sigue
+/// terminando fuera de cuadro. Sólo se asoma el borde al alejar el zoom del todo.
+///
+/// Motivo: el teléfono reportó **2916 sprites de decoración** con frames de
+/// 356 ms y jitter de sólo 13.5 ms — un costo PAREJO, la firma de miles de draw
+/// calls, no de un tirón. Menos sprites es menos draw calls, menos extracción y
+/// menos trabajo de iluminación, todo a la vez.
+#[cfg(target_os = "android")]
+const DECOR_FULL_RANGE: i64 = 2;
+#[cfg(not(target_os = "android"))]
+const DECOR_FULL_RANGE: i64 = CHUNK_RANGE;
+
+// **Se probó aclarar la siembra en Android (uno de cada dos adornos) y NO vale
+// la pena.** Medido en el Redmi: la aldea pasó de 4.813 a 4.665 entidades —
+// 148, un 3 %— sin mover los fps. El adorno chico no es de donde salen las
+// entidades de una aldea: son los árboles y las rocas (`surface_decor_at`, que
+// no es "chico"), los edificios y la gente. Media flora menos en el teléfono
+// que en el escritorio es un precio visible por un ahorro que no se mide.
+//
+// Lo que sí sirvió, en orden: juntar lo sembrado en las páginas `mundo_N` del
+// atlas y bajar la densidad de vereda y playa (ver `worldgen`). Si mañana hay
+// que bajar más el conteo, el sitio a mirar es el adorno GRANDE y el arte de
+// tile, no éste. Ver biblia §10.
 /// Cuántos chunks se les puede construir mesh+decoración en UN frame. Sin este
 /// tope, un salto grande de `range` (aterrizar, teletransportarse, entrar a
 /// una ciudad densa) intenta poblar cientos de chunks de una vez y el frame se
 /// congela (medido: 250 ms/4 fps). Con el tope se reparte en varios frames,
 /// más cerca primero — imperceptible en vez de un tirón. Mismo patrón que
 /// streaming de chunks en Minecraft/GTA.
-const CHUNK_BUILD_BUDGET_PER_FRAME: usize = 6;
+/// **Medido: cada chunk cuesta ~6-12 ms de construir** (malla + decoración +
+/// arte de tile, con `spawn_chunk_decor` recorriendo las 256 celdas y adjuntando
+/// luces). Con el presupuesto en 10, un frame que llenaba el anillo se iba a
+/// 60-124 ms — confirmado en el log (`ha-span chunk=59583us`, picos de
+/// `chk=124817us`), y eso es UN SOLO sistema comiéndose de 4 a 8 frames enteros.
+/// Era, de lejos, el mayor gasto del juego: las luces medían 424 µs y el HUD 19 µs.
+///
+/// Con 2 el mismo trabajo se reparte en cinco veces más frames y el pico baja a
+/// ~12-24 ms. Lo que se paga es que el anillo tarda más en llenarse volando
+/// rápido; lo que se gana es que deja de haber un frame de 124 ms, que es
+/// exactamente el tirón que se siente. El fondo del asunto —que construir un
+/// chunk cueste 6-12 ms— sigue abierto: ahí está la próxima gran ganancia.
+
+const CHUNK_BUILD_BUDGET_PER_FRAME: usize = 2;
+/// **Techo del anillo al volar.** El presupuesto de arriba reparte el COSTE de
+/// construir en el tiempo, pero no acota el TOTAL vivo: sólo demora llegar al
+/// pico. Con el tope viejo (12) el anillo llegaba a 25×25 = 625 chunks, cada uno
+/// con su malla, su decoración y su arte de tile — de ahí salían los "19 k
+/// entities volando" que menciona `stream_tile_chunks`, y es el único punto del
+/// vuelo donde el consumo de memoria crece sin freno.
+///
+/// 7 son 15×15 = 225 chunks: un 64 % menos en el pico. Lo que queda más allá no
+/// se pierde, lo cubre el mapa satelital de `universe.rs`, y los dos se cruzan
+/// con el fundido de `fade_surface_lod` — que es exactamente el mecanismo que
+/// existe para esto.
+const MAX_CHUNK_RANGE: i64 = 7;
+/// Tope duro de sprites de decoración vivos. Al alcanzarlo se deja de poblar
+/// hasta que se libere: convierte un crecimiento sin límite (que termina en que
+/// Android mate el proceso) en una degradación visual que se recupera sola al
+/// alejarse. Holgado a propósito — en juego normal no se toca nunca.
+///
+/// ⚠ **NO BAJARLO PARA GANAR FPS — está medido que no sirve.** El 2026-07-31, con el
+/// cable, se probó 3.200 en el Redmi: el frame pasó de 22-29 ms a **74 ms**, o sea
+/// PEOR con la MITAD de sprites. En la misma sesión el espacio iba a 60 fps con 2.852
+/// entidades. El cuello no es cuántos sprites hay, es que **cada especie es una
+/// textura distinta** y el lote se rompe (ver `spawn_chunk_decor`). Se arregla con
+/// atlas, no recortando el mundo.
+const MAX_LIVE_DECOR: usize = 6_000;
+/// Cuánta decoración y cuántos chunks se pueden DESTRUIR por frame al apagar el
+/// detalle fino. Existe por la misma razón que `CHUNK_BUILD_BUDGET_PER_FRAME`:
+/// destruir miles de entidades con hijos en un solo frame es un tirón igual de
+/// grande que construirlas. Medido en el Redmi: el cruce a espacio marcaba picos de
+/// 200-490 ms. Repartido, el mismo trabajo se reparte en ~15 frames y no se siente.
+const DECOR_DESPAWN_BUDGET_PER_FRAME: usize = 420;
+const CHUNK_DESPAWN_BUDGET_PER_FRAME: usize = 24;
+
+/// Memoria del apagado del detalle fino (histéresis del umbral `FINE_OFF_VIEW_H`).
+#[derive(Resource, Default)]
+pub struct FineDetailOff(bool);
+
+/// Chunks que se pueden construir por frame. Es [`CHUNK_BUILD_BUDGET_PER_FRAME`]
+/// mientras se juega — el número está medido y no se toca (ver la nota larga de
+/// esa constante) — pero la **pantalla de carga** lo sube a lo bestia: ahí nadie
+/// está mirando el mundo, así que un frame de 200 ms no es un tirón, es tiempo
+/// bien gastado. `crate::loading` lo levanta al entrar y lo baja al salir.
+#[derive(Resource)]
+pub struct ChunkBudget(pub usize);
+
+impl Default for ChunkBudget {
+    fn default() -> Self {
+        Self(CHUNK_BUILD_BUDGET_PER_FRAME)
+    }
+}
+
+impl ChunkBudget {
+    pub fn normal() -> usize {
+        CHUNK_BUILD_BUDGET_PER_FRAME
+    }
+}
+
+/// El medidor y la histéresis, juntos en un solo parámetro: `stream_tile_chunks` ya
+/// está en el tope de 16 que admite un sistema de Bevy, y perder el span sería perder
+/// justo la instrumentación con la que se diagnostica este sistema (`RENDIMIENTO.md`).
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct StreamCtl<'w> {
+    span: Res<'w, crate::debug::CpuSpanStats>,
+    fine_off: ResMut<'w, FineDetailOff>,
+    budget: Res<'w, ChunkBudget>,
+    /// Cuántos chunks quedaron sin construir en el último pase. La pantalla de
+    /// carga espera a que esto sea 0: es la definición honesta de "el anillo
+    /// visible ya está armado".
+    backlog: ResMut<'w, ChunkBacklog>,
+}
+
+/// Chunks pendientes tras el último pase de streaming (0 = anillo completo).
+#[derive(Resource, Default)]
+pub struct ChunkBacklog(pub usize);
 
 /// Screen render position of a world ground point `(x, z)` (metres).
 /// North (−z) is up. Shared with the orbital view.
@@ -49,8 +190,10 @@ pub fn render_xy(x: f32, z: f32) -> Vec2 {
 }
 
 /// Y-sort depth for a sprite at world z (more south / larger z draws in front).
+/// Reexport de [`crate::layers::ysort`] — la escalera completa de bandas z vive
+/// en `layers`, éste es el nombre histórico que usa medio juego.
 pub fn sort_z(world_z: f32) -> f32 {
-    2.0 + world_z * 0.001
+    crate::layers::ysort(world_z)
 }
 
 /// Hash estable de una celda → id u32 para el set de cosecha/flora. ANTES truncaba
@@ -114,22 +257,31 @@ fn tile_name(t: Tile) -> &'static str {
         Tile::Dirt => "dirt",
         Tile::Sand => "sand",
         Tile::Water => "water",
+        Tile::WaterDeep => "water_deep",
+        Tile::Cliff => "cliff",
+        Tile::Slope => "slope",
+        Tile::Fence => "fence",
+        Tile::Pavement => "pavement",
+        Tile::Asphalt => "asphalt",
+        Tile::Rock => "rock",
         Tile::Regolith => "regolith",
         Tile::Basalt => "basalt",
         Tile::Ice => "ice",
         Tile::RockRed => "rock_red",
         Tile::Stone => "stone",
+        Tile::Subsoil => "subsoil",
         Tile::RockDark => "rock_dark",
         Tile::Bedrock => "bedrock",
         Tile::CaveFloor => "cave_floor",
         Tile::WoodFloor => "wood_floor",
+        Tile::StoneFloor => "stone_floor",
         Tile::Wall => "wall",
         Tile::WoodWall => "wood_wall",
         Tile::StoneBrick => "stone_brick",
         Tile::Door => "door",
         Tile::Window => "window",
-        Tile::StairsDown => "stairs_down",
-        Tile::StairsUp => "stairs_up",
+        Tile::Step => "step",
+        Tile::Stairwell => "stairwell",
     }
 }
 
@@ -139,6 +291,13 @@ fn tile_from_name(name: &str) -> Tile {
         "dirt" => Tile::Dirt,
         "sand" => Tile::Sand,
         "water" => Tile::Water,
+        "water_deep" => Tile::WaterDeep,
+        "cliff" => Tile::Cliff,
+        "slope" => Tile::Slope,
+        "fence" => Tile::Fence,
+        "pavement" => Tile::Pavement,
+        "asphalt" => Tile::Asphalt,
+        "rock" => Tile::Rock,
         "regolith" => Tile::Regolith,
         "basalt" => Tile::Basalt,
         "ice" => Tile::Ice,
@@ -148,13 +307,19 @@ fn tile_from_name(name: &str) -> Tile {
         "bedrock" => Tile::Bedrock,
         "cave_floor" => Tile::CaveFloor,
         "wood_floor" => Tile::WoodFloor,
+        "stone_floor" => Tile::StoneFloor,
         "wall" => Tile::Wall,
         "wood_wall" => Tile::WoodWall,
         "stone_brick" => Tile::StoneBrick,
         "door" => Tile::Door,
         "window" => Tile::Window,
-        "stairs_down" => Tile::StairsDown,
-        "stairs_up" => Tile::StairsUp,
+        "step" => Tile::Step,
+        "stairwell" => Tile::Stairwell,
+        // **Partidas viejas**: las gradas-teletransporte (`stairs_up`/`stairs_down`)
+        // se borraron. Su celda vuelve a ser un rellano de madera y NO un hueco: en
+        // el mapa guardado esa celda era pisable, y degradarla a `Air` abriría un
+        // pozo por el que el jugador se cae al cargar la partida.
+        "stairs_down" | "stairs_up" => Tile::WoodFloor,
         _ => Tile::Air,
     }
 }
@@ -180,6 +345,10 @@ pub struct TileWorld {
     /// Active depth layer (0 = surface).
     pub z: i32,
     pub version: u64,
+    /// Losas que dejaron de serlo (picadas o pisadas por otro material). Las
+    /// drena `integrity::collapse_unsupported`: lo que se apoyaba en ellas se
+    /// viene abajo. Ver C5 en biblia §13.
+    removed_floors: Vec<(u8, i32, i64, i64)>,
     /// Celdas editadas desde el último refresh de arte (autotile por vecinos):
     /// `rebuild_edited_tile_art` la drena y re-spawnea el arte de los chunks
     /// tocados (la edición cambia la forma de los 8 vecinos, no sólo la celda).
@@ -203,36 +372,239 @@ struct RegrowCell {
 
 impl TileWorld {
     pub fn tile_at(&self, body: CelestialBody, tx: i64, tz: i64) -> Tile {
-        if let Some(t) = self.edits.get(&(body as u8, self.z, tx, tz)) {
+        self.tile_at_level(body, self.z, tx, tz)
+    }
+
+    /// Celdas EDITADAS de un nivel, con su tile. Es lo que permite recorrer "lo
+    /// que el jugador construyó en la planta de arriba" sin barrer un cuadrado de
+    /// miles de celdas por si acaso: sin ediciones, el bucle no tiene vueltas.
+    pub fn edited_cells_at_level(
+        &self,
+        body: CelestialBody,
+        level: i32,
+    ) -> impl Iterator<Item = (i64, i64, Tile)> + '_ {
+        let b = body as u8;
+        self.edits
+            .iter()
+            .filter(move |((eb, ez, _, _), _)| *eb == b && *ez == level)
+            .map(|((_, _, tx, tz), t)| (*tx, *tz, *t))
+    }
+
+    /// Vacía la lista de losas que dejaron de existir desde la última consulta.
+    pub fn take_removed_floors(&mut self) -> Vec<(u8, i32, i64, i64)> {
+        std::mem::take(&mut self.removed_floors)
+    }
+
+    /// Saca el edit de una celda de CUALQUIER nivel y deja lo que corresponda.
+    /// Lo usa el derrumbe: la losa que se cae no es la del nivel activo.
+    pub fn clear_floor_at_level(&mut self, body: CelestialBody, level: i32, tx: i64, tz: i64) {
+        let key = (body as u8, level, tx, tz);
+        if !ha_shared::build_grid::is_build_floor(self.tile_at_level(body, level, tx, tz)) {
+            return;
+        }
+        if level > 0 {
+            self.edits.insert(key, Tile::Air);
+        } else {
+            self.edits.remove(&key);
+        }
+        self.version = self.version.wrapping_add(1);
+        self.dirty = true;
+        self.edit_log.push((tx, tz));
+        self.removed_floors.push((body as u8, level, tx, tz));
+    }
+
+    /// **Qué se DIBUJA en esta celda** — que no es lo mismo que en qué nivel
+    /// estás parado. Es la regla del "un solo mundo" (§4), y es **la planta en la
+    /// que estás**, en los tres sentidos:
+    ///
+    /// - Bajo tierra (`z < 0`) se ve el SUBSUELO: tierra maciza
+    ///   ([`Tile::Subsoil`]) hasta donde llega la vista, y recortado en ella lo
+    ///   que se excavó — la galería, tu sótano, el pozo. Eso es estar debajo.
+    /// - Arriba (`z > 0`) manda tu planta, que para eso la construiste, y por el
+    ///   vacío del borde se ve la calle de abajo atenuada
+    ///   ([`tile_render_color`]): desde la azotea se ve por dónde entraste.
+    /// - En la superficie, el mundo.
+    ///
+    /// **Por qué ya no se pinta la superficie estando abajo** (7 ago 2026): la
+    /// idea era no cortar la escena —bajabas y seguías viendo tu casa y la calle,
+    /// con tu túnel abierto al lado como el corte de un hormiguero—. En la
+    /// práctica se leía al revés: caminabas por el subsuelo rodeado de pasto a
+    /// pleno sol, con árboles y mariposas, y un agujero negro en el medio. No
+    /// parecía estar abajo; parecía un mapa roto. La continuidad no la daba el
+    /// dibujo —la dan los cuatro escalones que se andan y el gradiente de luz
+    /// (`interior.rs`)—, así que lo que se dibuja pasa a decir la verdad.
+    pub fn render_tile(&self, body: CelestialBody, tx: i64, tz: i64) -> Tile {
+        if self.z != 0 {
+            return self.tile_at(body, tx, tz);
+        }
+        self.tile_at_level(body, 0, tx, tz)
+    }
+
+    /// ¿Esta celda se dibuja como HUECO (pozo) en vez de como suelo? El hueco es
+    /// [`Tile::Air`] y nada más: bajo tierra, el suelo de la galería es SUELO —se
+    /// camina— y dibujarlo como un pozo era lo que convertía la cueva en una
+    /// mancha de agujeros negros.
+    pub fn renders_as_pit(&self, body: CelestialBody, tx: i64, tz: i64) -> bool {
+        self.render_tile(body, tx, tz) == Tile::Air
+    }
+
+    /// El tile de OTRO nivel (el activo lo da `tile_at`). Lo pide la
+    /// verticalidad: qué hay DEBAJO de la losa que querés colocar, y qué se ve
+    /// por el hueco del piso alto (`tile_render_color`).
+    pub fn tile_at_level(&self, body: CelestialBody, level: i32, tx: i64, tz: i64) -> Tile {
+        if let Some(t) = self.edits.get(&(body as u8, level, tx, tz)) {
             return *t;
         }
-        topdown_tile(body, self.z, tx, tz)
+        topdown_tile(body, level, tx, tz)
+    }
+
+    /// ¿La celda del nivel `level` aguanta una LOSA encima? Es la mitad "tile" de
+    /// `build_grid::floor_supported` (la otra mitad son las paredes de borde y las
+    /// estructuras, que las suma quien construye).
+    ///
+    /// Cuenta lo CONSTRUIDO —tuyo o del pueblo generado—, nunca el terreno pelado:
+    /// sobre el césped no se empieza un piso flotante, sobre tu casa (o sobre la
+    /// casa del mapa, que es justo lo que el jugador quiere ampliar) sí.
+    pub fn supports_upper_floor(&self, body: CelestialBody, level: i32, tx: i64, tz: i64) -> bool {
+        matches!(
+            self.tile_at_level(body, level, tx, tz),
+            Tile::WoodFloor
+                | Tile::StoneFloor
+                | Tile::StoneBrick
+                | Tile::Pavement
+                | Tile::WoodWall
+                | Tile::Window
+                | Tile::Door
+                // Y el tramo de escalera: sostiene su propio rellano, que es lo
+                // único que hace que una escalera lleve a algún sitio.
+                | Tile::Step
+                | Tile::Stairwell
+        )
     }
 
     pub fn solid_at(&self, body: CelestialBody, tx: i64, tz: i64) -> bool {
         self.tile_at(body, tx, tz).solid()
     }
 
+    /// ¿Esta celda la editó el jugador (picó, rellenó, construyó)? Lo autorado a
+    /// mano manda sobre cualquier regla del terreno procedural.
+    pub fn is_edited(&self, body: CelestialBody, tx: i64, tz: i64) -> bool {
+        self.edits.contains_key(&(body as u8, self.z, tx, tz))
+    }
+
+    /// **¿Esta celda frena a alguien que va a PIE?**
+    ///
+    /// Igual que `solid_at`, salvo por los acantilados: uno de un solo escalón es
+    /// un bordillo y se trepa o se baja de un impulso, en cualquier dirección y
+    /// también por las esquinas (ver `relief::climbable_edge`). Los de dos
+    /// escalones o más siguen siendo pared y hay que ir a buscar el paso.
+    ///
+    /// Que la excepción viva acá y no en `Tile::solid()` importa: picar, construir
+    /// y la navegación de vehículos siguen viendo el acantilado como lo que es —
+    /// esto sólo afecta a quien camina. Y una celda que EDITASTE nunca se relaja:
+    /// si pusiste roca ahí, es roca.
+    pub fn walk_blocked(&self, body: CelestialBody, tx: i64, tz: i64) -> bool {
+        let t = self.tile_at(body, tx, tz);
+        if !t.solid() {
+            return false;
+        }
+        t != Tile::Cliff
+            || self.z != 0
+            || self.is_edited(body, tx, tz)
+            || !ha_shared::relief::climbable_edge(body, tx, tz)
+    }
+
     pub fn break_tile(&mut self, body: CelestialBody, tx: i64, tz: i64) -> Option<Tile> {
         let t = self.tile_at(body, tx, tz);
-        if t == Tile::Bedrock || t == Tile::Air || t == Tile::Water {
+        // El líquido no se pica (ni el bajío ni el fondo): se rellena colocando
+        // bloques encima, que es lo que `place_tile` sí permite.
+        if matches!(t, Tile::Bedrock | Tile::Air | Tile::Water | Tile::WaterDeep) {
             return None;
         }
-        // Digging a surface tile reveals dirt/cave floor beneath (walkable);
-        // digging underground rock opens cave floor.
-        let revealed = if self.z == 0 { Tile::Dirt } else { Tile::CaveFloor };
+        // Qué queda cuando sacás lo que había. En superficie, tierra; bajo tierra,
+        // suelo de cueva.
+        //
+        // **Arriba queda VACÍO, no suelo de cueva.** Picar la losa de tu segundo
+        // piso tiene que abrir un agujero por el que se cae —eso es sacar el
+        // piso—; dejar `CaveFloor` te dejaba caminando por el aire sobre una
+        // planta que ya no existe.
+        let revealed = if self.z == 0 {
+            Tile::Dirt
+        } else if self.z > 0 {
+            Tile::Air
+        } else {
+            Tile::CaveFloor
+        };
+        let was_floor = ha_shared::build_grid::is_build_floor(t);
         self.edits
             .insert((body as u8, self.z, tx, tz), revealed);
         self.version = self.version.wrapping_add(1);
         self.dirty = true;
         self.edit_log.push((tx, tz));
+        if was_floor {
+            self.removed_floors.push((body as u8, self.z, tx, tz));
+        }
         self.maybe_schedule_regrow(body, tx, tz);
         Some(t)
     }
 
+    /// **Cavar hacia abajo** — el mundo es voxel (biblia §5).
+    ///
+    /// Picar ([`Self::break_tile`]) saca el bloque que tenés AL LADO y te deja la
+    /// celda abierta en tu mismo nivel: es cavar en horizontal, y es lo único que
+    /// existía. Cavar saca el suelo que PISÁS: la celda queda en [`Tile::Air`]
+    /// —el hueco, que se ve y por el que se cae— y el nivel de abajo se abre en
+    /// esa misma celda, que es la **cavidad**. De ahí sale la verticalidad
+    /// entera: bajar es cavar, no encontrar la boca de cueva que el mundo puso.
+    ///
+    /// Lo que hace y no se ve: **talla la cavidad** si abajo hay roca maciza. Sin
+    /// esto caerías dentro de la piedra, porque el nivel de abajo es un grid
+    /// propio y su celda podía estar sólida.
+    ///
+    /// **Del pozo se sale TREPANDO**, no por una grada que aparece sola. Antes el
+    /// fondo se estampaba con un tile-grada que al pisarlo te subía el pozo entero
+    /// de un salto; era el teletransporte que se borró. Ahora se camina contra el
+    /// borde y se trepa un nivel, como se sale de cualquier bordillo
+    /// (`escaleras::trepar_borde`).
+    ///
+    /// No se cava el líquido (se rellena), ni el vacío (ya es hueco), ni contra
+    /// el lecho de roca del fondo de la mina.
+    pub fn dig_down(&mut self, body: CelestialBody, tx: i64, tz: i64) -> Option<Tile> {
+        let t = self.tile_at(body, tx, tz);
+        if !t.diggable_down() {
+            return None;
+        }
+        let below = self.z - 1;
+        // Contra el fondo no se cava: `MIN_Z_LEVEL` y más abajo es lecho de roca.
+        if below <= MIN_Z_LEVEL {
+            return None;
+        }
+        let under = self.tile_at_level(body, below, tx, tz);
+        if under.solid() {
+            self.edits.insert((body as u8, below, tx, tz), Tile::CaveFloor);
+            self.edit_log.push((tx, tz));
+        }
+        let was_floor = ha_shared::build_grid::is_build_floor(t);
+        self.edits.insert((body as u8, self.z, tx, tz), Tile::Air);
+        self.version = self.version.wrapping_add(1);
+        self.dirty = true;
+        self.edit_log.push((tx, tz));
+        if was_floor {
+            self.removed_floors.push((body as u8, self.z, tx, tz));
+        }
+        Some(t)
+    }
+
     pub fn place_tile(&mut self, body: CelestialBody, tx: i64, tz: i64, kind: Tile) -> bool {
-        if self.solid_at(body, tx, tz) {
+        let cur = self.tile_at(body, tx, tz);
+        // Sobre LÍQUIDO sí se coloca: rellenar un charco y tender un pontón sobre
+        // el mar hondo son dos de las cosas que uno espera poder hacer con un
+        // montón de piedra en la mochila. Sobre roca o pared, no.
+        if cur.solid() && cur != Tile::WaterDeep {
             return false;
+        }
+        if ha_shared::build_grid::is_build_floor(cur) && !ha_shared::build_grid::is_build_floor(kind) {
+            self.removed_floors.push((body as u8, self.z, tx, tz));
         }
         self.edits.insert((body as u8, self.z, tx, tz), kind);
         self.version = self.version.wrapping_add(1);
@@ -327,56 +699,147 @@ pub use ha_shared::worldgen::{
 /// pero el usuario puede FIJARLO por asset con la casilla "bloquea el paso" del
 /// editor (`collides` en el manifest). Determinista → coincide con lo que
 /// `spawn_chunk_decor` colocó. Primer paso hacia la colisión por-celda precisa
-/// (relieves/cráteres) — ver `PLAN_COLISIONES_Y_CIUDADES.md`.
+/// (relieves/cráteres) — ver `biblia.md` §8.
 pub fn decor_blocks_walk(
     art: &crate::art2d::ArtLibrary,
     body: CelestialBody,
     tx: i64,
     tz: i64,
 ) -> bool {
-    // (A1) Huella multi-celda: un decor anclado en `(cx,cz)` con huella marca
-    // sólidas las celdas `(cx+dx, cz+dz)`. Sólo escaneamos la vecindad si ALGÚN
-    // asset declara huella (cero costo hasta que el usuario pinte una en el
-    // editor). `R` = radio máximo de huella soportado (assets hasta ~9 tiles).
-    if art.has_footprints() {
-        const R: i64 = 4;
-        for cz in (tz - R)..=(tz + R) {
-            for cx in (tx - R)..=(tx + R) {
-                let fp = match surface_decor_at(body, cx, cz) {
-                    Some(DecorKind::Tree) => art.collision_footprint(&[pick_tree_species_in(body, cx, cz).key]),
-                    Some(DecorKind::Rock) => {
-                        let rk = format!("decor/rock{}", body_art_suffix(body));
-                        art.collision_footprint(&[&rk, "decor/rock"])
-                    }
-                    None => None,
-                };
-                if let Some(fp) = fp {
-                    let off = ((tx - cx) as i32, (tz - cz) as i32);
-                    if fp.solid_offsets().any(|o| o == off) {
-                        return true;
-                    }
-                }
+    // La celda entera como "cápsula": si alguna caja del decor la toca, bloquea.
+    let cell = [
+        tx as f32 * TILE_M,
+        tz as f32 * TILE_M,
+        (tx + 1) as f32 * TILE_M,
+        (tz + 1) as f32 * TILE_M,
+    ];
+    decor_hits_box(art, None, None, body, 0, cell)
+}
+
+/// ¿La caja `[x0, z0, x1, z1]` (metros) choca con la colisión de algún decor?
+///
+/// Ésta es la colisión FINA: cada asset aporta las cajas de su huella pintada en
+/// el editor (`CollisionFootprint`, sub-celdas de hasta ¼ de tile), no el tile
+/// entero. Un farol delgado frena sólo en su poste y pasar rozando un árbol deja
+/// de sentirse un bug. Sin huella pintada se cae al comportamiento de siempre:
+/// una celda completa, según `collides` o el default por tipo.
+///
+/// `authored` = decor colocado en el editor de mundo (`None` para consultar sólo
+/// el procedural). `flora` = lo ya cosechado, que deja de estorbar (talar un árbol
+/// abre el paso). Determinista → coincide con lo que `spawn_chunk_decor` puso.
+pub fn decor_hits_box(
+    art: &crate::art2d::ArtLibrary,
+    authored: Option<&AuthoredDecor>,
+    flora: Option<&FloraHarvest>,
+    body: CelestialBody,
+    z: i32,
+    aabb: [f32; 4],
+) -> bool {
+    // Celdas ancla candidatas: las que toca la caja, más el alcance de las huellas
+    // multi-celda (un asset anclado lejos puede tener una caja acá). Sin huellas
+    // declaradas el escaneo es la vecindad inmediata — el costo de antes.
+    let reach: i64 = art.footprint_reach();
+    let x0 = (aabb[0] / TILE_M).floor() as i64 - reach;
+    let x1 = (aabb[2] / TILE_M).floor() as i64 + reach;
+    let z0 = (aabb[1] / TILE_M).floor() as i64 - reach;
+    let z1 = (aabb[3] / TILE_M).floor() as i64 + reach;
+    for cz in z0..=z1 {
+        for cx in x0..=x1 {
+            if decor_cell_hits(art, authored, flora, body, z, cx, cz, aabb) {
+                return true;
             }
         }
     }
-    // Default 1 celda (comportamiento actual) para decor SIN huella en esta celda.
-    match surface_decor_at(body, tx, tz) {
+    false
+}
+
+/// Cajas de colisión del decor anclado en `(cx, cz)` contra `aabb`.
+fn decor_cell_hits(
+    art: &crate::art2d::ArtLibrary,
+    authored: Option<&AuthoredDecor>,
+    flora: Option<&FloraHarvest>,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+    aabb: [f32; 4],
+) -> bool {
+    // Lo autorado en el editor de mundo gana sobre el procedural (misma regla que
+    // el dibujo). Sólo bloquea si el asset lo declara: huella pintada o la casilla
+    // "bloquea el paso" — así plantar flores decorativas no levanta un muro.
+    if let Some(d) = authored.and_then(|a| a.at(body, z, cx, cz)) {
+        let keys = [d.key.as_str()];
+        if let Some(fp) = art.collision_footprint(&keys) {
+            // La huella se pintó sobre el sprite a su tamaño natural; si lo
+            // escalaste al colocarlo, la colisión escala con él.
+            let (sx, sz) = match d.size {
+                Some([w, h]) if fp.w > 0 && fp.h > 0 => (w / fp.w as f32, h / fp.h as f32),
+                _ => (1.0, 1.0),
+            };
+            return footprint_hits(fp, cx, cz, (sx, sz), aabb);
+        }
+        // Sin huella pintada, el default sale de la CAPA del slot: una pared
+        // frena, un piso y un techo no. Antes el default era "no frena" para
+        // todo, asi que una `wall/*` plantada desde el editor de mundo se
+        // atravesaba caminando hasta que alguien se acordaba de tildarle la
+        // casilla — el mismo bug que la capa por namespace resuelve del lado del
+        // dibujo. El override explicito del editor sigue ganando.
+        let por_capa = matches!(art.slot_layer(&d.key), Some(ha_assets::ArtLayer::Wall));
+        return art.collides_override(&keys).unwrap_or(por_capa) && cell_hits(cx, cz, aabb);
+    }
+    if z != 0 {
+        return false;
+    }
+    // Lo que ya talaste/picaste no frena a nadie.
+    if flora.is_some_and(|f| f.is_removed(body, 0, 0, pack_cell(cx, cz))) {
+        return false;
+    }
+    match surface_decor_at(body, cx, cz) {
         Some(DecorKind::Tree) => {
-            let key = pick_tree_species_in(body, tx, tz).key;
-            if art.collision_footprint(&[key]).is_some() {
-                return false; // su colisión la define la huella (ya evaluada arriba)
+            let key = pick_tree_species_in(body, cx, cz).key;
+            match art.collision_footprint(&[key]) {
+                Some(fp) => footprint_hits(fp, cx, cz, (1.0, 1.0), aabb),
+                // Sin huella: el tronco ocupa su celda (default histórico).
+                None => art.collides_override(&[key]).unwrap_or(true) && cell_hits(cx, cz, aabb),
             }
-            art.collides_override(&[key]).unwrap_or(true)
         }
         Some(DecorKind::Rock) => {
             let rock_key = format!("decor/rock{}", body_art_suffix(body));
-            if art.collision_footprint(&[&rock_key, "decor/rock"]).is_some() {
-                return false;
+            let keys = [rock_key.as_str(), "decor/rock"];
+            match art.collision_footprint(&keys) {
+                Some(fp) => footprint_hits(fp, cx, cz, (1.0, 1.0), aabb),
+                None => art.collides_override(&keys).unwrap_or(false) && cell_hits(cx, cz, aabb),
             }
-            art.collides_override(&[&rock_key, "decor/rock"]).unwrap_or(false)
         }
         None => false,
     }
+}
+
+/// ¿Alguna caja de la huella anclada en `(cx, cz)` (escalada `scale`) toca `aabb`?
+fn footprint_hits(
+    fp: &ha_assets::CollisionFootprint,
+    cx: i64,
+    cz: i64,
+    scale: (f32, f32),
+    aabb: [f32; 4],
+) -> bool {
+    let (ox, oz) = (cx as f32 * TILE_M, cz as f32 * TILE_M);
+    fp.solid_rects().any(|r| {
+        let bx0 = ox + r[0] * scale.0 * TILE_M;
+        let bz0 = oz + r[1] * scale.1 * TILE_M;
+        let bx1 = ox + r[2] * scale.0 * TILE_M;
+        let bz1 = oz + r[3] * scale.1 * TILE_M;
+        overlaps([bx0, bz0, bx1, bz1], aabb)
+    })
+}
+
+fn cell_hits(cx: i64, cz: i64, aabb: [f32; 4]) -> bool {
+    let (x, z) = (cx as f32 * TILE_M, cz as f32 * TILE_M);
+    overlaps([x, z, x + TILE_M, z + TILE_M], aabb)
+}
+
+fn overlaps(a: [f32; 4], b: [f32; 4]) -> bool {
+    a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 }
 
 /// ¿Se puede construir sobre esta celda? NO si tiene decor COSECHABLE aún
@@ -391,10 +854,19 @@ pub fn cell_build_blocked(
     tx: i64,
     tz: i64,
 ) -> bool {
+    // Terreno que no es suelo firme: líquido (el bajío se camina pero no se
+    // cimenta) y rampas (son el paso de una terraza a otra, taparlas sellaría el
+    // relieve). Va ANTES de la comprobación de cosecha porque no depende de ella:
+    // haber talado el árbol no seca el lago.
+    if z == 0 && !ha_shared::topdown::topdown_tile(body, 0, tx, tz).buildable_ground() {
+        return true;
+    }
     if flora.is_removed(body, 0, 0, pack_cell(tx, tz)) {
         return false;
     }
-    (z == 0 && surface_decor_at(body, tx, tz).is_some()) || deposit_at(body, z, tx, tz).is_some()
+    // Mismo criterio que al spawnear (`spawn_chunk_decor`): el decor de superficie
+    // existe también mientras cavás debajo, porque el mundo de arriba sigue ahí.
+    (z <= 0 && surface_decor_at(body, tx, tz).is_some()) || deposit_at(body, z, tx, tz).is_some()
 }
 
 fn deposit_target_kind(d: Deposit) -> InteractTargetKind {
@@ -417,10 +889,29 @@ pub struct TileChunk {
     pub cx: i64,
     pub cz: i64,
     pub built_version: u64,
-    /// Si este chunk tiene poblada su decoración fina (sprites de árboles,
-    /// props y autotiles). Los chunks lejanos se crean SIN ella y la reciben al
-    /// entrar en el anillo cercano — ver `stream_tile_chunks`.
-    pub decorated: bool,
+    /// Cuánta decoración tiene poblada este chunk. Los chunks se crean con el
+    /// nivel que les toca por distancia y lo SUBEN al acercarse (bajaste volando):
+    /// ver `stream_tile_chunks` y [`DecorDetail`].
+    pub decor: DecorDetail,
+}
+
+/// Cuánto detalle de decoración lleva un chunk. Es un nivel ORDENADO: subir de
+/// nivel repuebla el chunk, bajar no hace nada (lo que sobra ya se ve como una
+/// mota y el fundido de LOD lo está apagando igual).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default)]
+pub enum DecorDetail {
+    /// Sin nada: fuera del alcance de la capa fina.
+    #[default]
+    None,
+    /// Lo que se lee desde el aire: árboles, piedras, vetas y portales.
+    Coarse,
+    /// Todo: además, la flora chica, los props de adorno y el arte de tile
+    /// (agua, autotiles, piezas construidas). Sólo de cerca, porque son las dos
+    /// categorías con MÁS entidades por chunk —el arte de tile puede llegar a una
+    /// por celda, 256 en un chunk de costa— y a distancia miden un píxel. El
+    /// color del agua y de las piezas ya lo pinta la malla del chunk
+    /// (`build_chunk_mesh`), así que lejos no falta nada: falta el brillo.
+    Full,
 }
 
 #[derive(Component)]
@@ -428,6 +919,10 @@ pub struct SurfaceDecor {
     pub cx: i64,
     pub cz: i64,
     pub z: i32,
+    /// Flora/props de adorno: es la categoría más numerosa y la primera que se
+    /// tira cuando el chunk sólo llega a [`DecorDetail::Coarse`]. Árboles,
+    /// piedras, vetas y portales van con `false` (viven en todo el anillo).
+    pub small: bool,
 }
 
 #[derive(Resource, Default)]
@@ -438,17 +933,86 @@ pub struct ChunkMaterial(pub Handle<ColorMaterial>);
 /// El cambio de capa NUNCA mueve al jugador ni carga una escena: caminás sobre
 /// la boca de la cueva o la grada y ya estás abajo, en las mismas coordenadas.
 /// Lo único que hacía falta era que el mundo nuevo APAREZCA en vez de aparecer
-/// de golpe — un cuarto de segundo de fundido y deja de leerse como un corte.
+/// de golpe.
+///
+/// **Son dos fundidos y no uno**, porque hay dos maneras de cambiar de planta y
+/// duran cosas distintas:
+///
+/// - [`Self::pulso`] — **caer** por un hueco. Es instantáneo por definición, así
+///   que lo único posible es un cuarto de segundo por detrás para que el ojo siga
+///   la caída. Se dispara y decae solo.
+/// - [`Self::tramo`] — **andar una escalera**. Acá no hay nada que perseguir: el
+///   cambio dura lo que dura el paso, así que el fundido es una **función de dónde
+///   estás en el tramo** ([`ha_shared::escaleras::meseta_del_tramo`]) y no un
+///   temporizador. Subiendo, la planta de abajo se desvanece mientras subís y la
+///   de arriba entra ya entera al llegar al rellano; bajando, al revés. Y como es
+///   función de la posición, **desandar medio escalón devuelve el dibujo**: no es
+///   una animación disparada que haya que esperar a que termine.
+///
+/// Se combinan con `max` y no sumando: son dos formas de decir "esto se está
+/// yendo", no dos velos apilados.
 #[derive(Resource, Default)]
-pub struct LayerFade(pub f32);
+pub struct LayerFade {
+    pub pulso: f32,
+    pub tramo: f32,
+}
 
-/// Duración del fundido de capa, en segundos.
+impl LayerFade {
+    /// Cuánto se esconde la planta que se está dibujando, de 0 (entera) a 1.
+    pub fn total(&self) -> f32 {
+        self.pulso.max(self.tramo)
+    }
+}
+
+/// Duración del fundido de capa al CAER, en segundos.
 const LAYER_FADE_SECS: f32 = 0.28;
+
+/// **Cuánto llega a desvanecerse la planta en mitad de un tramo.**
+///
+/// No es 1.0 a propósito. A uno la planta se borra del todo y lo que queda es el
+/// color de fondo de la cámara — un fotograma de vacío, que es exactamente la
+/// "cortina" que §4 prohíbe. A 0.85 se lee como un disolvido: la planta que se va
+/// queda apenas insinuada justo en el frame en que la otra la reemplaza.
+pub const FUNDIDO_TRAMO: f32 = 0.85;
 
 /// Decor AUTORADO (árboles/props colocados a mano en el editor de mundo, `world_edits.json`).
 /// Se pinta junto al decor procedural al streamear cada chunk. Lo llena `world_edits.rs`.
 #[derive(Resource, Default)]
-pub struct AuthoredDecor(pub Vec<ha_shared::world_edits::PlacedDecor>);
+pub struct AuthoredDecor {
+    pub list: Vec<ha_shared::world_edits::PlacedDecor>,
+    /// `(cuerpo, z, x, zc)` → índice en `list`. La colisión lo consulta por celda
+    /// varias veces por frame; recorrer el vector entero no escala.
+    by_cell: std::collections::HashMap<(u8, i32, i64, i64), usize>,
+}
+
+impl AuthoredDecor {
+    pub fn set(&mut self, list: Vec<ha_shared::world_edits::PlacedDecor>) {
+        self.by_cell = list
+            .iter()
+            .enumerate()
+            .map(|(i, d)| ((d.body, d.z, d.x, d.zc), i))
+            .collect();
+        self.list = list;
+    }
+
+    /// El asset autorado en esa celda, si hay uno.
+    pub fn at(
+        &self,
+        body: CelestialBody,
+        z: i32,
+        tx: i64,
+        tz: i64,
+    ) -> Option<&ha_shared::world_edits::PlacedDecor> {
+        if self.by_cell.is_empty() {
+            return None;
+        }
+        self.by_cell.get(&(body as u8, z, tx, tz)).map(|&i| &self.list[i])
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.list.is_empty()
+    }
+}
 
 pub struct World2dPlugin;
 
@@ -456,25 +1020,28 @@ impl Plugin for World2dPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TileWorld>()
             .init_resource::<ActivePlanet>()
+            .init_resource::<ChunkBudget>()
+            .init_resource::<ChunkBacklog>()
             .init_resource::<ChunkMaterial>()
             .init_resource::<LayerFade>()
             .init_resource::<AuthoredDecor>()
             .init_resource::<DecorFreeCells>()
+            .init_resource::<FineDetailOff>()
             .add_systems(
                 Startup,
                 (
                     load_tiles_on_startup,
                     init_chunk_material,
                     spawn_cursor_highlight,
-                    spawn_pointer_reticle,
                 ),
             )
             .add_systems(
                 Update,
                 (
+                    sync_chunk_material,
                     apply_tile_hold.before(crate::hud::update_interact_hud),
                     try_place_tile_on_hold.before(crate::hud::update_interact_hud),
-                    layer_transition,
+                    fall_through_void,
                     tick_grass_regrowth,
                     stream_tile_chunks,
                     rebuild_dirty_chunks,
@@ -482,11 +1049,17 @@ impl Plugin for World2dPlugin {
                     // Colonos "tontos" reemplazados por NPCs con cerebro + memoria
                     // (`society.rs`, F6). `sync_colonists` queda inactivo.
                     sync_cursor_highlight,
-                    sync_pointer_reticle,
                     canopy_translucency,
                     fade_surface_lod.after(canopy_translucency),
                     debounced_tiles_save,
-                ),
+                )
+                    // Todo esto necesita un jugador en el mundo, y el jugador
+                    // recién nace al entrar a `Loading` (`scene::spawn_player`).
+                    // Antes corrían igual en el splash y el menú: cada uno
+                    // resolvía su query, no encontraba jugador y salía — barato
+                    // por sistema, pero son doce, todos los frames, mientras la
+                    // pantalla de carga es justo donde el arranque va más justo.
+                    .run_if(crate::game_phase::world_active),
             );
     }
 }
@@ -521,8 +1094,9 @@ fn canopy_translucency(
     }
 }
 
-/// Yellow corner-bracket highlight on the grid cell under the aim cursor —
-/// so you know where the reticle is detecting (base of the building system).
+/// Corchetes amarillos sobre la celda que estás TOCANDO — el único adorno que
+/// quedó del viejo sistema de mira, y sólo mientras el dedo está apoyado: es la
+/// confirmación de "acá va a pasar", no un cursor que vive en pantalla.
 #[derive(Component)]
 struct CursorHighlight;
 
@@ -532,7 +1106,7 @@ fn spawn_cursor_highlight(mut commands: Commands) {
     commands
         .spawn((
             CursorHighlight,
-            Transform::from_xyz(0.0, 0.0, 6.0),
+            Transform::from_xyz(0.0, 0.0, crate::layers::OBRA),
             Visibility::Hidden,
             InheritedVisibility::default(),
             ViewVisibility::default(),
@@ -558,13 +1132,17 @@ fn spawn_cursor_highlight(mut commands: Commands) {
 
 fn sync_cursor_highlight(
     cursor: Res<crate::input::AimCursor>,
+    hold: Res<crate::input::HoldInteractState>,
     region: Res<RegionRuntime>,
     mut hl: Query<(&mut Transform, &mut Visibility), With<CursorHighlight>>,
 ) {
     let Ok((mut tf, mut vis)) = hl.get_single_mut() else {
         return;
     };
-    if surface_region_active(&region).is_none() || !cursor.initialized {
+    // Se sostiene mientras dura la acción aunque el dedo se levante justo al
+    // final: si no, el resaltado parpadea en el último frame del hachazo.
+    let showing = cursor.targeting() || hold.active;
+    if surface_region_active(&region).is_none() || !showing {
         *vis = Visibility::Hidden;
         return;
     }
@@ -576,79 +1154,42 @@ fn sync_cursor_highlight(
     tf.translation = Vec3::new(r.x, r.y, 6.0);
 }
 
-/// Free-moving pointer reticle: a small cross drawn at the EXACT aim-cursor
-/// world position — never snapped to the grid. This is the "where is my
-/// pointer" marker the right stick drives; the yellow brackets above merely
-/// highlight whichever cell the pointer currently sits on (Terraria-style).
-#[derive(Component)]
-struct PointerReticle;
-
-#[derive(Component)]
-struct PointerReticleBar;
-
-fn spawn_pointer_reticle(mut commands: Commands) {
-    let color = crate::ui_theme::crosshair_color(false);
-    let arm = 0.34;
-    let thick = 0.07;
-    commands
-        .spawn((
-            PointerReticle,
-            Transform::from_xyz(0.0, 0.0, 6.5),
-            Visibility::Hidden,
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-        ))
-        .with_children(|p| {
-            // Horizontal + vertical bars form the cross.
-            p.spawn((
-                Sprite::from_color(color, Vec2::new(arm, thick)),
-                Transform::default(),
-                PointerReticleBar,
-            ));
-            p.spawn((
-                Sprite::from_color(color, Vec2::new(thick, arm)),
-                Transform::default(),
-                PointerReticleBar,
-            ));
-        });
-}
-
-fn sync_pointer_reticle(
-    cursor: Res<crate::input::AimCursor>,
-    region: Res<RegionRuntime>,
-    target: Res<crate::targeting::LookTarget>,
-    mut reticle: Query<(&mut Transform, &mut Visibility), With<PointerReticle>>,
-    mut bars: Query<&mut Sprite, With<PointerReticleBar>>,
-) {
-    let Ok((mut tf, mut vis)) = reticle.get_single_mut() else {
-        return;
-    };
-    if surface_region_active(&region).is_none() || !cursor.initialized {
-        *vis = Visibility::Hidden;
-        return;
-    }
-    *vis = Visibility::Visible;
-    // Exactly where the cursor is — free, no grid snap.
-    let r = render_xy(cursor.world.x, cursor.world.y);
-    tf.translation = Vec3::new(r.x, r.y, 6.5);
-
-    // Brighten when the pointer is over an interactable, like the old reticle.
-    let color = crate::ui_theme::crosshair_color(target.entity.is_some());
-    for mut sprite in &mut bars {
-        sprite.color = color;
-    }
-}
-
 fn init_chunk_material(
     mut mat: ResMut<ChunkMaterial>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    // Blend explícito: `fade_surface_lod` baja el alpha de ESTE material para
-    // fundir los tiles finos en el mapa satelital al alejarse (`universe.rs`).
+    // Arranca OPACO, que es el estado de a pie. `fade_surface_lod` es el dueño
+    // del modo de acá en más: lo pasa a Blend sólo mientras funde hacia el mapa
+    // satelital, que es el único momento en que el alpha de este material baja
+    // de 1.0. Ver el porqué del costo en esa función.
     mat.0 = materials.add(ColorMaterial {
-        alpha_mode: bevy::sprite::AlphaMode2d::Blend,
+        alpha_mode: bevy::sprite::AlphaMode2d::Opaque,
         ..default()
     });
+}
+
+/// **Le engancha al material del chunk la hoja del suelo**, una sola vez.
+///
+/// No se hace en `init_chunk_material` porque la textura la trae la carga
+/// perezosa de `ArtLibrary` y en `Startup` todavía no hay a quién pedírsela. Con
+/// el material ya texturizado, la malla del chunk dibuja el pixel del pack en el
+/// mismo draw call de siempre — sin esto las UVs no tendrían de dónde leer.
+fn sync_chunk_material(
+    art: Res<ArtLibrary>,
+    mat: Res<ChunkMaterial>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut hecho: Local<bool>,
+) {
+    if *hecho {
+        return;
+    }
+    let Some(hoja) = art.suelo_pagina() else {
+        return;
+    };
+    if let Some(m) = materials.get_mut(&mat.0) {
+        m.texture = Some(hoja);
+        *hecho = true;
+    }
 }
 
 /// Funde la capa de tiles finos (suelo + decoración) hacia el mapa satelital a
@@ -665,12 +1206,32 @@ fn fade_surface_lod(
     mut was_fading: Local<bool>,
     mut decor: Query<&mut Sprite, Or<(With<SurfaceDecor>, With<TileArt>)>>,
 ) {
-    layer.0 = (layer.0 - time.delta_secs() / LAYER_FADE_SECS).max(0.0);
-    let f = crate::universe::fine_tile_alpha(zoom.live_view_h) * (1.0 - layer.0);
+    // El traspaso fino <-> satelital: es el momento exacto que el usuario reporta
+    // como "al salir al espacio da un tirón en cada cambio".
+    let _probe = crate::debug::probe("fade_surface_lod");
+    layer.pulso = (layer.pulso - time.delta_secs() / LAYER_FADE_SECS).max(0.0);
+    let f = crate::universe::fine_tile_alpha(zoom.live_view_h) * (1.0 - layer.total());
+    let fading = f < 0.999;
+    // El suelo tapa la pantalla entera, así que su modo de mezcla es la cuenta
+    // más cara del frame. A pie `f` vale 1.0: en Blend la GPU igual lee el
+    // framebuffer por cada fragmento y no puede descartar los tapados, para
+    // mezclar un alpha que no mezcla nada. Medido en el Redmi: 81 ms -> 28 ms
+    // con sólo pasarlo a Opaque, a pixel idéntico (la malla no tiene textura,
+    // su único alpha es el de esta línea). Ablación ronda 3, biblia §10.
+    //
+    // El modo se escribe SÓLO al cruzar el umbral: cambiarlo respecializa el
+    // pipeline, y hacerlo cada frame sería un tirón permanente en vez de uno.
+    let want_mode = if fading {
+        bevy::sprite::AlphaMode2d::Blend
+    } else {
+        bevy::sprite::AlphaMode2d::Opaque
+    };
     if let Some(m) = materials.get_mut(&mat.0) {
         m.color = Color::srgba(1.0, 1.0, 1.0, f);
+        if m.alpha_mode != want_mode {
+            m.alpha_mode = want_mode;
+        }
     }
-    let fading = f < 0.999;
     // A pie (f == 1) no tocamos los sprites: `canopy_translucency` es la dueña
     // del alpha de los árboles. Sólo se hace una pasada final al volver.
     if !fading && !*was_fading {
@@ -701,7 +1262,7 @@ fn apply_tile_hold(
     mut tiles: ResMut<TileWorld>,
     mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
     mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
 ) {
     if !hold.completed || target.kind != Some(InteractTargetKind::Block) {
         return;
@@ -711,8 +1272,18 @@ fn apply_tile_hold(
     };
     hold.completed = false;
     let body = active_surface_body(&ctx, &planet);
-    if let Some(t) = tiles.break_tile(body, tx as i64, tz as i64) {
-        sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Dig));
+    // Picar (de costado) y cavar (hacia abajo) son el MISMO gesto: lo que cambia
+    // es qué había apuntado. Ver `TileWorld::dig_down`.
+    let dug = if target.dig_down {
+        tiles.dig_down(body, tx as i64, tz as i64)
+    } else {
+        tiles.break_tile(body, tx as i64, tz as i64)
+    };
+    if let Some(t) = dug {
+        sfx.send(crate::audio::PlaySfxAt(
+            crate::audio::Sfx::Dig,
+            render_xy((tx as f32 + 0.5) * TILE_M, (tz as f32 + 0.5) * TILE_M),
+        ));
         if let Some(item) = t.dug_item() {
             inv.add(item, 1);
             persist.mark_immediate();
@@ -729,7 +1300,7 @@ fn try_place_tile_on_hold(
     mut tiles: ResMut<TileWorld>,
     mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
     mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
 ) {
     if !hold.completed || !hold.placing_block {
         return;
@@ -747,32 +1318,50 @@ fn try_place_tile_on_hold(
     }
     let body = active_surface_body(&ctx, &planet);
     if tiles.place_tile(body, tx as i64, tz as i64, kind) {
-        sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Place));
+        sfx.send(crate::audio::PlaySfxAt(
+            crate::audio::Sfx::Place,
+            render_xy((tx as f32 + 0.5) * TILE_M, (tz as f32 + 0.5) * TILE_M),
+        ));
         inv.remove(&equipped.item_id, 1);
         persist.mark_immediate();
     }
 }
 
-/// Z-Level transition: standing on a portal cell drops/climbs one floor
-/// (a coherent vertical shaft, so `(x,z)` stays — only the layer changes).
-/// Latched: re-arms only after the player steps off the portal (so you don't
-/// fall through every floor at once). Discrete frame change, never a cutscene.
-fn layer_transition(
+/// **Por el hueco se CAE, en cualquier nivel.** Todo lo que es [`Tile::Air`] —el
+/// vacío de tu piso alto, y también el pozo que cavaste en el pasto— te baja un
+/// nivel en el acto, en el mismo `(x, z)`. Si abajo también hay hueco seguís
+/// bajando hasta pisar algo.
+///
+/// Que valga para `z <= 0` es lo que conecta cavar con las cuevas **sin cambio de
+/// escena** (§4): el pozo que abrís en la superficie te deja en la galería de
+/// abajo sin cargar nada. No hay dos sistemas — hay un hueco.
+///
+/// Por qué CAER y no una pared invisible: la alternativa era hacer sólido el
+/// vacío, y eso es exactamente el "atravesar/chocar con nada" que el jugador
+/// reporta como bug. Un balcón sin baranda tiene que dejarte caer.
+///
+/// Sin daño: la caída es feedback (impulso del sprite, polvo, golpe y un tirón de
+/// cámara, los mismos que descolgarse de un bordillo), no un castigo — misma
+/// política que la "muerte amable" del survival.
+fn fall_through_void(
     region: Res<RegionRuntime>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
     mut tiles: ResMut<TileWorld>,
-    mut armed: Local<bool>,
-    mut started: Local<bool>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
     mut fade: ResMut<LayerFade>,
+    mut bob: ResMut<crate::vault::VaultBob>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+    mut shake: EventWriter<crate::camera::CameraShakeEvent>,
     player: Query<&SimState, With<Player>>,
 ) {
-    if !*started {
-        *armed = true;
-        *started = true;
-    }
-    if surface_region_active(&region).is_none() {
+    // Volando no se cae: el piso alto es justo por donde entrás volando. Y en el
+    // interior de la nave las celdas son derivadas, no un mundo con niveles.
+    if tiles.z <= MIN_Z_LEVEL
+        || fly.flying()
+        || region.active == RegionId::ShipInterior
+        || surface_region_active(&region).is_none()
+    {
         return;
     }
     let Ok(sim) = player.get_single() else {
@@ -781,83 +1370,28 @@ fn layer_transition(
     let body = active_surface_body(&ctx, &planet);
     let tx = (sim.body.x / TILE_M).floor() as i64;
     let tz = (sim.body.z / TILE_M).floor() as i64;
-    // Portales naturales (mina) O gradas colocadas por el jugador (F6): ambos
-    // son el MISMO swap instantáneo de capa, nunca una cutscene.
-    let portal = portal_here(body, tiles.z, tx, tz).or_else(|| {
-        match tiles.tile_at(body, tx, tz) {
-            Tile::StairsDown => Some(Portal::Descend),
-            Tile::StairsUp => Some(Portal::Ascend),
-            _ => None,
-        }
-    });
-    match portal {
-        Some(portal) if *armed => {
-            // Verticalidad interior: hasta 3 pisos hacia arriba; hacia abajo,
-            // el fondo de la mina.
-            let new_z = match portal {
-                Portal::Descend => (tiles.z - 1).max(MIN_Z_LEVEL),
-                Portal::Ascend => (tiles.z + 1).min(3),
-            };
-            if new_z != tiles.z {
-                let from_stairs = matches!(
-                    tiles.tile_at(body, tx, tz),
-                    Tile::StairsDown | Tile::StairsUp
-                );
-                tiles.z = new_z;
-                tiles.version = tiles.version.wrapping_add(1);
-                // Al llegar por gradas, tallar la sala destino (idempotente) y
-                // dejar la grada de vuelta — sensación de subsuelo/piso sin
-                // cuevas procedurales ni loading.
-                if from_stairs {
-                    carve_stair_room(&mut tiles, body, tx, tz, portal);
-                }
-                fade.0 = 1.0; // el piso nuevo entra fundido, no de golpe
-                sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Stairs));
-                *armed = false;
-                eprintln!("ha-layer: → z={new_z} ({:?})", portal);
-            }
-        }
-        Some(_) => {}
-        None => *armed = true,
-    }
-}
-
-/// Talla una sala cerrada 7×7 alrededor de la celda de llegada de una grada
-/// (perímetro = muro, interior = piso, la celda de llegada = grada de vuelta).
-/// Idempotente: sólo talla celdas aún naturales (no pisa lo que el jugador
-/// construyó); las ediciones persisten en `tiles.json` como cualquier otra.
-fn carve_stair_room(tiles: &mut TileWorld, body: CelestialBody, tx: i64, tz: i64, took: Portal) {
-    let z = tiles.z;
-    let back = match took {
-        Portal::Descend => Tile::StairsUp,
-        Portal::Ascend => Tile::StairsDown,
-    };
-    // Si la grada de vuelta ya está, la sala ya existe.
-    if tiles.tile_at(body, tx, tz) == back {
+    if tiles.tile_at(body, tx, tz) != Tile::Air {
         return;
     }
-    const R: i64 = 3;
-    for dz in -R..=R {
-        for dx in -R..=R {
-            let (cx, cz) = (tx + dx, tz + dz);
-            let key = (body as u8, z, cx, cz);
-            if tiles.edits.contains_key(&key) {
-                continue; // respeta lo construido por el jugador
-            }
-            let perimeter = dx.abs() == R || dz.abs() == R;
-            let t = if (cx, cz) == (tx, tz) {
-                back
-            } else if perimeter {
-                Tile::WoodWall
-            } else {
-                Tile::WoodFloor
-            };
-            tiles.edits.insert(key, t);
-            tiles.edit_log.push((cx, cz));
-        }
+    // Bajar hasta pisar algo (el lecho de roca del fondo siempre frena).
+    let mut z = tiles.z;
+    while z > MIN_Z_LEVEL && tiles.tile_at_level(body, z, tx, tz) == Tile::Air {
+        z -= 1;
     }
+    if z == tiles.z {
+        return;
+    }
+    tiles.z = z;
     tiles.version = tiles.version.wrapping_add(1);
-    tiles.dirty = true;
+    // Caer cambia lo que se dibuja —de un piso alto y también hacia el subsuelo,
+    // que desde el 7 ago se pinta como lo que es—, así que la planta nueva ENTRA
+    // en vez de aparecer de golpe. No es una transición ni tapa nada: es un cuarto
+    // de segundo para que el ojo siga la caída.
+    fade.pulso = 1.0;
+    bob.drop_impact();
+    let feet = render_xy(sim.body.x, sim.body.z);
+    sfx.send(crate::audio::PlaySfxAt(crate::audio::Sfx::DropLedge, feet));
+    shake.send(crate::camera::CameraShakeEvent { trauma: 0.14 });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -877,22 +1411,61 @@ fn stream_tile_chunks(
     player: Query<&Transform, With<Player>>,
     mut chunks: Query<(Entity, &mut TileChunk)>,
     decor: Query<(Entity, &SurfaceDecor)>,
+    mut ctl: StreamCtl,
 ) {
+    let _guard = crate::debug::span_guard(&ctl.span, crate::debug::CpuSpanSlot::Chunk);
+    let _probe = crate::debug::probe("stream_tile_chunks");
     // Los tiles de 1 m sólo existen mientras se VEN. Pasado `FINE_OFF_VIEW_H` ya
     // los reemplazó el mapa satelital (`universe.rs`), así que streamear más
     // sería trabajo puro para nada — y era de donde salían los 19 k entities
     // volando con un anillo enorme que igual no llenaba la pantalla.
-    if surface_region_active(&region).is_none()
-        || zoom.live_view_h > crate::universe::FINE_OFF_VIEW_H
-    {
-        for (e, _) in &chunks {
-            commands.entity(e).despawn_recursive();
-        }
+    // APAGADO CON HISTÉRESIS Y CON PRESUPUESTO — es la mitad del tirón al despegar.
+    //
+    // Antes esto era un `if` sin memoria que, en UN frame, hacía `despawn_recursive`
+    // de hasta 225 chunks (con su malla de 256 quads cada uno) y de hasta
+    // `MAX_LIVE_DECOR` sprites con sus hijos de luz. Había presupuesto para
+    // CONSTRUIR (`CHUNK_BUILD_BUDGET_PER_FRAME`) y ninguno para DESTRUIR.
+    //
+    // Y sin histéresis: flotando justo en el umbral, un frame por encima y otro por
+    // debajo tiraba y reconstruía el anillo entero, sin parar.
+    let off = crate::universe::FINE_OFF_VIEW_H;
+    let want_off = if ctl.fine_off.0 {
+        // Ya apagado: para volver a encender hay que bajar bastante del umbral.
+        zoom.live_view_h > off * 0.82
+    } else {
+        zoom.live_view_h > off
+    };
+    if surface_region_active(&region).is_none() || want_off {
+        ctl.fine_off.0 = true;
+        // Nada que construir acá: si quedara un backlog viejo anotado, la pantalla
+        // de carga esperaría para siempre un anillo que no se va a armar.
+        ctl.backlog.0 = 0;
+        // Se destruye A PLAZOS, lo más lejano primero: el jugador ya no lo mira
+        // (está subiendo) y el satelital de `universe.rs` ya cubre ese hueco.
+        let mut budget = DECOR_DESPAWN_BUDGET_PER_FRAME;
         for (e, _) in &decor {
+            if budget == 0 {
+                break;
+            }
             commands.entity(e).despawn_recursive();
+            budget -= 1;
+        }
+        let mut cbudget = CHUNK_DESPAWN_BUDGET_PER_FRAME;
+        for (e, chunk) in &chunks {
+            if cbudget == 0 {
+                break;
+            }
+            commands.entity(e).despawn_recursive();
+            // El censo de árboles del chunk se va CON el chunk. Sin esto, cada
+            // despegue dejaba en `FloraHarvest` la lista de todos los chunks que
+            // acababa de tirar, y el mapa crecía sin freno durante toda la
+            // partida — la ruta de salida más transitada del juego.
+            flora.clear_chunk(chunk.cx as i32, chunk.cz as i32);
+            cbudget -= 1;
         }
         return;
     }
+    ctl.fine_off.0 = false;
     let Ok(player_tf) = player.get_single() else {
         return;
     };
@@ -906,25 +1479,65 @@ fn stream_tile_chunks(
 
     // El anillo sólo tiene que llenar la pantalla hasta `FINE_OFF_VIEW_H`; más
     // allá manda el satelital. Se ensancha con el zoom en vez de saltar a un
-    // valor fijo por "estar volando".
+    // valor fijo por "estar volando". El ancho de pantalla en apaisado de móvil
+    // es ~1.2× el alto por lado, de ahí el 1.25.
     let need_m = zoom.live_view_h * 1.25;
-    let range = ((need_m / (CHUNK as f32 * TILE_M)).ceil() as i64).clamp(CHUNK_RANGE, 9);
+    // `visible` es lo que llena la pantalla; `range` le suma el margen que se
+    // arma fuera de cuadro (ver `BUILD_MARGIN`) para que ningún chunk nazca a la
+    // vista. `MAX_CHUNK_RANGE` sigue siendo el techo duro de todo el anillo.
+    let visible =
+        ((need_m / (CHUNK as f32 * TILE_M)).ceil() as i64).clamp(CHUNK_RANGE, MAX_CHUNK_RANGE);
+    let range = (visible + BUILD_MARGIN).min(MAX_CHUNK_RANGE);
 
-    // La DECORACIÓN (árboles, props, autotiles) sólo vive en el anillo cercano:
-    // más allá son unos pocos píxeles y el mapa satelital ya pinta el mismo
-    // terreno debajo. Antes se poblaban los ~440 chunks del anillo ancho de
-    // vuelo, unas 19 000 entidades — el grueso del coste por frame volando, para
-    // dibujar árboles del tamaño de una mota.
-    let near = CHUNK_RANGE;
-    let in_near = |cx: i64, cz: i64| (cx - pcx).abs() <= near && (cz - pcz).abs() <= near;
+    // LA DECORACIÓN LLENA EL MISMO ANILLO QUE EL SUELO.
+    //
+    // Antes vivía sólo en `CHUNK_RANGE` (48 m) mientras los tiles se estiraban
+    // hasta 192 m al volar: el resultado era un CUADRADO de bosque de 96 m de
+    // lado con el terreno pelado alrededor — el borde de render que se veía al
+    // despegar. Ahora árboles y piedras cubren exactamente lo que cubre el suelo,
+    // y los tres (suelo + decor + arte de tile) se apagan JUNTOS con el fundido
+    // de `fade_surface_lod`, que es lo que hace que al seguir subiendo el detalle
+    // desaparezca sin que se note dónde termina.
+    //
+    // El coste se acota por otro lado: la flora chica (matas, hongos, props de
+    // adorno) es lo MÁS numeroso por chunk y a esa distancia mide un píxel, así
+    // que sólo se puebla en el anillo cercano (`in_near`). Lo que el jugador
+    // nombró —árboles, piedras, vetas— va en todo el anillo (`in_decor`).
+    // El nivel que le toca a un chunk. `Coarse` llega exactamente hasta `range`
+    // — que YA incluye el margen de construcción (`BUILD_MARGIN`), o sea un
+    // anillo más que lo que se ve. Antes decía `range + 1` para atarse al
+    // envolvente de supervivencia y que un pelo de zoom no poblara/despoblara el
+    // borde; ahora ese anillo de más existiría de verdad (el suelo llega hasta
+    // `range`) y serían ~640 sprites de decoración extra por nada, con el borde
+    // igual de fuera de cuadro. El anti-parpadeo sigue en pie por otro lado: el
+    // nivel de un chunk NUNCA baja (ver el ascenso Coarse→Full más abajo), así
+    // que cruzar el borde ida y vuelta no despuebla nada.
+    let want_detail = |cx: i64, cz: i64| -> DecorDetail {
+        let cheb = (cx - pcx).abs().max((cz - pcz).abs());
+        if cheb <= DECOR_FULL_RANGE {
+            DecorDetail::Full
+        } else if cheb <= range {
+            DecorDetail::Coarse
+        } else {
+            DecorDetail::None
+        }
+    };
 
-    let mut budget = CHUNK_BUILD_BUDGET_PER_FRAME;
+    let mut budget = ctl.budget.0;
+    // Presupuesto de MEMORIA, aparte del de trabajo por frame: mientras esté
+    // agotado se sigue construyendo el suelo (que es lo que no puede faltar) pero
+    // no se puebla decoración nueva. Ver `MAX_LIVE_DECOR`.
+    let decor_room = decor.iter().count() < MAX_LIVE_DECOR;
     let mut live: HashSet<(i64, i64)> = HashSet::new();
-    // Recorrer los chunks vivos por distancia al jugador primero: si el
-    // presupuesto se agota, lo que queda sin decorar es lo más lejano (menos
-    // visible), no una franja al azar según el orden de iteración del ECS.
-    let mut pending_decor: Vec<(i64, i64, Entity)> = Vec::new();
-    for (e, chunk) in &chunks {
+    // Chunks cuyo nivel de decoración hay que SUBIR (te acercaste volando). Se
+    // ordenan por distancia al jugador antes de gastar presupuesto: si se agota,
+    // lo que queda a medias es lo más lejano (menos visible), no una franja al
+    // azar según el orden de iteración del ECS.
+    let mut pending_decor: Vec<(i64, i64, Entity, DecorDetail, DecorDetail)> = Vec::new();
+    // Nivel vigente por chunk — lo consulta el barrido de decor de abajo para
+    // tirar sólo lo que sobra, no todo.
+    let mut detail_of: HashMap<(i64, i64), DecorDetail> = HashMap::new();
+    for (e, mut chunk) in &mut chunks {
         let stale = chunk.body != body
             || chunk.z != z
             || (chunk.cx - pcx).abs() > range + 1
@@ -935,28 +1548,71 @@ fn stream_tile_chunks(
             continue;
         }
         live.insert((chunk.cx, chunk.cz));
-        // Un chunk que se creó lejos (sin decoración) y ahora quedó cerca —
-        // bajaste volando — la puebla en este momento (con presupuesto: ver abajo).
-        if in_near(chunk.cx, chunk.cz) && !chunk.decorated {
-            pending_decor.push((chunk.cx, chunk.cz, e));
+        // Sólo se SUBE de nivel mientras el chunk viva: bajar de Full a Coarse
+        // borraría la flora chica cada vez que cruzás un borde de anillo.
+        let want = chunk.decor.max(want_detail(chunk.cx, chunk.cz));
+        detail_of.insert((chunk.cx, chunk.cz), want);
+        if want > chunk.decor {
+            pending_decor.push((chunk.cx, chunk.cz, e, chunk.decor, want));
+            chunk.decor = want;
         }
     }
-    pending_decor.sort_by_key(|&(cx, cz, _)| (cx - pcx).pow(2) + (cz - pcz).pow(2));
-    for (cx, cz, e) in pending_decor {
-        if budget == 0 {
-            break;
+    pending_decor.sort_by_key(|&(cx, cz, ..)| (cx - pcx).pow(2) + (cz - pcz).pow(2));
+    // Índice chunk → decoración viva, sólo si hay algún chunk que ASCIENDE de
+    // nivel (el caso normal es que no haya ninguno y esto no cuesta nada).
+    let mut decor_of: HashMap<(i64, i64), Vec<Entity>> = HashMap::new();
+    if pending_decor.iter().any(|&(.., had, _)| had != DecorDetail::None) {
+        for (e, d) in &decor {
+            decor_of.entry((d.cx, d.cz)).or_default().push(e);
+        }
+    }
+    let mut deferred: Vec<(i64, i64)> = Vec::new();
+    for (cx, cz, e, had, want) in pending_decor {
+        if budget == 0 || !decor_room {
+            // No entró en el presupuesto: hay que DESHACER la marca, o el chunk
+            // se queda diciendo que está decorado y nunca se puebla.
+            deferred.push((cx, cz));
+            if let Ok((_, mut chunk)) = chunks.get_mut(e) {
+                chunk.decor = had;
+            }
+            continue;
         }
         budget -= 1;
-        if let Ok((_, mut chunk)) = chunks.get_mut(e) {
-            chunk.decorated = true;
+        if had != DecorDetail::None {
+            // **Subir de Coarse a Full REHACE el chunk.** Antes sólo se añadía lo
+            // de cerca, y eso dejaba dos bugs vivos:
+            //   1. los árboles/piedras poblados a distancia son SILUETAS —un quad
+            //      de color plano, sin textura— y se quedaban así para siempre. Es
+            //      el "salgo al espacio, vuelvo y el árbol es un rectángulo verde":
+            //      al volver, los chunks nacen lejos (Coarse) y nadie los ascendía
+            //      de verdad.
+            //   2. el arte de tile (agua, autotiles, piezas) ya se spawnea en
+            //      Coarse, así que volver a llamarlo lo DUPLICABA encima.
+            // Tirar la decoración del chunk y repoblarla entera arregla las dos, y
+            // sólo pasa una vez por chunk (el nivel nunca baja).
+            for &e in decor_of.get(&(cx, cz)).into_iter().flatten() {
+                commands.entity(e).despawn_recursive();
+            }
         }
         spawn_chunk_decor(
-            &mut commands, &mut flora, &art, &tiles, &authored.0, &decor_free, body, z, cx, cz,
+            &mut commands, &mut flora, &art, &tiles, &authored.list, &decor_free, body, z, cx, cz,
+            want,
         );
+        // `spawn_chunk_decor` ya spawnea la flora chica cuando el nivel es Full;
+        // el arte de tile va aparte (y sólo una vez, porque acabamos de limpiar).
         spawn_chunk_tile_art(&mut commands, &art, &tiles, body, z, cx, cz);
     }
+    let deferred_count = deferred.len();
+    for (cx, cz) in deferred {
+        detail_of.remove(&(cx, cz));
+    }
     for (e, d) in &decor {
-        if d.z != z || !in_near(d.cx, d.cz) {
+        let level = detail_of.get(&(d.cx, d.cz)).copied().unwrap_or_default();
+        // Sin chunk (o fuera del anillo) se va todo; con chunk, la flora chica
+        // sobrevive mientras el chunk siga en nivel Full.
+        let keep =
+            d.z == z && level != DecorDetail::None && (!d.small || level == DecorDetail::Full);
+        if !keep {
             commands.entity(e).despawn_recursive();
         }
     }
@@ -972,13 +1628,25 @@ fn stream_tile_chunks(
         }
     }
     missing.sort_by_key(|&(cx, cz)| (cx - pcx).pow(2) + (cz - pcz).pow(2));
+    // Lo que no entre en el presupuesto queda anotado: la pantalla de carga no
+    // levanta la cortina hasta que esto llega a 0 (y `pending_decor` también,
+    // porque un anillo con el suelo puesto pero sin árboles se ve a medio hacer).
+    ctl.backlog.0 = missing.len().saturating_sub(budget) + deferred_count;
     for (cx, cz) in missing {
         if budget == 0 {
             break;
         }
         budget -= 1;
-        let decorated = in_near(cx, cz);
-        let mesh = build_chunk_mesh(&tiles, body, cx, cz);
+        // Sin sitio para decoración el chunk nace pelado, pero NACE: el suelo es
+        // lo que no puede faltar. `decor` se queda en `None`, así que en cuanto
+        // haya sitio otra vez el ascenso de nivel normal lo puebla — no queda
+        // marcado como decorado y olvidado.
+        let decor_level = if decor_room {
+            want_detail(cx, cz)
+        } else {
+            DecorDetail::None
+        };
+        let mesh = build_chunk_mesh(&tiles, &art, body, cx, cz);
         commands.spawn((
             TileChunk {
                 body,
@@ -986,24 +1654,25 @@ fn stream_tile_chunks(
                 cx,
                 cz,
                 built_version: tiles.version,
-                decorated,
+                decor: decor_level,
             },
             Mesh2d(meshes.add(mesh)),
             MeshMaterial2d(mat.0.clone()),
             Transform::from_xyz(0.0, 0.0, 0.0),
         ));
-        if decorated {
+        if decor_level != DecorDetail::None {
             spawn_chunk_decor(
                 &mut commands,
                 &mut flora,
                 &art,
                 &tiles,
-                &authored.0,
+                &authored.list,
                 &decor_free,
                 body,
                 z,
                 cx,
                 cz,
+                decor_level,
             );
             // Tiles con arte "vivo" (agua/autotile/piezas construidas) como
             // sprites — en TODAS las capas (subsuelos/pisos usan floor/wall/*).
@@ -1022,6 +1691,7 @@ fn body_art_suffix(body: CelestialBody) -> &'static str {
 
 fn rebuild_dirty_chunks(
     tiles: Res<TileWorld>,
+    art: Res<ArtLibrary>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut chunks: Query<(&mut TileChunk, &Mesh2d)>,
 ) {
@@ -1032,25 +1702,479 @@ fn rebuild_dirty_chunks(
         if chunk.built_version == tiles.version || chunk.z != tiles.z {
             continue;
         }
-        let mesh = build_chunk_mesh(&tiles, chunk.body, chunk.cx, chunk.cz);
+        let mesh = build_chunk_mesh(&tiles, &art, chunk.body, chunk.cx, chunk.cz);
         meshes.insert(mesh2d.0.id(), mesh);
         chunk.built_version = tiles.version;
     }
 }
 
+/// **La sombra que proyecta una terraza sobre la de abajo.** Devuelve el factor
+/// por el que se multiplica el color del suelo (1 = sin sombra).
+///
+/// Es lo que hace que el relieve se LEA como relieve en una vista cenital. Sin
+/// ella, un acantilado es una línea de otro color y el ojo no sabe si la terraza
+/// de al lado está más alta o más baja — podrían ser dos materiales distintos en
+/// el mismo plano. Con una franja oscura al pie de la pared, el cerebro resuelve
+/// la ambigüedad al instante: hay algo alto ahí.
+///
+/// **No sigue al sol y es a propósito.** La malla del chunk se hornea una vez y
+/// rehornear el mundo entero cada minuto de juego para girar las sombras costaría
+/// muchísimo más de lo que aporta. Ésta es la sombra AMBIENTE del pie de la
+/// pared —la que existe a cualquier hora, la que un tileset pintaría en el
+/// propio tile—; las sombras que sí giran con el día son las de los sprites, que
+/// las lleva `light2d` con su textura direccional.
+///
+/// Coste: cuatro consultas de nivel por celda, todas servidas por la caché de
+/// `relief` (la propia celda ya se consultó justo antes).
+///
+/// # LA SOMBRA CAÍA DENTRO DE LA ROCA, QUE ES POR DONDE NO SE VE
+///
+/// Éste era el motivo de fondo de *"sólo se pone el borde del acantilado y arriba
+/// se ve vacío"*. La sombra se pedía mirando al vecino del NORTE, y el vecino del
+/// norte de la primera celda visible de una terraza no es el canto de arriba: es
+/// el PIE del muro, que tiene el nivel de la terraza de abajo (es
+/// [`ha_shared::relief::ReliefCell::Pared`], la huella que el dibujo tapa). O sea
+/// que la comparación daba cero y la franja oscura se pintaba entera **debajo del
+/// sprite del acantilado**, donde no la ve nadie: en pantalla, dos praderas del
+/// mismo verde separadas por una banda de roca, sin ninguna pista de cuál está
+/// más alta.
+///
+/// Ahora se busca el canto hacia el norte y se cuenta desde el PIE DE SU DIBUJO
+/// ([`ha_shared::relief::alto_de_pared`]), así la franja cae sobre el suelo que sí
+/// se ve. Y el largo y la fuerza salen del alto del muro: un bordillo tira una
+/// línea, un farallón tira una sombra que se camina.
+fn terrace_shadow(body: CelestialBody, tx: i64, tz: i64, level: i8) -> f32 {
+    // El agua no recibe sombra de terraza: su superficie ya es un plano distinto y
+    // oscurecer la orilla la haría parecer más profunda de lo que es.
+    if level < 0 {
+        return 1.0;
+    }
+    // Los costados y el sur: caras que se ven de canto, una línea y nada más. **El
+    // norte no está acá** — la pared que tenés encima la resuelve
+    // [`sombra_de_muro_en_la_columna`], que sabe dónde termina su dibujo y por eso
+    // pinta sobre el suelo que se ve en vez de sobre la roca.
+    let mut drop = 0i32;
+    for (dx, dz, w) in [(-1i64, 0i64, 2), (1, 0, 2), (0, 1, 1)] {
+        let n = ha_shared::relief::relief_level(body, tx + dx, tz + dz);
+        if n > level {
+            drop += (n - level).min(3) as i32 * w;
+        }
+    }
+    if drop == 0 {
+        return 1.0;
+    }
+    // Hasta un 34 % más oscuro al pie de una pared alta. Más que eso y la franja
+    // se lee como un agujero negro pegado al acantilado.
+    (1.0 - (drop as f32 * 0.035)).max(0.66)
+}
+
+/// Hasta cuántas filas de la terraza de abajo alcanza la sombra de un farallón.
+/// Cuatro: lo bastante para que un muro alto se lea alto, y no tanto como para
+/// apagar el valle entero.
+const SOMBRA_FILAS: i64 = 4;
+
+/// Lo más oscuro que llega a ponerse el pie de un muro. Igual que
+/// [`terrace_shadow`]: pasado esto la franja se lee como un agujero negro.
+const SOMBRA_PISO: f32 = 0.66;
+
+/// **LA SOMBRA QUE TIRA EL MURO, DE UNA PASADA POR COLUMNA.**
+///
+/// Devuelve el factor de sombra de las [`CHUNK`] celdas de una columna del chunk.
+///
+/// # Por qué por columna y no por celda
+///
+/// La pregunta *"¿tengo un muro encima y a cuántas filas?"* se contesta buscando
+/// hacia el norte hasta el primer canto, y en una llanura eso son quince consultas
+/// de nivel **por celda** — el primer intento, y se notó enseguida: el chunk
+/// tardaba tanto en hornearse que la captura del driver salía con el mundo entero
+/// sin cargar, verde liso.
+///
+/// Barriendo la columna de norte a sur la misma información sale de **dos
+/// consultas por fila**: cada canto que aparece sabe dónde cae su pie
+/// ([`ha_shared::relief::pie_del_muro`]) y escribe su franja hacia abajo. El
+/// barrido arranca `MAX_PARED + 1 + SOMBRA_FILAS` filas por encima del chunk para
+/// que un muro que nace justo antes del borde tire igual su sombra dentro.
+///
+/// La sombra sólo se pinta sobre la terraza que el muro DOMINA (la de su pie): si
+/// antes de las cuatro filas el terreno vuelve a cambiar de escalón, ahí se corta
+/// — es la misma poda que aplica el dibujo en [`pared_apilada`].
+fn sombra_de_muro_en_la_columna(body: CelestialBody, tx: i64, z0: i64) -> [f32; CHUNK as usize] {
+    use ha_shared::relief::{alto_de_pared, pie_del_muro, relief_level, MAX_PARED};
+    let mut out = [1.0f32; CHUNK as usize];
+    let arranque = z0 - (MAX_PARED + 1 + SOMBRA_FILAS);
+    for tz in arranque..z0 + CHUNK {
+        let Some(pie) = pie_del_muro(body, tx, tz) else { continue };
+        if pie + 1 >= z0 + CHUNK {
+            continue;
+        }
+        let alto = alto_de_pared(body, tx, tz);
+        // La terraza sobre la que cae: la que tiene el muro debajo.
+        let abajo = relief_level(body, tx, tz + 1);
+        // Un bordillo tira una línea; un farallón de diez, la franja entera.
+        let largo = alto.clamp(1, SOMBRA_FILAS);
+        for f in 0..largo {
+            let fila = pie + 1 + f;
+            if fila < z0 || fila >= z0 + CHUNK {
+                continue;
+            }
+            if relief_level(body, tx, fila) != abajo {
+                break;
+            }
+            let caida = (largo - f) as f32 / largo as f32;
+            let drop = caida * (3 + alto.min(6)) as f32 * 2.0;
+            let k = (1.0 - drop * 0.035).max(SOMBRA_PISO);
+            let i = (fila - z0) as usize;
+            out[i] = out[i].min(k);
+        }
+    }
+    out
+}
+
+/// Cuánto detalle de sombreado se calcula por celda. La diferencia es sólo de
+/// COSTE: el color base y el aclarado por altura son iguales en las dos.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum TileShade {
+    /// Todo: incluye la sombra de terraza (4 consultas de nivel más por celda).
+    /// Es la de los tiles de 1 m — a esa escala la franja oscura al pie de un
+    /// acantilado es lo que hace que el desnivel se lea.
+    Full,
+    /// Sin sombra de terraza. Para el mapa satelital y el disco del planeta: un
+    /// quad de 64 m promedia decenas de celdas y la franja de un tile se pierde
+    /// en el promedio igual, así que pagarla sería tirar tiempo.
+    Coarse,
+}
+
+/// **EL color del terreno en una celda.** Color base del tile (con el líquido
+/// propio del cuerpo), ruido por celda, aclarado por altura de relieve y —si se
+/// pide— sombra de terraza.
+///
+/// Es la ÚNICA fuente de color del suelo y por eso la comparten las TRES capas
+/// del LOD: los tiles de 1 m (`build_chunk_mesh`), el mapa satelital y el disco
+/// del planeta (`universe.rs`). Que sea una sola función es el requisito de que
+/// el zoom sea continuo.
+///
+/// Antes cada capa lo calculaba por su lado: la fina aplicaba relieve y terraza,
+/// y las de arriba sólo `Tile::color()` pelado. Resultado: en cuanto despegabas
+/// —y durante TODA la reentrada, hasta bajar de ~58 m— el mundo perdía de golpe
+/// su relieve, sus costas y sus biomas y se volvía un manchón café o verde
+/// uniforme. Ésa era la "niebla" al salir de la Tierra y volver.
+/// Cuánto se apaga el mundo que se ve por el hueco de un piso alto. Bastante
+/// oscuro como para que la losa donde estás parado se lea de un vistazo, y no
+/// tanto como para perder de vista dónde está la calle.
+const VOID_DIM: f32 = 0.42;
+
+/// **Qué suelo se VE en esta celda, de qué planta sale y cuánto se atenúa.**
+///
+/// Es la regla del hueco, factorizada: si en tu planta hay materia, es eso, sin
+/// atenuar; si hay vacío ([`Tile::Air`]), se mira hacia abajo hasta encontrar
+/// algo y se dibuja apagado ([`VOID_DIM`]) — la lectura de Project Zomboid, tu
+/// planta nítida y el mundo de abajo en penumbra.
+///
+/// Devuelve también el NIVEL de donde salió, que es lo que le permite al decor
+/// preguntar "¿lo que se ve acá es la superficie?" sin repetir la búsqueda: los
+/// árboles y los coches se plantan en el mundo (nivel 0) y se ven desde la
+/// azotea, pero no crecen dentro de una galería que se asoma por un pozo.
+pub fn suelo_a_la_vista(
+    tiles: &TileWorld,
+    body: CelestialBody,
+    tx: i64,
+    tz: i64,
+) -> (Tile, i32, f32) {
+    let t = tiles.render_tile(body, tx, tz);
+    if t != Tile::Air {
+        return (t, tiles.z, 1.0);
+    }
+    let mut below = tiles.z - 1;
+    let mut under = tiles.tile_at_level(body, below, tx, tz);
+    while under == Tile::Air && below > MIN_Z_LEVEL {
+        below -= 1;
+        under = tiles.tile_at_level(body, below, tx, tz);
+    }
+    (under, below, VOID_DIM)
+}
+
+pub fn tile_render_color(
+    tiles: &TileWorld,
+    body: CelestialBody,
+    tx: i64,
+    tz: i64,
+    detail: TileShade,
+) -> [f32; 3] {
+    let (rgb, shade) = tile_render_color_y_sombra(tiles, body, tx, tz, detail);
+    [rgb[0] * shade, rgb[1] * shade, rgb[2] * shade]
+}
+
+/// **EL SOMBREADO DE UNA CELDA, APARTE DE SU COLOR.**
+///
+/// Lo mismo que [`tile_render_color`] pero devuelto en dos: el color base del
+/// material y el factor que lo modula (grano por celda, aclarado por altura,
+/// sombra de terraza, atenuación del vacío).
+///
+/// **Hace falta porque la losa del pack se estaba comiendo TODO el sombreado.**
+/// `build_chunk_mesh` pone el color de vértice en blanco cuando la celda tiene
+/// losa —si no, la textura sale teñida por el color del material, que ya está
+/// dentro de la propia losa—, y con eso se iba también el grano, el aclarado por
+/// escalón y la sombra que un farallón proyecta sobre la terraza de abajo. En
+/// pantalla: la cumbre nevada como **una plancha blanca sin un solo matiz**
+/// (`relieve-3-cumbre.png`), y el relieve de todo el mundo texturizado ilegible
+/// desde el aire, que es justo lo que el aclarado por altura existe para
+/// resolver.
+///
+/// El comentario de más abajo sobre recortar el aclarado para que la nieve no
+/// saturara describe un arreglo que nunca llegó a correr en la nieve: con losa
+/// el factor ni se aplicaba. Ahora se aplica —como escala gris sobre la
+/// textura— y el tope sigue siendo el que evita aplanarla.
+pub fn tile_render_color_y_sombra(
+    tiles: &TileWorld,
+    body: CelestialBody,
+    tx: i64,
+    tz: i64,
+    detail: TileShade,
+) -> ([f32; 3], f32) {
+    // **Se dibuja la planta en la que estás** (ver `TileWorld::render_tile`): bajo
+    // tierra, tierra; arriba, tu piso; en el suelo, el mundo.
+    //
+    // **El hueco de un piso alto deja ver lo de abajo.** En `z > 0` todo lo que no
+    // construiste es vacío (`Tile::Air`): pintarlo de negro convertía el segundo
+    // piso en una habitación flotando en la nada y no había forma de saber si el
+    // borde de tu losa daba al patio o a la calle. Se busca hacia abajo el primer
+    // nivel con algo y se dibuja ATENUADO — la lectura de Project Zomboid: tu
+    // planta nítida, el mundo de abajo apagado.
+    //
+    // Vale para CUALQUIER nivel, no sólo para los pisos altos: el pozo que cavás
+    // en el pasto es el mismo hueco, y verle el fondo —la cueva, apagada— es lo
+    // que hace que se lea como un agujero en el suelo y no como una mancha negra.
+    let (t, _, void_dim) = suelo_a_la_vista(tiles, body, tx, tz);
+    // El líquido se pinta con el color del CUERPO: agua en la Tierra, metano
+    // ámbar en Titán, lava en Ío. Un solo tile, un solo autotile, una sola
+    // animación — y aun así cada mundo se reconoce de un vistazo.
+    let rgb = match t {
+        Tile::Water => ha_shared::relief::liquid_color(body, false),
+        Tile::WaterDeep => ha_shared::relief::liquid_color(body, true),
+        // El suelo de un acantilado es la TERRAZA, no la pared (ver
+        // [`suelo_del_relieve`]): la roca la dibuja el sprite que cuelga.
+        Tile::Cliff | Tile::Slope => suelo_del_relieve(body, tx, tz).color(),
+        _ => t.color(),
+    };
+    // Ruido por celda para que un relleno grande no se vea plano.
+    let n = (hash_cell(0x51ce, tx, tz) % 100) as f32 / 100.0;
+    let grano = 0.93 + n * 0.09;
+    let mut shade = grano * void_dim;
+    // SOMBREADO POR ALTURA: cada escalón por encima del mar aclara un poco el
+    // suelo y cada uno por debajo lo oscurece. Sin esto, una meseta y la llanura
+    // de al lado se pintan del mismo verde y el relieve sólo se lee por la línea
+    // del acantilado — con esto, se lee de un vistazo desde el aire, que es
+    // donde el jugador pasa la mitad del tiempo.
+    //
+    // 4.5 % por escalón: a 12 escalones la cumbre queda ~54 % más clara que la
+    // costa. Más que esto y el mundo parece un mapa de calor.
+    //
+    // Era 3,5 % y no alcanzaba: entre dos terrazas seguidas la diferencia era de
+    // un 3 %, o sea menos que el ruido por celda (±4,5 %) que se aplica justo
+    // arriba — el escalón quedaba literalmente por debajo del grano del suelo, y
+    // por eso arriba y abajo del acantilado se veía el mismo verde.
+    let level = ha_shared::relief::relief_level(body, tx, tz);
+    let aclarado = 1.0 + (level as f32).clamp(-4.0, 12.0) * 0.045;
+    // **PERO ACLARAR NO PUEDE PASARSE DE BLANCO.**
+    //
+    // `ColorMaterial` multiplica la losa por este color, y el resultado se
+    // recorta a 1: en cuanto el canal más alto pasa de ahí, todos los píxeles
+    // claros de la textura caen en el mismo blanco y **la losa se aplana**. Con
+    // suelos oscuros no se notaba —el pasto es (0.36, 0.62, 0.29) y aguanta el
+    // +40 % de sobra—, pero la nieve de la cumbre es (0.82, 0.88, 0.93) en el
+    // escalón 9-12: 0,93 × 1,38 = 1,28, o sea que **la cima salía como una
+    // plancha lisa blanca** con toda su textura recortada. Se vio en
+    // `relieve-3-cumbre.png` el 14 ago 2026 y ninguna medición lo iba a cazar.
+    //
+    // El tope se calcula sobre el canal más alto para que el TONO no se mueva:
+    // recortar canal por canal viraría el color hacia el gris.
+    //
+    // **Y SE RECORTA EL ACLARADO, NO EL RESULTADO.** El arreglo anterior recortaba
+    // `shade` entero —grano incluido—, así que en la nieve TODAS las celdas caían
+    // exactamente en el mismo tope y el ±4,5 % de grano por celda desaparecía: la
+    // cumbre seguía siendo la plancha lisa que se quería arreglar, sólo que ahora
+    // sin saturar. Recortando el aclarado y dejando que el grano module alrededor,
+    // el techo se respeta igual (el grano no pasa de 1,02, y por eso el margen) y
+    // el suelo sin arte conserva lo único que lo hace suelo.
+    let alto = rgb[0].max(rgb[1]).max(rgb[2]).max(1e-3);
+    let techo = (1.0 / alto) / 1.02;
+    shade = grano * void_dim * aclarado.min(techo);
+    if detail == TileShade::Full {
+        shade *= terrace_shadow(body, tx, tz, level);
+    }
+    (rgb, shade)
+}
+
+/// **Una ciudad tiene que verse desde el aire.**
+///
+/// A partir de `universe::FINE_OFF_VIEW_H` (170 m) el mundo lo pinta la malla
+/// satelital, y su quad mide `view_h/40` redondeado a potencia de dos: a 900 m de
+/// altura son **64 m por quad, muestreado 2×2**. Una calle mide tres tiles, así
+/// que la probabilidad de que una muestra caiga sobre asfalto es de un 5 % — el
+/// promedio se come la ciudad entera y desde el aire quedaba un degradado del
+/// bioma, sin retícula, sin veredas y sin manzanas. Es lo que reportó
+/// `HA_CITYTEST` a 900 m: "sale casi vacío".
+///
+/// No se arregla muestreando más: cada tap de más son 37.000 evaluaciones de
+/// terreno por reconstrucción de malla, y ese camino ya devolvió el tirón del
+/// despegue una vez (ver `universe::average_tile_color`). Se arregla preguntando
+/// **una sola vez por vértice** si ese punto cae dentro de un casco urbano
+/// (`settlement_covering`, memoizado) y tiñendo el color hacia el gris de la
+/// ciudad. Desde un avión una ciudad ES una mancha gris; lo que faltaba no era
+/// resolución, era que el color supiera que ahí hay ciudad.
+///
+/// El tinte se desvanece en el último quinto del casco para que el borde no sea
+/// un círculo pintado.
+pub fn tinte_urbano(body: CelestialBody, rx: f32, ry: f32, rgb: [f32; 3]) -> [f32; 3] {
+    let tx = (rx / TILE_M).floor() as i64;
+    let tz = (-ry / TILE_M).floor() as i64;
+    let Some(s) = ha_shared::geography::settlement_covering(body, tx, tz) else {
+        return rgb;
+    };
+    let r = s.radius.max(1) as f32;
+    let d = (tx - s.center.0).abs().max((tz - s.center.1).abs()) as f32 / r;
+    // 1 en el centro, 0 en la orilla; el último 20 % se funde.
+    let k = ((1.0 - d) / 0.2).clamp(0.0, 1.0) * TINTE_URBANO;
+    let urbano = ha_shared::topdown::Tile::Pavement.color();
+    [
+        rgb[0] + (urbano[0] - rgb[0]) * k,
+        rgb[1] + (urbano[1] - rgb[1]) * k,
+        rgb[2] + (urbano[2] - rgb[2]) * k,
+    ]
+}
+
+/// Cuánto se tiñe el centro de un casco urbano hacia el gris de la vereda.
+///
+/// No es 1: una ciudad tiene parques, patios y tejados de colores, y pintarla de
+/// gris pleno la volvería una mancha muerta. Con 0,45 se lee la mancha urbana
+/// sobre el bioma y el bioma sigue asomando por debajo — que es como se ve una
+/// ciudad desde un avión.
+const TINTE_URBANO: f32 = 0.45;
+
+/// Cuánto del borde de la celda ocupa el corte de tierra del pozo.
+const PIT_RIM: f32 = 0.17;
+/// Y cuánto la pared, por dentro del corte.
+const PIT_WALL: f32 = 0.15;
+
+/// **Dibuja un pozo**: corte de tierra → pared → fondo. Tres tonos concéntricos,
+/// que es como se lee un agujero desde arriba cuando no hay perspectiva.
+///
+/// El corte sale del terreno que SEGUIRÍA ahí si no hubieras cavado (`topdown_tile`
+/// del nivel activo), así que un pozo en el pasto tiene borde de pasto oscuro y
+/// uno en la arena, de arena: el agujero pertenece al sitio donde está.
+/// **El borde del hueco se dibuja donde el hueco TERMINA**, no en cada celda.
+///
+/// `bordes` son los cuatro lados —sur, norte, oeste, este, en ese orden— que
+/// tocan algo que NO es hueco. Existe porque el anillo por celda sólo tiene
+/// sentido para un pozo de un tile: en cuanto el vacío es grande —el que rodea a
+/// una azotea, o una galería excavada a lo ancho— dibujar cuatro tiras en cada
+/// celda pinta una CUADRÍCULA de bordes sobre el suelo de abajo, y la calle que
+/// se ve desde el techo queda rayada como un plano en vez de leerse como calle.
+/// Con el borde sólo en la orilla, un pozo sigue siendo un pozo y un descampado
+/// visto desde arriba sigue siendo el barrio.
+#[allow(clippy::too_many_arguments)]
+fn pit_quads(
+    quad: &mut impl FnMut(f32, f32, f32, f32, [f32; 4]),
+    tiles: &TileWorld,
+    body: CelestialBody,
+    tx: i64,
+    tz: i64,
+    x0: f32,
+    y0: f32,
+    fondo: [f32; 3],
+    bordes: [bool; 4],
+    orilla_con_arte: bool,
+) {
+    let hondo = [fondo[0], fondo[1], fondo[2], 1.0];
+    if bordes == [false; 4] {
+        // En medio del vacío no hay orilla que dibujar: sólo el fondo.
+        quad(x0, y0, TILE_M, TILE_M, hondo);
+        return;
+    }
+    let suelo = ha_shared::topdown::topdown_tile(body, tiles.z.max(0), tx, tz);
+    let s = if suelo == Tile::Air { fondo } else { suelo.color() };
+    // Corte de tierra: el suelo de al lado, más oscuro — se lee como tierra
+    // recién abierta. Pared: la sombra del pozo, lo más oscuro de los tres.
+    // Fondo: lo que ya calculaba `tile_render_color`, o sea el nivel de abajo
+    // atenuado — el hueco DEJA VER, que es el punto de todo esto.
+    let corte = [s[0] * 0.60, s[1] * 0.60, s[2] * 0.60, 1.0];
+    let pared = [fondo[0] * 0.45, fondo[1] * 0.45, fondo[2] * 0.45, 1.0];
+
+    // El fondo primero, de celda entera; encima van las tiras de la orilla. No se
+    // solapan entre sí porque cada una ocupa su lado y las esquinas se ceden a
+    // las horizontales.
+    quad(x0, y0, TILE_M, TILE_M, hondo);
+    let mut orilla = |inset: f32, ancho: f32, c: [f32; 4]| {
+        let lado = TILE_M - inset * 2.0;
+        if bordes[0] {
+            quad(x0 + inset, y0 + inset, lado, ancho, c); // sur (abajo en pantalla)
+        }
+        if bordes[1] {
+            quad(x0 + inset, y0 + TILE_M - inset - ancho, lado, ancho, c); // norte
+        }
+        if bordes[2] {
+            quad(x0 + inset, y0 + inset, ancho, lado, c); // oeste
+        }
+        if bordes[3] {
+            quad(x0 + TILE_M - inset - ancho, y0 + inset, ancho, lado, c); // este
+        }
+    };
+    // **EL CORTE DE TIERRA LO DIBUJA LA ORILLA SI HAY ARTE.**
+    //
+    // Esta tira oscura es el "corte de tierra recién abierta" — y es lo que el
+    // usuario ve como *"unas líneas negras"* alrededor del pozo. Existía porque
+    // no había ninguna pieza de transición entre la tierra y el pasto; ahora sí
+    // (`borde/tierra`, ver `spawn_chunk_orilla`), y el pack dibuja esa costura
+    // mucho mejor que un rectángulo al 60 % de luminancia.
+    //
+    // **La PARED se queda igual.** Es la sombra del pozo, no una costura: es lo
+    // único que dice que el agujero tiene profundidad, y la orilla no la dibuja.
+    if !orilla_con_arte {
+        orilla(0.0, PIT_RIM, corte);
+    }
+    orilla(PIT_RIM, PIT_WALL, pared);
+}
+
 /// One `Mesh2d` covering a CHUNK×CHUNK grid of tiles, each a colored quad at
 /// render pos `(tx*TILE, -tz*TILE)`.
-fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, cx: i64, cz: i64) -> Mesh {
+fn build_chunk_mesh(
+    tiles: &TileWorld,
+    art: &ArtLibrary,
+    body: CelestialBody,
+    cx: i64,
+    cz: i64,
+) -> Mesh {
     let mut positions: Vec<[f32; 3]> = Vec::with_capacity(1024);
     let mut colors: Vec<[f32; 4]> = Vec::with_capacity(1024);
+    let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(1024);
     let mut indices: Vec<u32> = Vec::with_capacity(1536);
+    let blanca = crate::art2d::suelo_uv_blanca();
+    // ¿Hay arte de orilla para el borde de un pozo? Se pregunta UNA vez por chunk:
+    // la respuesta es del manifest, no de la celda.
+    //
+    // **Y sólo en la planta baja o más abajo**, con el mismo límite que
+    // `spawn_chunk_orilla`: en un piso alto el "hueco" es el vacío que rodea a una
+    // azotea, ahí no se siembra orilla, y si además se apagara el corte oscuro el
+    // borde del tejado se quedaría sin ninguna de las dos cosas.
+    let orilla_de_pozo = tiles.z <= 0 && art.has_poses("borde/tierra");
+    // La vereda de la ciudad de este chunk. Una consulta por chunk — ver
+    // `suelo_de_la_celda`.
+    let vereda = vereda_de_la_ciudad(art, body, cx * CHUNK + CHUNK / 2, cz * CHUNK + CHUNK / 2);
 
-    let mut quad = |x0: f32, y0: f32, size: f32, rgba: [f32; 4]| {
+    // `uv` es el recorte de la hoja del suelo que le toca a este quad; la celda
+    // blanca deja el color de vértice como estaba (ver `art2d::suelo_uv_blanca`).
+    let mut quad = |x0: f32, y0: f32, w: f32, h: f32, rgba: [f32; 4], uv: [f32; 4]| {
         let base = positions.len() as u32;
         positions.push([x0, y0, 0.0]);
-        positions.push([x0 + size, y0, 0.0]);
-        positions.push([x0 + size, y0 + size, 0.0]);
-        positions.push([x0, y0 + size, 0.0]);
+        positions.push([x0 + w, y0, 0.0]);
+        positions.push([x0 + w, y0 + h, 0.0]);
+        positions.push([x0, y0 + h, 0.0]);
+        // V crece hacia ABAJO en la textura y hacia ARRIBA en el mundo: el
+        // vértice de abajo del quad lleva la V de abajo de la celda.
+        uvs.push([uv[0], uv[3]]);
+        uvs.push([uv[2], uv[3]]);
+        uvs.push([uv[2], uv[1]]);
+        uvs.push([uv[0], uv[1]]);
         let lin = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]).to_linear();
         for _ in 0..4 {
             colors.push([lin.red, lin.green, lin.blue, lin.alpha]);
@@ -1059,20 +2183,71 @@ fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, cx: i64, cz: i64) ->
     };
 
     for lx in 0..CHUNK {
+        let tx = cx * CHUNK + lx;
+        // **La franja oscura al pie de los muros de esta columna**, de una pasada.
+        // Es lo que hace que en cenital se lea cuál terraza está más alta; ver
+        // [`sombra_de_muro_en_la_columna`].
+        let sombra_muro = sombra_de_muro_en_la_columna(body, tx, cz * CHUNK);
         for lz in 0..CHUNK {
-            let tx = cx * CHUNK + lx;
             let tz = cz * CHUNK + lz;
-            let t = tiles.tile_at(body, tx, tz);
-            let mut rgb = t.color();
-            // Per-tile shade so big fills don't look flat.
-            let n = (hash_cell(0x51ce, tx, tz) % 100) as f32 / 100.0;
-            let shade = 0.93 + n * 0.09;
-            rgb = [rgb[0] * shade, rgb[1] * shade, rgb[2] * shade];
+            // El color sale de `tile_render_color`, la MISMA función que usan el
+            // mapa satelital y el disco del planeta: es lo que hace que al subir
+            // el terreno no cambie de color ni pierda el relieve.
+            let (base, sombra) = tile_render_color_y_sombra(tiles, body, tx, tz, TileShade::Full);
+            let k = sombra_muro[lz as usize];
+            let sombra = sombra * k;
+            let rgb = [base[0] * sombra, base[1] * sombra, base[2] * sombra];
             // Render pos: cell (tx,tz) spans [tx,tx+1]×[tz,tz+1] in world; screen
             // y = -z so the quad bottom-left is (tx*TILE, -(tz+1)*TILE).
             let x0 = tx as f32 * TILE_M;
             let y0 = -(tz as f32 + 1.0) * TILE_M;
-            quad(x0, y0, TILE_M, [rgb[0], rgb[1], rgb[2], 1.0]);
+            // **El pozo se dibuja como AGUJERO, no como celda de otro color.**
+            //
+            // Con un solo cuadrado del color de abajo atenuado, cavar dejaba una
+            // mancha oscura que no se leía como hueco: el jugador miraba el suelo
+            // y no entendía qué había pasado. Un agujero en cenital son tres
+            // cosas — el corte de tierra alrededor, la pared del pozo y el fondo
+            // —, y con eso alcanza aunque sean colores planos.
+            //
+            // El BORDE va sólo en la orilla del hueco (ver `pit_quads`): en medio
+            // de un vacío grande —el que rodea a una azotea— cada celda con su
+            // marco pintaba una cuadrícula encima de la calle de abajo.
+            if tiles.renders_as_pit(body, tx, tz) {
+                let borde = |dx: i64, dz: i64| !tiles.renders_as_pit(body, tx + dx, tz + dz);
+                // Sur = z+1 (abajo en el mundo), y en pantalla `y = -z`, así que
+                // el lado "de abajo" del quad es el del vecino sur.
+                let bordes = [borde(0, 1), borde(0, -1), borde(-1, 0), borde(1, 0)];
+                // El pozo se dibuja con colores planos: va a la celda blanca.
+                let mut plano = |x: f32, y: f32, w: f32, h: f32, c: [f32; 4]| {
+                    quad(x, y, w, h, c, blanca)
+                };
+                pit_quads(&mut plano, tiles, body, tx, tz, x0, y0, rgb, bordes, orilla_de_pozo);
+                continue;
+            }
+            // **La losa del pack, si este material tiene una.** La variante sale
+            // de la celda (determinista) para que la calle y el pasto no repitan
+            // el mismo dibujo cada metro. Sin losa → celda blanca → el color de
+            // vértice de siempre.
+            let mut suelo = tiles.render_tile(body, tx, tz);
+            if matches!(suelo, Tile::Cliff | Tile::Slope) {
+                suelo = suelo_del_relieve(body, tx, tz);
+            }
+            let uv = suelo_de_la_celda(art, body, suelo, tx, tz, vereda).unwrap_or(blanca);
+            // **Con losa el color de vértice es el SOMBREADO en gris.**
+            //
+            // No puede ser el color del material —la losa ya lo trae, y
+            // multiplicarlos deja el suelo el doble de oscuro—, pero tampoco
+            // blanco: eso fue lo que hubo hasta ahora y con blanco se perdía
+            // TODO el sombreado. El grano por celda, el aclarado por escalón y la
+            // sombra de terraza se calculan en `tile_render_color_y_sombra` y
+            // valen igual para un color plano que para una textura; en gris
+            // modulan la losa sin virarle el tono.
+            //
+            // Era el motivo de fondo de que la cumbre se viera como una plancha
+            // blanca vacía: la nieve tiene losa, así que su celda salía a
+            // 1,0×losa, sin un matiz que dijera dónde sube el terreno.
+            let tinte = if uv == blanca { rgb } else { [sombra, sombra, sombra] };
+            quad(x0, y0, TILE_M, TILE_M, [tinte[0], tinte[1], tinte[2], 1.0], uv);
         }
     }
 
@@ -1082,10 +2257,12 @@ fn build_chunk_mesh(tiles: &TileWorld, body: CelestialBody, cx: i64, cz: i64) ->
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
     mesh
 }
 
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn spawn_chunk_decor(
     commands: &mut Commands,
@@ -1098,7 +2275,13 @@ fn spawn_chunk_decor(
     z: i32,
     cx: i64,
     cz: i64,
+    detail: DecorDetail,
 ) {
+    // ANIDADA dentro de `stream_tile_chunks`: en la tabla de `ha-sys` este número
+    // está INCLUIDO en el de aquél. Se separa a propósito — §10 sospecha de las
+    // 256 celdas × `light2d::attach` de acá, y sin partirlo el chunk entero es
+    // una sola cifra que no acusa a nadie.
+    let _probe = crate::debug::probe("spawn_chunk_decor");
     let suffix = body_art_suffix(body);
     let mut trees: Vec<TreeInstance> = Vec::new();
 
@@ -1112,39 +2295,39 @@ fn spawn_chunk_decor(
             let r = render_xy(wx, wz);
             let sort = sort_z(wz);
 
-            // Z-Level portals (mine entrance / ladders).
-            if let Some(portal) = portal_here(body, z, tx, tz) {
-                let (color, size) = match portal {
-                    Portal::Descend => (Color::srgb(0.05, 0.04, 0.06), Vec2::new(1.6, 1.6)),
-                    Portal::Ascend => (Color::srgb(0.55, 0.40, 0.20), Vec2::new(1.2, 1.6)),
-                };
-                let key = match portal {
-                    Portal::Descend => "decor/mine_hole",
-                    Portal::Ascend => "decor/ladder",
-                };
-                let mut e = commands.spawn((
-                    SurfaceDecor { cx, cz, z },
-                    art.sprite_or_color(key, color, size),
-                    Transform::from_xyz(r.x, r.y, sort - 0.5),
-                ));
-                if let Some(a) = art.animation(key) {
-                    e.insert(a);
-                }
-                crate::light2d::attach(&mut e, &art, &[key], size);
-            }
+            // (Acá se dibujaban la boca de mina y la escalera del generador.
+            // Se fueron con las cuevas procedurales: el único agujero del suelo
+            // es el que cavás, y lo dibuja la propia malla — ver `pit_quads`.)
 
-            // Surface decor only on the surface layer, y NUNCA sobre un tile SÓLIDO —
-            // natural (roca) o CONSTRUIDO por el jugador (muros): así los árboles/props ya
-            // no tapan tu muro (bug de capas). `solid_at` incluye las ediciones.
-            // Tampoco sobre celdas AUTORADAS en el editor de mundo: si pintaste
-            // un claro de pasto donde había bosque, el bosque no vuelve a crecer.
-            if z == 0 && !tiles.solid_at(body, tx, tz) && !decor_free.contains(body, z, tx, tz) {
+            // El decor va donde hay SUELO A LA VISTA, y nunca sobre un tile sólido
+            // —natural (roca) o construido (muros)—: así los árboles y los props ya
+            // no tapan tu muro (bug de capas). Tampoco sobre celdas AUTORADAS en el
+            // editor de mundo: si pintaste un claro donde había bosque, el bosque no
+            // vuelve a crecer. `buildable_ground` deja fuera el líquido, las rampas
+            // y lo construido.
+            //
+            // **Qué suelo se ve depende de la planta**, y lo resuelve
+            // [`suelo_a_la_vista`]:
+            //
+            // - En la superficie, el mundo: pasto, árboles, mariposas.
+            // - Bajo tierra, NADA: el subsuelo es tierra maciza y ahí no crece un
+            //   árbol. (Antes el decor "seguía al mundo" y salía la superficie
+            //   entera plantada alrededor de tu túnel — la mitad de por qué el
+            //   subsuelo no parecía subsuelo.)
+            // - Desde un piso alto, lo de ABAJO, atenuado: por el vacío del borde
+            //   de la azotea se ven la calle, los árboles y los coches, apagados
+            //   como el color del suelo que ya dibuja `tile_render_color`. Eso es
+            //   lo que hace que salir a la azotea sea salir a mirar el barrio y no
+            //   asomarse a una losa flotando en gris.
+            let (suelo, nivel, atenuar) = suelo_a_la_vista(tiles, body, tx, tz);
+            if nivel == 0 && suelo.buildable_ground() && !decor_free.contains(body, 0, tx, tz) {
                 if let Some(decor) = surface_decor_at(body, tx, tz) {
                     match decor {
                         DecorKind::Tree => {
                             // Removed set is a flat per-body set at key (0,0);
                             // `id` = packed global cell (see `pack_cell`).
                             if !flora.is_removed(body, 0, 0, id) {
+                                let _probe = crate::debug::probe("decor/arbol");
                                 trees.push(TreeInstance {
                                     cx: 0,
                                     cz: 0,
@@ -1152,30 +2335,41 @@ fn spawn_chunk_decor(
                                     world: Vec3::new(r.x, r.y, 0.0),
                                 });
                                 let species = pick_tree_species_in(body, tx, tz);
-                                let sprite = art
-                                    .get_first(&[
+                                // SILUETA a distancia. Fuera del anillo cercano el
+                                // árbol mide unos píxeles: la textura de su especie no
+                                // aporta nada y sí cuesta —cada especie es un material
+                                // distinto, o sea un draw call distinto—. Con un quad
+                                // de color plano TODOS los árboles lejanos entran en un
+                                // solo lote, y la silueta (misma forma, mismo tamaño,
+                                // color medio de la copa) se lee igual desde el aire.
+                                let sprite = if detail == DecorDetail::Coarse {
+                                    let f = species.fallback;
+                                    Sprite::from_color(
+                                        Color::srgb(f[0], f[1], f[2]),
+                                        species.size.into(),
+                                    )
+                                } else {
+                                    art
+                                    .sprite_first_seeded(&[
                                         &format!("{}{suffix}", species.key),
                                         species.key,
                                         &format!("decor/tree{suffix}"),
                                         "decor/tree",
-                                    ])
-                                    .map(|img| {
-                                        let mut s = Sprite::from_image(img);
-                                        s.custom_size = Some(species.size.into());
-                                        s
-                                    })
+                                    ], id as u64, species.size.into())
                                     .unwrap_or_else(|| {
                                         let f = species.fallback;
                                         Sprite::from_color(
                                             Color::srgb(f[0], f[1], f[2]),
                                             species.size.into(),
                                         )
-                                    });
+                                    })
+                                };
+                                let sprite = atenuar_sprite(sprite, atenuar);
                                 // Base al suelo: el centro sube medio alto (menos el
                                 // hundido que ya tenía el árbol de 3.2 → -0.6).
                                 let y = r.y + species.size[1] * 0.5 - 0.6;
                                 let mut ent = commands.spawn((
-                                    SurfaceDecor { cx, cz, z },
+                                    SurfaceDecor { cx, cz, z, small: false },
                                     InteractTarget {
                                         kind: InteractTargetKind::Tree,
                                         id,
@@ -1186,83 +2380,78 @@ fn spawn_chunk_decor(
                                 ));
                                 // Árboles bioluminiscentes / con farol colgado: si el
                                 // usuario le marcó luz a la especie, la lleva puesta.
-                                crate::light2d::attach(
-                                    &mut ent,
-                                    &art,
-                                    &[
-                                        &format!("{}{suffix}", species.key),
-                                        species.key,
-                                        &format!("decor/tree{suffix}"),
-                                        "decor/tree",
-                                    ],
-                                    species.size.into(),
-                                );
+                                // A distancia NO: cada emisor cuelga tres quads de halo
+                                // y compite por los 24 slots del velo de noche
+                                // (`light2d::VEIL_LIGHTS`), y un farol a 150 m no
+                                // ilumina nada que se vea — sólo le roba el charco al
+                                // farol que tenés al lado.
+                                if detail == DecorDetail::Full {
+                                    crate::light2d::attach(
+                                        &mut ent,
+                                        &art,
+                                        &[
+                                            &format!("{}{suffix}", species.key),
+                                            species.key,
+                                            &format!("decor/tree{suffix}"),
+                                            "decor/tree",
+                                        ],
+                                        species.size.into(),
+                                    );
+                                }
                             }
                         }
                         DecorKind::Rock => {
                             // Mined rocks are removed just like chopped trees.
                             if !flora.is_removed(body, 0, 0, id) {
-                                let sprite = art
-                                    .get_first(&[&format!("decor/rock{suffix}"), "decor/rock"])
-                                    .map(|img| {
-                                        let mut s = Sprite::from_image(img);
-                                        s.custom_size = Some(Vec2::new(1.3, 1.0));
-                                        s
-                                    })
-                                    .unwrap_or_else(|| {
-                                        Sprite::from_color(rock_color(body), Vec2::new(1.2, 0.9))
-                                    });
+                                // Silueta a distancia — mismo criterio que el árbol.
+                                let sprite = if detail == DecorDetail::Coarse {
+                                    Sprite::from_color(rock_color(body), Vec2::new(1.3, 1.0))
+                                } else {
+                                    art.sprite_first_seeded(
+                                        &[&format!("decor/rock{suffix}"), "decor/rock"],
+                                        id as u64,
+                                        Vec2::new(1.3, 1.0),
+                                    )
+                                        .unwrap_or_else(|| {
+                                            Sprite::from_color(rock_color(body), Vec2::new(1.2, 0.9))
+                                        })
+                                };
                                 let mut ent = commands.spawn((
-                                    SurfaceDecor { cx, cz, z },
+                                    SurfaceDecor { cx, cz, z, small: false },
                                     InteractTarget {
                                         kind: InteractTargetKind::Rock,
                                         id,
                                     },
-                                    sprite,
+                                    atenuar_sprite(sprite, atenuar),
                                     Transform::from_xyz(r.x, r.y, sort),
                                 ));
-                                crate::light2d::attach(
-                                    &mut ent,
-                                    &art,
-                                    &[&format!("decor/rock{suffix}"), "decor/rock"],
-                                    Vec2::new(1.3, 1.0),
-                                );
+                                if detail == DecorDetail::Full {
+                                    crate::light2d::attach(
+                                        &mut ent,
+                                        &art,
+                                        &[&format!("decor/rock{suffix}"), "decor/rock"],
+                                        Vec2::new(1.3, 1.0),
+                                    );
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Flora/props extra (F3): sólo visual, sólo si el slot TIENE arte
-            // (cero entidades sin textura asignada) y sin pisar decor cosechable.
-            if z == 0
-                && !tiles.solid_at(body, tx, tz)
-                && surface_decor_at(body, tx, tz).is_none()
-                && !decor_free.contains(body, z, tx, tz)
+            // **Vetas de mineral y gema**, y sólo las que se PUEDEN VER.
+            //
+            // Bajo tierra el 1,4 % de las celdas tiene veta, y hasta ahora se
+            // dibujaban todas: el macizo entero salía salpicado de cuadraditos de
+            // colores hasta el horizonte, como un mapa de puntos. Una veta metida
+            // en veinte metros de roca no se ve —hay que llegar cavando—, así que
+            // se dibuja la que está EXPUESTA: la que asoma en la pared de una
+            // galería, o la que está en el suelo abierto. Es la misma cuenta que
+            // hace un minero: la veta se descubre en la cara del túnel.
+            let veta_visible = z >= 0 || expuesta(tiles, body, tx, tz);
+            if let Some(dep) = deposit_at(body, z, tx, tz)
+                .filter(|_| veta_visible && !flora.is_removed(body, 0, 0, id))
             {
-                let extra = nature_decor_at(body, tx, tz)
-                    .or_else(|| prop_decor_at(body, tx, tz));
-                if let Some(e) = extra {
-                    if let Some(img) = art.get(e.key) {
-                        let mut s = Sprite::from_image(img);
-                        s.custom_size = Some(e.size.into());
-                        // Pivote al pie (LimeZu): el centro sube medio alto.
-                        let y = r.y + e.size[1] * 0.5 - 0.5;
-                        let mut ent = commands.spawn((
-                            SurfaceDecor { cx, cz, z },
-                            s,
-                            Transform::from_xyz(r.x, y, sort),
-                        ));
-                        // Faroles, fogatas, hongos brillantes: la luz viene del
-                        // slot, no de una lista hardcodeada acá.
-                        crate::light2d::attach(&mut ent, &art, &[e.key], e.size.into());
-                    }
-                }
-            }
-
-            // Ore/gem deposits (surface sparse, underground rich). Mined ones are
-            // removed like rocks/trees.
-            if let Some(dep) = deposit_at(body, z, tx, tz).filter(|_| !flora.is_removed(body, 0, 0, id)) {
                 let kind = deposit_target_kind(dep);
                 let (color, size) = deposit_style(kind);
                 let key = match kind {
@@ -1271,12 +2460,23 @@ fn spawn_chunk_decor(
                     InteractTargetKind::OreGold => "decor/ore_gold",
                     _ => "decor/ore_iron",
                 };
+                let con_arte = art.tile_has_art(key);
                 let mut e = commands.spawn((
-                    SurfaceDecor { cx, cz, z },
+                    SurfaceDecor { cx, cz, z, small: false },
                     InteractTarget { kind, id },
-                    art.sprite_or_color(key, color, size),
+                    if con_arte {
+                        art.sprite_or_color(key, color, size)
+                    } else {
+                        Sprite::from_color(Color::NONE, size)
+                    },
                     Transform::from_xyz(r.x, r.y, sort),
                 ));
+                if !con_arte {
+                    // Sin pixel asignado la veta se dibuja POR CÓDIGO: pepitas
+                    // sueltas en la roca, no un cuadrado de color. Un cuadrado es
+                    // lo que hacía que el subsuelo pareciera un tablero.
+                    vetear(&mut e, size, color, id as u64);
+                }
                 if let Some(a) = art.animation(key) {
                     e.insert(a);
                 }
@@ -1296,9 +2496,6 @@ fn spawn_chunk_decor(
         {
             continue;
         }
-        let wx = d.x as f32 * TILE_M + 0.5;
-        let wz = d.zc as f32 * TILE_M + 0.5;
-        let r = render_xy(wx, wz);
         // Tamaño: el que fijó el editor (deducido del recorte del asset) manda;
         // si no, el de la tabla de especies; si no, un decor chico.
         let size: [f32; 2] = d
@@ -1320,13 +2517,54 @@ fn spawn_chunk_decor(
             .unwrap_or([1.5, 1.5]);
         // `world_sprite` respeta el recorte/pose del slot: sin esto, un asset
         // recortado de un atlas se plantaba con el atlas entero.
-        let Some((s, anim)) = art.world_sprite(&d.key, size.into()) else { continue };
-        let y = r.y + size[1] * 0.5 - 0.5;
-        let mut ent = commands.spawn((
-            SurfaceDecor { cx, cz, z },
-            s,
-            Transform::from_xyz(r.x, y, sort_z(wz)),
+        // Variante por celda: un objeto con varias variantes de arte se ve
+        // variado sin guardar nada por instancia (la misma celda elige siempre
+        // la misma). Sin variantes, es exactamente `world_sprite` de antes.
+        let seed = (d.x as u64) << 32 ^ (d.zc as u64 & 0xFFFF_FFFF);
+        let Some((s, anim)) = art.world_sprite_seeded(&d.key, seed, size.into()) else { continue };
+        // Colocación ALINEADA AL GRID (misma regla que el editor de mundo, ver
+        // `ha_assets::placement_center_tiles`): la celda ancla del asset queda
+        // sobre la celda que apuntaste. Antes se apoyaba el pie del sprite en el
+        // borde inferior de la celda y se centraba a ojo: con anchos pares el
+        // asset quedaba medio tile corrido de su huella de colisión y parecía
+        // plantado una celda más arriba de donde lo pusiste.
+        let cells = art.slot_cells(&d.key).unwrap_or((
+            size[0].round().max(1.0) as u32,
+            size[1].round().max(1.0) as u32,
         ));
+        let anchor = art.anchor(&d.key, cells);
+        let c = ha_assets::placement_center_tiles(d.x, d.zc, cells, anchor, size);
+        let (wx, wz) = (c[0] * TILE_M, c[1] * TILE_M);
+        let r = render_xy(wx, wz);
+        let (min_x, min_z) = ha_assets::placement_min_tile(d.x, d.zc, anchor);
+        // El Y-sort sale del PIE del sprite: la fila INFERIOR de su huella.
+        //
+        // Antes se usaba la fila del ANCLA (`d.zc + 1`), que sólo coincide con el
+        // pie cuando el ancla está en la última fila —el default—. En cuanto
+        // pintabas una huella de colisión en el editor y el ancla quedaba más
+        // arriba (lo normal en una casa: se ancla por la puerta), el asset
+        // Y-sorteaba varias filas al norte de donde de verdad se apoya y se
+        // dibujaba ENCIMA del jugador que estaba delante. Con la fila real del pie
+        // un asset alto nunca tapa lo que tiene por delante.
+        let foot_z = (min_z + cells.1.max(1) as i64) as f32 * TILE_M;
+        // La CAPA del slot decide la banda: lo que marcaste como piso en el
+        // editor de assets (charcos, caminos, alfombras, plataformas) va debajo
+        // del jugador; lo que marcaste techo va arriba y se transparenta. Sin
+        // capa, Y-sort como siempre. Esto es lo que arregla "lo que dibujo en el
+        // editor de mundo me tapa".
+        let layer = art.slot_layer(&d.key);
+        let mut ent = commands.spawn((
+            SurfaceDecor { cx, cz, z, small: false },
+            s,
+            Transform::from_xyz(r.x, r.y, crate::layers::depth(layer, foot_z)),
+        ));
+        if layer == Some(ha_assets::ArtLayer::Roof) {
+            // Techo autorado: se desvanece cuando el jugador camina por debajo.
+            ent.insert(crate::layers::Overhead::techo(
+                (min_x, min_z),
+                (cells.0.max(1) as i64, cells.1.max(1) as i64),
+            ));
+        }
         if let Some(a) = anim {
             ent.insert(a);
         }
@@ -1334,6 +2572,199 @@ fn spawn_chunk_decor(
     }
 
     flora.set_chunk_trees(cx as i32, cz as i32, trees);
+
+    if detail == DecorDetail::Full {
+        spawn_chunk_small_decor(commands, art, tiles, decor_free, body, z, cx, cz);
+    }
+}
+
+/// Flora y props de ADORNO (F3): matas, hongos, muebles de exterior. Sólo visual
+/// y sólo si el slot tiene arte asignada (cero entidades sin textura).
+///
+/// Vive aparte de [`spawn_chunk_decor`] porque es la categoría más numerosa por
+/// chunk y la única que se puebla sólo en el anillo cercano: a 100 m de distancia
+/// una mata mide un píxel, y multiplicada por los ~600 chunks que puede tener el
+/// anillo de vuelo era el grueso del coste por frame. Los árboles y las piedras
+/// —lo que de verdad se lee desde el aire— van en todo el anillo.
+#[allow(clippy::too_many_arguments)]
+fn spawn_chunk_small_decor(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    decor_free: &DecorFreeCells,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    // Bajo tierra no hay vereda, ni flora, ni bancos: hay tierra. Desde un piso
+    // alto sí se pueblan —atenuados— porque son la calle que se mira desde la
+    // azotea: los coches, los faroles y los bancos son lo que la hace una calle y
+    // no una franja gris.
+    if z < 0 {
+        return;
+    }
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            if decor_free.contains(body, 0, tx, tz) {
+                continue;
+            }
+            let (tile, nivel, atenuar) = suelo_a_la_vista(tiles, body, tx, tz);
+            if nivel != 0 {
+                continue;
+            }
+            // EL AGUA TAMBIÉN SE DECORA. Antes esta puerta era "sólo suelo firme",
+            // así que los lagos y el mar salían como una plancha lisa de un solo
+            // azul — que a la vista es un agujero en el mapa. Ahora el bajío lleva
+            // troncos flotantes, nenúfares y juncos, y su orilla lleva el
+            // campamento y el puesto de pesca.
+            // Y lo que flota lo elige el SITIO, no un dado: el junco sale donde
+            // el agua toca la tierra, el nenúfar sólo en agua quieta, el tronco
+            // a la deriva donde hay corriente y el cardumen lejos de la orilla.
+            // Ver `ha_shared::agua::sitio_de_agua` — con la tabla única que había
+            // antes, el salvavidas del pack aparecía en un charco de la sierra.
+            let e = if tile.swim() {
+                ha_shared::agua::decor_at(body, tx, tz)
+            } else if !tile.buildable_ground() || surface_decor_at(body, tx, tz).is_some() {
+                None
+            } else {
+                // La VEREDA va primero: es la única de estas tablas que tiene una
+                // celda propia (`Pavement`) y no compite con la flora, que no
+                // crece sobre la acera.
+                // ADENTRO PRIMERO: es lo más específico que hay. Una celda de
+                // piso de una casa generada se amuebla con el tema de su lote
+                // (`interior_decor_at`) y no compite con la flora ni la vereda,
+                // que no tienen nada que hacer dentro de un cuarto.
+                ha_shared::worldgen::interior_decor_at(body, tx, tz)
+                    // La ESQUINA manda sobre la vereda: el semáforo tiene sitio
+                    // fijo y no puede perderlo contra un banco sorteado.
+                    .or_else(|| ha_shared::worldgen::esquina_decor_at(body, tx, tz))
+                    .or_else(|| ha_shared::worldgen::vereda_decor_at(body, tx, tz))
+                    // La calzada tiene su propia tabla —lo tirado en el suelo— y
+                    // va acá, antes que la flora: sobre asfalto no crece nada.
+                    .or_else(|| ha_shared::worldgen::calzada_decor_at(body, tx, tz))
+                    .or_else(|| ha_shared::worldgen::playa_decor_at(body, tx, tz))
+                    .or_else(|| ha_shared::worldgen::shore_decor_at(body, tx, tz))
+                    .or_else(|| nature_decor_at(body, tx, tz))
+                    .or_else(|| prop_decor_at(body, tx, tz))
+            };
+            let Some(e) = e else { continue };
+            // `world_sprite` y no `get`: si el slot se recortó de un atlas, con el
+            // handle a pelo se plantaba la HOJA ENTERA en el pasto.
+            //
+            // Y **seeded**: los objetos del pack traen sus colores como variantes
+            // (una cama son 56 camas), así que la celda elige cuál. Con la versión
+            // sin semilla se dibujaba siempre la primera y un pueblo entero salía
+            // del mismo color — que es tener el arte y no usarlo.
+            let semilla = ((tx as u64) << 32) ^ (tz as u64 & 0xFFFF_FFFF);
+            let Some((mut s, anim)) = art.world_sprite_seeded(e.key, semilla, e.size.into()) else {
+                continue;
+            };
+            let wx = tx as f32 * TILE_M + 0.5;
+            let wz = tz as f32 * TILE_M + 0.5;
+            let r = render_xy(wx, wz);
+            s.custom_size = Some(e.size.into());
+            // Pivote al pie (LimeZu): el centro sube medio alto.
+            let y = r.y + e.size[1] * 0.5 - 0.5;
+            // **La textura del agua va en la banda de piso.** La onda, la
+            // hondura, la burbuja, el cardumen y el nenúfar no se levantan del
+            // agua: son el agua. Y-sorteados, `light2d` les colgaba su mancha de
+            // sombra y el mar abierto salía lleno de manchones oscuros sin nada
+            // que los proyecte. Lo que sí tiene volumen —la roca, el tronco— no
+            // está en la lista y conserva su sombra. Ver
+            // `ha_shared::agua::TEXTURA_DE_AGUA`.
+            let capa = if tile.swim() && ha_shared::agua::es_textura_de_agua(e.key) {
+                crate::layers::depth(Some(crate::layers::ArtLayer::Floor), wz)
+            } else {
+                crate::layers::depth(art.slot_layer(e.key), wz)
+            };
+            let mut ent = commands.spawn((
+                SurfaceDecor { cx, cz, z, small: true },
+                atenuar_sprite(s, atenuar),
+                // Mismo criterio que el decor autorado: una mata marcada piso
+                // (musgo, charco, hojas caídas) no debe taparte los pies.
+                Transform::from_xyz(r.x, y, capa),
+            ));
+            // **Lo animado se mueve.** `world_sprite_seeded` devolvía la animación
+            // y acá se tiraba: el pack trae peceras, fuego, cardúmenes y un cuervo
+            // con sus cuadros ya recortados, y el mundo los plantaba congelados.
+            // Sólo pagan reloj los slots que declaran animación.
+            if let Some(a) = anim {
+                ent.insert(a);
+            }
+            // Faroles, fogatas, hongos brillantes: la luz viene del slot, no de
+            // una lista hardcodeada acá.
+            crate::light2d::attach(&mut ent, &art, &[e.key], e.size.into());
+        }
+    }
+}
+
+/// Apaga un sprite por un factor multiplicativo. Es cómo se dibuja el mundo que
+/// se ve **por el vacío** —la calle desde la azotea, el fondo del pozo—: el mismo
+/// [`VOID_DIM`] que ya usa el color del suelo, aplicado al pixel para que el
+/// árbol de la vereda no salga a pleno sol sobre un asfalto en penumbra.
+///
+/// Multiplica el color (no el alpha) a propósito: bajar el alpha lo volvería
+/// translúcido y se vería a través, y lo que está abajo no es un fantasma — está
+/// lejos y con menos luz.
+fn atenuar_sprite(mut s: Sprite, k: f32) -> Sprite {
+    if k < 1.0 {
+        let c = s.color.to_srgba();
+        s.color = Color::srgba(c.red * k, c.green * k, c.blue * k, c.alpha);
+    }
+    s
+}
+
+/// **¿Esta celda del subsuelo da a un hueco?** La propia celda abierta, o maciza
+/// pero con una cara contra la galería. Es lo que decide si una veta se ve.
+fn expuesta(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let z = tiles.z;
+    if !tiles.tile_at_level(body, z, tx, tz).solid() {
+        return true;
+    }
+    [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .iter()
+        .any(|&(dx, dz)| !tiles.tile_at_level(body, z, tx + dx, tz + dz).solid())
+}
+
+/// **Una veta dibujada por código**: pepitas del mineral repartidas en la celda.
+///
+/// El fallback de una veta no puede ser el cuadrado de color de los demás slots:
+/// la veta se mira de cerca y con luz de antorcha, y un cuadrado perfecto de
+/// 90 cm de lado no se lee como mineral en la roca — se lee como un bug. Cuatro
+/// pepitas sorteadas por la celda (siempre las mismas, es determinista) alcanzan
+/// para que se entienda qué es y dónde picar.
+fn vetear(padre: &mut bevy::ecs::system::EntityCommands, size: Vec2, color: Color, semilla: u64) {
+    let c = color.to_srgba();
+    let brillo = Color::srgb(
+        (c.red * 1.35).min(1.0),
+        (c.green * 1.35).min(1.0),
+        (c.blue * 1.35).min(1.0),
+    );
+    let mut h = semilla | 1;
+    let mut az = move || {
+        h ^= h << 13;
+        h ^= h >> 7;
+        h ^= h << 17;
+        (h % 1000) as f32 / 1000.0 - 0.5
+    };
+    let pepitas: Vec<(Vec2, Vec2, Color)> = (0..4)
+        .map(|i| {
+            let d = Vec2::new(az() * size.x * 0.62, az() * size.y * 0.62);
+            let lado = size.x * (0.20 + (i as f32) * 0.045);
+            (d, Vec2::splat(lado), if i % 2 == 0 { color } else { brillo })
+        })
+        .collect();
+    padre.with_children(|p| {
+        for (d, tam, col) in pepitas {
+            p.spawn((
+                Sprite::from_color(col, tam),
+                Transform::from_xyz(d.x, d.y, 0.001),
+            ));
+        }
+    });
 }
 
 fn rock_color(body: CelestialBody) -> Color {
@@ -1360,25 +2791,373 @@ fn deposit_style(kind: InteractTargetKind) -> (Color, Vec2) {
 // ---------------------------------------------------------------------------
 
 /// Clave de arte del material de un tile, o `None` si ese tile no tiene slot.
-fn tile_art_key(tile: Tile) -> Option<&'static str> {
-    match tile {
-        Tile::Water => Some("tiles/water"),
-        Tile::Grass => Some("tiles/grass"),
-        Tile::Sand => Some("tiles/sand"),
-        Tile::Regolith => Some("tiles/regolith"),
-        Tile::Basalt => Some("tiles/basalt"),
-        Tile::Ice => Some("tiles/ice"),
-        // Piezas de construcción (autotile de Room_Builder). El muro legacy
-        // (`Wall`) comparte el arte de madera.
-        Tile::WoodFloor => Some("floor/wood"),
-        Tile::WoodWall | Tile::Wall => Some("wall/wood"),
-        Tile::StoneBrick => Some("wall/stone"),
-        Tile::Door => Some("door/wood"),
-        Tile::Window => Some("window/basic"),
-        Tile::StairsDown => Some("stairs/down"),
-        Tile::StairsUp => Some("stairs/up"),
-        _ => None,
+/// `pub(crate)`: además del mundo lo usa la mochila, para que la tarjeta de una
+/// pieza de construir muestre EL MATERIAL (el piso de madera se ve como piso de
+/// madera) en vez de un icono genérico.
+///
+/// La tabla vive en `ha_shared::topdown::Tile::art_key` — al lado del tile, para
+/// que el editor de assets pueda auditar que toda pieza tiene su slot con nombre.
+pub(crate) fn tile_art_key(tile: Tile) -> Option<&'static str> {
+    tile.art_key()
+}
+
+/// **EL SUELO DE UNA CELDA DE RELIEVE ES LA TERRAZA, NO LA ROCA.**
+///
+/// `Tile::Cliff` y `Tile::Slope` son geometría: dicen "acá se termina la terraza"
+/// y "por acá se sube", no de qué está hecho el piso. Pero su color de material
+/// es el de la piedra y su slot de suelo (`cliff/roca`) no tiene losa, así que la
+/// malla del chunk pintaba **un cuadrado gris pardo por cada celda de borde** —
+/// las manchas que se ven en las capturas, salpicadas a lo largo de cada
+/// desnivel. Y son celdas por las que se CAMINA: la de un acantilado es el canto
+/// de la meseta, la de una rampa es el escalón.
+///
+/// La pared la dibuja el sprite que cuelga (`terrain_art_key` + el kit de
+/// `import-acantilado.py`). El piso de esa celda es el que le tocaría por bioma
+/// si el relieve no existiera, que es lo que devuelve esto.
+///
+/// Es la misma regla que ya manda en el resto del mundo: **la superficie es
+/// pasto** (biblia §5), la cumbre incluida.
+pub(crate) fn suelo_del_relieve(body: CelestialBody, tx: i64, tz: i64) -> Tile {
+    // **El bioma LISO de la terraza, no el difuminado.** Una pared es una pieza
+    // de kit de tres celdas de alto y su material sale de acá
+    // (`cliff_material`): con el bioma difuminado, la misma pared alternaría
+    // celda a celda entre el acantilado de nieve y el de pasto y saldría a
+    // rayas. La trama del difuminado es del SUELO; la pared es de la terraza
+    // (ver `geography::biome_de_terraza`).
+    let b = ha_shared::geography::biome_de_terraza(body, tx, tz);
+    let t = ha_shared::geography::biome_tile(body, b, tx, tz);
+    // Un borde de terraza nunca toca el líquido (`relief_cell` devuelve `Flat`
+    // contra el agua), pero el BIOMA de al lado sí puede ser mojado: el pantano
+    // sortea charcos celda a celda y el río pinta agua. Un acantilado con el pie
+    // mojado es exactamente lo que no puede pasar, así que ahí manda el pasto.
+    if matches!(t, Tile::Water | Tile::WaterDeep) {
+        Tile::Grass
+    } else {
+        t
     }
+}
+
+/// **El material de la cara sale del SUELO que corona, no del bioma.**
+///
+/// Regla del usuario, sin matices: *"usá donde haya pasto el acantilado de pasto
+/// y con arena el de arena"*. La forma en que se rompía era tener DOS tablas
+/// paralelas: una de bioma→material para la pared y otra de bioma→tile para el
+/// piso, y discrepaban en cuanto un bioma no era del color de su nombre. La
+/// sabana es el caso que se vio en la captura —**suelo de pasto, pared de
+/// arena**—: `biome_tile(Savanna)` da `Grass` y la tabla vieja daba `"arena"`,
+/// así que media pradera salía coronada por un médano.
+///
+/// Ahora hay UNA fuente: [`suelo_del_relieve`], el mismo tile que pinta la malla
+/// del chunk en esa celda. Si el piso es pasto la pared es de pasto, y no hay
+/// forma de que se vuelvan a separar. De paso se fue el barrido en anillos que
+/// buscaba tierra seca al lado del agua: `suelo_del_relieve` ya devuelve pasto
+/// donde el bioma es mojado.
+fn cliff_material(body: CelestialBody, tx: i64, tz: i64) -> &'static str {
+    material_de_suelo(suelo_del_relieve(body, tx, tz))
+}
+
+/// De qué está hecha la pared que sostiene este suelo. Los cinco materiales son
+/// los que corta `scripts/import-acantilado.py`.
+fn material_de_suelo(t: Tile) -> &'static str {
+    match t {
+        Tile::Sand => "arena",
+        Tile::Ice => "nieve",
+        Tile::Regolith => "regolito",
+        Tile::Basalt | Tile::RockRed => "basalto",
+        // **La superficie del mundo es pasto, la cumbre incluida** (biblia §5):
+        // la sierra, la montaña y la tierra removida beben del mismo verde. Un
+        // desnivel de cordillera se lee por su SOMBRA, no porque esté pintado de
+        // gris — eso era `cliff/roca`, que no tiene pixel y caía al respaldo por
+        // código: los rectángulos grises de las capturas viejas.
+        _ => "pasto",
+    }
+}
+
+/// Los slots de pasto por clima. `tiles/grass` no está: ése es el de
+/// referencia, el que se usa cuando el bioma no pide uno propio.
+pub(crate) const PASTOS_DE_BIOMA: &[&str] = &[
+    "tiles/pasto_bosque",
+    "tiles/pasto_seco",
+    "tiles/pasto_pantano",
+    "tiles/pasto_sierra",
+];
+
+/// **El pasto de este bioma**, o `None` si le toca el de referencia.
+///
+/// El mundo entero es pasto por decisión de diseño (§5, "La superficie viva es
+/// PASTO"), y eso dejaba a la sabana, al bosque y al pantano pintados del MISMO
+/// verde: lo único que los distinguía era cuántos árboles crecían encima. Acá
+/// cada clima pide su propia losa, igual que el relieve pide la suya
+/// (`cliff_material`): si el slot tiene pixel, se usa; si no, cae al pasto de
+/// siempre y no queda una sola celda sin dibujar.
+///
+/// La playa y el desierto no están porque su suelo NO es pasto — es arena, y ya
+/// tiene su material.
+fn pasto_de_bioma(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static str> {
+    use ha_shared::geography::Biome;
+    Some(match ha_shared::geography::biome_at(body, tx, tz) {
+        Biome::Forest => "tiles/pasto_bosque",
+        Biome::Savanna => "tiles/pasto_seco",
+        Biome::Swamp => "tiles/pasto_pantano",
+        // La montaña comparte el pastizal de altura de la sierra: desde que la
+        // cumbre dejó de ser piedra (`geography::natural_tile`), sin esto salía
+        // con el verde de la pradera a 2.000 m.
+        Biome::Highland | Biome::Mountain => "tiles/pasto_sierra",
+        // Pradera y cualquier otro sitio donde crezca pasto: el de referencia.
+        _ => return None,
+    })
+}
+
+/// **De qué familia es la vereda de esta ciudad.**
+///
+/// El pack dibujó seis aceras enteras —crema, crema cálido, gris frío, gris
+/// neutro, gris azulado, gris cálido— y el juego usaba una: todas las ciudades
+/// del mundo tenían la misma vereda, y la que las distinguía era el trazado y
+/// nada más. Acá cada asentamiento se queda con una pareja completa: la baldosa
+/// `floor/vereda_tipoN` (malla del chunk) y el escalón `road/cordon_N`
+/// (calcomanía sobre el asfalto).
+///
+/// **La elección es de la CIUDAD, no de la celda.** Sale del centro del
+/// asentamiento, que es el único dato estable que tiene: sortearla por celda
+/// pondría el cordón de una familia sobre la baldosa de otra cada tres metros, y
+/// ése fue siempre el motivo por el que había una sola. Fuera de un casco —una
+/// ruta de campo, un cruce suelto— manda la de siempre.
+///
+/// Devuelve `None` para la familia base, que es la que usa las claves sin
+/// sufijo. Sólo se ofrece una familia si el arte de las DOS mitades está
+/// cargado: media pareja se ve peor que la vereda de siempre.
+fn vereda_de_la_ciudad(art: &ArtLibrary, body: CelestialBody, tx: i64, tz: i64) -> usize {
+    // Sin ninguna familia alternativa cargada no hay nada que elegir, y
+    // preguntar por el asentamiento costaría nueve consultas de sitio por celda
+    // de acera para tirar la respuesta. Ver `ArtLibrary::veredas_de_ciudad`.
+    if !art.veredas_de_ciudad() {
+        return 0;
+    }
+    let Some(s) = ha_shared::geography::settlement_covering(body, tx, tz) else {
+        return 0;
+    };
+    // Mezcla barata del centro: dos ciudades vecinas no caen en la misma familia
+    // por estar en celdas de sitio contiguas.
+    let mut h = (s.center.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (s.center.1 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+    h ^= h >> 31;
+    let fam = (h % VEREDA_BALDOSA.len() as u64) as usize;
+    // Media pareja se ve peor que la vereda de siempre: si a la familia le falta
+    // la baldosa o le falta el cordón, no se usa.
+    let completa = art.suelo_uv(VEREDA_BALDOSA[fam]).is_some() && art.has_poses(VEREDA_CORDON[fam]);
+    if completa {
+        fam
+    } else {
+        0
+    }
+}
+
+/// Las baldosas de vereda del pack, por familia. La 0 es la de siempre y por eso
+/// no lleva sufijo: es la clave que ya existía y a la que cae todo lo que no es
+/// una ciudad con familia propia.
+pub(crate) const VEREDA_BALDOSA: [&str; 6] = [
+    "floor/vereda",
+    "floor/vereda_tipo2",
+    "floor/vereda_tipo3",
+    "floor/vereda_tipo4",
+    "floor/vereda_tipo5",
+    "floor/vereda_tipo6",
+];
+/// El escalón que va con cada baldosa. Índices en paralelo a [`VEREDA_BALDOSA`]:
+/// la pareja viaja junta o no viaja.
+pub(crate) const VEREDA_CORDON: [&str; 6] = [
+    "road/cordon",
+    "road/cordon_2",
+    "road/cordon_3",
+    "road/cordon_4",
+    "road/cordon_5",
+    "road/cordon_6",
+];
+
+/// La losa de suelo que le toca a esta celda, ya resuelta a UV de la hoja.
+///
+/// Es el punto donde el pasto elige clima. Vive aparte de `tile_art_key` porque
+/// esa función es del TILE (y vive en `ha-shared`, espejada en TS), mientras que
+/// "de qué es el pasto acá" es del SITIO — hace falta el cuerpo y la celda.
+///
+/// `vereda` es la familia de acera de la ciudad de este chunk, ya resuelta por
+/// quien llama: se decide UNA vez por chunk y no por celda, para que la baldosa
+/// que dibuja la malla y el escalón que dibuja `spawn_chunk_cordon` no puedan
+/// discrepar nunca — si cada uno la resolviera por su cuenta, en el borde del
+/// casco caería el cordón de una familia sobre la baldosa de otra.
+fn suelo_de_la_celda(
+    art: &ArtLibrary,
+    body: CelestialBody,
+    tile: Tile,
+    tx: i64,
+    tz: i64,
+    vereda: usize,
+) -> Option<[f32; 4]> {
+    let semilla = celda_semilla(tx, tz);
+    // El `pasto_por_bioma` va PRIMERO a propósito: sin losas de clima cargadas,
+    // preguntar el bioma sería pagar media docena de fbm por celda para tirar la
+    // respuesta a la basura. Ver `ArtLibrary::pasto_por_bioma`.
+    if tile == Tile::Grass && art.pasto_por_bioma() {
+        if let Some(uv) = pasto_de_bioma(body, tx, tz).and_then(|k| art.suelo_uv_seeded(k, semilla))
+        {
+            return Some(uv);
+        }
+    }
+    // La acera es de la CIUDAD, no del tile: cada asentamiento tiene la suya.
+    if tile == Tile::Pavement {
+        if let Some(uv) = art.suelo_uv_seeded(VEREDA_BALDOSA[vereda], semilla) {
+            return Some(uv);
+        }
+    }
+    art.suelo_uv_seeded(tile_art_key(tile)?, semilla)
+}
+
+/// La clave de arte de un tile de RELIEVE con su variante de bioma, si esa
+/// variante está curada. `None` = usá la genérica de `tile_art_key`.
+fn terrain_art_key(
+    art: &ArtLibrary,
+    body: CelestialBody,
+    tile: Tile,
+    tx: i64,
+    tz: i64,
+) -> Option<&'static str> {
+    // **EL AGUA TAMBIÉN ELIGE FAMILIA POR BIOMA.** El pack dibujó tres riberas
+    // —pasto, playa de arena y orilla pelada— y el juego usaba la de pasto en
+    // todas partes: una laguna del desierto salía con el pastito verde alrededor
+    // y el corte contra la arena se veía a un kilómetro. Es la misma regla del
+    // acantilado, aplicada al líquido (ver `ha_shared::agua::orilla_de`).
+    if tile == Tile::Water {
+        let key = ha_shared::agua::orilla_de(body, tx, tz).art_key();
+        return art.tile_has_art(key).then_some(key);
+    }
+    if !matches!(tile, Tile::Cliff | Tile::Slope) {
+        return None;
+    }
+    // **EL RELIEVE SE TIÑE DEL PASTO QUE CORONA.**
+    //
+    // La pieza del kit trae su meseta dibujada —así es como se ve el asset y así
+    // va al mundo—, y el mundo tiene CINCO pastos: el de referencia más los
+    // cuatro de clima que reparte `pasto_de_bioma`. Con una sola variante, la
+    // franja de arriba de la pared salía de otro verde que la losa de al lado:
+    // medido en la captura del campo, (86,165,92) contra un pasto de sabana de
+    // (135,147,89), una barra de un tile de ancho recorriendo el mundo.
+    //
+    // Se arregla eligiendo la variante teñida con SU losa —el importador la corta
+    // anclando el tono dominante de la meseta en el color de la losa— y no
+    // vaciándole el suelo al dibujo, que fue el intento anterior y dejó el muro
+    // hecho bloques de roca pelada. Vale para las tres familias: la pared, el
+    // bordillo y la escalinata pisan el mismo pasto.
+    //
+    // Sin la variante curada cae a la de siempre y no cambia nada.
+    if cliff_material(body, tx, tz) == "pasto" {
+        let familia = match tile {
+            Tile::Cliff if ha_shared::relief::alto_de_pared(body, tx, tz) == 1 => "ledge",
+            Tile::Cliff => "cliff",
+            _ => "slope",
+        };
+        let clima: Option<&'static str> = match (familia, pasto_de_bioma(body, tx, tz)) {
+            ("cliff", Some("tiles/pasto_bosque")) => Some("cliff/pasto_bosque"),
+            ("cliff", Some("tiles/pasto_seco")) => Some("cliff/pasto_seco"),
+            ("cliff", Some("tiles/pasto_pantano")) => Some("cliff/pasto_pantano"),
+            ("cliff", Some("tiles/pasto_sierra")) => Some("cliff/pasto_sierra"),
+            ("ledge", Some("tiles/pasto_bosque")) => Some("ledge/pasto_bosque"),
+            ("ledge", Some("tiles/pasto_seco")) => Some("ledge/pasto_seco"),
+            ("ledge", Some("tiles/pasto_pantano")) => Some("ledge/pasto_pantano"),
+            ("ledge", Some("tiles/pasto_sierra")) => Some("ledge/pasto_sierra"),
+            ("slope", Some("tiles/pasto_bosque")) => Some("slope/pasto_bosque"),
+            ("slope", Some("tiles/pasto_seco")) => Some("slope/pasto_seco"),
+            ("slope", Some("tiles/pasto_pantano")) => Some("slope/pasto_pantano"),
+            ("slope", Some("tiles/pasto_sierra")) => Some("slope/pasto_sierra"),
+            _ => None,
+        };
+        if let Some(k) = clima {
+            if art.tile_has_art(k) {
+                return Some(k);
+            }
+        }
+    }
+    // BORDILLO vs PARED, **y lo decide la altura**. Un desnivel de un solo
+    // escalón se trepa (ver `TileWorld::walk_blocked`) y el jugador tiene que
+    // poder VERLO antes de caminar hacia él: si se dibujara igual que un farallón
+    // de ocho pisos, la única forma de saber cuál es cuál sería chocarse. Su arte
+    // vive en `ledge/*` (dos celdas) con el mismo autotile que el resto; mientras
+    // no lo cures, cae al `cliff/*` de siempre y todo sigue igual.
+    //
+    // Antes esto lo decidía una "cota trepable" regional porque TODAS las caras
+    // del mundo medían un escalón y la altura no distinguía nada. Con la escalera
+    // de `relief::SALTO_DE_TERRAZA` la altura vuelve a ser el dato, y de paso el
+    // parpadeo que motivaba aquella regla desaparece por construcción: el alto es
+    // el mismo a lo largo de todo el tramo, porque las dos terrazas lo son.
+    if tile == Tile::Cliff && ha_shared::relief::alto_de_pared(body, tx, tz) == 1 {
+        let ledge: &'static str = match cliff_material(body, tx, tz) {
+            "arena" => "ledge/arena",
+            "nieve" => "ledge/nieve",
+            "pasto" => "ledge/pasto",
+            "regolito" => "ledge/regolito",
+            "basalto" => "ledge/basalto",
+            _ => "ledge/roca",
+        };
+        if art.tile_has_art(ledge) {
+            return Some(ledge);
+        }
+    }
+    let key: &'static str = match (tile, cliff_material(body, tx, tz)) {
+        (Tile::Cliff, "arena") => "cliff/arena",
+        (Tile::Cliff, "nieve") => "cliff/nieve",
+        (Tile::Cliff, "pasto") => "cliff/pasto",
+        (Tile::Cliff, "regolito") => "cliff/regolito",
+        (Tile::Cliff, "basalto") => "cliff/basalto",
+        (Tile::Slope, "arena") => "slope/arena",
+        (Tile::Slope, "nieve") => "slope/nieve",
+        (Tile::Slope, "pasto") => "slope/pasto",
+        (Tile::Slope, "regolito") => "slope/regolito",
+        (Tile::Slope, "basalto") => "slope/basalto",
+        // "roca" y cualquier material sin variante propia: la genérica sirve.
+        _ => return None,
+    };
+    art.tile_has_art(key).then_some(key)
+}
+
+/// **El costado de un paso.**
+///
+/// Devuelve la pose de mejilla que le toca a una celda de ACANTILADO pegada a
+/// una rampa, o `None` si esta celda no está al lado de ningún paso.
+///
+/// El kit del pack no dibuja la escalinata suelta: la dibuja con sus dos
+/// espolones de roca, uno a cada lado (`Four_Sand_Mountains_1_Bottom`, columnas
+/// 0 y 3). Esos espolones son PARED —la celda de acantilado, no la del paso— y
+/// por eso viven en `cliff/*` y se piden desde acá. Es la regla 8 del proyecto
+/// aplicada al relieve: la escalinata es un kit, no una losa suelta.
+///
+/// Sólo se pide para las caras que MIRAN AL SUR (la terraza de abajo está al
+/// sur): son las únicas que enseñan la pared entera, y el espolón es un dibujo
+/// de esa pared. En una cara que se ve de canto no habría dónde ponerlo.
+fn mejilla_de_rampa(
+    body: CelestialBody,
+    tile: Tile,
+    tx: i64,
+    tz: i64,
+) -> Option<&'static str> {
+    use ha_shared::relief::{alto_de_pared, relief_cell, ReliefCell};
+    if tile != Tile::Cliff {
+        return None;
+    }
+    // **Sólo el bordillo lleva mejilla.** El espolón del pack es una pieza de
+    // 1×3 celdas fijas: pegado a una pared de ocho pisos sería un tapón de roca
+    // a media altura. Una pared alta muere contra el paso con sus propias filas
+    // apiladas (`pared_apilada`), que es lo que hace que el paso se lea como un
+    // desfiladero y no como un agujero cuadrado.
+    if alto_de_pared(body, tx, tz) != 1 {
+        return None;
+    }
+    // El paso al ESTE ⇒ esta celda es su mejilla OESTE, y viceversa.
+    if relief_cell(body, tx + 1, tz) == ReliefCell::Ramp {
+        return Some("rampa_o");
+    }
+    if relief_cell(body, tx - 1, tz) == ReliefCell::Ramp {
+        return Some("rampa_e");
+    }
+    None
 }
 
 /// Elige la forma autotile de una celda según si sus 8 vecinos son del MISMO
@@ -1386,7 +3165,7 @@ fn tile_art_key(tile: Tile) -> Option<&'static str> {
 /// lados DISTINTOS. Los nombres son los que escribe el editor
 /// (`center`/`edge_*`/`corner_*`/`inner_*`).
 #[allow(clippy::too_many_arguments)]
-fn autotile_shape(n: bool, e: bool, s: bool, w: bool, ne: bool, nw: bool, se: bool, sw: bool) -> &'static str {
+pub(crate) fn autotile_shape(n: bool, e: bool, s: bool, w: bool, ne: bool, nw: bool, se: bool, sw: bool) -> &'static str {
     match (!n, !e, !s, !w) {
         // Todos los lados iguales: puede ser esquina cóncava si una diagonal difiere.
         (false, false, false, false) => {
@@ -1402,9 +3181,35 @@ fn autotile_shape(n: bool, e: bool, s: bool, w: bool, ne: bool, nw: bool, se: bo
         (true, false, false, true) => "corner_nw",
         (false, true, true, false) => "corner_se",
         (false, false, true, true) => "corner_sw",
-        // Lados opuestos / 3-4 lados distintos → center como fallback seguro.
-        _ => "center",
+        // **LADOS OPUESTOS O TRES DISTINTOS: EL PACK NO DIBUJÓ ESA PIEZA.**
+        //
+        // Acá decía `center`, o sea el INTERIOR del material — y para el agua eso
+        // es un cuadrado celeste liso sin orilla, plantado en mitad del pasto. Es
+        // el bug que el usuario marcó en círculo rojo por todo el borde de la
+        // laguna. Lo que de verdad lo arregla es no generar celdas que no se
+        // pueden dibujar (`ha_shared::geography::orilla_dibujable`); esto es la
+        // red por si alguna se escapa: se elige la esquina que enseñe orilla por
+        // los dos lados que la tienen, empezando por el SUR, que en 3/4 es el que
+        // se ve entero.
+        _ => match (!n, !e, !s, !w) {
+            (_, true, true, _) => "corner_se",
+            (_, _, true, true) => "corner_sw",
+            (true, true, _, _) => "corner_ne",
+            (true, _, _, true) => "corner_nw",
+            // Canal de un tile (los dos lados opuestos en tierra): no hay pieza
+            // que enseñe las dos orillas, y el interior es lo menos malo.
+            _ => "center",
+        },
     }
+}
+
+/// Semilla estable de una celda del mundo, para elegir su variante de arte.
+///
+/// Determinista y sin estado: la misma celda saca siempre la misma baldosa, aunque
+/// el chunk entre y salga del streaming diez veces. Es lo que permite variar el
+/// suelo sin guardar un byte por tile.
+pub(crate) fn celda_semilla(tx: i64, tz: i64) -> u64 {
+    (tx as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (tz as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
 }
 
 /// Spawnea sprites por-tile para los materiales con arte "vivo" del chunk (agua…),
@@ -1424,8 +3229,15 @@ fn spawn_chunk_tile_art(
         for lz in 0..CHUNK {
             let tx = cx * CHUNK + lx;
             let tz = cz * CHUNK + lz;
-            let tile = tiles.tile_at(body, tx, tz);
-            let Some(key) = tile_art_key(tile) else { continue };
+            // El arte sigue a lo que se DIBUJA, no a la capa en la que estás: bajo
+            // tierra la casa de arriba conserva su arte y sólo tu galería se abre.
+            let tile = tiles.render_tile(body, tx, tz);
+            let Some(generic) = tile_art_key(tile) else { continue };
+            // El relieve elige su arte por BIOMA: la misma pared es roca desnuda
+            // en la sierra, arena en el desierto y nieve en la cumbre. Si esa
+            // variante no está curada todavía, cae a la genérica y se ve igual que
+            // antes — nunca queda una celda sin dibujar por falta de arte.
+            let key = terrain_art_key(art, body, tile, tx, tz).unwrap_or(generic);
             let wx = tx as f32 * TILE_M + 0.5;
             let wz = tz as f32 * TILE_M + 0.5;
             let r = render_xy(wx, wz);
@@ -1433,46 +3245,1287 @@ fn spawn_chunk_tile_art(
             // conmuta). Con arte de poses, spawn especial; si no, sigue al autotile.
             if tile == Tile::Door && art.has_poses(key) {
                 if let Some((_, _)) = art.pose(key, "closed").or_else(|| art.pose(key, "open")) {
-                    let sprite = art.sprite_or_color(key, Color::srgb(0.30, 0.20, 0.10), Vec2::splat(TILE_M));
+                    // ALTA Y APOYADA EN SU PIE, igual que las paredes de borde.
+                    // Dibujada 1×1 quedaba más baja que el jugador: una puerta
+                    // por la que no cabés no se lee como una puerta. Ocupa un
+                    // tile de SUELO y `WALL_RENDER_H` tiles de ALTO; el pie se
+                    // queda clavado en la celda, así que la colisión y el
+                    // Y-sort no cambian — sólo crece hacia arriba en pantalla.
+                    let size = crate::building::door_render_size(art, key);
+                    let sprite = art.sprite_or_color(key, Color::srgb(0.30, 0.20, 0.10), size);
                     let mut ent = commands.spawn((
-                        SurfaceDecor { cx, cz, z },
+                        SurfaceDecor { cx, cz, z, small: false },
                         TileArt,
-                        crate::building::DoorArt { tx, tz, open: false },
+                        crate::building::DoorArt { tx, tz, open: false, art: key, t: 0.0 },
                         sprite,
-                        Transform::from_xyz(r.x, r.y, sort_z(wz)),
+                        Transform::from_xyz(
+                            r.x,
+                            r.y + (size.y - TILE_M) * 0.5,
+                            sort_z(wz),
+                        ),
                     ));
-                    crate::light2d::attach(&mut ent, &art, &[key], Vec2::splat(TILE_M));
+                    crate::light2d::attach(&mut ent, &art, &[key], size);
                     continue;
                 }
             }
             if !art.tile_has_art(key) {
                 continue;
             }
-            let same = |dx: i64, dz: i64| tiles.tile_at(body, tx + dx, tz + dz) == tile;
+            // **EL CUERPO DE UN MURO NO PIDE PIEZA: LA PIDIÓ SU CANTO.**
+            //
+            // Un farallón de ocho pisos tapa nueve filas de la terraza de abajo,
+            // y esas filas son roca (`ReliefCell::Pared`, tile de acantilado). Si
+            // cada una pidiera su propia cara, el mismo muro se dibujaría nueve
+            // veces solapado y cada copia taparía a la de arriba: en pantalla, la
+            // pared entera reducida a su última fila. Lo dibuja el canto, de una
+            // pieza, en `pared_apilada`.
+            if matches!(
+                ha_shared::relief::relief_cell(body, tx, tz),
+                ha_shared::relief::ReliefCell::Pared
+            ) {
+                continue;
+            }
+            // **DONDE CAE UNA CASCADA, MANDA LA GARGANTA.** El recorte del pack
+            // ya trae la roca de los dos costados, y el muro del relieve no le
+            // coincide: mide tres celdas fijas contra las que mida el chorro, y
+            // las tres columnas del salto pueden arrancar en filas distintas
+            // (`agua::salto_vecino` tolera un tile). El labio de roca asomaba por
+            // encima del agua — ver `agua::garganta_de_cascada`.
+            if tile == Tile::Cliff && ha_shared::agua::garganta_de_cascada(body, tx, tz) {
+                continue;
+            }
+            // **Y EL HOMBRO LO DIBUJA EL MÓDULO DE LA GARGANTA**, no el autotile.
+            // La pieza que le tocaría por relieve empieza y termina donde manda
+            // el borde de terraza, que no es donde cae el chorro
+            // (`agua::hombro_de_garganta`): dejarlas a las dos deja dos paredes
+            // solapadas a media fila de distancia.
+            if tile == Tile::Cliff && ha_shared::agua::hombro_de_garganta(body, tx, tz).is_some() {
+                continue;
+            }
+            // **Para el bajío, "igual" es LÍQUIDO, no "el mismo tile".**
+            //
+            // El autotile compara la celda con su vecina; con la comparación
+            // literal, el borde entre el bajío y la hondura contaba como tierra
+            // y el agua se dibujaba a sí misma una ORILLA CON BARRO en mitad del
+            // lago, justo donde el fondo se hunde. Son el mismo líquido: lo que
+            // cambia es la profundidad, y eso ya lo dibuja `tiles/water_deep`
+            // encima. La hondura sí compara literal — su borde contra el bajío
+            // es precisamente lo que tiene que dibujar.
+            // **Y para el RELIEVE, "igual" es "no se cae para ese lado".**
+            //
+            // Un borde de terraza es una banda de UN tile: comparando el tile
+            // con el de al lado, sus vecinos de los costados son acantilado
+            // (igual) y los de arriba y abajo no (distintos) — o sea lados
+            // OPUESTOS distintos, que `autotile_shape` resuelve como "center".
+            // Resultado: las 32.000 caras del planeta pedían la misma pieza y
+            // daba exactamente lo mismo hacia dónde miraba el precipicio.
+            //
+            // Lo que define la forma de una cara no es de qué está hecha la
+            // celda de al lado, es **por dónde se cae**: el borde mira hacia el
+            // terreno más bajo. Con esto `edge_s` es la cara que da a la terraza
+            // de abajo, `corner_se` una esquina, y el arte —el que dibuje el
+            // usuario en HA Studio o el respaldo de `procedural_art`— por fin
+            // puede orientarse.
+            let nivel = ha_shared::relief::relief_level(body, tx, tz);
+            let same = |dx: i64, dz: i64| {
+                if matches!(tile, Tile::Cliff | Tile::Slope) {
+                    return ha_shared::relief::relief_level(body, tx + dx, tz + dz) >= nivel;
+                }
+                let n = tiles.tile_at(body, tx + dx, tz + dz);
+                if tile == Tile::Water {
+                    // **Y LA BOCA DE UN SALTO CUENTA COMO AGUA.** Es la única
+                    // celda del mundo donde la tierra y el agua no ponen su
+                    // borde: la transición la hace el propio recorte de la
+                    // cascada, que trae su labio dibujado. La boca es acantilado
+                    // —tierra— así que sin esto el río de arriba le dibujaba su
+                    // banda de barro y pasto CRUZADA POR ENCIMA DEL SALTO, y el
+                    // lago terminaba en una ribera con la cascada empezando
+                    // debajo, sin que una cosa llevara a la otra.
+                    //
+                    // **Y LA POZA TAMBIÉN**, que es la mitad que faltaba. Al pie
+                    // del salto el agua tiene tierra a los dos costados —los
+                    // hombros de la garganta y el pie de la pared—, así que le
+                    // pedía `edge_e`/`edge_w`/`corner_*` y pintaba su ribete de
+                    // barro DEBAJO del sprite del reventón: el chorro terminaba
+                    // contra un borde de orilla en vez de contra su propia agua.
+                    // La transición ahí la trae la poza del recorte, con la
+                    // espuma dibujada.
+                    matches!(n, Tile::Water | Tile::WaterDeep)
+                        || ha_shared::agua::boca_de_cascada(body, tx + dx, tz + dz)
+                        || ha_shared::agua::poza_de_cascada(body, tx + dx, tz + dz)
+                } else {
+                    n == tile
+                }
+            };
             // n=norte(−z) e=este(+x) s=sur(+z) w=oeste(−x) + diagonales.
             let shape = autotile_shape(
                 same(0, -1), same(1, 0), same(0, 1), same(-1, 0),
                 same(1, -1), same(-1, -1), same(1, 1), same(-1, 1),
             );
-            let Some((sprite, anim)) = art.tile_sprite(key, shape, Vec2::splat(TILE_M)) else { continue };
-            // Suelo: capa baja (encima del mesh, debajo del decor). Muros y
-            // piezas sólidas: Y-sort, el jugador camina "detrás" de ellas.
-            let depth = if tile.solid() { sort_z(wz) } else { 1.0 };
+            // **La MEJILLA del paso.** Donde la pared muere contra una rampa, la
+            // celda de acantilado no es una cara más: es el costado de la
+            // escalinata, y el kit le dibuja su espolón de roca
+            // (`scripts/import-acantilado.py`). Sin esto el paso se abría como un
+            // agujero cuadrado y las dos caras se quedaban mirándose.
+            //
+            // Sólo vale para las caras que MIRAN AL SUR, que son las que enseñan
+            // la pared entera: en una que se ve de canto el espolón no se vería.
+            let shape = mejilla_de_rampa(body, tile, tx, tz).unwrap_or(shape);
+            // **La baldosa de ESTA celda.** El pack trajo 169 losas de vereda,
+            // asfalto y suelo urbano, y el mundo dibujaba siempre la primera:
+            // una ciudad entera con la misma baldosa repetida cada metro. La
+            // variante se elige por la celda (determinista, sin guardar nada), el
+            // mismo camino que ya usaban las rocas y los árboles. Sin variantes
+            // cargadas devuelve la clave base y no cambia nada.
+            let vk = art.variant_key_seeded(key, celda_semilla(tx, tz));
+            // **UNA CERCA ES UNA LÍNEA, NO UNA MANCHA.**
+            //
+            // `autotile_shape` contesta "¿de qué lado se acaba el material?" y eso
+            // describe el borde de un ÁREA. A una cerca hay que preguntarle hacia
+            // dónde SIGUE, que es otra pregunta y otra tabla de nombres
+            // (`ha_shared::cercas`). Pidiendo `edge_*` —que ninguna cerca tiene—
+            // `tile_sprite` caía al recorte base y dibujaba **el mismo tramo
+            // horizontal en los cuatro lados de la parcela**: la valla acostada en
+            // los tramos verticales que reportó el usuario.
+            //
+            // El sufijo de lado lo sabe el lote y nadie más (`city::afuera_de_cerca`):
+            // una parcela pegada a otra no deja adivinarlo mirando vecinos.
+            let cerca = (tile == Tile::Fence).then(|| {
+                let v = ha_shared::cercas::Vecinos::new(
+                    same(0, -1),
+                    same(1, 0),
+                    same(0, 1),
+                    same(-1, 0),
+                );
+                let afuera = ha_shared::geography::settlement_covering(body, tx, tz)
+                    .and_then(|s| ha_shared::city::afuera_de_cerca(body, &s, tx, tz));
+                let cadena = ha_shared::cercas::cadena(v, afuera);
+                cadena
+                    .iter()
+                    .find(|p| art.has_pose(&vk, p) || art.has_pose(key, p))
+                    .cloned()
+                    // Sin ninguna pose de la cadena curada, la clave base: es lo
+                    // que se veía antes de tener el kit orientado, no una regresión.
+                    .unwrap_or_default()
+            });
+            let shape = match &cerca {
+                Some(p) if !p.is_empty() => p.as_str(),
+                _ => shape,
+            };
+            // **Un muro del mundo se dibuja del alto de su pixel, no aplastado a
+            // la celda.**
+            //
+            // Una superficie (piso, vereda, asfalto) mide la celda por definición
+            // — si no, no embaldosa. Pero `wall/*` y `window/*` son recortes de
+            // 1×2 celdas y se estaban estirando dentro de un cuadrado de 1×1: la
+            // pared de una casa generada salía de la mitad de alto y con el pixel
+            // chato, mientras la que construye el jugador sale entera. La misma
+            // pieza, dos alturas, según quién la puso.
+            //
+            // Es la regla de obra (`ArtLibrary::medida_de_obra`): una celda del
+            // pack, un tile — así el ancho sigue encajando borde con borde y sólo
+            // crece hacia arriba, apoyada en el pie como cualquier pared.
+            //
+            // **El RELIEVE mide por POSE, no por slot.** Sus formas no miden
+            // todas lo mismo: la cara que mira al sur son tres celdas (labio +
+            // pared + pie) y la que mira al norte es UNA (el canto de enfrente,
+            // que no tiene pared que enseñar). Preguntando por el slot salían
+            // todas del alto de la primera y el canto lejano se dibujaba
+            // estirado sobre la meseta.
+            let relieve = matches!(tile, Tile::Cliff | Tile::Slope);
+            // **Y LA CERCA TAMBIÉN MIDE POR POSE.** Sus formas no miden todas lo
+            // mismo (el kit de madera son recortes de 1×2 y el murete de piedra de
+            // 1×1), y preguntar por el slot devuelve el rect del slot, no el de la
+            // pose que se va a dibujar — la mentira dormida de `medida_de_pieza`
+            // que ya costó una vuelta con las fachadas (biblia §8).
+            let medida = if relieve || tile == Tile::Fence {
+                let respaldo = Vec2::splat(TILE_M);
+                let m = art.medida_de_obra(&vk, Some(shape), respaldo);
+                if m == respaldo { art.medida_de_obra(key, Some(shape), respaldo) } else { m }
+            } else if tile.upright() {
+                let respaldo = Vec2::splat(TILE_M);
+                let m = art.medida_de_obra(&vk, None, respaldo);
+                if m == respaldo { art.medida_de_obra(key, None, respaldo) } else { m }
+            } else {
+                Vec2::splat(TILE_M)
+            };
+            // **Una pared tan alta como su desnivel.** Si la cara baja más de un
+            // escalón, la pieza compuesta del kit (labio + cuerpo + pie, que mide
+            // UNO) se queda corta y hay que armarla por filas — ver
+            // [`pared_apilada`], que devuelve `true` cuando ya la dibujó ella.
+            // **Y el PASO se apila igual que la pared.** La escalinata del kit
+            // mide lo que mide una pared del pack; un paso que baja diez pisos
+            // necesita diez filas de peldaños, o queda una franja de meseta lisa
+            // cortando el muro de arriba abajo — que es exactamente lo que había
+            // que arreglar. Las dos familias piden `labio`/`cuerpo`/`pie`, así
+            // que las apila el mismo código.
+            if matches!(tile, Tile::Cliff | Tile::Slope)
+                && CARAS_QUE_CUELGAN.contains(&shape)
+                && pared_apilada(commands, &art, body, key, &vk, tx, tz, cx, cz, z)
+            {
+                continue;
+            }
+            let Some((sprite, anim)) = art.tile_sprite(&vk, shape, medida) else { continue };
+            // Banda por ALTO, no por colisión. `Tile::solid()` significa "bloquea
+            // el paso" y usarlo acá era el bug del AGUA tapando al jugador: el
+            // agua frena pero es plana. `upright()` es el eje correcto — sólo lo
+            // que se levanta del suelo (muros, ventanas, roca) Y-sortea; el resto
+            // (agua, hielo, pisos) vive en la banda de piso, siempre bajo los pies.
+            // Una capa explícita en el slot manda por encima de las dos.
+            // La capa la puede declarar la variante; si no, manda la del slot.
+            let depth = match art.slot_layer(&vk).or_else(|| art.slot_layer(key)) {
+                Some(l) => crate::layers::depth(Some(l), wz),
+                // La rampa TAMBIÉN cuelga sobre la terraza de abajo, así que
+                // también Y-sortea: es la misma pared del acantilado, abierta.
+                None if tile.upright() || relieve => crate::layers::ysort(wz),
+                None => crate::layers::FLOOR,
+            };
+            // **Una pared crece hacia arriba; un ACANTILADO cuelga hacia abajo.**
+            //
+            // Son el mismo truco al revés y la diferencia está en dónde vive la
+            // celda dentro del dibujo. En una pared la celda es el PIE: lo que
+            // sobra del alto sale por arriba y tapa lo que hay detrás. En un
+            // acantilado la celda es el CANTO —el borde de la meseta, que es
+            // terreno alto y se camina— y lo que sobra es la cara de roca, que
+            // cae sobre la terraza de abajo, hacia la cámara.
+            //
+            // Dibujado como una pared, el acantilado se tapaba a sí mismo: la
+            // roca subía por encima de la meseta que la sostiene.
+            //
+            // El Y-sort no cambia —sigue siendo el de su celda—, y eso es lo que
+            // hace que el que camina por la terraza de abajo pase POR DELANTE de
+            // la pared en vez de meterse dentro.
+            let alto_extra = (medida.y - TILE_M) * 0.5;
+            let y = if relieve { r.y - alto_extra } else { r.y + alto_extra };
             let mut ent = commands.spawn((
-                SurfaceDecor { cx, cz, z },
+                SurfaceDecor { cx, cz, z, small: false },
                 TileArt,
                 sprite,
-                Transform::from_xyz(r.x, r.y, depth),
+                Transform::from_xyz(r.x, y, depth),
             ));
             if let Some(a) = anim {
                 ent.insert(a);
             }
             // Tiles que iluminan (lava, cristal, un piso de luz). Sólo pagan quad
             // los materiales que el usuario marcó como emisores.
-            crate::light2d::attach(&mut ent, &art, &[key], Vec2::splat(TILE_M));
+            crate::light2d::attach(&mut ent, &art, &[&vk, key], medida);
+        }
+    }
+    spawn_chunk_orilla(commands, art, tiles, body, z, cx, cz);
+    spawn_chunk_canto_concavo(commands, art, tiles, body, z, cx, cz);
+    spawn_chunk_hombros_de_garganta(commands, art, body, z, cx, cz);
+    spawn_chunk_cascadas(commands, art, tiles, body, z, cx, cz);
+    spawn_chunk_cliff_urbano(commands, art, tiles, body, z, cx, cz);
+    spawn_chunk_lane_marks(commands, art, tiles, body, z, cx, cz);
+}
+
+/// **LA ORILLA DEL SUELO BASE: dónde la tierra, la arena o la nieve muerden el pasto.**
+///
+/// El suelo lo pinta la malla del chunk con **una losa plana por celda** —medido:
+/// `tiles/grass` son 1.024 píxeles de un solo verde—, así que donde dos
+/// materiales se tocan había un corte a escuadra entre dos colores. Eso es lo que
+/// hacía que la cumbre nevada se leyera como un rectángulo celeste pegado encima
+/// del prado y que el pozo que cavás saliera como un cuadrado marrón con el borde
+/// a cuchillo.
+///
+/// El pack ya dibujó esa transición (`Grass_3`, autotile entero de tierra contra
+/// pasto) y estaba sin usar. `scripts/import-suelo-bordes.py` la publica como
+/// `borde/tierra`, `borde/arena` y `borde/nieve`, con una variante por clima de
+/// pasto para que el verde de la orilla sea el MISMO que el del tile de al lado.
+///
+/// **Sólo las celdas de BORDE pagan sprite.** El relleno lo sigue dibujando la
+/// malla —un draw call por chunk— y acá se saltea la forma `center`: el borde de
+/// una mancha son decenas de celdas, su interior son miles (regla 2).
+///
+/// **Y la orilla nace sólo contra el PASTO.** El dibujo del pack trae el verde
+/// puesto: usarlo contra el agua pintaría una franja de césped dentro de la
+/// laguna, que ya tiene su propia ribera (`tiles/water_arena`). Por eso un lado
+/// cuenta como "igual" si es el mismo material **o si no es pasto**.
+fn spawn_chunk_orilla(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    for lz in 0..CHUNK {
+        for lx in 0..CHUNK {
+            let (tx, tz) = (cx * CHUNK + lx, cz * CHUNK + lz);
+            // **EL POZO QUE CAVÁS TAMBIÉN LLEVA ORILLA**, y es la mitad del pedido:
+            // *"cuando se crea ese hueco, que se vaya editando en tiempo real ese
+            // contorno de tierra-césped; ahora se colocan unas líneas negras, en
+            // vez de eso usaríamos los assets"*. El hueco es tierra abierta contra
+            // el pasto de al lado — exactamente lo que dibuja `borde/tierra`. El
+            // corte oscuro que hacía ese papel se apaga en `pit_quads`.
+            // **Sólo el pozo del SUELO.** En un piso alto, "hueco" es el vacío que
+            // rodea a una azotea (`pit_quads` ya tenía escrita esa lección), y ahí
+            // una orilla de tierra y pasto sería un ribete de campo alrededor de un
+            // tejado. Se cava en la planta baja y hacia abajo.
+            let pozo = z <= 0 && tiles.renders_as_pit(body, tx, tz);
+            let tile = tiles.render_tile(body, tx, tz);
+            let mat = if pozo { "tierra" } else {
+                let Some(m) = orilla_del_tile(tile) else { continue };
+                m
+            };
+            // Igual = el mismo material, o cualquier cosa que no sea pasto.
+            let same = |dx: i64, dz: i64| {
+                if pozo {
+                    return tiles.renders_as_pit(body, tx + dx, tz + dz);
+                }
+                let n = tiles.render_tile(body, tx + dx, tz + dz);
+                n == tile || n != Tile::Grass
+            };
+            let shape = autotile_shape(
+                same(0, -1), same(1, 0), same(0, 1), same(-1, 0),
+                same(1, -1), same(-1, -1), same(1, 1), same(-1, 1),
+            );
+            if shape == "center" {
+                continue;
+            }
+            // El clima del pasto vecino manda sobre el verde de la orilla, igual
+            // que ya manda sobre el del acantilado (`cliff/pasto_*`). Sin la
+            // variante curada cae a la de referencia y no se pierde ninguna celda.
+            let clima = match pasto_de_bioma(body, tx, tz) {
+                Some("tiles/pasto_bosque") => Some("bosque"),
+                Some("tiles/pasto_seco") => Some("seco"),
+                Some("tiles/pasto_pantano") => Some("pantano"),
+                Some("tiles/pasto_sierra") => Some("sierra"),
+                _ => None,
+            };
+            let clave = clima
+                .map(|c| format!("borde/{mat}_{c}"))
+                .filter(|k| art.has_pose(k, shape))
+                .unwrap_or_else(|| format!("borde/{mat}"));
+            let Some((sprite, _)) = art.tile_sprite(&clave, shape, Vec2::splat(TILE_M)) else {
+                continue;
+            };
+            let r = render_xy(tx as f32 * TILE_M + 0.5, tz as f32 * TILE_M + 0.5);
+            commands.spawn((
+                SurfaceDecor { cx, cz, z, small: true },
+                TileArt,
+                sprite,
+                // Es SUELO: plano, en la capa del piso, y nunca Y-sortea. Un
+                // borde que tapara al que camina sobre él sería un agujero. La
+                // del pozo va un pelo más arriba: se dibuja SOBRE la sombra de
+                // la pared, que la malla ya pintó.
+                Transform::from_xyz(r.x, r.y, crate::layers::FLOOR + if pozo { 0.006 } else { 0.004 }),
+            ));
         }
     }
 }
+
+/// Qué orilla le toca a un tile de suelo, o `None` si ese material no lleva.
+///
+/// Son los tres que muerden el pasto: la tierra que deja el que cava, la arena
+/// de la playa y del desierto, y la nieve de la cumbre. La piedra y el asfalto no
+/// entran: los pone la ciudad y ya traen su cordón.
+fn orilla_del_tile(tile: Tile) -> Option<&'static str> {
+    match tile {
+        Tile::Dirt => Some("tierra"),
+        Tile::Sand => Some("arena"),
+        Tile::Ice => Some("nieve"),
+        _ => None,
+    }
+}
+
+/// Las formas que CUELGAN sobre la terraza de abajo: las que miran al sur, que
+/// en 3/4 son las únicas que enseñan la pared entera. Sólo ésas pueden necesitar
+/// tramos de más (`import-acantilado.py::CARA_SUR`).
+const CARAS_QUE_CUELGAN: [&str; 4] = ["edge_s", "corner_se", "corner_sw", "center"];
+
+/// **UNA PARED TAN ALTA COMO SU DESNIVEL.**
+///
+/// La pieza compuesta del kit —labio + cuerpo + pie, tres celdas— mide UN escalón
+/// y punto. Si la cara baja ocho, entre el labio y el pie van ocho cuerpos: con
+/// uno solo queda media pared y por debajo asoma el pasto de la terraza de abajo.
+///
+/// Devuelve `true` si dibujó la pared por filas sueltas (y entonces quien llama
+/// no debe dibujar la compuesta).
+///
+/// **Ésta es la función que el rediseño desbloqueó.** Ya existía y devolvía
+/// `false` siempre, porque medido sobre la Tierra las 7.832 caras del planeta
+/// bajaban exactamente un escalón: el campo de altura no cambia lo suficiente en
+/// un tile y todas las terrazas medían lo mismo. Con la escalera de
+/// `relief::SALTO_DE_TERRAZA`, el alto sale de [`ha_shared::relief::alto_de_pared`]
+/// y un farallón de meseta apila diez cuerpos de roca — que es lo que hace que
+/// la cascada que cae al lado pueda medir diez pisos.
+/// **LAS FILAS DE UN MURO NO SON LA MISMA BALDOSA.**
+///
+/// Un farallón de diez pisos apila nueve `cuerpo`, y con una sola celda eso es la
+/// misma piedra repetida nueve veces por el ancho de la corrida: a esa escala el
+/// ojo deja de ver cantos rodados y ve una CUADRÍCULA — el "se lee como relleno"
+/// de las capturas. La suposición era que el pack no tenía con qué; medido, sí
+/// tiene: `Middle_Modular_Single_Small_Sand_Mountain` es la fila que el kit dibujó
+/// justamente para repetirse y trae tres celdas distintas, que
+/// `import-acantilado.py` publica como `cuerpo_2`/`cuerpo_3`/`cuerpo_4`.
+///
+/// El reparto es por CELDA (columna y fila), no por fila entera: variando sólo la
+/// fila, una corrida larga sigue enseñando una banda horizontal idéntica.
+/// Determinista y sin estado, como el resto de las variantes del mundo.
+///
+/// Sin las poses de variante devuelve `"cuerpo"` y la pared sale como salía: un
+/// manifiesto viejo no rompe nada.
+///
+/// Se pregunta por la clave de VARIANTE (`vk`), que es la que va a dibujar, y no
+/// por la base: hoy son la misma —`cliff/*` no tiene variantes— pero el día que
+/// las tenga, preguntarle a la base por una pose que la variante no trae dejaría
+/// esa fila del muro sin dibujar.
+fn cuerpo_de_la_fila(art: &ArtLibrary, vk: &str, tx: i64, fila: i64) -> &'static str {
+    const CUERPOS: [&str; 4] = ["cuerpo", "cuerpo_2", "cuerpo_3", "cuerpo_4"];
+    let n = CUERPOS.iter().take_while(|p| art.has_pose(vk, p)).count();
+    if n <= 1 {
+        return "cuerpo";
+    }
+    let mut h = celda_semilla(tx, fila).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h ^= h >> 29;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 32;
+    CUERPOS[(h % n as u64) as usize]
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pared_apilada(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    body: CelestialBody,
+    key: &'static str,
+    vk: &str,
+    tx: i64,
+    tz: i64,
+    cx: i64,
+    cz: i64,
+    z: i32,
+) -> bool {
+    // El alto de la cara, en escalones. `0` = no cuelga hacia el sur; `1` = es un
+    // bordillo y lo dibuja la pieza compuesta de siempre.
+    let alto = ha_shared::relief::alto_de_pared(body, tx, tz);
+    if alto <= 1 {
+        return false;
+    }
+    if !(art.has_pose(key, "labio") && art.has_pose(key, "cuerpo") && art.has_pose(key, "pie")) {
+        return false;
+    }
+    let medida = Vec2::splat(TILE_M);
+    // El Y-sort es el de la celda del CANTO para TODAS las filas: la pared es un
+    // solo objeto y tiene que ordenarse como uno, o el que camina por la terraza
+    // de abajo se mete entre dos de sus filas.
+    let orden = crate::layers::ysort(tz as f32 * TILE_M + 0.5);
+    let mut poner = |pose: &'static str, fila: i64| {
+        let r = render_xy(tx as f32 * TILE_M + 0.5, fila as f32 * TILE_M + 0.5);
+        if let Some((sprite, anim)) = art.tile_sprite(vk, pose, medida) {
+            let mut ent = commands.spawn((
+                SurfaceDecor { cx, cz, z, small: false },
+                TileArt,
+                sprite,
+                Transform::from_xyz(r.x, r.y, orden),
+            ));
+            if let Some(a) = anim {
+                ent.insert(a);
+            }
+        }
+    };
+    // **Y SE CORTA CONTRA EL CANTO DE MÁS ABAJO.** En una ladera escarpada la
+    // terraza siguiente empieza antes de que el muro termine de caer; si el
+    // dibujo siguiera, taparía la meseta de abajo con roca por la que se camina.
+    // Es la MISMA poda que aplica `relief::pie_de_pared` al decidir qué celdas
+    // son roca, y por eso no puede quedar ni pared invisible ni roca fantasma.
+    // La roca cubre la TERRAZA DE ABAJO mientras siga siendo la misma: en cuanto
+    // el nivel cambia —otro canto que baja, o el suelo que vuelve a subir en el
+    // fondo de un valle— el muro deja de tener sobre qué colgar.
+    let base = ha_shared::relief::relief_level(body, tx, tz + 1);
+    let mut filas = alto + 1;
+    for j in 2..=alto + 1 {
+        if ha_shared::relief::relief_level(body, tx, tz + j) != base {
+            filas = j - 1;
+            break;
+        }
+    }
+    poner("labio", tz);
+    for i in 1..filas {
+        poner(cuerpo_de_la_fila(art, vk, tx, tz + i), tz + i);
+    }
+    poner("pie", tz + filas);
+    // **EL ESPOLÓN QUE ENMARCA EL PASO.** El kit no dibuja la escalinata suelta:
+    // la dibuja entre dos costillas de roca (regla 8 del proyecto — una pieza de
+    // kit no se siembra sola). En una pared de un escalón eso lo resolvía la
+    // pieza compuesta de 1×3 (`mejilla_de_rampa`); apilada hay que poner el
+    // espolón fila a fila, del lado que dé al paso.
+    if let Some(lado) = espolon_de_paso(body, tx, tz) {
+        let cliff = terrain_art_key(art, body, Tile::Cliff, tx, tz)
+            .or(tile_art_key(Tile::Cliff))
+            .unwrap_or("cliff/roca");
+        if art.has_pose(cliff, &format!("{lado}_cuerpo")) {
+            let mut espolon = |pose: String, fila: i64| {
+                let r = render_xy(tx as f32 * TILE_M + 0.5, fila as f32 * TILE_M + 0.5);
+                if let Some((sprite, anim)) = art.tile_sprite(cliff, &pose, medida) {
+                    let mut ent = commands.spawn((
+                        SurfaceDecor { cx, cz, z, small: false },
+                        TileArt,
+                        sprite,
+                        Transform::from_xyz(r.x, r.y, orden),
+                    ));
+                    if let Some(a) = anim {
+                        ent.insert(a);
+                    }
+                }
+            };
+            espolon(format!("{lado}_labio"), tz);
+            for i in 1..filas {
+                espolon(format!("{lado}_cuerpo"), tz + i);
+            }
+            espolon(format!("{lado}_pie"), tz + filas);
+        }
+    }
+    true
+}
+
+/// **¿DE QUÉ LADO LE TOCA EL ESPOLÓN A ESTA CELDA DE PASO?**
+///
+/// Devuelve `rampa_o` si el paso sigue al este (y entonces esta celda es su
+/// mejilla oeste) o `rampa_e` si sigue al oeste. `None` si la celda no está en el
+/// borde del paso — en el medio de una escalinata ancha no va roca.
+fn espolon_de_paso(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static str> {
+    use ha_shared::relief::{relief_cell, ReliefCell};
+    if relief_cell(body, tx, tz) != ReliefCell::Ramp {
+        return None;
+    }
+    let paso = |dx: i64| relief_cell(body, tx + dx, tz) == ReliefCell::Ramp;
+    match (paso(-1), paso(1)) {
+        (false, true) => Some("rampa_o"),
+        (true, false) => Some("rampa_e"),
+        _ => None,
+    }
+}
+
+/// **EL MURO SE CIERRA EN LAS ESQUINAS CÓNCAVAS.**
+///
+/// Un borde de terraza es una curva cerrada, pero `relief::relief_cell` sólo
+/// marca `Cliff` la celda de la que se puede CAER caminando: la que tiene un
+/// vecino ortogonal más abajo. En una esquina cóncava —la celda alta cuyos
+/// cuatro vecinos están a su nivel y sólo la DIAGONAL cae— no hay de dónde
+/// caerse, así que no era acantilado y nadie le pedía pieza.
+///
+/// Y son la mitad del perímetro. Medido sobre la Tierra (`medir_acantilados`,
+/// 800×800 tiles): **1.522 esquinas cóncavas contra 3.154 caras**. Como los
+/// bordes de terraza bajan casi siempre en diagonal, el muro salía alternando
+/// pieza y hueco —`M?M?M?`— y en pantalla eso es una línea de puntos de roca
+/// bajando por la ladera. Eso es el "acantilado cortado en seco".
+///
+/// La pieza que va acá **no es una pared**: la celda vecina ya cuelga la suya, y
+/// debajo de ésta hay terreno alto por el que se camina —una pared de tres
+/// celdas taparía meseta—. Es el CANTO, una celda: la cresta si la diagonal cae
+/// al norte, el labio si cae al sur (`import-acantilado.py::CARA_CANTO`).
+///
+/// **Es dibujo y nada más.** La celda sigue siendo terraza llana: no colisiona,
+/// no cambia de tile y `relief_cell` no se entera. Cerrar el muro no puede
+/// cerrarle el paso a nadie.
+fn spawn_chunk_canto_concavo(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    use ha_shared::relief::relief_level;
+    if z != 0 {
+        return;
+    }
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            let nivel = relief_level(body, tx, tz);
+            // Sólo terreno alto. Bajo el nivel del mar no hay cantos que cerrar:
+            // la costa se entra caminando (`relief_cell`).
+            if nivel <= 0 {
+                continue;
+            }
+            // Si algún ortogonal cae, esta celda YA es acantilado y su pieza la
+            // dibuja el bucle de arriba. El descarte va primero porque es lo que
+            // salta la enorme mayoría de las celdas de un chunk.
+            if [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)]
+                .into_iter()
+                .any(|(dx, dz)| relief_level(body, tx + dx, tz + dz) < nivel)
+            {
+                continue;
+            }
+            // **La diagonal que cae tiene que ser TIERRA.** Contra el líquido no
+            // hay muro —la orilla se camina—, así que un nivel negativo no abre
+            // esquina: es la misma regla que ya aplica `relief_cell`.
+            let baja = |dx: i64, dz: i64| {
+                let n = relief_level(body, tx + dx, tz + dz);
+                n >= 0 && n < nivel
+            };
+            if !(baja(1, 1) || baja(-1, 1) || baja(1, -1) || baja(-1, -1)) {
+                continue;
+            }
+            // Lo que se dibuja encima manda: si acá hay una casa, una calle o un
+            // árbol plantado, el canto no se cuela por debajo.
+            if tiles.render_tile(body, tx, tz) != suelo_del_relieve(body, tx, tz) {
+                continue;
+            }
+            // **Y la garganta de una cascada también manda**, igual que en el
+            // bucle de las caras. Este cierre de esquina no lo miraba, y por eso
+            // en el salto de la sierra asomaban dos cuadrados de arena sueltos
+            // flotando sobre el agua, a los costados de la boca: eran cantos
+            // cóncavos pedidos por el relieve dentro del recorte del pack, que
+            // ya trae su propia roca a los dos lados.
+            // Y tampoco dentro de un hombro: ahí la pared la arma
+            // [`spawn_chunk_hombros_de_garganta`] de una pieza, y un canto suelto
+            // encima sería roca sobre roca.
+            if ha_shared::agua::hombro_de_garganta(body, tx, tz).is_some() {
+                continue;
+            }
+            if ha_shared::agua::en_la_garganta(body, tx, tz) {
+                continue;
+            }
+            let generic = tile_art_key(Tile::Cliff);
+            let key = terrain_art_key(art, body, Tile::Cliff, tx, tz)
+                .or(generic)
+                .unwrap_or("cliff/roca");
+            if !art.tile_has_art(key) {
+                continue;
+            }
+            // El mismo criterio de "igual" que el muro: no es de qué está hecha
+            // la celda de al lado, es por dónde se cae.
+            let same = |dx: i64, dz: i64| relief_level(body, tx + dx, tz + dz) >= nivel;
+            let shape = autotile_shape(
+                same(0, -1), same(1, 0), same(0, 1), same(-1, 0),
+                same(1, -1), same(-1, -1), same(1, 1), same(-1, 1),
+            );
+            // Con los cuatro lados al mismo nivel, `autotile_shape` sólo puede
+            // devolver `inner_*` o `center`; y `center` es la pared entera, que
+            // acá taparía meseta. Si sale eso, no hay esquina que cerrar.
+            if !shape.starts_with("inner_") {
+                continue;
+            }
+            let vk = art.variant_key_seeded(key, celda_semilla(tx, tz));
+            let medida = Vec2::splat(TILE_M);
+            let Some((sprite, anim)) = art.tile_sprite(&vk, shape, medida) else { continue };
+            let wz = tz as f32 * TILE_M + 0.5;
+            let r = render_xy(tx as f32 * TILE_M + 0.5, wz);
+            let mut ent = commands.spawn((
+                SurfaceDecor { cx, cz, z, small: false },
+                TileArt,
+                sprite,
+                Transform::from_xyz(r.x, r.y, crate::layers::ysort(wz)),
+            ));
+            if let Some(a) = anim {
+                ent.insert(a);
+            }
+        }
+    }
+}
+
+/// **LO QUE LA CIUDAD LE CUELGA AL ACANTILADO.**
+///
+/// La misma pared cuenta dos cosas distintas según dónde esté: en mitad del
+/// bosque es geología y no lleva nada encima; cayendo al borde de un pueblo
+/// lleva la escalera por la que se baja, el caño que desagua sobre la terraza y
+/// la reja del sumidero. Eso es lo que pidió el usuario —"los tubos y escaleras
+/// en un contexto más cercano a la ciudad, para que tengan sentido"— y es
+/// también la razón de que no se siembren por bioma: una escalera clavada en un
+/// farallón del desierto no la puso nadie.
+///
+/// **"Cerca de gente" es DENTRO DEL CASCO** (`settlement_covering`), no en la
+/// celda de sitio de 2.600 tiles: ésa es la lección que ya costó una vuelta con
+/// los semáforos (biblia §8).
+///
+/// Sólo entra en las caras que MIRAN AL SUR: son las únicas que enseñan la pared
+/// entera, y una escalera de canto no se ve. La pieza cuelga sobre las celdas de
+/// roca que tapa el muro —las que cuenta `relief::alto_de_pared`—, apoyada en el
+/// pie.
+fn spawn_chunk_cliff_urbano(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    // Bajo tierra no hay ni ciudad ni ladera. Y sin arte curado no hay nada que
+    // sembrar: se pregunta UNA vez, antes de mirar el chunk.
+    if z != 0 {
+        return;
+    }
+    let familias: Vec<&'static str> = CLIFF_URBANO
+        .iter()
+        .copied()
+        .filter(|k| art.tile_has_art(k))
+        .collect();
+    if familias.is_empty() {
+        return;
+    }
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            if tiles.render_tile(body, tx, tz) != Tile::Cliff {
+                continue;
+            }
+            // Sólo la cara que se ve entera: una escalera de canto no se ve.
+            let nivel = ha_shared::relief::relief_level(body, tx, tz);
+            if ha_shared::relief::relief_level(body, tx, tz + 1) >= nivel {
+                continue;
+            }
+            // **CUÁNTA PARED HAY.** Un bordillo que se trepa
+            // (`relief::climbable_edge`) enseña UNA celda de roca y un muro dos,
+            // y de eso depende qué se le puede colgar: en el bordillo entra la
+            // reja del sumidero y nada más; la escalera y el caño piden el muro.
+            //
+            // No es un detalle: **las ciudades se fundan en llano**, así que casi
+            // todo desnivel urbano es bordillo. Descartándolos —que fue el primer
+            // intento— la ladera de ciudad no llevaba nunca nada encima y la
+            // regla no se veía en ninguna parte del mundo.
+            // La misma medida que dibujó la pared, o la escalera se apoya en un
+            // pie que no está donde está la roca. El bordillo enseña UNA celda y
+            // un muro de `n` escalones enseña `n + 1`.
+            let celdas = match ha_shared::relief::alto_de_pared(body, tx, tz) {
+                0 => continue,
+                1 => CELDAS_DE_BORDILLO,
+                n => n + 1,
+            };
+            // **Una cada tantas celdas de pared, no una por celda.** Un
+            // acantilado con escalera cada metro es una escalera de caracol, no
+            // una ladera. El sorteo es por celda y determinista: la misma pared
+            // saca siempre las mismas piezas aunque el chunk entre y salga del
+            // streaming diez veces.
+            let semilla = celda_semilla(tx, tz);
+            let mut h = semilla.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            h ^= h >> 31;
+            if h % URBANO_UNA_DE_CADA != 0 {
+                continue;
+            }
+            // **"Cerca de gente" es DENTRO DEL CASCO**, no en la celda de sitio
+            // de 2.600 tiles: la lección que ya costó una vuelta con los
+            // semáforos (biblia §8). Se pregunta por CELDA y no por chunk porque
+            // una ladera cae casi siempre en el BORDE del pueblo, y mirando sólo
+            // el centro del chunk la mitad de las laderas urbanas quedaban
+            // peladas — que es lo que se vio en `relieve-2-urbano`.
+            //
+            // Sale caro por celda (nueve celdas de sitio) y no importa: para
+            // llegar acá una celda tiene que ser cara sur, con pared, y haber
+            // ganado un sorteo de 1 entre `URBANO_UNA_DE_CADA`. En un chunk de
+            // 1.024 celdas eso es menos de una consulta.
+            if ha_shared::geography::settlement_covering(body, tx, tz).is_none() {
+                continue;
+            }
+            let familia = familias[((h >> 8) % familias.len() as u64) as usize];
+            let vk = art.variant_key_seeded(familia, semilla);
+            // **La pieza se apoya en el pie y ASOMA lo que le sobre.** Se probó
+            // recortarla al alto exacto del desnivel y en un bordillo —que es
+            // casi todo el relieve urbano, porque las ciudades se fundan en
+            // llano— la escalera quedaba en dos peldaños sueltos que no se leían
+            // como nada. Una escalera apoyada contra un muro bajo asoma por
+            // encima del canto: eso es lo que hace una escalera de verdad, y es
+            // lo que la vuelve reconocible de un vistazo.
+            let alto = art.medida_de_obra(&vk, Some("alta"), Vec2::splat(TILE_M));
+            let Some((sprite, anim)) = art.tile_sprite(&vk, "alta", alto) else { continue };
+            // El pie de la pieza se apoya en el PIE DE LA PARED: la celda del
+            // acantilado más las celdas de roca que cuelgan. De ahí para arriba
+            // crece lo que mida el recorte, que es lo que hace que una escalera
+            // corta y un caño largo salgan los dos bien apoyados.
+            let pie_wz = (tz + 1 + celdas) as f32 * TILE_M;
+            let centro_wz = pie_wz - alto.y * 0.5;
+            let r = render_xy(tx as f32 * TILE_M + 0.5, centro_wz);
+            let mut ent = commands.spawn((
+                SurfaceDecor { cx, cz, z, small: true },
+                TileArt,
+                sprite,
+                // Y-sort por el pie, como cualquier cosa apoyada: el que camina
+                // por la terraza de abajo pasa por delante de la escalera.
+                Transform::from_xyz(r.x, r.y, crate::layers::ysort(pie_wz)),
+            ));
+            if let Some(a) = anim {
+                ent.insert(a);
+            }
+        }
+    }
+}
+
+/// Las familias que le cuelga la ciudad a un acantilado. Ver
+/// [`spawn_chunk_cliff_urbano`]; el pixel lo trae `scripts/import-acantilado.py`.
+const CLIFF_URBANO: [&str; 3] = ["cliff/escalera", "cliff/tubo", "cliff/reja"];
+
+/// Celdas de ROCA que cuelgan del canto de un BORDILLO: una sola (es
+/// `ALTO_BORDILLO - 1` del importador). Las paredes de verdad no tienen constante
+/// porque no tienen alto fijo — se lo pregunta cada una a
+/// `relief::alto_de_pared`.
+const CELDAS_DE_BORDILLO: i64 = 1;
+
+/// Una de cada cuántas celdas de pared lleva algo colgado. Con 6 sale una pieza
+/// cada dos o tres metros de ladera urbana: se nota que la gente usa ese
+/// desnivel sin que la pared se convierta en un andamio.
+const URBANO_UNA_DE_CADA: u64 = 6;
+
+/// **La línea pintada de la calzada, y el cordón que la bordea.**
+///
+/// Van aparte del arte de tile porque no son del suelo: el asfalto y la vereda
+/// son materiales que cubren celdas y los dibuja la malla del chunk
+/// (`suelo_uv_seeded`), mientras que esto son CALCOMANÍAS encima. La línea es una
+/// RED que sigue el eje de la calle con sus empalmes en T y en cruz; el cordón es
+/// un autotile que sólo existe donde la calzada toca la vereda.
+///
+/// Sólo cuesta en las celdas que son eje (`roads::lane_mark_at`) y en el borde de
+/// la calzada: en un chunk de campo no spawnea nada.
+/// **LAS CASCADAS DEL CHUNK.**
+///
+/// No se siembran: se DERIVAN. `ha_shared::agua::cascada_at` responde sólo en la
+/// esquina noroeste de un salto —una pared de terraza de tres tiles de ancho con
+/// agua arriba y agua abajo— y devuelve cuántos PISOS de meseta cae. Acá eso se
+/// arma con las piezas modulares del pack: la boca, un tramo de caída por piso y
+/// la poza reventando sobre el agua de abajo.
+///
+/// Por eso una cascada nunca está "puesta ahí porque sí": no puede existir donde
+/// el agua no baje de verdad un escalón.
+///
+/// # AL RAS DE LA MESETA, AL RAS DEL SUELO
+///
+/// Las filas son las MISMAS que las de la pared que el kit cuelga al lado
+/// (`pared_apilada`: labio en el canto, un cuerpo por piso, el pie debajo):
+///
+/// ```text
+///   fila tz            boca    ↔  labio   ← al ras de la meseta
+///   filas tz+1..tz+n   tramo   ↔  cuerpo     (n = pisos que baja)
+///   fila tz+n+1        poza    ↔  pie     ← al ras del suelo de abajo
+///   fila tz+n+2        poza                  el reventón, ya sobre el agua
+/// ```
+///
+/// Las dos puntas estaban corridas y las dos se veían. La boca se ponía en
+/// `tz-1` —una fila POR ENCIMA del canto—, así que el labio de roca del recorte
+/// asomaba flotando en mitad del lago de arriba (los dos cuadrados de arena que
+/// se ven en `agua-4-sierra.png` de la corrida vieja). Y el chorro medía lo que
+/// `cascada_at` devolvía en TILES sobre el mar: diez filas colgando de un
+/// desnivel de un escalón, terminando en mitad del río.
+/// **De qué material es la pared que rodea a un salto**, con el mismo criterio
+/// con el que [`terrain_art_key`] elige la cara de acantilado: el material del
+/// suelo que corona y, si es pasto, el clima que le toca.
+///
+/// Que sea el MISMO criterio es todo el punto — la garganta y la pared que tiene
+/// pegada al lado se dibujan con el mismo color o no se dibujan bien.
+fn material_de_cascada(body: CelestialBody, tx: i64, tz: i64) -> &'static str {
+    let mat = cliff_material(body, tx, tz);
+    if mat != "pasto" {
+        return mat;
+    }
+    match pasto_de_bioma(body, tx, tz) {
+        Some("tiles/pasto_bosque") => "pasto_bosque",
+        Some("tiles/pasto_seco") => "pasto_seco",
+        Some("tiles/pasto_pantano") => "pasto_pantano",
+        Some("tiles/pasto_sierra") => "pasto_sierra",
+        _ => "pasto",
+    }
+}
+
+/// La clave de la copia teñida de una cascada. **Mismo formato que arma
+/// `import-agua.py::clave_de_cascada`**: si allá cambia, acá también.
+///
+/// Los dos ejes van en el nombre porque son independientes: la variante del pack
+/// (qué dibujo le tocó al salto, por posición) y el material (de qué está hecha
+/// la pared, por bioma).
+fn clave_de_cascada(crudo: &str, material: &str) -> String {
+    let n = match crudo {
+        "agua/cascada#2" => "2",
+        "agua/cascada#3" => "3",
+        _ => "1",
+    };
+    format!("agua/cascada#{n}_{material}")
+}
+
+/// **LOS DOS HOMBROS DE CADA GARGANTA — el módulo que cierra la cascada.**
+///
+/// Un salto es tres piezas y siempre las mismas: el chorro en el medio
+/// ([`spawn_chunk_cascadas`]) y una pared de roca a cada lado, de la misma
+/// altura, empezando en la misma fila. Eso último no salía del relieve —de los
+/// 22 hombros medidos, 9 no eran ni pared y 7 tenían el canto desfasado; ver
+/// `agua::hombro_de_garganta`— y en pantalla el chorro colgaba al lado de una
+/// banda de acantilado más corta y a otra altura.
+///
+/// Acá el hombro se ARMA, con las mismas filas sueltas que apila
+/// [`pared_apilada`] y con el material de la garganta ([`material_de_cascada`]),
+/// que es lo que hace que la roca del costado y la del recorte sean del mismo
+/// color:
+///
+/// ```text
+///   fila tz            labio   ← al ras de la meseta, la fila de la boca
+///   filas tz+1..tz+n   cuerpo     (n = pisos que baja el salto)
+///   fila tz+n+1        pie     ← al ras del suelo de abajo, donde revienta la poza
+/// ```
+///
+/// **Es dibujo y nada más**, como el cierre de esquinas cóncavas: la celda sigue
+/// siendo lo que el relieve diga, no colisiona distinto y nadie se queda
+/// encerrado por un hombro.
+fn spawn_chunk_hombros_de_garganta(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    if z != 0 {
+        return;
+    }
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            let Some((fila, pisos)) = ha_shared::agua::hombro_de_garganta(body, tx, tz) else {
+                continue;
+            };
+            // La misma clave de arte que usa la pared de al lado: el material
+            // del suelo que corona, con su clima si es pasto.
+            let key = match material_de_cascada(body, tx, fila) {
+                "arena" => "cliff/arena",
+                "nieve" => "cliff/nieve",
+                "regolito" => "cliff/regolito",
+                "basalto" => "cliff/basalto",
+                m => match m {
+                    "pasto_bosque" => "cliff/pasto_bosque",
+                    "pasto_seco" => "cliff/pasto_seco",
+                    "pasto_pantano" => "cliff/pasto_pantano",
+                    "pasto_sierra" => "cliff/pasto_sierra",
+                    _ => "cliff/pasto",
+                },
+            };
+            if !(art.has_pose(key, "labio") && art.has_pose(key, "cuerpo") && art.has_pose(key, "pie"))
+            {
+                continue;
+            }
+            let medida = Vec2::splat(TILE_M);
+            // Un hombro es UN objeto: todas sus filas se ordenan por el canto, o
+            // el que camina por la terraza de abajo se mete entre dos de ellas.
+            let orden = crate::layers::ysort(fila as f32 * TILE_M + 0.5);
+            let mut poner = |pose: &'static str, f: i64| {
+                let r = render_xy(tx as f32 * TILE_M + 0.5, f as f32 * TILE_M + 0.5);
+                if let Some((sprite, anim)) = art.tile_sprite(key, pose, medida) {
+                    let mut ent = commands.spawn((
+                        SurfaceDecor { cx, cz, z, small: false },
+                        TileArt,
+                        sprite,
+                        Transform::from_xyz(r.x, r.y, orden),
+                    ));
+                    if let Some(a) = anim {
+                        ent.insert(a);
+                    }
+                }
+            };
+            poner("labio", fila);
+            for i in 0..pisos {
+                poner("cuerpo", fila + 1 + i);
+            }
+            poner("pie", fila + 1 + pisos);
+        }
+    }
+}
+
+fn spawn_chunk_cascadas(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    // Bajo tierra no llueve ni cae ningún río: sólo la superficie.
+    if z != 0 {
+        return;
+    }
+    for lx in 0..CHUNK {
+        for lz in 0..CHUNK {
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            if tiles.render_tile(body, tx, tz) != Tile::Cliff {
+                continue;
+            }
+            let Some(pisos) = ha_shared::agua::cascada_at(body, tx, tz) else { continue };
+            let crudo = match ha_shared::agua::variante_cascada(tx, tz) {
+                0 => "agua/cascada",
+                1 => "agua/cascada#2",
+                _ => "agua/cascada#3",
+            };
+            // **LA GARGANTA SE VISTE DEL MATERIAL DE SU PARED.** El recorte del
+            // pack trae su roca terracota dibujada y el kit de acantilado sale
+            // teñido con la losa que corona, así que puestos uno al lado del otro
+            // —que es literalmente cómo se dibujan— el salto era una cicatriz
+            // naranja en un muro verde grisáceo. `import-agua.py` corta una copia
+            // teñida por material, con los seis frames de cada pose.
+            let tenida = clave_de_cascada(crudo, material_de_cascada(body, tx, tz));
+            let base: &str = if art.has_pose(&tenida, "tramo") { &tenida } else { crudo };
+            // Sin arte curado no se dibuja nada: el salto sigue siendo la pared
+            // de terraza de siempre, que es una lectura correcta del terreno.
+            if !art.has_pose(base, "tramo") {
+                continue;
+            }
+            // La poza del pack mide dos tiles de alto (la última caída más el
+            // reventón). Se lee del propio recorte, y **lo que falta cae en
+            // `POZA_FILAS`, no en 1**: ése es el número que usa la sim para saber
+            // hasta dónde llega el dibujo (`filas_de_dibujo`, `bajo_el_chorro`,
+            // `poza_de_cascada`), así que un respaldo distinto ponía a las dos
+            // mitades a contar filas diferentes. El comentario decía que las
+            // variantes derivadas de la hoja entera medían una; medido sobre el
+            // manifest, las 30 miden dos, y ahora hay guardián
+            // (`art2d::la_poza_del_pack_mide_lo_que_dice_la_sim`).
+            let poza_alto = art
+                .pose(base, "poza")
+                .map(|(r, _)| (r[3] / 32).max(1) as i64)
+                .unwrap_or(ha_shared::agua::POZA_FILAS);
+            let ancho = ha_shared::agua::ANCHO_CASCADA;
+            // Centro en X del chorro: las tres celdas del ancho.
+            let wx = (tx as f32 + ancho as f32 * 0.5) * TILE_M;
+
+            let mut poner = |pose: &'static str, fila: i64, alto_celdas: i64| {
+                let medida = Vec2::new(ancho as f32 * TILE_M, alto_celdas as f32 * TILE_M);
+                let centro = render_xy(wx, (fila as f32 + alto_celdas as f32 * 0.5) * TILE_M);
+                let Some((sprite, anim)) = art.tile_sprite(base, pose, medida) else { return };
+                // **EL SUELO NUNCA TAPA AL JUGADOR — y un salto es agua.**
+                //
+                // Las tres piezas Y-sorteaban por el PIE del dibujo entero, así
+                // que la poza —que mide dos filas y termina abajo del todo— se
+                // ordenaba como si fuese una pared de dos metros: el que se
+                // metía a la poza quedaba DETRÁS del reventón, tapado por agua
+                // que le llegaba a los tobillos. Lo mismo la boca contra el que
+                // vadea el río de arriba.
+                //
+                // La boca y la poza son líquido acostado en el suelo: van a
+                // [`layers::FLOOR`], igual que el agua del río, y por definición
+                // no tapan a nadie. El único trozo que se LEVANTA es el chorro,
+                // y ése Y-sortea por SU PROPIA fila —no por el pie del conjunto—
+                // para que pararse al lado de una fila de caída te ponga
+                // delante de ella y no detrás.
+                //
+                // **Y un pelo por encima del agua** ([`layers::SOBRE_EL_PISO`]):
+                // la celda de la boca y las de la poza dibujan además su propio
+                // tile de agua, que también pide `FLOOR` exacto. Dos sprites con
+                // el mismo z no tienen orden — funcionaba de casualidad, porque
+                // esta función corre después del bucle de tiles del chunk, y
+                // dejaba de funcionar en cuanto la poza caía del otro lado de una
+                // frontera de chunk.
+                let capa = match pose {
+                    "tramo" => crate::layers::ysort((fila + 1) as f32 * TILE_M),
+                    _ => crate::layers::FLOOR + crate::layers::SOBRE_EL_PISO,
+                };
+                let mut ent = commands.spawn((
+                    SurfaceDecor { cx, cz, z, small: false },
+                    TileArt,
+                    sprite,
+                    Transform::from_xyz(centro.x, centro.y, capa),
+                ));
+                // **Pero el chorro no proyecta sombra**: Y-sortea porque hay que
+                // pasarle por delante, no porque se levante del suelo. Es agua.
+                crate::light2d::sin_sombra(&mut ent);
+                if let Some(a) = anim {
+                    ent.insert(a);
+                }
+            };
+
+            // **La boca EN el canto**, no encima: es la fila que la pared de al
+            // lado dibuja como labio, y es lo que pone el principio del chorro al
+            // ras de la meseta.
+            poner("boca", tz, 1);
+            for i in 0..pisos {
+                poner("tramo", tz + 1 + i, 1);
+            }
+            // La poza arranca en la fila del PIE de la pared y desborda una más
+            // abajo: el reventón va sobre el agua, un cuadro después de donde la
+            // roca toca el suelo.
+            poner("poza", tz + 1 + pisos, poza_alto);
+        }
+    }
+}
+
+fn spawn_chunk_lane_marks(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    // La calzada pintada es de la superficie: bajo tierra no hay calle. La senda
+    // entra aunque `road/linea` no esté curada — su respaldo lo dibuja
+    // `procedural_art`, así que la esquina nunca se queda sin paso de peatones.
+    let hay_pintura =
+        art.tile_has_art(LANE_MARK_ART) || art.has_art(SENDA_NS_ART) || art.has_poses(CORDON_ART);
+    if z != 0 || !hay_pintura {
+        return;
+    }
+    // **Primero: ¿hay calle acá?** Armar el mapa de calzada del chunk cuesta una
+    // consulta de geografía por celda, y la enorme mayoría de los chunks del
+    // mundo son campo sin una sola calle. El sondeo va de dos en dos y no puede
+    // perderse una calzada: la más angosta que se pinta mide tres tiles
+    // (`ANCHO_MINIMO_LINEA`), y una retícula de paso 2 siempre pega en una de
+    // tres celdas seguidas.
+    let hay_calle = (0..CHUNK).step_by(2).any(|lz| {
+        (0..CHUNK).step_by(2).any(|lx| {
+            matches!(
+                ha_shared::geography::civil_kind_at(body, cx * CHUNK + lx, cz * CHUNK + lz),
+                Some(ha_shared::geography::Civil::Road)
+            )
+        })
+    });
+    if !hay_calle {
+        return;
+    }
+    // De una pasada para el chunk entero: celda por celda son ~240 consultas de
+    // geografía cada una (ver `roads::lane_marks_rect`), y eso es un tirón por
+    // manzana nueva.
+    let lado = CHUNK as usize;
+    let marcas = ha_shared::roads::pintura_rect(body, cx * CHUNK, cz * CHUNK, lado, lado);
+    for lz in 0..CHUNK {
+        for lx in 0..CHUNK {
+            let Some(pintura) = marcas[lz as usize * lado + lx as usize] else { continue };
+            let tx = cx * CHUNK + lx;
+            let tz = cz * CHUNK + lz;
+            // La línea es una RED con poses por conexión; la senda es una losa
+            // sola que se repite a lo ancho de la calzada. Por eso son dos slots
+            // y no dos poses del mismo.
+            let sprite = match pintura {
+                ha_shared::roads::Pintura::Linea(forma) => {
+                    art.tile_sprite(LANE_MARK_ART, forma, Vec2::splat(TILE_M)).map(|(s, _)| s)
+                }
+                ha_shared::roads::Pintura::Senda { calle_ns } => {
+                    let clave = if calle_ns { SENDA_NS_ART } else { SENDA_EW_ART };
+                    art.world_sprite(clave, Vec2::splat(TILE_M)).map(|(s, _)| s)
+                }
+            };
+            let Some(sprite) = sprite else { continue };
+            let wx = tx as f32 * TILE_M + 0.5;
+            let wz = tz as f32 * TILE_M + 0.5;
+            let r = render_xy(wx, wz);
+            commands.spawn((
+                SurfaceDecor { cx, cz, z, small: true },
+                TileArt,
+                sprite,
+                // Justo encima del asfalto y bajo los pies de todo el mundo: una
+                // raya pintada no tapa ni al que la pisa ni al auto que pasa.
+                Transform::from_xyz(r.x, r.y, crate::layers::FLOOR + 0.01),
+            ));
+        }
+    }
+    spawn_chunk_cordon(commands, art, tiles, body, z, cx, cz);
+}
+
+/// **El CORDÓN: por donde la vereda se levanta sobre la calzada.**
+///
+/// Sin él, el asfalto y la acera se tocaban a filo —dos colores de piso pegados—
+/// y una calle se leía como una franja gris entre dos franjas claras. El cordón
+/// es lo que dice cuál de las dos está más alta, y es la pieza que hace que la
+/// vereda de una ciudad sea una vereda de ciudad y no el sendero de un parque.
+///
+/// **Va sobre la celda de ASFALTO, no sobre la de vereda.** El pack lo dibuja
+/// así y es lo correcto en 3/4: lo que se ve del cordón desde arriba es su CARA,
+/// que cae del lado de la calle. La vereda en sí la sigue pintando la malla del
+/// chunk con su baldosa.
+///
+/// El borde sólo nace contra la VEREDA: una ruta de campo con el pasto pegado a
+/// la calzada no lleva cordón, y preguntarle a `autotile_shape` por "vecino del
+/// mismo material" se lo habría puesto igual. Por eso la vecindad se mide contra
+/// `Tile::Pavement` y no contra "es asfalto".
+fn spawn_chunk_cordon(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) {
+    if !art.has_poses(CORDON_ART) {
+        return;
+    }
+    // La familia se pregunta UNA vez por chunk y no por celda. Un chunk mide 16
+    // tiles y un casco urbano cientos, así que todas las celdas de acera de un
+    // chunk son de la misma ciudad; preguntarlo por celda serían nueve consultas
+    // de sitio por celda de calzada para obtener siempre lo mismo.
+    let fam = vereda_de_la_ciudad(
+        art,
+        body,
+        cx * CHUNK + CHUNK / 2,
+        cz * CHUNK + CHUNK / 2,
+    );
+    let cordon_art = VEREDA_CORDON[fam];
+    for lz in 0..CHUNK {
+        for lx in 0..CHUNK {
+            let (tx, tz) = (cx * CHUNK + lx, cz * CHUNK + lz);
+            if tiles.tile_at(body, tx, tz) != Tile::Asphalt {
+                continue;
+            }
+            // `same` = "de este lado NO hay vereda", que es la convención de
+            // `autotile_shape`: el borde mira hacia los lados distintos.
+            let calle = |dx: i64, dz: i64| tiles.tile_at(body, tx + dx, tz + dz) != Tile::Pavement;
+            let shape = autotile_shape(
+                calle(0, -1), calle(1, 0), calle(0, 1), calle(-1, 0),
+                calle(1, -1), calle(-1, -1), calle(1, 1), calle(-1, 1),
+            );
+            // Sin vereda alrededor no hay cordón que dibujar. `road/cordon` no
+            // trae pose `center` a propósito (ver `scripts/import-calles.py`):
+            // así una calzada en medio del campo no paga un quad por celda.
+            if shape == "center" {
+                continue;
+            }
+            // **LA CUNETA.** Cada tantos metros el cordón norte lleva la rejilla
+            // del sumidero, que es lo que una cuneta es: un desagüe cada tanto,
+            // no un canal continuo. Antes esta pieza era el cordón NORMAL —la
+            // tabla de índices leída a mano le había dado a `edge_n` la losa con
+            // rejilla—, así que toda ciudad del mundo tenía una alcantarilla
+            // cada 95 cm a lo largo de cada cuadra. Ver `import-calles.py`.
+            //
+            // El periodo va sobre `tx` y no sobre un hash: un desagüe se pone a
+            // intervalos, no al azar, y así la fila entera de la cuadra queda
+            // pareja. Nueve celdas son unos 8,5 m.
+            let toca_rejilla = shape == "edge_n" && tx.rem_euclid(9) == 0;
+            let dibujo = if toca_rejilla {
+                // Sin rejilla curada en esta familia, el cordón liso de siempre:
+                // el respaldo es sólo para ESTA pose, no para todas — si faltara
+                // una esquina, dibujarle un borde recto sería peor que no
+                // dibujar nada.
+                art.tile_sprite(cordon_art, CORDON_REJILLA, Vec2::splat(TILE_M))
+                    .or_else(|| art.tile_sprite(cordon_art, shape, Vec2::splat(TILE_M)))
+            } else {
+                art.tile_sprite(cordon_art, shape, Vec2::splat(TILE_M))
+            };
+            let Some((sprite, _)) = dibujo else {
+                continue;
+            };
+            let wx = tx as f32 * TILE_M + 0.5;
+            let wz = tz as f32 * TILE_M + 0.5;
+            let r = render_xy(wx, wz);
+            commands.spawn((
+                SurfaceDecor { cx, cz, z, small: true },
+                TileArt,
+                sprite,
+                // Debajo de la línea de carril: si dos calcomanías se solapan en
+                // una esquina, manda la pintura, que es lo que se lee de lejos.
+                Transform::from_xyz(r.x, r.y, crate::layers::FLOOR + 0.005),
+            ));
+        }
+    }
+}
+
+/// Slot de la línea pintada de la calzada. Ver `spawn_chunk_lane_marks`.
+const LANE_MARK_ART: &str = "road/linea";
+/// Slot del cordón de la vereda, en poses de autotile. Ver `spawn_chunk_cordon`.
+const CORDON_ART: &str = "road/cordon";
+/// La pose del cordón que trae la REJILLA de la cuneta. Sólo existe para
+/// `edge_n` —es el único borde donde se ve la CARA del cordón— y entra con
+/// periodo, no en toda celda: un sumidero cada tanto es una cuneta, uno cada
+/// 95 cm es lo que el juego tuvo por error durante meses (ver
+/// `scripts/import-calles.py::rejilla_de`).
+const CORDON_REJILLA: &str = "edge_n_rejilla";
+
+/// Slots de la senda peatonal (la que cruza una calle norte-sur y la otra). Sin
+/// arte asignado los dibuja `procedural_art::zebra`, así que la esquina tiene
+/// paso de peatones desde el primer día.
+const SENDA_NS_ART: &str = "road/senda_ns";
+const SENDA_EW_ART: &str = "road/senda_ew";
 
 /// Regeneración de césped (pedido #2): las celdas de tierra expuesta (cavar,
 /// demoler un piso, tierra colocada) sobre césped natural vuelven a pasto tras
@@ -1597,10 +4650,9 @@ fn colonist_sprite(art: &ArtLibrary) -> (Sprite, Option<crate::art2d::ArtAnimate
             return (s, anim);
         }
     }
-    if let Some(img) = art.get("npc/colonist") {
-        let mut s = Sprite::from_image(img);
+    if let Some((mut s, anim)) = art.world_sprite("npc/colonist", size) {
         s.custom_size = Some(size);
-        return (s, art.animation("npc/colonist"));
+        return (s, anim);
     }
     (Sprite::from_color(Color::srgb(0.85, 0.82, 0.75), Vec2::new(0.7, 1.4)), None)
 }
@@ -1723,5 +4775,553 @@ fn debounced_tiles_save(time: Res<Time>, mut tiles: ResMut<TileWorld>) {
     };
     if let Ok(json) = serde_json::to_string(&save) {
         let _ = std::fs::write(tiles_path(), json);
+    }
+}
+
+#[cfg(test)]
+mod streaming_tests {
+    use super::*;
+
+    /// El mismo cálculo que hace `stream_tile_chunks`, aislado para poder
+    /// afirmar la propiedad que importa.
+    fn ranges(live_view_h: f32) -> (i64, i64) {
+        let need_m = live_view_h * 1.25;
+        let visible =
+            ((need_m / (CHUNK as f32 * TILE_M)).ceil() as i64).clamp(CHUNK_RANGE, MAX_CHUNK_RANGE);
+        (visible, (visible + BUILD_MARGIN).min(MAX_CHUNK_RANGE))
+    }
+
+    /// **El "titila verde".** Caminando y en vuelo bajo —que es donde el jugador
+    /// mira el suelo de cerca— el anillo que se CONSTRUYE tiene que ser
+    /// estrictamente mayor que el que se VE, o se ven nacer los rectángulos de
+    /// suelo en el borde de la pantalla.
+    ///
+    /// Arriba del tope (`MAX_CHUNK_RANGE`, a partir de ~77 m de vista) el anillo
+    /// ya es más chico que la pantalla A PROPÓSITO: ahí el borde no se ve porque
+    /// el detalle fino se está fundiendo contra el satelital
+    /// (`universe::FINE_FADE_VIEW_H` = 95 m). Ese caso lo cubre el test de abajo.
+    #[test]
+    fn el_suelo_se_arma_fuera_de_cuadro() {
+        for view_h in [12.0, 24.0, 30.0, 48.0, 70.0] {
+            let (visible, build) = ranges(view_h);
+            assert!(
+                visible < MAX_CHUNK_RANGE,
+                "view_h={view_h} ya toca el tope: no es un caso de caminata"
+            );
+            assert!(
+                build > visible,
+                "con view_h={view_h} se construye hasta {build} y se ve hasta {visible}: \
+                 el chunk nace a la vista"
+            );
+        }
+    }
+
+    /// El tope duro de memoria manda por encima del margen: volando con el zoom
+    /// al máximo no se pasa de `MAX_CHUNK_RANGE` (ahí ya manda el satelital).
+    #[test]
+    fn el_margen_no_rompe_el_tope() {
+        let (_, build) = ranges(10_000.0);
+        assert_eq!(build, MAX_CHUNK_RANGE);
+    }
+}
+
+#[cfg(test)]
+mod layer_tests {
+    use super::*;
+
+    /// **Por el hueco de un piso alto se ve el suelo de abajo, apagado.**
+    ///
+    /// En `z > 0` todo lo que no construiste es `Tile::Air`, y el color de `Air`
+    /// es negro. Pintado tal cual, el segundo piso quedaba flotando en la nada:
+    /// no había forma de saber si el borde de tu losa daba al patio o a la calle,
+    /// y el hueco se leía como "acá no hay mundo" en vez de "acá hay una caída".
+    #[test]
+    fn el_hueco_del_piso_alto_muestra_el_suelo_de_abajo() {
+        let body = CelestialBody::Earth;
+        let mut tiles = TileWorld::default();
+        let (tx, tz) = (120, 120);
+        let suelo = tile_render_color(&tiles, body, tx, tz, TileShade::Coarse);
+        tiles.z = 1;
+        assert_eq!(tiles.tile_at(body, tx, tz), Tile::Air, "arriba tiene que haber vacio");
+        let hueco = tile_render_color(&tiles, body, tx, tz, TileShade::Coarse);
+
+        let brillo = |c: [f32; 3]| c[0] + c[1] + c[2];
+        assert!(brillo(hueco) > 0.0, "el vacio no puede pintarse negro");
+        assert!(
+            brillo(hueco) < brillo(suelo),
+            "el suelo de abajo tiene que verse ATENUADO: {hueco:?} vs {suelo:?}"
+        );
+        // Es el MISMO suelo, sólo más oscuro: si cambiara de tinte, el jugador no
+        // reconocería la calle sobre la que está construyendo.
+        for i in 0..3 {
+            let esperado = suelo[i] * VOID_DIM;
+            assert!((hueco[i] - esperado).abs() < 1e-4, "canal {i}: {hueco:?}");
+        }
+    }
+}
+
+/// **Voxel 2D: al sacar un bloque queda la cavidad.** Ver `TileWorld::dig_down`
+/// y biblia §5.
+#[cfg(test)]
+mod dig_tests {
+    use super::*;
+
+    /// Una celda de superficie de tierra firme con roca maciza debajo: el caso
+    /// que obliga a tallar la cavidad, porque caer ahí sin tallarla sería caer
+    /// DENTRO de la piedra.
+    fn tierra_firme() -> (i64, i64) {
+        let body = CelestialBody::Earth;
+        (0..4000i64)
+            .flat_map(|x| (0..40i64).map(move |z| (x, z)))
+            .find(|&(x, z)| {
+                ha_shared::topdown::topdown_tile(body, 0, x, z).diggable_down()
+                    && ha_shared::topdown::topdown_tile(body, -1, x, z).solid()
+            })
+            .expect("hay tierra firme con roca debajo cerca del origen")
+    }
+
+    /// El corazón del asunto: cavar deja el HUECO donde estabas y la CAVIDAD
+    /// abierta abajo. Sin la cavidad, el pozo te dejaría dentro de la roca; sin
+    /// el hueco, no habría por dónde bajar y esto sería un mapa plano otra vez.
+    #[test]
+    fn cavar_deja_el_hueco_y_abre_la_cavidad() {
+        let body = CelestialBody::Earth;
+        let (tx, tz) = tierra_firme();
+        let mut tiles = TileWorld::default();
+        let sacado = tiles.dig_down(body, tx, tz).expect("la tierra se cava");
+
+        assert!(sacado.diggable_down(), "se sacó el suelo, no otra cosa: {sacado:?}");
+        assert_eq!(tiles.tile_at(body, tx, tz), Tile::Air, "arriba queda el pozo");
+        let abajo = tiles.tile_at_level(body, -1, tx, tz);
+        assert!(!abajo.solid(), "la cavidad tiene que quedar ABIERTA, no maciza: {abajo:?}");
+    }
+
+    /// El pozo se VE: por el hueco se lee el fondo de la cueva, atenuado. Es la
+    /// misma regla del vacío del piso alto, aplicada hacia abajo — sin esto el
+    /// agujero se pinta negro y no se distingue de "acá no hay mundo".
+    #[test]
+    fn el_pozo_deja_ver_la_cueva_de_abajo() {
+        let body = CelestialBody::Earth;
+        let (tx, tz) = tierra_firme();
+        let mut tiles = TileWorld::default();
+        tiles.dig_down(body, tx, tz);
+        let hueco = tile_render_color(&tiles, body, tx, tz, TileShade::Coarse);
+        let brillo = |c: [f32; 3]| c[0] + c[1] + c[2];
+        assert!(brillo(hueco) > 0.0, "el pozo no puede pintarse negro");
+
+        // Es el fondo del pozo, atenuado: mismo tinte, menos luz. La referencia
+        // se pinta a plena luz poniendo ese mismo tile ARRIBA, en superficie: así
+        // se compara "lo de abajo" contra "lo mismo pero iluminado".
+        let mut fondo = TileWorld::default();
+        fondo.author_tile(body, 0, tx, tz, Tile::CaveFloor);
+        let claro = tile_render_color(&fondo, body, tx, tz, TileShade::Coarse);
+        for i in 0..3 {
+            assert!((hueco[i] - claro[i] * VOID_DIM).abs() < 1e-4, "canal {i}: {hueco:?}");
+        }
+    }
+
+    /// **Bajo tierra se ve el SUBSUELO.**
+    ///
+    /// Reemplaza a `bajo_tierra_se_sigue_viendo_la_superficie` (7 ago 2026). Aquel
+    /// test defendía una idea buena —no cambiar de escena— con el mecanismo
+    /// equivocado: pintar la superficie a plena luz alrededor de tu túnel. En la
+    /// pantalla eso no se leía como "estoy debajo de mi casa"; se leía como un
+    /// mapa roto, con pasto, árboles y mariposas rodeando un agujero negro. El
+    /// jugador lo rechazó con todas las letras.
+    ///
+    /// La continuidad **no la daba el dibujo** y sigue intacta sin él: se baja
+    /// andando cuatro escalones (`escaleras.rs`), la luz se apaga en gradiente
+    /// (`interior.rs`) y nadie se teletransporta. Lo que cambia es que ahora el
+    /// dibujo dice la verdad: tierra maciza hasta el horizonte, y recortado en
+    /// ella lo que se excavó.
+    #[test]
+    fn bajo_tierra_se_ve_el_subsuelo_y_no_el_pasto() {
+        let body = CelestialBody::Earth;
+        let (tx, tz) = tierra_firme();
+        let mut tiles = TileWorld::default();
+        let arriba = tiles.tile_at_level(body, 0, tx + 1, tz);
+        assert!(arriba.buildable_ground(), "la referencia era superficie pisable");
+        tiles.dig_down(body, tx, tz);
+        tiles.z = -1; // te caíste a tu propia galería
+
+        let al_lado = tiles.render_tile(body, tx + 1, tz);
+        assert_ne!(al_lado, arriba, "al lado seguía dibujándose el pasto de arriba");
+        assert!(al_lado.solid(), "el subsuelo es macizo: {al_lado:?}");
+        assert_eq!(al_lado, Tile::Subsoil, "y es TIERRA, no roca gris");
+        assert!(!tiles.renders_as_pit(body, tx + 1, tz), "el macizo no es un hueco");
+
+        // Tu cavidad NO es un pozo: es el suelo que pisás. Dibujarla como agujero
+        // negro es lo que convertía la cueva en una mancha de cuadros negros.
+        assert!(!tiles.renders_as_pit(body, tx, tz), "tu galería es SUELO, no un pozo");
+        assert!(!tiles.walk_blocked(body, tx, tz), "y se camina");
+        // Y se ve más clara que el macizo que la rodea: sin luz ni arte, el
+        // contraste solo ya dice dónde se puede andar.
+        let brillo = |c: [f32; 3]| c[0] + c[1] + c[2];
+        let hueco = tile_render_color(&tiles, body, tx, tz, TileShade::Coarse);
+        let macizo = tile_render_color(&tiles, body, tx + 1, tz, TileShade::Coarse);
+        assert!(brillo(hueco) > brillo(macizo), "{hueco:?} vs {macizo:?}");
+    }
+
+    /// **Desde la azotea se ve la calle.** El otro lado de la misma regla: por el
+    /// vacío del borde de un piso alto se ve el mundo de abajo, atenuado — y lo
+    /// que se ve es de la SUPERFICIE (nivel 0), que es lo que le permite al decor
+    /// plantar ahí los árboles y los coches apagados en vez de nada.
+    #[test]
+    fn desde_un_piso_alto_lo_que_se_ve_es_la_superficie() {
+        let body = CelestialBody::Earth;
+        let (tx, tz) = tierra_firme();
+        let mut tiles = TileWorld::default();
+        let calle = tiles.tile_at_level(body, 0, tx, tz);
+        tiles.z = 2;
+        let (suelo, nivel, dim) = suelo_a_la_vista(&tiles, body, tx, tz);
+        assert_eq!(suelo, calle, "por el vacío se ve el suelo de la calle");
+        assert_eq!(nivel, 0, "y sale del nivel de la superficie");
+        assert!(dim < 1.0, "atenuado: está abajo, no al lado");
+    }
+
+    /// Contra el lecho de roca no se cava, y el líquido se rellena, no se pica:
+    /// las dos formas de que un pozo dejara al jugador en un sitio imposible.
+    #[test]
+    fn ni_el_lecho_de_roca_ni_el_agua_se_cavan() {
+        let body = CelestialBody::Earth;
+        let (tx, tz) = tierra_firme();
+        let mut tiles = TileWorld::default();
+        tiles.z = MIN_Z_LEVEL + 1;
+        tiles.author_tile(body, tiles.z, tx, tz, Tile::CaveFloor);
+        assert!(tiles.dig_down(body, tx, tz).is_none(), "el fondo de la mina no se cava");
+
+        let mut agua = TileWorld::default();
+        agua.author_tile(body, 0, tx, tz, Tile::Water);
+        assert!(agua.dig_down(body, tx, tz).is_none(), "el bajío no se cava");
+        agua.author_tile(body, 0, tx, tz, Tile::WaterDeep);
+        assert!(agua.dig_down(body, tx, tz).is_none(), "el fondo hondo tampoco");
+    }
+}
+
+#[cfg(test)]
+mod collision_tests {
+    use super::*;
+    use ha_assets::CollisionFootprint;
+    use ha_shared::world_edits::PlacedDecor;
+
+    /// Una celda de superficie donde el mundo NO genera nada, para probar sólo lo
+    /// que colocamos a mano.
+    fn empty_cell() -> (i64, i64) {
+        (0..2000i64)
+            .flat_map(|x| (0..40i64).map(move |z| (x, z)))
+            .find(|&(x, z)| surface_decor_at(CelestialBody::Earth, x, z).is_none())
+            .expect("hay celdas vacías cerca del origen")
+    }
+
+    /// **Los COSTADOS de una terraza se oscurecen.** Las caras que se ven de
+    /// canto: una línea de sombra y nada más.
+    ///
+    /// La cara que MIRA AL SUR ya no está acá — la resuelve
+    /// [`sombra_de_muro_en_la_columna`], porque hace falta saber dónde termina el
+    /// dibujo del muro y eso no se contesta mirando al vecino. Ver el test de al
+    /// lado.
+    #[test]
+    fn the_foot_of_a_cliff_gets_a_shadow() {
+        use ha_shared::relief::relief_level;
+        let body = CelestialBody::Earth;
+        let mut shadowed = 0;
+        let mut plain_ok = 0;
+        for tx in -1_500..1_500 {
+            for tz in -6..6 {
+                let l = relief_level(body, tx, tz);
+                if l < 0 {
+                    // El agua nunca recibe sombra de terraza.
+                    assert_eq!(terrace_shadow(body, tx, tz, l), 1.0, "sombra sobre agua");
+                    continue;
+                }
+                let de_canto = [(-1i64, 0i64), (1, 0), (0, 1)]
+                    .into_iter()
+                    .any(|(dx, dz)| relief_level(body, tx + dx, tz + dz) > l);
+                let s = terrace_shadow(body, tx, tz, l);
+                if de_canto {
+                    assert!(s < 1.0, "el costado de la terraza en ({tx},{tz}) no tiene sombra");
+                    assert!(s >= SOMBRA_PISO, "sombra demasiado negra: {s}");
+                    shadowed += 1;
+                } else {
+                    assert_eq!(s, 1.0, "sombra en campo abierto en ({tx},{tz})");
+                    plain_ok += 1;
+                }
+            }
+        }
+        assert!(shadowed > 50, "apenas {shadowed} celdas al costado de una terraza");
+        assert!(plain_ok > 1_000, "casi todo el mundo salió sombreado: {plain_ok}");
+    }
+
+    /// **LA SOMBRA DEL MURO CAE SOBRE EL SUELO QUE SE VE, NO SOBRE LA ROCA.**
+    ///
+    /// Es el bug que hacía que el mundo no se leyera apilado: la franja oscura se
+    /// pintaba en las celdas pegadas al canto, que son justo las que el dibujo del
+    /// acantilado TAPA ([`ha_shared::relief::ReliefCell::Pared`]). En pantalla,
+    /// dos praderas del mismo verde con una banda de roca en medio.
+    ///
+    /// Se comprueba lo que de verdad importa: que la primera fila de terraza
+    /// visible bajo un muro esté oscurecida, y que ninguna celda de roca cargue con
+    /// sombra que nadie va a ver.
+    #[test]
+    fn la_sombra_del_muro_cae_donde_se_ve() {
+        use ha_shared::relief::{alto_de_pared, relief_cell, relief_level, ReliefCell};
+        let body = CelestialBody::Earth;
+        let mut probados = 0;
+        // Ventanas con relieve de verdad: la sierra reparte paredes de 2 a 10.
+        for (cx, cz) in [(1_700i64, -5_000i64), (0, 0), (2_400, -1_800)] {
+            for lx in 0..64 {
+                let tx = cx + lx;
+                let z0 = cz - (cz.rem_euclid(CHUNK));
+                let sombra = sombra_de_muro_en_la_columna(body, tx, z0);
+                for lz in 0..CHUNK {
+                    let tz = z0 + lz;
+                    let k = sombra[lz as usize];
+                    if k >= 1.0 {
+                        continue;
+                    }
+                    probados += 1;
+                    assert!(k >= SOMBRA_PISO, "sombra demasiado negra en ({tx},{tz}): {k}");
+                    // La celda sombreada se VE: nunca es cuerpo de pared.
+                    assert_ne!(
+                        relief_cell(body, tx, tz),
+                        ReliefCell::Pared,
+                        "sombra pintada dentro de la roca en ({tx},{tz})"
+                    );
+                    // Y hay un muro encima, a menos de SOMBRA_FILAS del pie.
+                    let hay_muro = (1..=ha_shared::relief::MAX_PARED + 1 + SOMBRA_FILAS).any(|k| {
+                        let alto = alto_de_pared(body, tx, tz - k);
+                        alto >= 1 && (alto + 2..alto + 2 + SOMBRA_FILAS).contains(&k)
+                    });
+                    assert!(hay_muro, "sombra sin muro que la tire en ({tx},{tz})");
+                    // Y está sobre terreno, no sobre líquido.
+                    assert!(relief_level(body, tx, tz) >= 0, "sombra sobre agua en ({tx},{tz})");
+                }
+            }
+        }
+        assert!(probados > 100, "apenas {probados} celdas con sombra de muro");
+    }
+
+    fn authored(key: &str, x: i64, z: i64, size: Option<[f32; 2]>) -> AuthoredDecor {
+        let mut a = AuthoredDecor::default();
+        a.set(vec![PlacedDecor {
+            body: CelestialBody::Earth as u8,
+            z: 0,
+            x,
+            zc: z,
+            key: key.to_string(),
+            size,
+            ground: None,
+            cells: None,
+            anchor: None,
+        }]);
+        a
+    }
+
+    /// Caja del jugador centrada en un punto del mundo.
+    fn player_at(x: f32, z: f32) -> [f32; 4] {
+        let r = ha_shared::topdown::PLAYER_RADIUS;
+        [x - r, z - r, x + r, z + r]
+    }
+
+    #[test]
+    fn subtile_footprint_only_blocks_where_the_sprite_is() {
+        let (tx, tz) = empty_cell();
+        // Poste de farol: media celda de ancho, apoyado en el suelo (res 4).
+        let fp = CollisionFootprint {
+            w: 1,
+            h: 2,
+            ax: 0,
+            az: 1,
+            solid: vec![(1, 6), (2, 6), (1, 7), (2, 7)],
+            step: Vec::new(), res: 4,
+        };
+        let art = crate::art2d::ArtLibrary::test_footprint("prop/farol", fp);
+        let dec = authored("prop/farol", tx, tz, None);
+        let c = (tx as f32 + 0.5, tz as f32 + 0.5);
+        // Encima del poste: frena.
+        assert!(decor_hits_box(&art, Some(&dec), None, CelestialBody::Earth, 0, player_at(c.0, c.1)));
+        // Rozando por el borde de la celda (el jugador entra en ella pero no
+        // toca el poste): pasás. Con colisión por TILE esto frenaba y se sentía
+        // un bug.
+        let roce = player_at(tx as f32 - 0.3, c.1);
+        assert!(roce[2] > tx as f32, "el jugador sí invade la celda del farol");
+        assert!(!decor_hits_box(&art, Some(&dec), None, CelestialBody::Earth, 0, roce));
+        // Una celda más arriba (donde está el farol dibujado, no su base): pasás.
+        assert!(!decor_hits_box(
+            &art,
+            Some(&dec),
+            None,
+            CelestialBody::Earth,
+            0,
+            player_at(c.0, tz as f32 - 0.6)
+        ));
+    }
+
+    #[test]
+    fn authored_props_without_a_footprint_do_not_block() {
+        let (tx, tz) = empty_cell();
+        let art = crate::art2d::ArtLibrary::default();
+        let dec = authored("nature/flor", tx, tz, None);
+        let c = (tx as f32 + 0.5, tz as f32 + 0.5);
+        assert!(!decor_hits_box(&art, Some(&dec), None, CelestialBody::Earth, 0, player_at(c.0, c.1)));
+        // Con la casilla "bloquea el paso" marcada sí frena, en su celda.
+        let art = crate::art2d::ArtLibrary::test_collides("nature/flor", true);
+        assert!(decor_hits_box(&art, Some(&dec), None, CelestialBody::Earth, 0, player_at(c.0, c.1)));
+    }
+
+    #[test]
+    fn scaling_an_asset_scales_its_collision() {
+        let (tx, tz) = empty_cell();
+        // Huella de 1 tile completo sobre un asset de 1×1.
+        let fp = CollisionFootprint { w: 1, h: 1, ax: 0, az: 0, solid: vec![(0, 0)], step: Vec::new(), res: 1 };
+        let art = crate::art2d::ArtLibrary::test_footprint("prop/caja", fp);
+        let big = authored("prop/caja", tx, tz, Some([3.0, 3.0]));
+        // A 3× la caja alcanza la celda de al lado; a 1× no.
+        let side = (tx as f32 + 1.6, tz as f32 + 0.5);
+        assert!(decor_hits_box(&art, Some(&big), None, CelestialBody::Earth, 0, player_at(side.0, side.1)));
+        let small = authored("prop/caja", tx, tz, Some([1.0, 1.0]));
+        assert!(!decor_hits_box(&art, Some(&small), None, CelestialBody::Earth, 0, player_at(side.0, side.1)));
+    }
+}
+
+#[cfg(test)]
+mod pasto_tests {
+    use super::*;
+
+    /// Un slot al que el juego le pide pixel y que el editor no lista es un
+    /// slot que nadie puede llenar: el pasto de sabana se quedaría vacío para
+    /// siempre y nadie sabría por qué. Es la misma regla que ya cuidan
+    /// `every_slot_has_a_human_label` y `slot_audit` para el resto del catálogo.
+    #[test]
+    fn todo_pasto_de_bioma_tiene_slot_con_nombre() {
+        let slots = ha_assets::game_slots();
+        for clave in PASTOS_DE_BIOMA {
+            let s = slots
+                .iter()
+                .find(|s| s.key == *clave)
+                .unwrap_or_else(|| panic!("`{clave}` no está en el catálogo de slots"));
+            assert!(!s.label.is_empty(), "`{clave}` sin nombre humano");
+        }
+    }
+
+    /// **Los cuatro climas que crían pasto piden losa propia, y ninguno más.**
+    ///
+    /// El resto de los biomas no está por una razón concreta y no por olvido: la
+    /// montaña es roca, la playa y el desierto son arena, el océano es agua. Si
+    /// alguno de ésos empezara a pedir pasto sería que `biome_tile` cambió de
+    /// opinión, y el mundo se llenaría de pradera sobre la arena.
+    #[test]
+    fn cada_clima_que_cria_pasto_pide_su_losa() {
+        use ha_shared::geography::Biome;
+        let body = CelestialBody::Earth;
+        for (bioma, esperado) in [
+            (Biome::Forest, Some("tiles/pasto_bosque")),
+            (Biome::Savanna, Some("tiles/pasto_seco")),
+            (Biome::Swamp, Some("tiles/pasto_pantano")),
+            (Biome::Highland, Some("tiles/pasto_sierra")),
+            (Biome::Grassland, None),
+            (Biome::Desert, None),
+            (Biome::Mountain, None),
+        ] {
+            // Se busca una celda REAL de ese bioma en vez de inyectarlo: así el
+            // test también caza que el bioma haya dejado de existir en el mundo.
+            let Some((tx, tz)) = (0..3000i64)
+                .flat_map(|x| (0..300i64).map(move |z| (x * 7, z * 7)))
+                .find(|&(x, z)| ha_shared::geography::biome_at(body, x, z) == bioma)
+            else {
+                continue; // ese bioma no cae cerca del origen; no es lo que se prueba
+            };
+            assert_eq!(
+                pasto_de_bioma(body, tx, tz),
+                esperado,
+                "{bioma:?} en ({tx},{tz})"
+            );
+        }
+    }
+
+    /// **Sin losas de clima cargadas, el suelo cuesta lo que costaba.** Es el
+    /// atajo de `ArtLibrary::pasto_por_bioma`: con la biblioteca vacía la malla
+    /// no puede preguntar el bioma, así que tampoco puede pagarlo.
+    #[test]
+    fn sin_arte_de_clima_no_se_pregunta_el_bioma() {
+        let art = ArtLibrary::default();
+        assert!(!art.pasto_por_bioma());
+        assert_eq!(
+            suelo_de_la_celda(&art, CelestialBody::Earth, Tile::Grass, 0, 0, 0),
+            None,
+            "sin hoja de suelo no hay losa: la celda cae al color plano"
+        );
+    }
+}
+
+#[cfg(test)]
+mod vereda_tests {
+    use super::*;
+
+    /// **La pareja viaja junta.** Cada familia de vereda son DOS piezas —la
+    /// baldosa que dibuja la malla y el escalón que se pega sobre el asfalto— y
+    /// las dos tablas se indexan con el mismo número. Si se desalinearan, una
+    /// ciudad tendría el cordón de otra: crema sobre gris azulado, que es
+    /// exactamente el motivo por el que durante meses hubo una sola vereda.
+    #[test]
+    fn cada_baldosa_de_vereda_tiene_su_cordon() {
+        assert_eq!(VEREDA_BALDOSA.len(), VEREDA_CORDON.len());
+        let slots = ha_assets::game_slots();
+        for (i, (baldosa, cordon)) in VEREDA_BALDOSA.iter().zip(VEREDA_CORDON).enumerate() {
+            // La familia 6 no llega a publicar cordón (el pack no le dibujó el
+            // `edge_n`); su slot igual existe, y el filtro de "pareja completa"
+            // de `vereda_de_la_ciudad` la deja fuera en tiempo de ejecución.
+            assert!(
+                slots.iter().any(|s| s.key == *baldosa),
+                "la baldosa {baldosa} (familia {i}) no está en el catálogo"
+            );
+            assert!(
+                slots.iter().any(|s| s.key == cordon) || i == 5,
+                "el cordón {cordon} (familia {i}) no está en el catálogo"
+            );
+        }
+    }
+
+    /// Con la biblioteca vacía no hay familias que repartir, así que ni se
+    /// pregunta por el asentamiento: se usa la vereda de siempre. Es el atajo
+    /// que mantiene el costo del suelo donde estaba.
+    #[test]
+    fn sin_familias_cargadas_manda_la_vereda_de_siempre() {
+        let art = ArtLibrary::default();
+        assert!(!art.veredas_de_ciudad());
+        assert_eq!(vereda_de_la_ciudad(&art, CelestialBody::Earth, 0, 0), 0);
+    }
+
+    /// **Una ciudad, una vereda.** La familia sale del CENTRO del asentamiento,
+    /// así que dos celdas cualesquiera del mismo casco tienen que dar la misma —
+    /// si dependiera de la celda, la acera cambiaría de material cada tres
+    /// metros y el cordón caería sobre la baldosa equivocada.
+    #[test]
+    fn el_casco_entero_usa_la_misma_familia() {
+        use ha_shared::geography::settlement_covering;
+        let body = CelestialBody::Earth;
+        let Some((tx, tz, s)) = (0..4000i64)
+            .flat_map(|x| (0..400i64).map(move |z| (x * 3, z * 3)))
+            .find_map(|(x, z)| settlement_covering(body, x, z).map(|s| (x, z, s)))
+        else {
+            return; // no hay ciudad cerca del origen en esta semilla
+        };
+        // El mismo cálculo que hace `vereda_de_la_ciudad`, sin depender de que
+        // haya arte cargado (en un test no lo hay): lo que se afirma es que la
+        // ENTRADA es el centro y no la celda.
+        let familia = |cx: i64, cz: i64| {
+            settlement_covering(body, cx, cz).map(|s| s.center)
+        };
+        for (dx, dz) in [(0, 0), (5, 5), (-5, 9), (12, -7)] {
+            let (px, pz) = (tx + dx, tz + dz);
+            if settlement_covering(body, px, pz).is_none() {
+                continue; // esa celda se salió del casco; no es lo que se prueba
+            }
+            assert_eq!(
+                familia(px, pz),
+                Some(s.center),
+                "({px},{pz}) tendría que seguir siendo la misma ciudad"
+            );
+        }
     }
 }

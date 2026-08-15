@@ -343,8 +343,15 @@ pub fn body_transit_burn(body: CelestialBody) -> f32 {
     body_def(body).transit_burn
 }
 
+/// La semilla de terreno de un cuerpo, **mezclada con la de la partida**.
+///
+/// La constante del cuerpo es lo que hace que la Luna no se parezca a la Tierra;
+/// la de la partida (`crate::partida::semilla`, 0 por defecto) es lo que hace que
+/// la Tierra de hoy no sea tile por tile la de ayer. Todo el ruido del mundo pasa
+/// por acá, así que mezclarlas en un solo sitio alcanza para que cambie el
+/// planeta entero — relieve, biomas, ríos, cuevas y los pueblos sorteados.
 pub fn body_terrain_seed(body: CelestialBody) -> u32 {
-    body_def(body).terrain_seed
+    body_def(body).terrain_seed ^ crate::partida::semilla()
 }
 
 pub fn earth_center() -> [f32; 3] {

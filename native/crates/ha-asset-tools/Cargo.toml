@@ -12,7 +12,7 @@ name = "ha-asset-tools"
 path = "src/main.rs"
 
 [dependencies]
-ha-assets = { path = "../ha-assets", features = ["scan"] }
+ha-assets = { path = "../ha-assets" }
 ha-shared = { path = "../ha-shared" }
 iafz-sys = { path = "../iafz-sys" }
 ha-audio = { path = "../ha-audio" }

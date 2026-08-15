@@ -5,6 +5,14 @@ plugins {
 def versionCodeProp = project.findProperty("versionCode") ?: "1"
 def versionNameProp = project.findProperty("versionName") ?: "1.0.0"
 
+// ABIs a empaquetar. TIENE que coincidir con los que `cargo ndk` compiló
+// (`ANDROID_ABIS` en scripts/ship-native-android.mjs, default arm64-v8a), o gradle
+// mete el `libc++_shared.so` que trae el NDK para el ABI de más SIN su
+// `libha_game.so`: peso muerto en el APK y crash al cargar el motor en ese equipo.
+// Ver biblia.md §12.
+def abiProp = project.findProperty("abiFilters") ?: System.getenv("ANDROID_ABIS") ?: "arm64-v8a"
+def abiList = abiProp.split(",").collect { it.trim() }.findAll { it }
+
 android {
     namespace 'com.hungerarena.app'
     compileSdk 34
@@ -16,7 +24,7 @@ android {
         versionCode versionCodeProp.toInteger()
         versionName versionNameProp
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
+            abiFilters abiList as String[]
         }
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -24,6 +32,13 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // El APK se instala de costado (no pasa por Play), así que se firma
+            // con la clave de debug: sin esto `assembleRelease` produce un APK sin
+            // firmar que el teléfono se niega a instalar. Lo que importa acá NO es
+            // la firma sino que el build type sea `release`: `debuggable=false`
+            // deja a ART optimizar de verdad y apaga los chequeos JNI que pagaba
+            // cada llamada nativa. Antes se publicaba `assembleDebug`.
+            signingConfig signingConfigs.debug
         }
     }
     compileOptions {

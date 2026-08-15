@@ -10,6 +10,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveAndroidEnv } from "./lib/android-env.mjs";
 import { clearStaleCargoLocks, jniLibsUpToDate } from "./lib/cargo-lock.mjs";
+import { freeDisk } from "./lib/free-disk.mjs";
 import { copyLibcxxShared } from "./lib/android-ndk-libs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,7 +24,7 @@ const noBump = args.includes("--no-bump");
 const forceRust = args.includes("--rebuild-rust");
 // Skip the pre-publish test gates (npm test + `make -C native test`). Those
 // recompile the ha-game TEST binary (full Bevy) and OOM on low-RAM machines
-// (see labiblia §7). Use when you've already validated with `cargo check`.
+// (see biblia.md §12). Use when you've already validated with `cargo check`.
 const skipTests = args.includes("--skip-tests");
 const hostIdx = args.indexOf("--host");
 const lanHost =
@@ -133,12 +134,20 @@ if (rustUpToDate) {
   );
 }
 
-copyLibcxxShared(androidEnv.ANDROID_NDK_ROOT, JNI_LIBS);
+copyLibcxxShared(androidEnv.ANDROID_NDK_ROOT, JNI_LIBS, ABIS);
 console.log("✓ libc++_shared.so copiado a jniLibs");
 
 const gradleBuildStartedAt = Date.now();
 run(
-  `./gradlew assembleDebug -PversionCode=${version.versionCode} -PversionName=${version.version}`,
+  // `assembleRelease`: el APK debug lleva `debuggable=true`, que apaga las
+  // optimizaciones de ART y activa los chequeos JNI en cada llamada nativa —
+  // justo lo que no sobra en el teléfono. Se firma con la clave de debug (ver
+  // native/android/app/build.gradle) porque esto se instala de costado.
+  // `findApk` ya elige por fecha entre debug/release, así que sigue funcionando.
+  // `-PabiFilters`: gradle tiene que empaquetar EXACTAMENTE los ABIs que compiló
+  // cargo ndk. Si le sobra uno, mete el libc++_shared.so del NDK sin su
+  // libha_game.so → peso muerto y crash en ese equipo (biblia.md §12).
+  `./gradlew assembleRelease -PversionCode=${version.versionCode} -PversionName=${version.version} -PabiFilters=${ABIS.join(",")}`,
   ANDROID,
   buildEnv
 );
@@ -157,6 +166,11 @@ run(
 );
 
 run("node scripts/verify-apk-pipeline.mjs", ROOT);
+
+// El disco de esta máquina se llena y lo que falla después NO parece falta de
+// espacio (el linker muere con "Bus error"). Se purga la caché incremental —
+// regenerable — al terminar, siempre, sin que nadie tenga que acordarse.
+freeDisk(NATIVE);
 
 console.log("\n══ APK listo para instalar ══");
 console.log(`Landing:  http://${lanHost}:5173`);

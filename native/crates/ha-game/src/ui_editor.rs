@@ -4,9 +4,9 @@ use bevy::prelude::*;
 use crate::debug::PerfOverlayVisible;
 use crate::flight::Flight;
 use ha_shared::{body_radius, CelestialBody};
-use crate::scene::{teleport_to_body, RegionId, RegionRuntime, WorldContextRuntime};
+use crate::scene::{teleport_to_body, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, PlayerVisual, SimState};
-use crate::game_ui::{self, apply_top_center, apply_center, GameUiRoot, MENU_BUTTON_WIDTH};
+use crate::game_ui::{self, apply_center, GameUiRoot};
 use crate::input::calibration::InputCalibration;
 use crate::input::{TouchBlockRects, TouchLayout};
 use crate::ui_theme::{self, UiButtonTone};
@@ -17,15 +17,12 @@ impl Plugin for UiEditorPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(load_ui_layout().unwrap_or_default())
             .init_resource::<UiEditorState>()
-            .init_resource::<EditorUiSpawned>()
             .init_resource::<EditorTouchBlocks>()
             .init_resource::<EditorPanelsState>()
             .add_systems(
                 Update,
                 (
-                    ensure_editor_ui.after(crate::game_ui::sync_game_ui_root),
-                    dedupe_menu_buttons,
-                    sync_editor_panels.after(dedupe_menu_buttons),
+                    sync_editor_panels,
                     editor_button_system,
                     creative_topup_system,
                     editor_touch_drag_system,
@@ -157,9 +154,6 @@ impl Default for UiEditorState {
     }
 }
 
-#[derive(Resource, Default)]
-struct EditorUiSpawned(bool);
-
 /// Touch rects owned by the in-game menu / editor panel (merged after action buttons).
 #[derive(Resource, Default, Clone)]
 pub struct EditorTouchBlocks(pub Vec<[f32; 4]>);
@@ -199,9 +193,6 @@ struct CalLabel(CalAdjust);
 #[derive(Component)]
 struct UiEditorLabel;
 
-#[derive(Component)]
-struct UiMenuButton;
-
 #[derive(Component, Clone, Copy)]
 pub enum UiEditorCommand {
     Menu,
@@ -213,6 +204,7 @@ pub enum UiEditorCommand {
     SelectJump,
     OpenSettings,
     TogglePerf,
+    ToggleProbe,
     ToggleCreative,
     GoLuna,
     GoSpace,
@@ -229,56 +221,6 @@ const EDITOR_PANEL_W: f32 = 116.0;
 const EDITOR_PANEL_H: f32 = 436.0;
 const SETTINGS_PANEL_W: f32 = 168.0;
 const SETTINGS_PANEL_H: f32 = 168.0;
-
-fn ensure_editor_ui(
-    mut commands: Commands,
-    layout: Res<TouchLayout>,
-    root: Query<Entity, With<GameUiRoot>>,
-    mut spawned: ResMut<EditorUiSpawned>,
-) {
-    if spawned.0 || layout.width < 100.0 {
-        return;
-    }
-    let Ok(root) = root.get_single() else {
-        return;
-    };
-    spawned.0 = true;
-
-    commands.entity(root).with_children(|parent| {
-        parent
-            .spawn((
-                Button,
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: Val::Px(MENU_BUTTON_WIDTH),
-                    height: Val::Px(26.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BorderColor(ui_theme::button_border(UiButtonTone::Primary)),
-                BackgroundColor(ui_theme::button_bg(
-                    UiButtonTone::Primary,
-                    ui_theme::interaction_state(Interaction::None, false),
-                )),
-                UiEditorCommand::Menu,
-                UiMenuButton,
-                Name::new("InGameMenuButton"),
-            ))
-            .with_children(|button| {
-                button.spawn((
-                    Text::new("MENU"),
-                    TextFont {
-                        font_size: 12.0,
-                        ..default()
-                    },
-                    TextColor(ui_theme::text_primary()),
-                ));
-            });
-    });
-}
-
 
 fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
     let mut panel_entity = Entity::PLACEHOLDER;
@@ -358,18 +300,6 @@ fn sync_editor_panels(
     }
 }
 
-/// Safety net: only one MENU button may exist (Startup race / hot reload).
-fn dedupe_menu_buttons(mut commands: Commands, menus: Query<Entity, With<UiMenuButton>>) {
-    let mut iter = menus.iter();
-    let Some(keep) = iter.next() else {
-        return;
-    };
-    for extra in iter {
-        if extra != keep {
-            commands.entity(extra).despawn_recursive();
-        }
-    }
-}
 
 fn spawn_editor_button(parent: &mut ChildBuilder, label: &str, command: UiEditorCommand) {
     parent
@@ -642,6 +572,15 @@ fn editor_button_system(
                     state.enabled = false;
                     state.active_pointer = None;
                 }
+                // La sonda escribe a logcat, no a pantalla: el menú se cierra
+                // igual que con PERF para poder jugar el escenario que se mide.
+                UiEditorCommand::ToggleProbe => {
+                    crate::debug::set_stage_probe(!crate::debug::stage_probe_on());
+                    state.menu_open = false;
+                    state.settings_open = false;
+                    state.enabled = false;
+                    state.active_pointer = None;
+                }
                 UiEditorCommand::ToggleCreative => {
                     // Flag only — `creative_topup_system` does the stocking so
                     // this system stays under Bevy's 16-param limit.
@@ -819,14 +758,9 @@ fn update_editor_overlay(
     layout: Res<TouchLayout>,
     mut panel: Query<&mut Node, With<UiEditorPanel>>,
     mut settings: Query<&mut Node, (With<SettingsPanel>, Without<UiEditorPanel>)>,
-    mut menu_button: Query<&mut Node, (With<UiMenuButton>, Without<UiEditorPanel>, Without<SettingsPanel>)>,
     mut label: Query<&mut Text, With<UiEditorLabel>>,
     mut editor_blocks: ResMut<EditorTouchBlocks>,
 ) {
-    let menu_top = layout.insets.top as f32 + 8.0;
-    if let Ok(mut node) = menu_button.get_single_mut() {
-        apply_top_center(&mut node, &layout, MENU_BUTTON_WIDTH, menu_top);
-    }
     if let Ok(mut node) = panel.get_single_mut() {
         apply_center(&mut node, &layout, EDITOR_PANEL_W, EDITOR_PANEL_H);
     }
@@ -843,7 +777,6 @@ fn update_editor_overlay(
     }
 
     editor_blocks.0.clear();
-    editor_blocks.0.push(game_ui::menu_screen_rect(&layout));
     if state.menu_open || state.enabled {
         let (w, h) = if state.settings_open {
             (SETTINGS_PANEL_W, SETTINGS_PANEL_H)
@@ -937,7 +870,7 @@ fn load_ui_layout() -> Option<UiLayoutConfig> {
 }
 
 fn layout_path() -> std::path::PathBuf {
-    std::env::var("HA_UI_LAYOUT_FILE")
+    crate::flags::var("HA_UI_LAYOUT_FILE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("ui-layout.cfg"))
 }

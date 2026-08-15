@@ -2,14 +2,25 @@
 //! + Terraria-style diggable surfaces (rewrite-2d).
 
 mod art2d;
+mod flags;
+mod fuente;
+mod prueba_overlay;
+mod procedural_art;
 mod audio;
 mod boot_ui;
 mod game_phase;
+mod chargen;
 mod character_create;
 mod build;
 mod building;
+mod ceilings;
+mod cuartos;
+mod edificios;
+mod integrity;
 mod structures;
 mod walls;
+mod weather;
+mod partida;
 mod world_edits;
 mod companion;
 mod dialog;
@@ -29,6 +40,10 @@ mod debug;
 mod game_ui;
 mod hud;
 mod input;
+mod escaleras;
+mod interior;
+mod layers;
+mod loading;
 mod inventory_persist;
 mod machines;
 mod npc_menu;
@@ -48,9 +63,12 @@ mod chests;
 mod sim;
 mod survival_stats;
 mod targeting;
+pub mod map_item;
+pub mod torches;
 mod transition;
 mod ui_editor;
 mod ui_theme;
+mod vault;
 mod ui;
 mod world2d;
 
@@ -66,12 +84,12 @@ use art2d::Art2dPlugin;
 use camera::FollowCameraPlugin;
 use world_persist::WorldPersistPlugin;
 use telemetry::TelemetryPlugin;
-use debug::{apply_android_frame_cap, install_crash_hook, AutoDrivePlugin, CrashReportPlugin, CpuSpanPlugin, PerfDebugPlugin};
+use debug::{apply_android_frame_cap, install_crash_hook, AblatePlugin, AutoDrivePlugin, CrashReportPlugin, CpuSpanPlugin, PerfDebugPlugin};
 use solar_system_clock::SolarSystemClockPlugin;
 use hud::PixelHudPlugin;
 use boot_ui::BootUiPlugin;
 use game_menu::GameMenuPlugin;
-use input::{InputPlugin, LookInteractPlugin};
+use input::{InputPlugin, LookInteractPlugin, WorldTouchPlugin};
 use machines::MachinesPlugin;
 use space_fx::SpaceFxPlugin;
 use universe::UniversePlugin;
@@ -82,6 +100,7 @@ use harvest::HarvestPlugin;
 use survival_stats::SurvivalStatsPlugin;
 use inventory_persist::InventoryPersistPlugin;
 use platform::PlatformPlugin;
+use render::lod::RenderLodPlugin;
 use render::particles::ParticlesPlugin;
 use scene::ScenePlugin;
 use creative_fly::CreativeFlyPlugin;
@@ -128,7 +147,17 @@ fn run_app_inner() {
 
     #[cfg(not(target_os = "android"))]
     {
-        window.resolution = (1280.0, 720.0).into();
+        // `HA_RES=ancho x alto` — palanca de diagnóstico, no de juego. Sirve para
+        // separar "cuesta la CPU" de "cuesta llenar píxeles": si el frame no baja
+        // al achicar la ventana a 160×90, el gasto NO es fill-rate.
+        let (w, h) = crate::flags::var("HA_RES")
+            .ok()
+            .and_then(|v| {
+                let (a, b) = v.split_once('x')?;
+                Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+            })
+            .unwrap_or((1280.0, 720.0));
+        window.resolution = (w, h).into();
     }
 
     #[cfg(target_os = "android")]
@@ -137,8 +166,15 @@ fn run_app_inner() {
         window.mode = bevy::window::WindowMode::BorderlessFullscreen(
             bevy::window::MonitorSelection::Primary,
         );
+// LA UI VA A RESOLUCIÓN NATIVA. Se probó bajar la escala de la surface a 0.7
+        // para ganar fill-rate y el reporte fue inmediato: "la UI en mi celu es
+        // demasiado pequeña, ni siquiera puedo leer el texto del reloj". Y encima no
+        // dio la ganancia buscada (seguía en 10-13 fps). El ahorro de píxeles tiene
+        // que salir del render del MUNDO, nunca de la legibilidad de la interfaz.
     }
 
+    // `mut` sólo hace falta en el camino no-android (abajo se le encadena más).
+    #[cfg_attr(target_os = "android", allow(unused_mut))]
     let mut plugins = DefaultPlugins
         .set(WindowPlugin {
             primary_window: Some(window),
@@ -175,13 +211,29 @@ fn run_app_inner() {
             Ps1Retro::SKY_ZENITH[2],
         )))
         .insert_resource({
+            // **`Continuous`, NO `mobile()`.** `WinitSettings::mobile()` es
+            // `UpdateMode::reactive(1/60)`: actualiza cuando pasan 16.6 ms *o
+            // cuando llega un evento de entrada*. Una pantalla táctil reporta a
+            // 120-240 Hz, así que con el dedo apoyado en el joystick el juego
+            // corría 2-4× más seguido de lo que presenta (`Fifo` = vsync a 60):
+            // `Time::delta()` saltaba frame a frame, el movimiento se escalonaba
+            // y la UI vibraba — y empeoraba justo mientras tocabas la pantalla.
+            //
+            // `reactive` es para una app que espera al usuario. Un juego de
+            // acción quiere el paso que marca el vsync, y nada más. En segundo
+            // plano sí se baja el ritmo: ahí no hay nada que animar.
             #[cfg(target_os = "android")]
             {
-                WinitSettings::mobile()
+                WinitSettings {
+                    focused_mode: bevy::winit::UpdateMode::Continuous,
+                    unfocused_mode: bevy::winit::UpdateMode::reactive_low_power(
+                        std::time::Duration::from_secs(1),
+                    ),
+                }
             }
             #[cfg(not(target_os = "android"))]
             {
-                if std::env::var("HA_AUTOPLAY").is_ok() {
+                if crate::flags::var("HA_AUTOPLAY").is_ok() {
                     // Agent test drives run unfocused — never throttle.
                     WinitSettings {
                         focused_mode: bevy::winit::UpdateMode::Continuous,
@@ -192,6 +244,9 @@ fn run_app_inner() {
                 }
             }
         })
+        // Aparte y primero: la fuente de la UI. En su propia llamada porque el
+        // tuple de abajo ya esta en el maximo de 16 que soporta `add_plugins`.
+        .add_plugins((fuente::FuentePlugin, prueba_overlay::PruebaOverlayPlugin))
         .add_plugins((
             game_phase::GamePhasePlugin,
             character_create::CharacterCreatePlugin,
@@ -210,9 +265,11 @@ fn run_app_inner() {
             Sky2dPlugin,
         ))
         .add_plugins((
+            procedural_art::ProceduralArtPlugin,
             InventoryPersistPlugin,
             MachinesPlugin,
             InputPlugin,
+            WorldTouchPlugin,
             TargetingPlugin,
             LookInteractPlugin,
             FlightPlugin,
@@ -240,9 +297,27 @@ fn run_app_inner() {
             UiEditorPlugin,
             AutoDrivePlugin,
         ))
+        .add_plugins(AblatePlugin)
+        .add_plugins(debug::StageProbePlugin)
+        .add_plugins(chargen::ChargenPlugin)
+        .add_plugins(loading::LoadingPlugin)
+        .add_plugins(vault::VaultPlugin)
+        .add_plugins(escaleras::EscalerasPlugin)
+        .add_plugins(interior::InteriorPlugin)
+        .add_plugins(torches::TorchesPlugin)
+        .add_plugins(map_item::MapItemPlugin)
+        .add_plugins(weather::WeatherPlugin)
+        // Aparte: la tupla de `add_plugins` topa en 16 elementos.
+        .add_plugins(RenderLodPlugin)
+        .add_plugins(render::scale::RenderScalePlugin)
+        .add_plugins(layers::LayersPlugin)
         .add_plugins((
             world_edits::WorldEditsPlugin,
             walls::WallsPlugin,
+            cuartos::CuartosPlugin,
+            edificios::EdificiosPlugin,
+            ceilings::CeilingsPlugin,
+            integrity::IntegrityPlugin,
             fauna::FaunaPlugin,
             companion::CompanionPlugin,
             dialog::DialogPlugin,

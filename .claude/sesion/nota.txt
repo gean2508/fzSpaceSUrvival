@@ -1,0 +1,1 @@
+Terminada la regla 11 del APK; falta wirear los hooks de continuidad

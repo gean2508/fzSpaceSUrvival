@@ -2,7 +2,7 @@
 //! `body.x`/`body.z` are the ground plane; render maps to screen `(x, -z)`.
 
 use bevy::prelude::*;
-use ha_shared::topdown::{step_topdown_movement, step_topdown_movement_ex};
+use ha_shared::topdown::step_topdown_movement;
 use ha_shared::{collision_obstacles, generate_world, InputState, WorldContext};
 
 use crate::game_time::configure_game_clock;
@@ -26,12 +26,45 @@ pub struct Player;
 #[derive(Component)]
 pub struct PlayerFlightShadow;
 
-/// Saiyan Ki aura — a golden glow behind the character that flares while
-/// charging (power-up) and stays lit while flying. Hidden on foot at rest.
-/// Procedural pulse today; the user can texture logical slot `fx/aura_saiyan`.
-/// Synced in `creative_fly.rs::sync_player_aura`.
+/// Aura de Ki — CAPA EXTERNA: el derrame naranja translúcido y ancho, el que da
+/// volumen. Es un halo radial (`light2d::GlowTexture`), no un cuadro: un
+/// `Sprite::from_color` amarillo se leía justo como lo describió el usuario, "un
+/// cuadro amarillo cutre", porque un quad de color plano NO tiene borde suave.
+///
+/// Las tres capas del aura, de afuera hacia adentro:
+/// [`PlayerAura`] (naranja ancho) → [`PlayerAuraMid`] (ámbar) →
+/// [`PlayerAuraCore`] (dorado casi blanco). Sincronizadas en
+/// `creative_fly.rs::sync_player_aura`.
 #[derive(Component)]
 pub struct PlayerAura;
+
+/// Aura de Ki — capa MEDIA (ámbar): el cuerpo de la llama.
+#[derive(Component)]
+pub struct PlayerAuraMid;
+
+/// Aura de Ki — NÚCLEO: el punto caliente, dorado tirando a blanco.
+#[derive(Component)]
+pub struct PlayerAuraCore;
+
+/// Un segmento de la ESTELA de Ki: un halo que se deja atrás al volar y se apaga
+/// encogiéndose. Los spawnea/apaga `creative_fly.rs` (`spawn_ki_trail` /
+/// `tick_ki_trail`).
+#[derive(Component)]
+pub struct KiTrail {
+    /// Segundos que le quedan de vida.
+    pub life: f32,
+    /// Vida total, para normalizar el desvanecido.
+    pub max_life: f32,
+    /// Lado del quad al nacer (m de mundo).
+    pub size: f32,
+}
+
+/// Sprites que la luz NO debe teñir: los efectos que ya son luz (aura, estela) y
+/// la sombra de vuelo. Sin esto, `light2d::light_sprites` les captura el color en
+/// `PostUpdate` (`LitBase`), y como el aura se repinta cada frame en `Update` el
+/// color capturado queda viejo → el aura late con un frame de retraso y titila.
+#[derive(Component)]
+pub struct UnlitSprite;
 
 #[derive(Resource, Clone)]
 pub struct WorldCollision(pub Vec<ha_shared::types::Obstacle>);
@@ -74,9 +107,12 @@ pub struct PlayerVisual {
     pub to_y: f32,
     pub to_rot: f32,
     pub radius: f32,
+    /// El jugador está en líquido de poco fondo. Lo escribe `tick_sim` desde el
+    /// estado del cuerpo y lo lee `face_player_sprite` para pedir la pose `swim_*`.
+    pub swimming: bool,
 }
 
-fn tick_sim(
+pub(crate) fn tick_sim(
     time: Res<Time<Fixed>>,
     intent: Res<MovementIntent>,
     actions: Res<TouchActions>,
@@ -86,6 +122,7 @@ fn tick_sim(
     tiles: Res<TileWorld>,
     art: Res<crate::art2d::ArtLibrary>,
     flora: Res<crate::harvest::FloraHarvest>,
+    authored: Res<crate::world2d::AuthoredDecor>,
     structures: Res<crate::structures::BuiltStructures>,
     walls: Res<crate::walls::BuiltWalls>,
     editor: Res<crate::ui_editor::UiEditorState>,
@@ -131,25 +168,46 @@ fn tick_sim(
                 // the canopy stays visual — you pass "behind" it. Per-asset the
                 // user can flip this in the editor ("bloquea el paso"), so e.g.
                 // rocks/boulders can be made solid too.
+                // `walk_blocked` en vez de `solid_at`: un acantilado de un solo
+                // escalón es un bordillo que se trepa y se baja, así que dejó de
+                // frenar a quien va a pie. Los desniveles altos siguen siendo
+                // pared — para ésos hay que buscar la rampa.
                 let solid = |tx: i64, tz: i64| {
-                    tiles.solid_at(body_surface, tx, tz)
+                    tiles.walk_blocked(body_surface, tx, tz)
                         || structures.blocks(body_surface, tiles.z, tx, tz)
-                        || (crate::world2d::decor_blocks_walk(&art, body_surface, tx, tz)
-                            && !flora.is_removed(
-                                body_surface,
-                                0,
-                                0,
-                                crate::world2d::pack_cell(tx, tz),
-                            ))
                 };
                 // Paredes de BORDE (construcción LDoE): viven en la arista
                 // entre celdas, así que van por fuera del grid de sólidos.
+                //
+                // El DECOR también: su colisión es la huella que pintaste sobre el
+                // sprite (hasta ¼ de tile), no la celda entera — por eso se prueba
+                // en metros y no en el grid. Un farol delgado frena en su poste y
+                // rozar un árbol deja de sentirse un choque fantasma.
+                let r = ha_shared::topdown::PLAYER_RADIUS;
                 let wall_hit = |x: f32, z: f32| {
                     ha_shared::build_grid::wall_capsule_hits(x, z, &|tx, tz, axis| {
                         walls.blocks(body_surface, tiles.z, tx, tz, axis)
-                    })
+                    }) || crate::world2d::decor_hits_box(
+                        &art,
+                        Some(&authored),
+                        Some(&flora),
+                        body_surface,
+                        tiles.z,
+                        [x - r, z - r, x + r, z + r],
+                    )
                 };
-                step_topdown_movement_ex(&mut sim.body, &input, dt, &solid, &wall_hit);
+                // Nadar: el bajío no frena, pero se cruza a media velocidad y con
+                // la pose de natación. Sale del TILE (que ya incluye tus ediciones),
+                // así que rellenar un charco con bloques deja de mojarte.
+                let swim = |tx: i64, tz: i64| tiles.tile_at(body_surface, tx, tz).swim();
+                ha_shared::topdown::step_topdown_movement_full(
+                    &mut sim.body,
+                    &input,
+                    dt,
+                    &solid,
+                    &wall_hit,
+                    &swim,
+                );
             }
         }
         sim.body.y = 0.0;
@@ -157,6 +215,7 @@ fn tick_sim(
         visual.to_x = sim.body.x;
         visual.to_z = sim.body.z;
         visual.to_y = 0.0;
+        visual.swimming = sim.body.state == ha_shared::types::MOV_SWIMMING;
         visual.to_rot = sim.body.rot;
         visual.radius = sim.body.radius;
     }
@@ -167,6 +226,8 @@ fn interpolate_player_visual(
     flight: Res<Flight>,
     fly: Res<crate::creative_fly::CreativeFlight>,
     zoom: Res<crate::camera::CameraZoom>,
+    bob: Res<crate::vault::VaultBob>,
+    subida: Res<crate::escaleras::Subida>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
     // Volando: el personaje NUNCA cambia de sitio (marco único — `universe.rs`),
@@ -181,9 +242,15 @@ fn interpolate_player_visual(
         let t = time.overstep_fraction() as f32;
         // 1 = igual de grande que pisando el suelo. En vista de mapa se achica
         // un poco (marcador, no protagonista) pero nunca por debajo de ~2/3.
-        let screen_f =
-            1.0 - 0.35 * crate::universe::smootherstep(200.0, 4_000.0, zoom.view_h);
-        let s = (zoom.view_h / crate::universe::GROUND_VIEW_H * screen_f).max(1.0);
+        // Con el encuadre VIVO, no con el objetivo: la proyección lo persigue con
+        // un lerp, así que dimensionar el sprite con el objetivo lo hacía crecer
+        // antes que el mundo (un pop de tamaño en cada cambio de altura). Y desde
+        // que `view_h` es el encuadre del JUGADOR y no el trinquete de la altura,
+        // usarlo acá directamente dejaría al personaje del tamaño de a pie —o sea,
+        // sub-píxel— en cuanto la altura abriera la cámara.
+        let live = zoom.live_view_h;
+        let screen_f = 1.0 - 0.35 * crate::universe::smootherstep(200.0, 4_000.0, live);
+        let s = (live / crate::universe::GROUND_VIEW_H * screen_f).max(1.0);
         for (visual, mut transform, mut vis) in &mut query {
             *vis = Visibility::Visible;
             let wx = visual.from_x.lerp(visual.to_x, t);
@@ -213,7 +280,17 @@ fn interpolate_player_visual(
         // step) so it draws above same-cell flat ground art but still sorts
         // fairly against trees/walls: a tree to the SOUTH (larger z) now draws
         // OVER the player — real 3/4 depth, canopies can hide you.
-        transform.translation = Vec3::new(r.x, r.y, sort_z(z) + 0.0005);
+        //
+        // `bob.y` despega el DIBUJO del suelo al trepar o descolgarse de un
+        // bordillo (`vault.rs`). Va sólo en la posición, nunca en `sort_z`: los
+        // pies siguen en su celda, así que izarse por encima de un borde no puede
+        // cambiar qué te tapa ni contra qué chocás.
+        // `subida.y` es lo mismo para la escalera: mientras andás el tramo el
+        // dibujo se eleva con el paso, y el salto que da al cambiar de planta
+        // cancela EXACTAMENTE el que da el mundo. Por eso subir se ve continuo
+        // sin necesidad de fundir nada (`escaleras.rs`).
+        transform.translation =
+            Vec3::new(r.x, r.y + bob.y + subida.y, sort_z(z) + crate::layers::HAIR);
         // Facing: flip horizontally when moving west (left half of the circle).
         let facing_left = visual.to_rot.abs() > std::f32::consts::FRAC_PI_2;
         transform.rotation = Quat::IDENTITY;
@@ -297,7 +374,16 @@ fn face_player_sprite(
         }
 
         let moving = (visual.to_x - visual.from_x).abs() > 1e-4 || (visual.to_z - visual.from_z).abs() > 1e-4;
-        let verb = if moving { "walk" } else { "idle" };
+        // Nadando manda la pose de natación, se mueva o no (flotar es una pose).
+        // Si el pack no trae `swim_*`, la cadena de fallback de abajo cae sola a
+        // `walk_*`/`idle_*` y el personaje nunca se queda sin sprite.
+        let verb = if visual.swimming {
+            "swim"
+        } else if moving {
+            "walk"
+        } else {
+            "idle"
+        };
         let [diag, card] = pose_directions(visual.to_rot);
 
         // Orden de preferencia: diagonal → cardinal → mismo verbo espejado →
@@ -350,7 +436,7 @@ fn face_player_sprite(
             match anim {
                 Some(anim) => {
                     sprite.rect = None;
-                    commands.entity(entity).insert(anim);
+                    crate::render::try_insert(&mut commands, entity, "pose/sim", anim);
                 }
                 None => {
                     commands.entity(entity).remove::<crate::art2d::ArtAnimated>();

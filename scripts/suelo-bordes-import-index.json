@@ -1,0 +1,20 @@
+{
+ "sprites": [
+  "borde/arena",
+  "borde/arena_bosque",
+  "borde/arena_pantano",
+  "borde/arena_seco",
+  "borde/arena_sierra",
+  "borde/nieve",
+  "borde/nieve_bosque",
+  "borde/nieve_pantano",
+  "borde/nieve_seco",
+  "borde/nieve_sierra",
+  "borde/tierra",
+  "borde/tierra_bosque",
+  "borde/tierra_pantano",
+  "borde/tierra_seco",
+  "borde/tierra_sierra"
+ ],
+ "pagina": "art/pack/suelo_bordes.png"
+}

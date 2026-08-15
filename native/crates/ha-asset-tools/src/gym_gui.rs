@@ -1,6 +1,6 @@
 //! Visor de "gimnasio" de NPCs — lista los genomas `.adn` ya evolucionados
 //! (fauna, vivario, sociedad), corre un episodio corto en la MISMA arena/sensor
-//! que `gym.rs` (determinismo gym↔juego, `ANALISIS_IA_FRUGAL.md`) para ver cómo
+//! que `gym.rs` (determinismo gym↔juego, `biblia.md` §6) para ver cómo
 //! se comporta cada uno, y deja mutar/cruzar y comparar el fitness antes de
 //! guardar. Es la herramienta de "entrená hasta el comportamiento esperado"
 //! interactiva; `gym.rs` sigue siendo el entrenador headless de fondo.
@@ -128,7 +128,7 @@ fn scan_genomes() -> Vec<GenomeEntry> {
     out
 }
 
-struct GymApp {
+pub(crate) struct GymApp {
     genomes: Vec<GenomeEntry>,
     selected: Option<usize>,
     second: Option<usize>,
@@ -139,7 +139,7 @@ struct GymApp {
 }
 
 impl GymApp {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             genomes: scan_genomes(),
             selected: None,
@@ -160,6 +160,14 @@ impl GymApp {
 
 impl eframe::App for GymApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.ui(ctx);
+    }
+}
+
+impl GymApp {
+    /// Dibuja este espacio de trabajo. Lo llama el shell del Studio
+    /// (`studio.rs`) o `eframe` cuando el editor corre solo.
+    pub(crate) fn ui(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("gym_genomes").min_width(260.0).show(ctx, |ui| {
             ui.heading("Genomas (.adn)");
             ui.label(egui::RichText::new("society/ · vivarium/ · iafz-sys/genomes/").weak().small());

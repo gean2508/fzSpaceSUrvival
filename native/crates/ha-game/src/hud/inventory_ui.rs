@@ -7,10 +7,13 @@ use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 
 use super::BagPanelState;
 
-pub const GRID_COLS: usize = 4;
-/// 8 rows (32 slots) so the creative kit + a full survival haul fit; the grid
+/// 6 columnas: la mochila ahora ocupa la pantalla entera (ver `spawn_bag_panel`),
+/// así que caben seis celdas por fila sin apretarlas — con 4 quedaba una columnita
+/// de slots enormes en medio de un panel vacío.
+pub const GRID_COLS: usize = 6;
+/// 6 filas (36 slots) so the creative kit + a full survival haul fit; the grid
 /// section scrolls (`BagInventorySection` overflow) past the visible rows.
-pub const GRID_ROWS: usize = 8;
+pub const GRID_ROWS: usize = 6;
 pub const GRID_LEN: usize = GRID_COLS * GRID_ROWS;
 /// Item slots between hammer (0) and BAG (last) in the 10-slot hotbar.
 pub const HOTBAR_ITEM_SLOTS: usize = 8;
@@ -48,7 +51,15 @@ struct PressTrack {
     slot: SlotId,
     timer: Timer,
     long_fired: bool,
+    /// Cuanto recorrio el dedo desde que apoyo. La celda ya se elegia al SOLTAR,
+    /// pero sin mirar esto: arrastrar para scrollear la mochila terminaba
+    /// eligiendo la celda donde empezaste el arrastre. Por encima de
+    /// `UMBRAL_ARRASTRE` el gesto fue un scroll y no elige nada.
+    recorrido: f32,
 }
+
+/// Px de UI que puede moverse el dedo y seguir contando como toque.
+const UMBRAL_ARRASTRE: f32 = 12.0;
 
 #[derive(Resource, Default)]
 pub struct InventoryUiState {
@@ -239,6 +250,28 @@ pub fn add_item_to_slots_rest(state: &mut InventoryUiState, item_id: &str, qty: 
         remaining -= put;
     }
     remaining
+}
+
+/// Quita `qty` unidades de `item_id` de los slots visibles (hotbar primero). Es
+/// la contracara de [`add_item_to_slots`] y la usa todo lo que CONSUME un ítem
+/// colocándolo en el mundo (mapa): descontar del `PlayerInventory` sin tocar los
+/// slots los deja desincronizados y el ítem "vuelve" al siguiente guardado.
+pub fn remove_from_slots(state: &mut InventoryUiState, item_id: &str, qty: u32) {
+    let mut remaining = qty;
+    for stack in state.hotbar.iter_mut().chain(state.grid.iter_mut()) {
+        if remaining == 0 {
+            break;
+        }
+        if stack.item_id.as_deref() != Some(item_id) {
+            continue;
+        }
+        let take = remaining.min(stack.qty);
+        stack.qty -= take;
+        remaining -= take;
+        if stack.qty == 0 {
+            *stack = Stack::default();
+        }
+    }
 }
 
 pub fn pick_up_stack(state: &mut InventoryUiState, slot: SlotId) -> bool {
@@ -468,6 +501,7 @@ pub fn inventory_slot_press_system(
             slot: slot_id,
             timer: Timer::from_seconds(LONG_PRESS_SECS, TimerMode::Once),
             long_fired: false,
+            recorrido: 0.0,
         });
     }
     for (slot, interaction) in &hotbar_slots {
@@ -482,6 +516,7 @@ pub fn inventory_slot_press_system(
                 TimerMode::Once,
             ),
             long_fired: false,
+            recorrido: 0.0,
         });
     }
 }
@@ -489,6 +524,7 @@ pub fn inventory_slot_press_system(
 pub fn inventory_long_press_system(
     bag: Res<BagPanelState>,
     time: Res<Time>,
+    touches: Res<Touches>,
     mut state: ResMut<InventoryUiState>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
@@ -500,6 +536,11 @@ pub fn inventory_long_press_system(
         return;
     };
     track.timer.tick(time.delta());
+    // Cuanto se movio el dedo desde que apoyo. Es lo que distingue "elegi esta
+    // celda" de "arrastre para ver el resto de la mochila".
+    for t in touches.iter() {
+        track.recorrido += t.delta().length();
+    }
     if track.timer.just_finished() && !track.long_fired {
         track.long_fired = true;
         let slot = track.slot;
@@ -561,7 +602,7 @@ pub fn inventory_slot_release_system(
         }
         let slot_id = slot_id_from_grid(slot);
         if let Some(track) = state.press.take() {
-            if track.slot == slot_id && !track.long_fired {
+            if track.slot == slot_id && !track.long_fired && track.recorrido <= UMBRAL_ARRASTRE {
                 handle_slot_tap(&mut state, &mut inv, &mut persist, slot_id, now);
             }
         }
@@ -572,7 +613,7 @@ pub fn inventory_slot_release_system(
         }
         let slot_id = slot_id_from_hotbar(slot);
         if let Some(track) = state.press.take() {
-            if track.slot == slot_id && !track.long_fired {
+            if track.slot == slot_id && !track.long_fired && track.recorrido <= UMBRAL_ARRASTRE {
                 if bag.open {
                     handle_slot_tap(&mut state, &mut inv, &mut persist, slot_id, now);
                 } else if !stack_ref(&state, slot_id).is_empty() {

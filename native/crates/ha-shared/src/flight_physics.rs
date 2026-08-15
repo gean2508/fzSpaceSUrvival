@@ -1,16 +1,10 @@
 //! SFS/KSP-style arcade flight — continuous thrust, gravity, SOI, atmosphere (no cutscenes).
 
 use crate::celestial_bodies::{
-    body_atmo_top, body_center, body_gravity_surface, body_landable, body_radius, body_soi,
-    body_walk_radius, CelestialBody, EARTH_ATMO_TOP_M, EARTH_FLIGHT_RADIUS_M, MOON_FLIGHT_RADIUS_M,
-    MOON_ORBIT_X_M,
+    body_atmo_top, body_gravity_surface, body_radius, body_soi, body_walk_radius, CelestialBody,
 };
 use crate::solar_ephemeris::body_center_at;
-use crate::cosmic_scale::MOON_GAMEPLAY_RADIUS_M;
-use crate::luna_terrain::luna_gameplay_center;
-use crate::planet_surface::{
-    altitude_above_planet_gameplay, planet_gameplay_center, remap_planet_gameplay_to_orbital,
-};
+use crate::planet_surface::{planet_gameplay_center, remap_planet_gameplay_to_orbital};
 
 pub use crate::celestial_bodies::{
     body_transit_burn, body_terrain_seed, earth_center, moon_center, BodyDef,

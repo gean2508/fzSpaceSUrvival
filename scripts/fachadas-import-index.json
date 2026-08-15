@@ -1,0 +1,10 @@
+{
+ "sprites": [
+  "wall/fachada_local",
+  "window/fachada_local",
+  "door/fachada_local",
+  "wall/fachada_portal",
+  "window/fachada_portal",
+  "door/fachada_portal"
+ ]
+}

@@ -30,6 +30,11 @@ use crate::universe::{body_offset_from_world, GlowTexture, UniverseFrame};
 #[derive(Component)]
 struct BeltRock {
     index: usize,
+    /// Si está dibujada ahora mismo. El corte por tamaño en pantalla tiene
+    /// HISTÉRESIS (dos umbrales) y para eso hay que recordar el estado: con un
+    /// umbral único, quedarse con el zoom justo en el corte encendía y apagaba
+    /// 220 rocas cada frame — parpadeo del cinturón.
+    shown: bool,
 }
 
 #[derive(Component)]
@@ -40,6 +45,8 @@ struct CometHead {
 #[derive(Component)]
 struct CometTail {
     index: usize,
+    /// 0 = la capa más ancha/tenue (el fondo de la cola), la última = el núcleo.
+    layer: usize,
 }
 
 /// Mota de polvo espacial, con su profundidad de parallax (0 = pegada a la
@@ -53,13 +60,16 @@ struct SpaceMote {
 
 /// Velo naranja de reentrada (nodo de UI, encima del mundo y debajo del HUD).
 #[derive(Component)]
-struct ReentryGlow;
+pub struct ReentryGlow;
 
 pub struct SpaceFxPlugin;
 
 impl Plugin for SpaceFxPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_reentry_overlay)
+            // Cinturón, cometas y motas SÓLO en partida: antes se creaban en el
+            // primer frame (cientos de sprites) y se dibujaban detrás del menú,
+            // que es la mitad del "gameplay que asoma" en el arranque.
             .add_systems(
                 Update,
                 (
@@ -68,7 +78,8 @@ impl Plugin for SpaceFxPlugin {
                     spawn_space_motes,
                     sync_space_motes,
                     sync_reentry_heat,
-                ),
+                )
+                    .run_if(crate::game_phase::world_active),
             );
     }
 }
@@ -97,24 +108,34 @@ fn spawn_minor_bodies(
         .collect();
     for i in 0..ASTEROID_COUNT {
         commands.spawn((
-            BeltRock { index: i },
+            BeltRock { index: i, shown: false },
             Mesh2d(unit.clone()),
             MeshMaterial2d(shades[i % shades.len()].clone()),
-            Transform::from_xyz(0.0, 0.0, -18.0),
+            // Épsilon de profundidad por roca: 220 mallas exactamente en −18.0 se
+            // empatan en la fase transparente y, cuando dos se solapan, el orden
+            // lo decide la extracción y puede alternar de un frame al otro. Ése es
+            // el parpadeo del cinturón. Con `i` en la z el orden es estable.
+            Transform::from_xyz(0.0, 0.0, belt_z(i)),
         ));
     }
     for i in 0..COMET_COUNT {
-        // La cola va DETRÁS de la cabeza y se dibuja estirada hacia el
-        // anti-Sol; ambas son el mismo halo, sólo cambia la forma.
-        commands.spawn((
-            CometTail { index: i },
-            Sprite {
-                image: glow.0.clone(),
-                color: Color::srgba(0.65, 0.85, 1.0, 0.0),
-                ..default()
-            },
-            Transform::from_xyz(0.0, 0.0, -17.5),
-        ));
+        // LA COLA es el mismo lenguaje visual que la estela de Ki del jugador
+        // (`creative_fly::spawn_ki_trail`): varias capas del halo radial, cada una
+        // más larga, más ancha y más transparente que la anterior. Una sola capa
+        // estirada se leía como una barra con bordes; tres apiladas dan un
+        // degradado que se afina y se apaga hacia la punta, que es como se ve un
+        // cometa de verdad. La más ancha va detrás.
+        for layer in 0..COMET_TAIL_LAYERS {
+            commands.spawn((
+                CometTail { index: i, layer },
+                Sprite {
+                    image: glow.0.clone(),
+                    color: Color::srgba(0.65, 0.85, 1.0, 0.0),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 0.0, comet_tail_z(i, layer)),
+            ));
+        }
         commands.spawn((
             CometHead { index: i },
             Sprite {
@@ -122,9 +143,29 @@ fn spawn_minor_bodies(
                 color: Color::srgba(0.85, 0.95, 1.0, 0.0),
                 ..default()
             },
-            Transform::from_xyz(0.0, 0.0, -17.0),
+            Transform::from_xyz(0.0, 0.0, comet_head_z(i)),
         ));
     }
+}
+
+/// Cuántas capas tiene la cola de un cometa. Tres alcanzan para el degradado sin
+/// multiplicar los draw calls (todas comparten textura y batchean).
+const COMET_TAIL_LAYERS: usize = 3;
+
+/// Z de una roca del cinturón: banda `[-18.20, -18.00)`, única por índice.
+fn belt_z(i: usize) -> f32 {
+    -18.2 + (i % 200) as f32 * 0.001
+}
+
+/// Z de la cabeza de un cometa: delante de su cola y del cinturón.
+fn comet_head_z(i: usize) -> f32 {
+    -17.0 + (i % 40) as f32 * 0.002
+}
+
+/// Z de una capa de cola: detrás de la cabeza, y las capas anchas detrás de las
+/// finas (`layer` 0 = la más ancha).
+fn comet_tail_z(i: usize, layer: usize) -> f32 {
+    -17.6 + layer as f32 * 0.05 + (i % 40) as f32 * 0.002
 }
 
 #[allow(clippy::type_complexity)]
@@ -132,7 +173,7 @@ fn sync_minor_bodies(
     frame: Res<UniverseFrame>,
     clock: Res<SolarSystemClock>,
     zoom: Res<CameraZoom>,
-    mut rocks: Query<(&BeltRock, &mut Transform, &mut Visibility), Without<CometHead>>,
+    mut rocks: Query<(&mut BeltRock, &mut Transform, &mut Visibility), Without<CometHead>>,
     mut heads: Query<
         (&CometHead, &mut Transform, &mut Sprite),
         (Without<BeltRock>, Without<CometTail>),
@@ -146,14 +187,41 @@ fn sync_minor_bodies(
     let r#ref = frame.ref_body;
     let view_h = zoom.live_view_h.max(1.0);
 
-    for (rock, mut tf, mut vis) in &mut rocks {
+    // CORTE DE ESCALA: con la cámara en escala de superficie (o de vuelo bajo) el
+    // cinturón y los cometas están a MILLONES de metros — no hay encuadre en el que
+    // se vean, y aun así eran 220 mallas + 40 sprites recorridos y extraídos cada
+    // frame mientras caminás por el bosque. En el espacio el encuadre nunca baja de
+    // decenas de km (`space_alt` × la curva de zoom), así que este umbral no puede
+    // esconder nada que se pudiera ver.
+    if view_h < 5_000.0 {
+        for (_, _, mut vis) in &mut rocks {
+            if *vis != Visibility::Hidden {
+                *vis = Visibility::Hidden;
+            }
+        }
+        for (_, _, mut sprite) in &mut heads {
+            sprite.color.set_alpha(0.0);
+        }
+        for (_, _, mut sprite) in &mut tails {
+            sprite.color.set_alpha(0.0);
+        }
+        return;
+    }
+
+    for (mut rock, mut tf, mut vis) in &mut rocks {
         let a = asteroid_at(rock.index, t);
         let p = body_offset_from_world(a.pos, r#ref, t);
         // Por debajo de ~medio píxel no vale la pena dibujarla; un cinturón de
-        // 220 puntos sub-píxel sólo produce parpadeo.
+        // 220 puntos sub-píxel sólo produce parpadeo. HISTÉRESIS: se enciende a
+        // 0.0022 del alto de pantalla y no se apaga hasta bajar de 0.0012, así que
+        // quedarse con el zoom en el borde no puede hacerla titilar.
         let on_screen = a.radius_m * 2.0 / view_h;
-        *vis = if on_screen < 0.0015 { Visibility::Hidden } else { Visibility::Visible };
-        tf.translation = Vec3::new(p.x, p.y, -18.0);
+        rock.shown = if rock.shown { on_screen > 0.0012 } else { on_screen > 0.0022 };
+        let want = if rock.shown { Visibility::Visible } else { Visibility::Hidden };
+        if *vis != want {
+            *vis = want;
+        }
+        tf.translation = Vec3::new(p.x, p.y, belt_z(rock.index));
         tf.rotation = Quat::from_rotation_z(a.spin);
         // Escala mínima: cuando el cinturón se ve de lejos las rocas siguen
         // leyéndose como polvo en vez de desaparecer.
@@ -164,10 +232,13 @@ fn sync_minor_bodies(
     for (comet, mut tf, mut sprite) in &mut heads {
         let c = comet_at(comet.index, t);
         let p = body_offset_from_world(c.pos, r#ref, t);
-        tf.translation = Vec3::new(p.x, p.y, -17.0);
+        tf.translation = Vec3::new(p.x, p.y, comet_head_z(comet.index));
         let r = (c.radius_m * 6.0).max(view_h * 0.01);
         sprite.custom_size = Some(Vec2::splat(r * 2.0));
-        sprite.color = Color::srgba(0.85, 0.95, 1.0, 0.35 + 0.5 * c.activity);
+        // La cabeza es blanco-hielo con un punto cálido: el mismo truco que el
+        // núcleo del aura de Ki (`creative_fly::sync_player_aura`) — el foco tira
+        // al blanco y el volumen lo dan las capas de alrededor.
+        sprite.color = Color::srgba(0.92, 0.97, 1.0, 0.42 + 0.5 * c.activity);
     }
 
     for (comet, mut tf, mut sprite) in &mut tails {
@@ -176,13 +247,29 @@ fn sync_minor_bodies(
         // Dirección de la cola en coordenadas de render (y = −z).
         let dir = Vec2::new(c.tail_dir[0], -c.tail_dir[2]).normalize_or_zero();
         // Larga y encendida cerca del Sol, corta y apagada lejos.
-        let len = (c.radius_m * 90.0 * (0.25 + c.activity)).max(view_h * 0.02);
-        let wide = (c.radius_m * 8.0).max(view_h * 0.006);
+        let base_len = (c.radius_m * 90.0 * (0.25 + c.activity)).max(view_h * 0.02);
+        let base_wide = (c.radius_m * 8.0).max(view_h * 0.006);
+        // Cada capa: más larga y más ancha que la anterior, y bastante más
+        // transparente. Apiladas, el alfa acumulado es alto pegado a la cabeza y
+        // cae hacia la punta — la cola se AFINA y se apaga en vez de terminar en
+        // un borde recto. `layer` 0 es la más grande (va detrás).
+        let k = COMET_TAIL_LAYERS - 1 - comet.layer; // 0 = núcleo fino
+        let spread = 1.0 + k as f32 * 0.85;
+        let len = base_len * (1.0 + k as f32 * 0.45);
+        let wide = base_wide * spread;
         let mid = p + dir * len * 0.5;
-        tf.translation = Vec3::new(mid.x, mid.y, -17.5);
+        tf.translation = Vec3::new(mid.x, mid.y, comet_tail_z(comet.index, comet.layer));
         tf.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));
         sprite.custom_size = Some(Vec2::new(len, wide));
-        sprite.color = Color::srgba(0.65, 0.85, 1.0, 0.10 + 0.35 * c.activity);
+        // El núcleo tira a blanco, las capas anchas al azul del hielo sublimando.
+        let core = 1.0 - k as f32 / (COMET_TAIL_LAYERS - 1).max(1) as f32;
+        let a = (0.10 + 0.34 * c.activity) / (1.0 + k as f32 * 1.1);
+        sprite.color = Color::srgba(
+            0.62 + 0.30 * core,
+            0.82 + 0.14 * core,
+            1.0,
+            a,
+        );
     }
 }
 
@@ -191,7 +278,11 @@ fn sync_minor_bodies(
 // ---------------------------------------------------------------------------
 
 /// Cuántas motas. Son hijas de la cámara y muy pequeñas: coste despreciable.
-const MOTE_COUNT: usize = 120;
+/// El espacio no tiene el problema de FPS de la superficie: no hay chunks que
+/// construir, ni decoración, ni luces por celda — es fondo negro y unos cientos de
+/// quads que batchean. Así que ahí la densidad se sube sin miedo: es justo donde el
+/// juego se puede permitir verse vivo.
+const MOTE_COUNT: usize = 420;
 
 fn spawn_space_motes(
     mut commands: Commands,
@@ -283,6 +374,7 @@ fn spawn_reentry_overlay(mut commands: Commands) {
         // Encima del mundo, debajo del HUD (igual que la bruma atmosférica).
         GlobalZIndex(-40),
         bevy::ui::FocusPolicy::Pass,
+        crate::game_ui::GameplayUi,
         Name::new("ReentryGlow"),
     ));
 }

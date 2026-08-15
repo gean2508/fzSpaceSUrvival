@@ -183,6 +183,7 @@ fn spawn_camera_ui(mut commands: Commands) {
             },
             BorderColor(Color::srgba(0.5, 0.8, 1.0, 0.8)),
             BackgroundColor(Color::srgba(0.05, 0.10, 0.16, 0.85)),
+            crate::game_ui::GameplayUi,
         ))
         .with_children(|p| {
             p.spawn((

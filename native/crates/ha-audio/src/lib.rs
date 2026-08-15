@@ -3,7 +3,7 @@
 //! y el editor de sonido de `ha-asset-tools` (edita/escucha/guarda el JSON).
 //!
 //! Sin deps de Bevy: todo devuelve buffers `f32` o bytes WAV.
-//! Diseño: `PLAN_EDITOR_SONIDO.md` (raíz del repo).
+//! Diseño: `biblia.md` §7.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -455,7 +455,7 @@ pub fn wav_bytes(rate: u32, buf: &[f32]) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// Defaults — transcripción 1:1 del diseño original (PLAN_SONIDO.md)
+// Defaults — transcripción 1:1 del diseño original (biblia.md §7)
 // ---------------------------------------------------------------------------
 
 fn t(wave: Wave, at: f32, dur: f32, f0: f32, f1: f32, amp: f32, attack: f32, vibrato: f32) -> ToneOp {
@@ -547,6 +547,20 @@ impl AudioSpec {
         put("pickup", sfx(0.14, vec![
             t(Square, 0.0, 0.05, 880.0, 880.0, 0.2, 0.05, 0.0),
             t(Square, 0.06, 0.07, 1320.0, 1320.0, 0.2, 0.05, 0.0),
+        ]));
+        // TREPAR un bordillo: raspón de tela y grava contra el borde. Todo ruido
+        // con ataque lento — un tono definido sonaría a "objeto", y esto es
+        // fricción. El retumbe grave por debajo es el peso del cuerpo subiendo.
+        put("climb_ledge", sfx(0.22, vec![
+            t(Noise, 0.0, 0.16, 0.0, 0.0, 0.20, 0.35, 0.0),
+            t(Sine, 0.05, 0.12, 150.0, 210.0, 0.16, 0.30, 0.0),
+        ]));
+        // DESCOLGARSE: golpe seco de los dos pies. Grave que cae rápido + el
+        // chasquido de la grava encima; más corto y más fuerte que trepar, que es
+        // lo que separa "me dejé caer" de "subí a pulso".
+        put("drop_ledge", sfx(0.2, vec![
+            t(Sine, 0.0, 0.14, 130.0, 55.0, 0.42, 0.01, 0.0),
+            t(Noise, 0.0, 0.07, 0.0, 0.0, 0.22, 0.02, 0.0),
         ]));
 
         // Loop de empuje: ruido+retumbe → paso-bajo → crossfade circular.

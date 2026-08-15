@@ -47,7 +47,7 @@ enum Sel {
     Track(usize),
 }
 
-struct SoundApp {
+pub(crate) struct SoundApp {
     path: String,
     spec: AudioSpec,
     defaults: AudioSpec,
@@ -64,7 +64,7 @@ struct SoundApp {
 }
 
 impl SoundApp {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let defaults = AudioSpec::default_spec();
         let (spec, status) = match std::fs::read_to_string(DEFAULT_PATH) {
             Ok(s) => match AudioSpec::from_json(&s) {
@@ -152,6 +152,14 @@ impl SoundApp {
 
 impl eframe::App for SoundApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.ui(ctx);
+    }
+}
+
+impl SoundApp {
+    /// Dibuja este espacio de trabajo. Lo llama el shell del Studio
+    /// (`studio.rs`) o `eframe` cuando el editor corre solo.
+    pub(crate) fn ui(&mut self, ctx: &egui::Context) {
         self.top_bar(ctx);
         self.left_list(ctx);
         self.central(ctx);
@@ -199,7 +207,7 @@ const MOODS: [(&str, &str); 3] = [
 
 impl SoundApp {
     fn top_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("bar").show(ctx, |ui| {
+        egui::TopBottomPanel::top("sound_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("🎛 Editor de sonido");
                 ui.separator();

@@ -61,17 +61,32 @@ struct HeldItemVisualState {
 /// icono: mismo `Light2d` que usan las antorchas colocadas en el mundo.
 pub fn item_light(item_id: &str) -> Option<Light2d> {
     match item_id {
-        "torch" => Some(Light2d {
-            color: Color::srgb(1.0, 0.72, 0.34),
-            radius: 7.0,
-            intensity: 1.15,
-            flicker: 0.75,
-            ..default()
-        }),
+        // Las antorchas salen del MISMO catálogo que las colocables
+        // (`torches::TORCH_VARIANTS`), no de una tabla paralela: si el color de
+        // la azul en la mano no fuera el de la azul clavada en la pared, el
+        // jugador vería cambiar la luz al soltarla. Una sola fuente de verdad.
+        //
+        // Los radios son en metros y el pozo real mide `radius * LIGHT_REACH`
+        // (×1.5), así que el 7.0 de antes daba 18 m de charco: a zoom de
+        // caminata ocupaba la pantalla ENTERA y no quedaba noche contra la cual
+        // notar la antorcha.
+        id if crate::torches::torch_variant(id).is_some() => {
+            let v = crate::torches::torch_variant(id)?;
+            Some(Light2d {
+                color: v.color,
+                radius: v.radius,
+                intensity: 1.15,
+                flicker: v.flicker,
+                ..default()
+            })
+        }
+        // La linterna es la luz MÁS generosa del juego (por eso se craftea), pero
+        // "generosa" son ~7 m de pozo, no media pantalla: su gracia es que ves
+        // dónde pisás, no que desaparezca la noche.
         "lantern" => Some(Light2d {
             color: Color::srgb(1.0, 0.86, 0.55),
-            radius: 9.0,
-            intensity: 1.3,
+            radius: 4.6,
+            intensity: 1.15,
             flicker: 0.25,
             ..default()
         }),
@@ -107,9 +122,10 @@ fn sync_light_item_equipped(
     }
     let emits = item_light(&equipped.item_id).is_some();
     ctrl.equipped = emits;
-    if emits {
-        ctrl.lit = true;
-    }
+    // `lit` se apaga al guardar la luz. Antes sólo se encendía: equipar una
+    // antorcha una vez y volver al puño dejaba el flag en `true` para siempre, y
+    // el HUD mostraba el botón LAMP encendido sin nada en la mano.
+    ctrl.lit = emits;
 }
 
 fn sync_held_item_visual(
@@ -147,11 +163,15 @@ fn sync_held_item_visual(
 
     // Arte del pack primero (`assets/art/items/<id>.png`, ya transparente); si
     // no hay, el icono procedural SIN el cuadrado de fondo.
-    let image = art
-        .get(&format!("items/{want}"))
-        .unwrap_or_else(|| icons.hand_sprite(want, &mut images));
-    let mut sprite = Sprite::from_image(image);
-    sprite.custom_size = Some(Vec2::splat(HELD_SIZE));
+    let size = Vec2::splat(HELD_SIZE);
+    // **La animación viaja con el sprite.** Un slot con tira (el farol encendido)
+    // no lleva recorte propio: el recorte lo pone `ArtAnimated` cuadro a cuadro.
+    // Tirarla acá no dejaba el ítem quieto, dejaba la TIRA ENTERA metida en el
+    // cuadrito de la mano — todos los cuadros a la vez.
+    let (mut sprite, anim) = art
+        .world_sprite(&format!("items/{want}"), size)
+        .unwrap_or_else(|| (icons.hand_icon(want, &mut images).sprite(size), None));
+    sprite.custom_size = Some(size);
 
     let mut entity = commands.spawn((
         HeldItemVisual,
@@ -159,6 +179,9 @@ fn sync_held_item_visual(
         Transform::from_xyz(0.0, 0.0, 0.02),
         Name::new(format!("HeldItem_{want}")),
     ));
+    if let Some(a) = anim {
+        entity.insert(a);
+    }
     if let Some(light) = item_light(want) {
         entity.insert(light);
     }

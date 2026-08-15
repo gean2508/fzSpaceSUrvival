@@ -63,16 +63,18 @@ impl Plugin for ChestsPlugin {
                 Update,
                 (
                     place_chest_on_hold,
-                    open_chest_on_hold.after(place_chest_on_hold),
+                    use_or_pick_up_chest.after(place_chest_on_hold),
                     sync_chest_visuals,
                     animate_chest_art.after(sync_chest_visuals),
                     close_chest_when_far,
                     chest_panel_lifecycle,
                     scroll_chest_panel,
+                    tick_chest_press,
                     chest_slot_tap_system.after(scroll_chest_panel),
                     player_slot_tap_system.after(scroll_chest_panel),
                     chest_panel_buttons,
                     update_chest_slot_visuals,
+                    update_split_bar.after(tick_chest_press),
                     debounced_chests_save,
                 ),
             );
@@ -125,12 +127,20 @@ enum PressedSlot {
 /// Píxeles de arrastre que convierten un toque en "estaba haciendo scroll".
 const PRESS_DRAG_CANCEL_PX: f32 = 12.0;
 
+/// A partir de acá el toque deja de ser "pasá todo" y empieza a MEDIR.
+const SPLIT_HOLD_SECS: f32 = 0.22;
+/// Cuánto tarda la barra en recorrer la pila entera desde que empieza a medir.
+/// 1.1 s es suficiente para soltar donde querés sin que se sienta lento.
+const SPLIT_SWEEP_SECS: f32 = 1.1;
+
 /// Panel abierto y sobre qué cofre.
 #[derive(Resource, Default)]
 pub struct ChestPanelState {
     pub open_uid: Option<u32>,
     pressed: Option<PressedSlot>,
     press_drag: f32,
+    /// Segundos que lleva el dedo apoyado en `pressed`.
+    press_secs: f32,
 }
 
 impl ChestPanelState {
@@ -146,12 +156,46 @@ impl ChestPanelState {
         self.pressed = None;
         let ok = self.press_drag < PRESS_DRAG_CANCEL_PX;
         self.press_drag = 0.0;
+        self.press_secs = 0.0;
         ok
     }
 
     fn begin_press(&mut self, slot: PressedSlot) {
         self.pressed = Some(slot);
         self.press_drag = 0.0;
+        self.press_secs = 0.0;
+    }
+
+    /// Fracción de la pila que se está seleccionando ahora mismo en `slot`
+    /// (`None` = todavía es un toque simple, o el dedo está en otro lado).
+    fn split_fraction(&self, slot: PressedSlot) -> Option<f32> {
+        if self.pressed != Some(slot) || self.press_secs < SPLIT_HOLD_SECS {
+            return None;
+        }
+        Some(((self.press_secs - SPLIT_HOLD_SECS) / SPLIT_SWEEP_SECS).clamp(0.0, 1.0))
+    }
+}
+
+/// **Cuántas unidades mueve este gesto.**
+///
+/// - **Toque** (soltás rápido) → la pila ENTERA. Es el 90 % de las veces:
+///   vaciar el cofre no puede costar una ceremonia.
+/// - **Mantener** → una barra recorre la pila de 1 hasta el total y soltás donde
+///   quieras. Empieza en 1 a propósito: "quiero sacar UN palito" es justo lo que
+///   no se podía hacer, y es lo primero que ofrece el gesto.
+///
+/// Un solo gesto continuo cubre 1, la mitad y todo, sin diálogos ni un modo
+/// aparte que haya que recordar.
+fn split_qty(total: u32, fraction: Option<f32>) -> u32 {
+    match fraction {
+        None => total,
+        Some(f) => {
+            if total <= 1 {
+                return total;
+            }
+            // 1 … total, redondeando al más cercano.
+            (1.0 + f * (total - 1) as f32).round().clamp(1.0, total as f32) as u32
+        }
     }
 }
 
@@ -167,6 +211,7 @@ fn place_chest_on_hold(
     mut hold: ResMut<HoldInteractState>,
     equipped: Res<EquippedItem>,
     ctx: PlacementCtx,
+    cursor: Res<crate::input::AimCursor>,
     player: Query<&SimState, With<Player>>,
     mut world: ResMut<ChestWorld>,
     mut inv: ResMut<PlayerInventory>,
@@ -193,8 +238,10 @@ fn place_chest_on_hold(
         return;
     }
 
-    let x = sim.body.x + sim.body.rot.cos() * 2.0;
-    let z = sim.body.z + sim.body.rot.sin() * 2.0;
+    // **Donde tocaste.** Con la mira vieja el cofre caía "dos metros al frente" y
+    // orientarse era girar el personaje; ahora el punto lo elegís con el dedo.
+    // Sin toque válido (mando, atajo) se planta al frente como siempre.
+    let (x, z) = crate::input::place_point(&cursor, sim, 2.0);
     let uid = world.next_uid;
     world.next_uid += 1;
     world.placed.push(LocalChest {
@@ -236,23 +283,63 @@ fn remove_from_ui_slots(state: &mut InventoryUiState, item_id: &str, qty: u32) {
 
 // --- Abrir / cerrar -----------------------------------------------------------
 
-fn open_chest_on_hold(
+/// **Un objeto colocado tiene dos verbos, y el gesto los separa solo.**
+///
+/// - **Toque** → lo USÁS (el cofre se abre).
+/// - **Mantener** → lo LEVANTÁS: vuelve a tu mochila y lo volvés a plantar donde
+///   quieras.
+///
+/// Es la misma gramática con la que ya picás un bloque, así que no hay nada
+/// nuevo que aprender: tocar es interactuar, mantener es desarmar. Antes ABRIR
+/// era el mantenido y no existía forma de recuperar un cofre mal puesto sin
+/// vaciarlo y buscarle el botón dentro del panel.
+///
+/// El cofre sólo se levanta VACÍO: si se llevara su contenido, el inventario
+/// tendría que representar "un cofre con cosas adentro" y no puede — y perder
+/// lo guardado por un gesto sería imperdonable. Con cosas dentro se avisa.
+fn use_or_pick_up_chest(
     mut hold: ResMut<HoldInteractState>,
     target: Res<LookTarget>,
     targets: Query<&InteractTarget>,
     mut panel: ResMut<ChestPanelState>,
+    mut world: ResMut<ChestWorld>,
+    mut inv_ui: ResMut<InventoryUiState>,
+    mut inv: ResMut<PlayerInventory>,
+    mut persist: ResMut<InventoryPersistState>,
 ) {
-    if !hold.completed || target.kind != Some(InteractTargetKind::Chest) {
+    if target.kind != Some(InteractTargetKind::Chest) {
         return;
     }
-    hold.completed = false;
-    let Some(entity) = target.entity else {
+    let tapped = std::mem::take(&mut hold.tapped);
+    let held = hold.completed;
+    if !tapped && !held {
         return;
-    };
-    let Ok(t) = targets.get(entity) else {
+    }
+    if held {
+        hold.completed = false;
+    }
+    let Some(entity) = target.entity else { return };
+    let Ok(t) = targets.get(entity) else { return };
+
+    if tapped {
+        panel.open_uid = Some(t.id);
         return;
-    };
-    panel.open_uid = Some(t.id);
+    }
+    // Mantenido: levantar.
+    let Some(chest) = world.get(t.id) else { return };
+    // Con cosas dentro no se levanta (se perderían) y con la mochila llena
+    // tampoco (no habría dónde ponerlo): en los dos casos el cofre se queda
+    // donde está, que es lo único que no puede salir mal.
+    if !chest.is_empty() || add_item_to_slots_rest(&mut inv_ui, CHEST_ITEM, 1) != 0 {
+        return;
+    }
+    world.placed.retain(|c| c.uid != t.id);
+    world.dirty = true;
+    if panel.open_uid == Some(t.id) {
+        panel.open_uid = None;
+    }
+    flush_slots_to_inventory(&inv_ui, &mut inv);
+    persist.mark_dirty();
 }
 
 /// Alejarse (o perder el cofre) cierra el panel: nunca queda una UI apuntando a
@@ -317,34 +404,50 @@ fn sync_chest_visuals(
         // Con arte de poses (`closed`/`open` en el editor) arrancamos cerrado y
         // `animate_chest_art` se encarga de la transición; si no, la imagen del
         // slot entero (o el icono procedural) como siempre.
+        let mut anim = None;
+        // **El cofre mide lo que mide su recorte.** Estaba clavado en 1,1 m —un
+        // número elegido a ojo— cuando su arte es de una celda del pack, o sea 1,5
+        // m. Un cofre más chico que su pixel no es un cofre más discreto: es el
+        // mundo entero a escalas distintas (ver `ArtLibrary::tamano_real`).
+        let medida = art.tamano_real(CHEST_ART, Some("closed"), Vec2::splat(1.1));
         let mut sprite = art
-            .pose_sprite(CHEST_ART, "closed", Vec2::splat(1.1))
+            .pose_sprite(CHEST_ART, "closed", medida)
             .unwrap_or_else(|| {
-                let image = art
-                    .get(CHEST_ART)
-                    .unwrap_or_else(|| icons.get(CHEST_ITEM, &mut images));
-                Sprite::from_image(image)
+                // `world_sprite` respeta el recorte de atlas del slot; con el
+                // handle a secas se dibujaba la hoja entera. Y la animación va
+                // CON el sprite: un slot con tira no lleva recorte propio (lo
+                // pone `ArtAnimated` cuadro a cuadro), así que soltarla dibujaría
+                // todos los cuadros a la vez encima del cofre.
+                match art.world_sprite(CHEST_ART, medida) {
+                    Some((s, a)) => {
+                        anim = a;
+                        s
+                    }
+                    None => icons.icon(CHEST_ITEM, &mut images).sprite(medida),
+                }
             });
-        sprite.custom_size = Some(Vec2::splat(1.1));
+        sprite.custom_size = Some(medida);
         let r = render_xy(c.x, c.z);
-        commands
-            .spawn((
-                sprite,
-                Transform::from_xyz(r.x, r.y + 0.35, sort_z(c.z)),
-                ChestEntity { uid: c.uid },
-                ChestArt { open: false },
-                InteractTarget {
-                    kind: InteractTargetKind::Chest,
-                    id: c.uid,
-                },
-                Name::new(format!("Chest_{}", c.uid)),
-            ))
-            .with_children(|p| {
-                p.spawn((
-                    Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.25), Vec2::new(1.0, 0.32)),
-                    Transform::from_xyz(0.0, -0.55, -0.05),
-                ));
-            });
+        let mut ent = commands.spawn((
+            sprite,
+            Transform::from_xyz(r.x, r.y + 0.35, sort_z(c.z)),
+            ChestEntity { uid: c.uid },
+            ChestArt { open: false },
+            InteractTarget {
+                kind: InteractTargetKind::Chest,
+                id: c.uid,
+            },
+            Name::new(format!("Chest_{}", c.uid)),
+        ));
+        if let Some(a) = anim {
+            ent.insert(a);
+        }
+        ent.with_children(|p| {
+            p.spawn((
+                Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.25), Vec2::new(1.0, 0.32)),
+                Transform::from_xyz(0.0, -0.55, -0.05),
+            ));
+        });
     }
 }
 
@@ -376,7 +479,7 @@ fn animate_chest_art(
         s.custom_size = sprite.custom_size;
         *sprite = s;
         match art.pose(CHEST_ART, pose).and_then(|(_, a)| a) {
-            Some(anim) => commands.entity(e).insert(anim.once()),
+            Some(anim) => commands.entity(e).try_insert(anim.once()),
             None => commands.entity(e).remove::<ArtAnimated>(),
         };
     }
@@ -410,6 +513,15 @@ struct ChestCloseButton;
 #[derive(Component)]
 struct ChestTakeAllButton;
 
+/// El simétrico de "sacar todo": volcar la mochila entera al cofre. Faltaba, y
+/// es la mitad del trabajo que se hace frente a un cofre.
+#[derive(Component)]
+struct ChestStoreAllButton;
+
+/// Barra de fracción que se dibuja SOBRE la celda mientras mantenés pulsado.
+#[derive(Component)]
+struct ChestSplitBar;
+
 #[derive(Component)]
 struct ChestPickUpButton;
 
@@ -437,12 +549,33 @@ fn chest_panel_lifecycle(
     spawn_chest_panel(&mut commands, root_e, &layout);
 }
 
+/// **El panel del cofre: dos columnas, no una torre.**
+///
+/// Antes era todo VERTICAL —cofre arriba, mochila abajo, y a hacer scroll—, y
+/// eso rompe lo único que importa en una pantalla de transferencia: **ver los
+/// dos lados a la vez**. Sin eso no sabés si te cabe lo que estás moviendo ni
+/// qué te falta guardar, y cada intercambio cuesta dos scrolls.
+///
+/// Ahora: **MOCHILA a la izquierda, COFRE a la derecha**, lado a lado, con las
+/// acciones abajo. En vertical (celular de pie) las dos columnas se estrechan
+/// pero siguen siendo dos: es preferible una celda más chica a perder de vista
+/// la mitad del intercambio.
 fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout) {
     let short = layout.width.min(layout.height);
-    let cell = (short * 0.11).clamp(38.0, 62.0);
     let gap = (short * 0.012).clamp(3.0, 7.0);
     let font = (short * 0.032).clamp(10.0, 15.0);
-    let panel_w = (cell * CHEST_COLS as f32) + gap * (CHEST_COLS as f32 + 3.0);
+    // El ancho manda: dos rejillas de `CHEST_COLS` más los aires tienen que
+    // entrar en la pantalla. La celda se calcula para eso en vez de ser fija.
+    let avail = layout.width - short * 0.10;
+    let cell = ((avail - gap * (CHEST_COLS as f32 * 2.0 + 8.0)) / (CHEST_COLS as f32 * 2.0))
+        .clamp(30.0, 62.0);
+    let col_w = cell * CHEST_COLS as f32 + gap * (CHEST_COLS as f32 + 1.0);
+    let panel_w = col_w * 2.0 + gap * 5.0;
+
+    let player_slots: Vec<SlotId> = (0..HOTBAR_ITEM_SLOTS)
+        .map(SlotId::Hotbar)
+        .chain((0..GRID_LEN).map(SlotId::Grid))
+        .collect();
 
     commands.entity(root).with_children(|p| {
         p.spawn((
@@ -450,9 +583,9 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(crate::game_ui::ui_center_left(layout, panel_w)),
-                top: Val::Px(layout.insets.top as f32 + short * 0.06),
+                top: Val::Px(layout.insets.top as f32 + short * 0.05),
                 width: Val::Px(panel_w),
-                max_height: Val::Px(layout.height - short * 0.18),
+                max_height: Val::Px(layout.height - short * 0.16),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(gap),
                 padding: UiRect::all(Val::Px(gap * 1.6)),
@@ -465,79 +598,105 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
             ScrollPosition::default(),
             Name::new("ChestPanel"),
         ))
-        .with_children(|panel| {
+        .with_children(|scroll| {
+            // Un solo hijo que envuelve todo: es lo que se MIDE para saber hasta
+            // dónde llega el scroll (ver `hud::ScrollContent`).
+            scroll
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(gap),
+                        ..default()
+                    },
+                    crate::hud::ScrollContent,
+                ))
+                .with_children(|panel| {
             panel.spawn((
-                Text::new("COFRE"),
-                TextFont {
-                    font_size: font * 1.15,
-                    ..default()
-                },
-                TextColor(ui_theme::text_primary()),
-            ));
-            panel.spawn((
-                Text::new("Toca una pila para moverla cofre <-> mochila"),
-                TextFont {
-                    font_size: font * 0.8,
-                    ..default()
-                },
+                Text::new("Toca una pila para moverla entera | manten pulsado para elegir cuantas"),
+                TextFont { font_size: font * 0.8, ..default() },
                 TextColor(ui_theme::text_muted()),
             ));
 
-            // Rejilla del cofre.
-            for row in 0..CHEST_ROWS {
-                panel
-                    .spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        column_gap: Val::Px(gap),
-                        ..default()
-                    })
-                    .with_children(|r| {
-                        for col in 0..CHEST_COLS {
-                            let index = row * CHEST_COLS + col;
-                            spawn_cell(r, cell, font, ChestSlotButton { index });
-                        }
-                    });
-            }
-
-            panel.spawn((
-                Text::new("MOCHILA"),
-                TextFont {
-                    font_size: font,
+            // ── Las dos columnas ──────────────────────────────────────────
+            panel
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(gap * 3.0),
                     ..default()
-                },
-                TextColor(ui_theme::text_primary()),
-            ));
-
-            // Inventario del jugador: hotbar primero, luego el grid.
-            let player_slots: Vec<SlotId> = (0..HOTBAR_ITEM_SLOTS)
-                .map(SlotId::Hotbar)
-                .chain((0..GRID_LEN).map(SlotId::Grid))
-                .collect();
-            for chunk in player_slots.chunks(CHEST_COLS) {
-                panel
-                    .spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        column_gap: Val::Px(gap),
+                })
+                .with_children(|cols| {
+                    // IZQUIERDA: la mochila del jugador.
+                    cols.spawn(Node {
+                        width: Val::Px(col_w),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(gap),
                         ..default()
                     })
-                    .with_children(|r| {
-                        for slot in chunk {
-                            spawn_cell(r, cell, font, ChestPlayerSlotButton { slot: *slot });
+                    .with_children(|c| {
+                        c.spawn((
+                            Text::new("MOCHILA"),
+                            TextFont { font_size: font * 1.05, ..default() },
+                            TextColor(ui_theme::text_primary()),
+                        ));
+                        for chunk in player_slots.chunks(CHEST_COLS) {
+                            c.spawn(Node {
+                                flex_direction: FlexDirection::Row,
+                                column_gap: Val::Px(gap),
+                                ..default()
+                            })
+                            .with_children(|r| {
+                                for slot in chunk {
+                                    spawn_cell(r, cell, font, ChestPlayerSlotButton { slot: *slot });
+                                }
+                            });
                         }
                     });
-            }
 
+                    // DERECHA: el cofre.
+                    cols.spawn(Node {
+                        width: Val::Px(col_w),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(gap),
+                        ..default()
+                    })
+                    .with_children(|c| {
+                        c.spawn((
+                            Text::new("COFRE"),
+                            TextFont { font_size: font * 1.05, ..default() },
+                            TextColor(ui_theme::text_primary()),
+                        ));
+                        for row in 0..CHEST_ROWS {
+                            c.spawn(Node {
+                                flex_direction: FlexDirection::Row,
+                                column_gap: Val::Px(gap),
+                                ..default()
+                            })
+                            .with_children(|r| {
+                                for col in 0..CHEST_COLS {
+                                    let index = row * CHEST_COLS + col;
+                                    spawn_cell(r, cell, font, ChestSlotButton { index });
+                                }
+                            });
+                        }
+                    });
+                });
+
+            // ── Acciones ──────────────────────────────────────────────────
             panel
                 .spawn(Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(gap),
                     margin: UiRect::top(Val::Px(gap * 2.0)),
+                    justify_content: JustifyContent::Center,
                     ..default()
                 })
                 .with_children(|r| {
-                    spawn_text_button(r, "VACIAR", font, ChestTakeAllButton);
+                    spawn_text_button(r, "GUARDAR TODO ->", font, ChestStoreAllButton);
+                    spawn_text_button(r, "<- SACAR TODO", font, ChestTakeAllButton);
                     spawn_text_button(r, "RECOGER", font, ChestPickUpButton);
                     spawn_text_button(r, "CERRAR", font, ChestCloseButton);
+                });
                 });
         });
     });
@@ -587,6 +746,21 @@ fn spawn_cell<M: Component>(parent: &mut ChildBuilder, cell: f32, font: f32, mar
                     ..default()
                 },
                 ChestSlotQty,
+            ));
+            // Barra de fracción: crece de abajo hacia arriba mientras mantenés
+            // pulsado. Es el feedback que convierte "mantener" en algo que se
+            // puede APUNTAR en vez de adivinar.
+            slot.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    bottom: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(0.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.35, 0.85, 1.0, 0.0)),
+                ChestSplitBar,
             ));
         });
 }
@@ -657,6 +831,8 @@ fn chest_slot_tap_system(
             panel.begin_press(PressedSlot::Chest(slot.index));
             continue;
         }
+        // La fracción se lee ANTES de `take_tap`, que resetea el reloj.
+        let fraction = panel.split_fraction(PressedSlot::Chest(slot.index));
         if !panel.take_tap(PressedSlot::Chest(slot.index)) {
             continue;
         }
@@ -670,18 +846,21 @@ fn chest_slot_tap_system(
             continue;
         }
         let id = stack.item_id.clone().unwrap();
+        // Cuánto pidió el gesto: toque = todo, mantener = lo que marcó la barra.
+        let want = split_qty(stack.qty, fraction);
         // Sólo se descuenta del cofre lo que REALMENTE entró en la mochila: si
         // está llena, el resto se queda en el cofre en vez de evaporarse.
-        let rest = add_item_to_slots_rest(&mut inv_ui, &id, stack.qty);
-        if rest == stack.qty {
+        let rest = add_item_to_slots_rest(&mut inv_ui, &id, want);
+        if rest == want {
             continue; // mochila llena
         }
-        chest.slots[slot.index] = if rest == 0 {
+        let left = stack.qty - (want - rest);
+        chest.slots[slot.index] = if left == 0 {
             Stack::default()
         } else {
             Stack {
                 item_id: Some(id),
-                qty: rest,
+                qty: left,
             }
         };
         world.dirty = true;
@@ -706,6 +885,7 @@ fn player_slot_tap_system(
             panel.begin_press(PressedSlot::Player(slot.slot));
             continue;
         }
+        let fraction = panel.split_fraction(PressedSlot::Player(slot.slot));
         if !panel.take_tap(PressedSlot::Player(slot.slot)) {
             continue;
         }
@@ -716,12 +896,79 @@ fn player_slot_tap_system(
         if stack.is_empty() {
             continue;
         }
-        let leftover = insert_into_chest(chest, stack);
-        if leftover.is_empty() {
-            *player_stack_mut(&mut inv_ui, slot.slot) = Stack::default();
-            world.dirty = true;
-            flush_slots_to_inventory(&inv_ui, &mut inv);
-            persist.mark_dirty();
+        // Mover una PARTE: se manda lo pedido y lo que sobra se queda en la
+        // mano. Si el cofre está lleno, vuelve lo que no entró — nada se pierde
+        // en el camino, que es la regla de todo este panel.
+        let want = split_qty(stack.qty, fraction);
+        let id = stack.item_id.clone();
+        let leftover = insert_into_chest(
+            chest,
+            Stack { item_id: id.clone(), qty: want },
+        );
+        let moved = want - leftover.qty;
+        if moved == 0 {
+            continue;
+        }
+        let left = stack.qty - moved;
+        *player_stack_mut(&mut inv_ui, slot.slot) = if left == 0 {
+            Stack::default()
+        } else {
+            Stack { item_id: id, qty: left }
+        };
+        world.dirty = true;
+        flush_slots_to_inventory(&inv_ui, &mut inv);
+        persist.mark_dirty();
+    }
+}
+
+/// Reloj de la pulsación: alimenta la barra de fracción. Vive aparte porque
+/// `Interaction` sólo avisa de los CAMBIOS, y mantener el dedo quieto no genera
+/// ninguno — sin este tick la barra nunca avanzaría.
+fn tick_chest_press(time: Res<Time>, mut panel: ResMut<ChestPanelState>) {
+    if panel.pressed.is_some() {
+        panel.press_secs += time.delta_secs();
+    }
+}
+
+/// Pinta la barra de fracción sobre la celda que estás manteniendo y muestra
+/// cuántas unidades se van a mover si soltás AHORA.
+fn update_split_bar(
+    panel: Res<ChestPanelState>,
+    world: Res<ChestWorld>,
+    inv_ui: Res<InventoryUiState>,
+    mut bars: Query<(&mut Node, &mut BackgroundColor, &Parent), With<ChestSplitBar>>,
+    chest_slots: Query<&ChestSlotButton>,
+    player_slots: Query<&ChestPlayerSlotButton>,
+) {
+    for (mut node, mut bg, parent) in &mut bars {
+        let cell = parent.get();
+        let slot = if let Ok(c) = chest_slots.get(cell) {
+            PressedSlot::Chest(c.index)
+        } else if let Ok(p) = player_slots.get(cell) {
+            PressedSlot::Player(p.slot)
+        } else {
+            continue;
+        };
+        let f = panel.split_fraction(slot);
+        let total = match slot {
+            PressedSlot::Chest(i) => panel
+                .open_uid
+                .and_then(|uid| world.get(uid))
+                .and_then(|c| c.slots.get(i))
+                .map(|s| s.qty)
+                .unwrap_or(0),
+            PressedSlot::Player(s) => player_stack(&inv_ui, s).qty,
+        };
+        match f.filter(|_| total > 1) {
+            Some(f) => {
+                let q = split_qty(total, Some(f));
+                node.height = Val::Percent(100.0 * q as f32 / total as f32);
+                bg.0 = Color::srgba(0.35, 0.85, 1.0, 0.45);
+            }
+            None => {
+                node.height = Val::Percent(0.0);
+                bg.0 = Color::srgba(0.35, 0.85, 1.0, 0.0);
+            }
         }
     }
 }
@@ -749,6 +996,7 @@ fn chest_panel_buttons(
     mut persist: ResMut<InventoryPersistState>,
     close: Query<&Interaction, (With<ChestCloseButton>, Changed<Interaction>)>,
     take_all: Query<&Interaction, (With<ChestTakeAllButton>, Changed<Interaction>)>,
+    store_all: Query<&Interaction, (With<ChestStoreAllButton>, Changed<Interaction>)>,
     pick_up: Query<&Interaction, (With<ChestPickUpButton>, Changed<Interaction>)>,
 ) {
     let Some(uid) = panel.open_uid else {
@@ -759,6 +1007,34 @@ fn chest_panel_buttons(
         return;
     }
     let mut changed = false;
+    // GUARDAR TODO: vuelca la mochila entera al cofre. Lo que no entra se queda
+    // donde está — el panel nunca hace desaparecer una pila.
+    if store_all.iter().any(|i| *i == Interaction::Pressed) {
+        if let Some(chest) = world.get_mut(uid) {
+            let slots: Vec<SlotId> = (0..HOTBAR_ITEM_SLOTS)
+                .map(SlotId::Hotbar)
+                .chain((0..GRID_LEN).map(SlotId::Grid))
+                .collect();
+            for s in slots {
+                let stack = player_stack(&inv_ui, s).clone();
+                if stack.is_empty() {
+                    continue;
+                }
+                let leftover = insert_into_chest(chest, stack.clone());
+                let moved = stack.qty - leftover.qty;
+                if moved == 0 {
+                    continue;
+                }
+                let left = stack.qty - moved;
+                *player_stack_mut(&mut inv_ui, s) = if left == 0 {
+                    Stack::default()
+                } else {
+                    Stack { item_id: stack.item_id, qty: left }
+                };
+                changed = true;
+            }
+        }
+    }
     if take_all.iter().any(|i| *i == Interaction::Pressed) {
         if let Some(chest) = world.get_mut(uid) {
             for i in 0..chest.slots.len() {
@@ -827,15 +1103,18 @@ fn update_chest_slot_visuals(
                 stack_q.extend(kids.iter().copied());
             }
             if icon_nodes.get(entity).is_ok() {
-                let handle = if stack.is_empty() {
+                let icon = if stack.is_empty() {
                     icons.empty_slot(&mut images)
                 } else {
-                    icons.get(stack.item_id.as_deref().unwrap_or("wood"), &mut images)
+                    icons.icon(stack.item_id.as_deref().unwrap_or("wood"), &mut images)
                 };
                 if let Ok(mut node) = image_nodes.get_mut(entity) {
-                    node.image = handle;
+                    // El rect va SIEMPRE junto a la imagen: si sólo se cambia el
+                    // handle, el slot se queda con el recorte del ítem anterior.
+                    node.image = icon.image.clone();
+                    node.rect = icon.rect;
                 } else {
-                    commands.entity(entity).insert(ImageNode::new(handle));
+                    commands.entity(entity).try_insert(icon.node());
                 }
             }
             if let Ok(mut text) = qty_texts.get_mut(entity) {
@@ -867,7 +1146,8 @@ fn scroll_chest_panel(
     mut panel: ResMut<ChestPanelState>,
     touches: Res<Touches>,
     mut wheel: EventReader<bevy::input::mouse::MouseWheel>,
-    mut sections: Query<&mut ScrollPosition, With<ChestPanelRoot>>,
+    mut sections: Query<(&mut ScrollPosition, &ComputedNode, &Children), With<ChestPanelRoot>>,
+    contents: Query<&ComputedNode, With<crate::hud::ScrollContent>>,
 ) {
     if !panel.is_open() {
         wheel.clear();
@@ -888,9 +1168,17 @@ fn scroll_chest_panel(
     if dy.abs() < 0.5 {
         return;
     }
-    for mut sp in &mut sections {
-        // Cota generosa: 5 filas de cofre + 10 de mochila + cabecera/botones.
-        sp.offset_y = (sp.offset_y + dy).clamp(0.0, 1200.0);
+    for (mut sp, view, children) in &mut sections {
+        // El tope sale de MEDIR el contenido, no de una cota "generosa": era
+        // `1200.0`, y con la mochila llena el último tramo del cofre no se
+        // alcanzaba. `ComputedNode::size()` es físico y `ScrollPosition` lógico.
+        let view_h = view.size().y * view.inverse_scale_factor();
+        let content_h = children
+            .iter()
+            .filter_map(|c| contents.get(*c).ok())
+            .map(|c| c.size().y * c.inverse_scale_factor())
+            .fold(0.0f32, f32::max);
+        sp.offset_y = (sp.offset_y + dy).clamp(0.0, crate::hud::max_scroll(view_h, content_h));
     }
 }
 

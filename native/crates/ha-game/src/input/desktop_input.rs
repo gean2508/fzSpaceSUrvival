@@ -198,10 +198,8 @@ pub fn desktop_hold_interact(
     }
 
     // Released before completion → cancel, same as the touch gesture.
-    if hold.active && !any_pressed && !hold.completed {
-        hold.cancelled = true;
-        hold.active = false;
-        hold.progress_ms = 0;
+    if !any_pressed {
+        hold.release(false);
     }
 }
 
@@ -214,7 +212,7 @@ pub fn desktop_aim_cursor(
     mut cursor: ResMut<super::AimCursor>,
 ) {
     // When the touch UI is forced on desktop, the right stick owns the cursor.
-    if std::env::var("HA_FORCE_TOUCH").is_ok() || cursor.locked {
+    if crate::flags::var("HA_FORCE_TOUCH").is_ok() || cursor.locked {
         return;
     }
     let Ok(win) = window.get_single() else {
@@ -226,7 +224,10 @@ pub fn desktop_aim_cursor(
     let Ok((cam, tf)) = camera.get_single() else {
         return;
     };
-    let Ok(render) = cam.viewport_to_world_2d(tf, sp) else {
+    // Vía `window_to_world_2d` y no `viewport_to_world_2d` a secas: con escala de
+    // render la cámara dibuja contra una imagen más chica que la ventana, y el
+    // cursor viene en píxeles de ventana. Ver `render::scale`.
+    let Some(render) = crate::render::scale::window_to_world_2d(cam, tf, win, sp) else {
         return;
     };
     // Screen (x, -z) → world (x, z).
@@ -240,6 +241,10 @@ pub fn desktop_aim_cursor(
     }
     cursor.world = world;
     cursor.initialized = true;
+    // En escritorio el mouse SIEMPRE está apuntando a algo (no hay "levantar el
+    // dedo"), así que el objetivo se resuelve siempre: es el equivalente exacto
+    // del dedo apoyado del táctil.
+    cursor.active = true;
 }
 
 pub fn desktop_cursor_grab(

@@ -1,39 +1,128 @@
-# Agencia Espacial Survival — AI Guidelines
+# Ki · Mundo Abierto — AI Guidelines
 
-Survival + space exploration: **Colyseus server** + **native Bevy client (2D)** + shared deterministic sim.  
-Product vision: `native/docs/SPACE_SURVIVAL_VISION.md` · context bible: `labiblia.md`.
+Sandbox de role-play 2D top-down 3/4 + vuelo Saiyan (Ki).
+**Servidor Colyseus** + **cliente nativo Bevy (2D)** + sim determinista compartida.
 
-## Status
+## 📖 Documento único: `biblia.md`
 
-Server MVP: authoritative netcode, survival waves, Postgres, auth, `/updates`.
-**Game client:** `native/` (Rust/Bevy ECS, **2D**: superficie Terraria + vuelo SFS — rama `rewrite-2d`; el 3D esférico vive solo en el historial de `main`). React/R3F/Expo **removed**.
+Todo el conocimiento del proyecto vive en **`biblia.md`** (raíz). No hay otros
+`.md`: se consolidaron ahí el 31 jul 2026. Antes de trabajar, leé la sección que
+corresponda:
 
-## Structure
+| Vas a tocar | Leé |
+|---|---|
+| mundo, vuelo, cámara, cielo, transiciones | §4 (marco único) + §5 (mundo) |
+| fauna, NPCs, sociedad, IA frugal | §6 |
+| controles, UI, luz, audio | §7 |
+| assets, sprites, editores | §8 |
+| build / publicar el APK | §9 |
+| render, streaming, FPS, tirones | **§10 — obligatorio antes de optimizar** |
+| tests y drivers de QA | §11 |
+| algo se rompió | §12 |
+| qué falta hacer | §13 |
+| "¿por qué no hacemos X?" | §14 (cementerio) |
+
+Si algo del documento contradice al código, **gana el código** — pero actualizá el
+documento.
+
+## Estructura
 
 ```
-shared/   → deterministic GameSimulation (TS)
-server/   → SurvivalRoom, auth, Drizzle
-client/   → landing download panel only
-native/   → ha-shared (sim constants) + ha-assets (manifest.ron/catálogo) + ha-game (Bevy)
+packages/shared/   Sim determinista (TS) — verdad del servidor
+server/            Colyseus + auth + Postgres + /updates
+client/            Landing ONLY — descarga del APK
+native/            ha-shared · ha-assets · ha-audio · iafz-sys · ha-game (Bevy) · ha-asset-tools (HA Studio)
 ```
 
-## Commands
+## Comandos
 
 ```bash
-npm install
-npm run play              # ship APK + server + landing — user opens URL on phone
-npm run ship:android      # build + publish APK only
-npm run dev:server        # :2567
-npm run test              # shared vitest
-npm run test:native       # ha-shared Rust tests
+./build-y-publicar.sh     # todo: compila APK + publica + sirve (ver biblia §9)
+npm run play              # ídem vía npm
+npm run test              # vitest de shared
+npm run test:native       # cargo test
+npm run validate:arch     # límites de arquitectura
+npm run qa:suite          # drivers de QA
+./editor_assets           # HA Studio (editores)
 ```
 
-## Rules
+## Reglas (detalle en biblia §2)
 
-1. Sim logic only in `/shared` (TS) — native mirrors via `ha-shared`, never fork rules.
-2. Server is authoritative; clients send inputs only.
-3. `VITE_SERVER_HOST` / `HA_SERVER_HOST` for LAN — never hardcode IPs.
-4. Landing stays minimal — no R3F, no game engine in `client/`.
-5. User flow: `npm run play` → URL on phone → download APK → install → play.
-6. **Direction:** juego 2D (Terraria en superficie + Space Flight Simulator en vuelo/planetas) conservando TODO el contenido (survival, máquinas, base lunar, colonos, ship builder). Tierra → naves prefab → off-world → colonos. No orbital physics; objetivo 60 FPS en el Redmi. NO reintroducir render 3D (biblia §1 anti-regresión).
-7. **Assets (sistema data-driven — ver `ASSET_SYSTEM_ARCHITECTURE.md`):** antes de spawnear o referenciar CUALQUIER asset visual (sprites, decoración, muebles, flora, NPCs), leé `native/assets/CATALOGO.md`. Todo asset se referencia por su ID lógico: `AssetSlot { slot_id: "...", asset_id: Some("categoria/id_logico") }`. Los IDs válidos están en la tabla del CATÁLOGO. **NUNCA inventes rects, offsets ni pivotes** — eso vive en `native/assets/manifest.ron` (fuente de verdad), no en el código. Regenerar catálogo tras cada scan/curado: `cargo run -p ha-asset-tools -- catalog --manifest native/assets/manifest.ron --out native/assets/CATALOGO.md`.
+0. **Antes de tocar código, preguntale al grafo.** `graphify-out/` tiene el mapa
+   del repo: `graphify explain "<concepto>"` / `graphify path "A" "B"` ubican el
+   código y sus vecinos sin grepear a ciegas. Al terminar, `graphify update .`
+   para dejarlo al día. Nunca volcar `graph.json` ni `GRAPH_REPORT.md` enteros a
+   la conversación — se consultan, no se leen. Detalle: skill `graphify-first`.
+1. **NO 3D.** Se borró a propósito por perf. No reintroducir nada de §14.
+2. **60 fps del Redmi manda.** Nada nuevo cuesta antes de que haya arte asignado.
+3. Sim determinista sólo en `/shared` (TS), espejada en `ha-shared` (Rust). Nunca
+   bifurcar reglas. Cambio de catálogo → `UPDATE_CATALOG_PARITY=1 npm test`.
+4. Servidor autoritativo, clientes input-only. Sin IPs hardcodeadas
+   (`VITE_SERVER_HOST` / `HA_SERVER_HOST` / `UPDATE_BASE_URL`).
+5. `client/` es sólo la landing — sin motor de juego.
+6. **La UI habla castellano de verdad.** El juego embarca su fuente
+   (`ha-game/assets/fonts/ui.ttf`, ver `fuente.rs`): escribí con acentos, `¿` y
+   `¡`. Lo que esa fuente NO tenga (emoji, `▲`, `←`) sigue saliendo caja, y el
+   test `la_fuente_dibuja_todo_el_texto_de_la_ui` lo caza — esas formas se
+   dibujan como nodos de UI, no como texto. La vieja regla "ASCII-only" quedó
+   sin efecto: era un parche por la fuente pelada de Bevy, no una decisión de
+   diseño.
+7. **Assets por ID lógico.** Antes de spawnear o referenciar cualquier asset visual,
+   mirá el catálogo de slots en `native/crates/ha-assets/src/slots.rs` (fuente de
+   verdad de qué IDs existen y cómo se llaman en castellano). El arte se declara en
+   `native/crates/ha-game/assets/art/manifest.json`, que escriben **los
+   importadores de `scripts/`** y que el usuario revisa desde HA Studio
+   (`./editor_assets`).
+   - **Nunca inventes rects a ojo.** La geometría del recorte sale de un
+     importador que la MIDE y se planta si el pack cambió
+     (`import-suelo-bordes.py` es el ejemplo corto).
+   - **Asignar arte es tarea tuya** (regla 13 de biblia §2, *no human in the
+     loop*). El orden es: buscalo en el pack → derivalo del arte en uso →
+     adaptá lo que el juego pide → **y si nada de eso da, dibujalo y dejá el
+     PNG**. Lo último estuvo prohibido hasta el 14 ago 2026 y dejó de estarlo
+     por decisión del usuario: la prohibición era por CÓMO salían mis dibujos
+     (un color plano), no por dibujar. Ahora el estilo está medido y hay corsé
+     que lo hace cumplir — **skill `pixel-art`, obligatoria antes de generar
+     cualquier gráfico**, con `scripts/lib/pixel.py`. Lo dibujado vive en
+     `art/gen/`, lo comprado en `art/pack/`, y el arte real gana siempre.
+   - **Rects, offsets, pivotes y claves de variante se MIDEN, no se escriben** —
+     los publica el importador o el editor, nunca un número a ojo. Las variantes
+     son `objeto#variante` y se piden con `ArtLibrary::resolved_key(objeto, variante)`
+     o `variant_key_seeded(objeto, celda)`.
+   - Si agregás una pieza colocable, declarale su slot con `label` o falla el test
+     (`every_slot_has_a_human_label`, `slot_audit.rs`).
+   - `native/assets/CATALOGO.md` es un volcado **regenerable** desde el botón
+     "📄 Catálogo" del editor. Sirve de referencia rápida; la verdad es `slots.rs`.
+8. **Antes de colocar algo: ¿es una PIEZA o es un OBJETO? Y después, ¿dónde va?**
+   Medio pack es modular y el que no lo mira pone media cosa en el mundo. El
+   semáforo es poste + calcomanía de lámparas (`*_Mod_*`); la cerca son doce losas
+   de autotile (`Bottom_Left`, `Inner_Corner`, `Pass`…); el galpón es cuerpo +
+   puerta + techo; el seto son tramos de pared. **Una pieza suelta no se siembra
+   nunca** — se compone en un importador (`scripts/import-semaforos.py` es el
+   ejemplo) o se coloca a mano desde el editor.
+   - El pack lo dice en el NOMBRE DEL ARCHIVO. El filtro vive en
+     `scripts/import-pack-masivo.py::MARCAS_MODULARES`; del lado del juego lo
+     cuida el test `ninguna_tabla_siembra_piezas_de_kit`.
+   - Y recién después de saber que va sola, decidí DÓNDE: cada tabla de
+     `pack_siembra.rs` es un sitio (vereda, calzada, parque, patio), y "cerca de
+     gente" quiere decir dentro del casco (`settlement_covering`), no en la misma
+     celda de 2,6 km. Detalle en biblia §8.
+9. **Una transición es un cambio de marco, jamás una cutscene**: no bloquea input ni
+   cámara, no tapa la pantalla.
+10. **No podar la conducta emergente** de fauna/NPCs.
+11. Flujo del usuario: `./build-y-publicar.sh` → URL en el celu → descargar APK →
+    instalar → jugar.
+12. **Probá en el celu ANTES de publicar. Publicar es el plan B.** El Redmi se
+    alcanza por tailnet sin cable, así que no hay excusa para dar por bueno un
+    APK que nadie corrió. El ciclo es:
+
+    ```bash
+    leo-celu conectar   # una vez por sesión
+    leo-celu probar     # instala, lanza, espera, captura y vuelca el log
+    ```
+
+    `probar` devuelve 0 sólo si la app quedó viva, pero **mirá igual la captura**
+    (`/tmp/leo-celu-prueba.png`): un proceso vivo con la pantalla en negro sigue
+    siendo un fallo. Recién si el teléfono no está accesible o la instalación
+    remota falla dos veces, publicás con `./build-y-publicar.sh` para bajarlo a
+    mano. Detalle y modos de falla en biblia §9.

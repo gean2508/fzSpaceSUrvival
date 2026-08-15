@@ -16,9 +16,9 @@ const TAU: f32 = std::f32::consts::TAU;
 
 /// Cuántas rocas tiene el cinturón. Se dibujan como puntos; sólo las que caen
 /// en pantalla cuestan algo.
-pub const ASTEROID_COUNT: usize = 220;
+pub const ASTEROID_COUNT: usize = 560;
 /// Cuántos cometas recorren el sistema.
-pub const COMET_COUNT: usize = 5;
+pub const COMET_COUNT: usize = 9;
 
 /// Radio interior del cinturón (m). Entre Marte (~5.6 M del Sol) y los mundos
 /// jovianos (~6.2 M), que es donde lo pondría cualquiera que mire el mapa.

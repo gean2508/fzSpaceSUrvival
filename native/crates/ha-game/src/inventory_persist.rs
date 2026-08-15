@@ -108,7 +108,7 @@ fn debounced_inventory_save(
 }
 
 pub fn persist_dir() -> PathBuf {
-    if let Ok(path) = std::env::var("HA_UI_LAYOUT_FILE") {
+    if let Ok(path) = crate::flags::var("HA_UI_LAYOUT_FILE") {
         let p = PathBuf::from(path);
         if let Some(parent) = p.parent() {
             if parent != Path::new(".") && parent != Path::new("") {

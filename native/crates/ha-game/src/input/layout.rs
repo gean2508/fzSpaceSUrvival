@@ -21,7 +21,7 @@ pub struct TouchLayout {
     pub move_anchor: Vec2,
     pub aim_anchor: Vec2,
     pub zone_top: f32,
-    /// Left edge of camera zone (MC ~62% look / 38% move split).
+    /// Borde derecho del stick de mover: a partir de acá el toque es MUNDO.
     pub look_min_x: f32,
     pub mid_x: f32,
 }
@@ -58,7 +58,8 @@ const EDGE_PAD_FRAC: f32 = 0.035;
 const STICK_Y_FROM_BOTTOM_FRAC: f32 = 0.13;
 const RADIUS_FRAC: f32 = 0.132;
 const KNOB_RADIUS_FRAC: f32 = 0.044;
-/// MC Bedrock: ~38% move / 62% camera (invisible split, no divider drawn).
+/// MC Bedrock: ~38% para el stick de mover; el resto de la pantalla es mundo
+/// (división invisible, no se dibuja ninguna línea).
 const LOOK_ZONE_FRAC: f32 = 0.38;
 
 pub fn sync_touch_layout(window: Query<&Window, With<PrimaryWindow>>, mut layout: ResMut<TouchLayout>) {
@@ -120,20 +121,10 @@ pub fn sync_touch_layout(window: Query<&Window, With<PrimaryWindow>>, mut layout
     layout.mid_x = layout.look_min_x;
 }
 
-/// Camera zone: right side, full height — touch anywhere here to look (MC Bedrock).
-pub fn touch_in_look_zone(pos: Vec2, layout: &TouchLayout) -> bool {
-    pos.x >= layout.look_min_x
-}
-
-/// Move stick zone: lower-left wedge (below hotbar band, left of camera split).
+/// Zona del stick de mover: cuña inferior izquierda. Todo lo demás es mundo
+/// tocable (ver `input/world_touch.rs`).
 pub fn touch_in_move_zone(pos: Vec2, layout: &TouchLayout) -> bool {
     pos.x < layout.look_min_x && pos.y >= layout.zone_top
-}
-
-/// Scale look sensitivity so 720p-class phones feel like MC pocket edition.
-pub fn look_sensitivity(layout: &TouchLayout) -> f32 {
-    let short = layout.width.min(layout.height).max(320.0);
-    0.0046 * (720.0 / short)
 }
 
 pub fn point_in_rect(x: f32, y: f32, rect: [f32; 4]) -> bool {

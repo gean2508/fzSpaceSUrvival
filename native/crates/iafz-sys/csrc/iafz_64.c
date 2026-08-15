@@ -103,12 +103,17 @@ float think_iafz_64(int id, uint32_t exteroception_32) {
 }
 
 void mutate_iafz_64(int sid, int tid, float rate) {
+    /* FIX: sin esto, un id fuera de rango escribe fuera del arreglo. */
+    if (sid < 0 || sid >= MAX_AGENTS || tid < 0 || tid >= MAX_AGENTS) return;
     if (sid != tid) {
         memcpy(&swarm[tid], &swarm[sid], sizeof(Brain64));
         rng_state[tid] = xorshift64(sid); 
     }
 
-    uint32_t prob = (uint32_t)(rate * 4294967295.0f);
+    /* FIX: 4294967295.0f redondea a 2^32 y el cast a uint32_t es UB. */
+    uint32_t prob = (rate >= 1.0f) ? 0xFFFFFFFFu
+                  : (rate <= 0.0f) ? 0u
+                  : (uint32_t)((double)rate * 4294967296.0);
     for (int i = 0; i < NEURONS; i++) {
         // Capa 1
         if ((uint32_t)xorshift64(tid) < prob) swarm[tid].hidden[i].weights ^= xorshift64(tid);
@@ -158,7 +163,10 @@ void crossover_iafz_64(int p1, int p2, int child) {
 }
 
 void earthquake_iafz_64(int id, int p) {
-    uint32_t prob = (uint32_t)((p/100.0f)*4294967295.0f);
+    if (id < 0 || id >= MAX_AGENTS) return;   /* FIX: mismo agujero que mutate */
+    uint32_t prob = (p >= 100) ? 0xFFFFFFFFu
+                  : (p <= 0)   ? 0u
+                  : (uint32_t)(((double)p/100.0) * 4294967296.0);
     for(int i = 0; i < NEURONS; i++) {
         if((uint32_t)xorshift64(id) < prob) {
             swarm[id].hidden[i].weights   = xorshift64(id);

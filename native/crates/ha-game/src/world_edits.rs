@@ -47,9 +47,32 @@ fn apply_world_edits(
     mut structures: ResMut<BuiltStructures>,
     mut authored: ResMut<crate::world2d::AuthoredDecor>,
     mut decor_free: ResMut<crate::world2d::DecorFreeCells>,
+    art: Res<crate::art2d::ArtLibrary>,
 ) {
     let edits = load_embedded_world_edits();
-    let (mut nt, mut ns) = (0usize, 0usize);
+    // **LAS ZONAS, ANTES QUE NADA.** No estampan nada: le cambian el carácter a
+    // las manzanas que cubren, y el generador de ciudad las consulta desde dentro
+    // (`city::district_at`). Tienen que estar puestas antes de que se genere el
+    // primer chunk, o el pedazo de mundo que ya se generó saldría con el reparto
+    // viejo y el resto con el nuevo.
+    if !edits.zonas.is_empty() {
+        eprintln!("ha-zonas: {} zonas autoradas", edits.zonas.len());
+    }
+    ha_shared::zonas::instalar(ha_shared::zonas::Zonas::new(edits.zonas.clone()));
+    let (mut nt, mut ns, mut ng) = (0usize, 0usize, 0usize);
+    // SOLAR DE LOS ASSETS COLOCADOS, PRIMERO. Un asset con `ground` reemplaza el
+    // terreno de toda su huella, así que plantar una casa deja de ser "dibujar un
+    // sprite encima del bosque": el suelo se adapta al tamaño del asset. Va por la
+    // misma vía que los tiles pintados (`author_tile`), de modo que un solar
+    // autorado y uno pintado son la misma cosa para la colisión, el decor y la
+    // persistencia — y va ANTES para que un camino que pintaste a mano sobre el
+    // solar gane sobre él, que es el orden en que lo dibujaste.
+    for t in edits.stamped_ground() {
+        if let Some(body) = crate::world2d::body_from_u8(t.body) {
+            tiles.author_tile(body, t.z, t.x, t.zc, t.tile);
+            ng += 1;
+        }
+    }
     for t in &edits.tiles {
         if let Some(body) = crate::world2d::body_from_u8(t.body) {
             // `author_tile` y no `place_tile`: respeta la CAPA del edit, pisa
@@ -60,6 +83,11 @@ fn apply_world_edits(
         }
     }
     for s in &edits.structures {
+        // Lo que se quedó sin pixel no entra: dibujaría un quad gris (ver el
+        // mismo filtro en `structures::load_structures_on_startup`).
+        if !art.has_art(&s.art) {
+            continue;
+        }
         structures.add(s.clone());
         ns += 1;
     }
@@ -69,12 +97,17 @@ fn apply_world_edits(
     let nf = free.len();
     decor_free.set(free);
     // Decor autorado (árboles/props colocados en el editor) → recurso que el streaming pinta.
-    let nd = edits.decor.len();
-    authored.0 = edits.decor;
+    let decor: Vec<_> = edits
+        .decor
+        .into_iter()
+        .filter(|d| art.has_art(&d.key))
+        .collect();
+    let nd = decor.len();
+    authored.set(decor);
     if nt > 0 || ns > 0 || nd > 0 {
         eprintln!(
-            "ha-world: autorado aplicado — {nt} tiles, {ns} estructuras, {nd} decor, \
-             {nf} celdas sin decor procedural"
+            "ha-world: autorado aplicado — {nt} tiles, {ng} celdas de solar, {ns} estructuras, \
+             {nd} decor, {nf} celdas sin decor procedural"
         );
     }
 }
