@@ -1158,22 +1158,57 @@ const DISC_TEX_N: usize = 512;
 /// plano, a cambio de 14 ms por frame.
 const DISC_BAKE_ROWS_PER_FRAME: usize = 8;
 
-/// Filas por frame **vigentes**. Es un recurso y no la constante a secas por lo
-/// mismo que `world2d::ChunkBudget`: detrás de la cortina de carga un frame de
-/// 200 ms no es un tirón, es trabajo adelantado, así que ahí se sube
-/// (`loading::boost_budget`) y se vuelve a [`DiscBakeRows::normal`] al entrar.
+/// **Y LAS FILAS SON UN PRESUPUESTO FALSO: lo que hay que acotar es el TIEMPO.**
+///
+/// Una fila cuesta 512 píxeles × 4 muestras de terreno, y **cuánto cuesta una
+/// muestra de terreno no es una constante del juego**: cambia con el build
+/// (release/debug), con la máquina y con si el sitio tiene relieve, río o
+/// ciudad. Ocho filas son 4,5 ms en el Redmi en release y **casi un minuto** en
+/// un build de depuración — medido con `HA_STAGES=1` en el driver del relieve:
+///
+/// ```text
+/// ha-stages: frames=1 frame_ms=59441.1 | update=59382.8
+/// ha-sys: bake_body_textures=59268.6 stream_tile_chunks=198.2 ...
+/// ```
+///
+/// **Un solo fotograma de 59 segundos**, y el 99,8 % era este horneado. Con eso
+/// la cortina de carga se rinde por tiempo ("se acabó el tiempo (20 s) con 45
+/// chunks y 1 discos pendientes — entro igual") y el jugador entra a un mundo a
+/// medio armar: eso, y no un error de dibujo, es la pantalla vacía de
+/// `relieve-3-cumbre.png`. Los drivers de QA directamente no terminaban.
+///
+/// El arreglo es dejar de contar filas y **mirar el reloj**: se pintan filas
+/// hasta agotar el plazo, con un mínimo de una para que el disco siempre avance.
+/// Así el mismo código da 8-10 filas en el Redmi, doscientas en un escritorio y
+/// una en un build lento — y en los tres casos el fotograma se respeta. Las
+/// filas quedan sólo como TECHO por tanda (que no se coma la caché de niveles de
+/// un tirón).
+const DISC_BAKE_MS_PER_FRAME: f32 = 4.0;
+
+/// El plazo **detrás de la cortina de carga**, donde un fotograma largo no es un
+/// tirón sino trabajo adelantado. Ver `loading::boost_budget`.
+pub const DISC_BAKE_MS_LOADING: f32 = 40.0;
+
+/// Presupuesto vigente del horneado del disco. Es un recurso y no la constante a
+/// secas por lo mismo que `world2d::ChunkBudget`: la cortina de carga lo sube y
+/// lo devuelve al entrar.
 #[derive(Resource)]
-pub struct DiscBakeRows(pub usize);
+pub struct DiscBakeRows {
+    /// Techo de filas por tanda.
+    pub filas: usize,
+    /// Plazo de la tanda, en milisegundos. **Es el que manda.**
+    pub ms: f32,
+}
 
 impl Default for DiscBakeRows {
     fn default() -> Self {
-        Self(Self::normal())
+        Self::normal()
     }
 }
 
 impl DiscBakeRows {
-    pub const fn normal() -> usize {
-        DISC_BAKE_ROWS_PER_FRAME
+    pub const fn normal() -> Self {
+        Self { filas: DISC_BAKE_ROWS_PER_FRAME, ms: DISC_BAKE_MS_PER_FRAME }
     }
 }
 
@@ -1228,9 +1263,21 @@ fn bake_body_textures(
     let _probe = crate::debug::probe("bake_body_textures");
     let Some(job) = queue.jobs.first_mut() else { return };
     let n = DISC_TEX_N;
-    let end = (job.next_row + rows.0.max(1)).min(n);
-    fill_disc_rows(&mut job.data, &tiles, job.body, job.next_row, end);
-    job.next_row = end;
+    // **DE A UNA FILA, MIRANDO EL RELOJ.** Ver [`DiscBakeRows`]: cuánto cuesta
+    // una fila depende del build, de la máquina y de si ese trozo de planeta
+    // tiene relieve, río o ciudad, así que un número fijo de filas no acota
+    // nada. Se pinta al menos una —el disco siempre avanza, nunca se atasca— y
+    // se sigue mientras quede plazo.
+    let plazo = std::time::Duration::from_secs_f32(rows.ms.max(0.5) / 1000.0);
+    let reloj = std::time::Instant::now();
+    let techo = (job.next_row + rows.filas.max(1)).min(n);
+    while job.next_row < techo {
+        fill_disc_rows(&mut job.data, &tiles, job.body, job.next_row, job.next_row + 1);
+        job.next_row += 1;
+        if reloj.elapsed() >= plazo {
+            break;
+        }
+    }
     if job.next_row < n {
         return;
     }

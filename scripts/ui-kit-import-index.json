@@ -1,0 +1,31 @@
+{
+ "sprites": [
+  "ui/ic_bajar",
+  "ui/ic_casa",
+  "ui/ic_controles",
+  "ui/ic_engranaje",
+  "ui/ic_equis",
+  "ui/ic_flecha_arriba",
+  "ui/ic_flecha_der",
+  "ui/ic_flecha_izq",
+  "ui/ic_grilla",
+  "ui/ic_interrogacion",
+  "ui/ic_lapiz",
+  "ui/ic_lista",
+  "ui/ic_lupa",
+  "ui/ic_mochila",
+  "ui/ic_papelera",
+  "ui/ic_persona",
+  "ui/ic_reloj",
+  "ui/ic_tilde",
+  "ui/marco_boton",
+  "ui/marco_boton_ancho",
+  "ui/marco_campo",
+  "ui/marco_hueco",
+  "ui/marco_liso",
+  "ui/marco_panel",
+  "ui/marco_slot",
+  "ui/marco_slot_chico"
+ ],
+ "pagina": "art/pack/ui_kit.png"
+}

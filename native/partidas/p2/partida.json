@@ -1,0 +1,11 @@
+{
+ "id": "p2",
+ "nombre": "La Meseta",
+ "semilla": 10077,
+ "creativo": false,
+ "dia": 3,
+ "habitantes": [
+  "Tobi"
+ ],
+ "creada": 1786840319
+}

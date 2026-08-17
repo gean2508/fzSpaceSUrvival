@@ -107,7 +107,10 @@ fn debounced_inventory_save(
     }
 }
 
-pub fn persist_dir() -> PathBuf {
+/// **La carpeta de la plataforma**, sin partida: donde vive todo lo que NO es de
+/// un mundo en particular — la lista de personajes, los ajustes, y la carpeta
+/// `partidas/` que las contiene a todas.
+pub fn base_dir() -> PathBuf {
     if let Ok(path) = crate::flags::var("HA_UI_LAYOUT_FILE") {
         let p = PathBuf::from(path);
         if let Some(parent) = p.parent() {
@@ -123,6 +126,21 @@ pub fn persist_dir() -> PathBuf {
     #[cfg(not(target_os = "android"))]
     {
         PathBuf::from(".")
+    }
+}
+
+/// **Dónde escribe el estado del juego: la carpeta de la partida abierta.**
+///
+/// Ésta es la pieza que hace posibles varias partidas sin tocar los veinte
+/// módulos que guardan cosas. Cada uno sigue pidiendo `persist_dir().join(...)`
+/// como siempre; lo que cambió es que el suelo se mueve con la partida.
+///
+/// Sin partida abierta —tests, drivers de QA, los editores— devuelve la carpeta
+/// de la plataforma, igual que antes de que existieran las ranuras.
+pub fn persist_dir() -> PathBuf {
+    match crate::partida::sufijo() {
+        Some(sufijo) => base_dir().join(sufijo),
+        None => base_dir(),
     }
 }
 

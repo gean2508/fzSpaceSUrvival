@@ -463,6 +463,23 @@ pub struct ArtEntry {
     /// (un poste, un muro): no muestra boton al acercarse.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interaccion: Option<Interaccion>,
+    /// **Borde de 9 partes, en píxeles de la hoja.** Sólo para marcos de
+    /// interfaz. `None` = el borde se adivina con la heurística de "una celda de
+    /// la grilla" (ver `art2d::ui_frame_node`), que es lo correcto para los
+    /// marcos alineados a 32 y lo INCORRECTO para las piezas del pack de UI, que
+    /// empiezan en píxeles sueltos y tienen bordes de 2 a 11 px. Lo publica
+    /// `scripts/import-ui-kit.py`, medido; no se escribe a ojo (regla 7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice: Option<SliceBorder>,
+}
+
+/// Los cuatro bordes de un marco de 9 partes, en píxeles de la hoja.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SliceBorder {
+    pub left: f32,
+    pub right: f32,
+    pub top: f32,
+    pub bottom: f32,
 }
 
 impl ArtEntry {
@@ -480,6 +497,7 @@ impl ArtEntry {
             interaccion: None,
             emission: None,
             layer: None,
+            slice: None,
         }
     }
 }

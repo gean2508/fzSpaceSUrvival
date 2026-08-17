@@ -1,0 +1,13 @@
+{
+ "id": "p3",
+ "nombre": "Ciudad Baja",
+ "semilla": 77412,
+ "creativo": false,
+ "dia": 40,
+ "habitantes": [
+  "Leo",
+  "Nube",
+  "Rulo"
+ ],
+ "creada": 1786833119
+}

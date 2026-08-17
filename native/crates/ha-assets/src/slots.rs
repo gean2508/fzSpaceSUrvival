@@ -348,6 +348,39 @@ const BUILDING_KEYS: &[(&str, &str)] = &[
     ("building/granero", "Granero"),
     ("building/nave_industrial", "Nave industrial"),
     ("building/base_militar", "Base militar"),
+    // **Los establecimientos que faltaban NO se declaran como slots vacíos.**
+    //
+    // El 15 ago 2026 se intentó agregar acá `building/panaderia`,
+    // `lot/juegos_infantiles`, `road/bahia_bus` y veinte más, sacados de las
+    // referencias del pack que pasó el usuario. Los cazó
+    // `ningun_slot_se_queda_sin_pixel`, y tenía razón: un slot declarado sin
+    // arte se dibuja como un cuadrado de color plano.
+    //
+    // **Y estaban casi todos, con otro nombre.** El 15 ago 2026 quedó anotado
+    // que "pizzería, lavadero, central eléctrica, natatorio, food trucks, muelle
+    // y balneario no están en el manifest con ningún nombre". Se fue a mirar y
+    // era sólo verdad para dos:
+    //
+    //   central eléctrica → `building/energia_casa` (la subestación de
+    //                       `City_Props`, 7×8 celdas) + `anim/…_wind_mill`
+    //   natatorio        → `lot/natatorio`, que no es una fachada sino agua de
+    //                       verdad + las 48 piezas de `swimming_pool`
+    //   food truck       → `vehicle/pizza_tuk_tuk_*`, y los puestos de feria
+    //                       `building/puestos_*` / `building/limonada_puesto_*`
+    //   muelle           → `agua/muelle_*`, ya sembrado en `pack_siembra::CAMPAMENTO`
+    //   balneario        → las reposeras, sombrillas y salvavidas de `PLAYA`
+    //
+    // Los cinco ya tienen su lote en `ha-shared::city::LOT_PROGRAMS`. Lo que NO
+    // existe en este pack, mirado archivo por archivo, es la **pizzería** y el
+    // **lavadero**: no hay ninguna fachada de ninguno de los dos. La pizza entra
+    // por donde el pack sí la dibujó —sobre ruedas— y el lavadero espera pixel.
+    //
+    // El pack YA tiene esos establecimientos, con otros nombres — los que les
+    // puso el importador: `edificio/tienda_panaderia`, `building/comisaria_chica`,
+    // `building/patio_juguete_1`, `building/reloj_torre`. La ciudad ahora apunta
+    // a ésos (`ha-shared::city::LOT_PROGRAMS`) en vez de a nombres inventados.
+    // Lo que sigue sin existir en el pack —pizzería, lavadero, central eléctrica,
+    // natatorio, food trucks— se declara el día que haya pixel, no antes.
 ];
 
 /// **RELIEVE** — la cara de los acantilados y las rampas (`crate::relief`).
@@ -409,6 +442,14 @@ const RELIEF_KEYS: &[(&str, &str)] = &[
     ("cliff/escalera", "Escalera de acantilado"),
     ("cliff/tubo", "Caño de acantilado"),
     ("cliff/reja", "Reja al pie del acantilado"),
+    // **EL CANAL.** Un río que cruza un pueblo con orilla de pasto se lee como
+    // que el pueblo se plantó al lado de un arroyo; lo que hace un canal es el
+    // MURO. El pack lo dibujó en `1_Terrains_and_Fences` —tres familias `Wall_*`,
+    // 58 piezas— y no lo usaba nadie. Autotile de ocho poses (esta familia no
+    // trae cóncavas), lo recorta `scripts/import-muelle.py` y lo siembra
+    // `world2d::spawn_chunk_muelle` sobre la tierra pegada al agua, **sólo dentro
+    // de un casco**.
+    ("quay/muro", "Muro de ribera (canal)"),
 ];
 
 /// **LAS ORILLAS DEL SUELO BASE** — la costura entre dos materiales del piso.
@@ -440,6 +481,25 @@ const ORLA_KEYS: &[(&str, &str)] = &[
     ("borde/nieve_seco", "Orilla de nieve (sabana)"),
     ("borde/nieve_pantano", "Orilla de nieve (pantano)"),
     ("borde/nieve_sierra", "Orilla de nieve (sierra)"),
+    // **Y LA COSTURA ENTRE DOS PASTOS.** Es la misma pieza del kit con el lóbulo
+    // de material teñido a otro VERDE en vez de a un marrón. Sin esto, la
+    // frontera entre la sierra (106,148,88) y la pradera (71,151,87) salía a
+    // escuadra calcada al borde de la terraza — la meseta se leía como un margen
+    // dibujado encima del suelo de abajo, que es lo que se reportó el 16 ago 2026.
+    //
+    // La dibuja el pasto de MAYOR rango (`world2d::rango_de_pasto`) y el sufijo
+    // dice contra cuál: `borde/pasto_sierra_bosque` es sierra contra bosque, y sin
+    // sufijo, contra la pradera de referencia.
+    ("borde/pasto_bosque", "Costura de bosque"),
+    ("borde/pasto_seco", "Costura de sabana"),
+    ("borde/pasto_seco_bosque", "Costura de sabana (bosque)"),
+    ("borde/pasto_pantano", "Costura de pantano"),
+    ("borde/pasto_pantano_bosque", "Costura de pantano (bosque)"),
+    ("borde/pasto_pantano_seco", "Costura de pantano (sabana)"),
+    ("borde/pasto_sierra", "Costura de sierra"),
+    ("borde/pasto_sierra_bosque", "Costura de sierra (bosque)"),
+    ("borde/pasto_sierra_seco", "Costura de sierra (sabana)"),
+    ("borde/pasto_sierra_pantano", "Costura de sierra (pantano)"),
 ];
 
 /// **AGUA** — para que el líquido no se vea como una plancha azul vacía.
@@ -9266,6 +9326,23 @@ pub fn game_slots() -> Vec<SlotDef> {
 /// aceptable y mantiene `SlotDef` `Copy`.
 fn leak(sfmt: String) -> &'static str {
     Box::leak(sfmt.into_boxed_str())
+}
+
+/// **Nombre humano de una clave, en caliente.** [`game_slots`] arma un `Vec` de
+/// miles de entradas y se paga una vez al abrir el editor; el juego necesita lo
+/// mismo por frame —el cartel de "Mantén para levantar Farol"— así que acá va el
+/// índice, construido una sola vez y consultado en O(1).
+///
+/// Devuelve `None` si la clave no está en el catálogo: quien pregunta decide si
+/// mostrar la clave pelada o callarse.
+pub fn slot_label(key: &str) -> Option<&'static str> {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    static INDICE: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+    INDICE
+        .get_or_init(|| game_slots().into_iter().map(|s| (s.key, s.label)).collect())
+        .get(key)
+        .copied()
 }
 
 #[cfg(test)]

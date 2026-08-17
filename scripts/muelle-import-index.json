@@ -1,0 +1,15 @@
+{
+ "sprites": [
+  "quay/muro"
+ ],
+ "poses": [
+  "corner_ne",
+  "corner_nw",
+  "corner_se",
+  "corner_sw",
+  "edge_e",
+  "edge_n",
+  "edge_s",
+  "edge_w"
+ ]
+}

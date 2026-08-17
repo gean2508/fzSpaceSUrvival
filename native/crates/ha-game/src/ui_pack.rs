@@ -1,0 +1,728 @@
+//! **El kit de interfaz del pack — la interfaz de Ki, tal cual el mockup.**
+//!
+//! Es el gemelo en Bevy de `uikit.py`, el módulo con el que se compuso la
+//! propuesta que el usuario aprobó el 15 ago 2026 (*Interfaz de Ki*). Todo lo
+//! que dibuja sale de arte REAL: los marcos y los botones-icono son recortes de
+//! **Modern UI Style 1** publicados por `scripts/import-ui-kit.py`, y el texto va
+//! con la fuente que embarca el APK.
+//!
+//! ## La regla de oro de este módulo: las coordenadas son las del mockup
+//!
+//! El mockup se compuso a **2400 × 1080** —el Redmi apaisado— y cada número de
+//! esas pantallas (el panel de 1800 × 810, la fila de 186 de alto, el texto de
+//! 44 px) está transcripto literal. Para que eso valga en cualquier pantalla, un
+//! solo factor [`k`] multiplica todo: `k = ancho_de_la_ventana / 2400`. En el
+//! teléfono da 1,0 y sale idéntico al PNG; en el escritorio encoge parejo.
+//!
+//! **No se corrigen números "a ojo" acá.** Si algo no entra, el número está mal
+//! en el mockup y se cambia en el mockup.
+//!
+//! ## Por qué todo es absoluto y no flex
+//!
+//! Un layout de flex "parecido" a un dibujo se parece pero no es. La consigna
+//! del usuario fue *"no quiero variaciones"*, así que cada pieza se planta en la
+//! coordenada exacta que tiene en la imagen de referencia.
+
+use bevy::prelude::*;
+use bevy::ecs::system::EntityCommands;
+
+use crate::art2d::ArtLibrary;
+use crate::input::TouchLayout;
+
+// ---------------------------------------------------------------------------
+// La paleta, medida sobre el pack (uikit.py)
+// ---------------------------------------------------------------------------
+
+/// Los colores del kit. Medidos sobre Modern UI Style 1, no elegidos.
+pub struct Pack;
+
+impl Pack {
+    /// Texto sobre panel: la tinta azulada del pack.
+    pub const TINTA: Color = Color::srgb(0.227, 0.227, 0.314);
+    /// Texto claro sobre el mundo (fuera de panel).
+    pub const TEXTO: Color = Color::srgb(0.969, 0.941, 0.886);
+    /// El amarillo de "esto está elegido".
+    pub const ACENTO: Color = Color::srgb(0.933, 0.769, 0.329);
+    /// Texto de etiqueta chiquita dentro de un panel.
+    pub const ETIQUETA: Color = Color::srgb(0.588, 0.486, 0.384);
+    /// Texto secundario dentro de un panel.
+    pub const SUAVE: Color = Color::srgb(0.549, 0.455, 0.361);
+    /// El pie de página de un panel, sobre el marco.
+    pub const PIE: Color = Color::srgb(0.808, 0.729, 0.627);
+    /// El filo de una viñeta (el recuadro de la miniatura de mundo).
+    pub const FILO: Color = Color::srgb(0.471, 0.361, 0.259);
+    /// El separador vertical de la barra de estado.
+    pub const SEPARADOR: Color = Color::srgb(0.769, 0.659, 0.525);
+    /// El clavo del cartel y el filo interno.
+    pub const CLAVO: Color = Color::srgb(0.588, 0.424, 0.275);
+    /// Tinta sobre el amarillo del botón fuerte.
+    pub const SOBRE_ACENTO: Color = Color::srgb(0.220, 0.165, 0.078);
+    /// La sombra bajo el personaje.
+    pub const SOMBRA: Color = Color::srgba(0.078, 0.063, 0.102, 0.43);
+}
+
+/// Claves del kit (las publica `scripts/import-ui-kit.py`).
+pub mod marco {
+    pub const PANEL: &str = "ui/marco_panel";
+    pub const LISO: &str = "ui/marco_liso";
+    pub const SLOT: &str = "ui/marco_slot";
+    pub const SLOT_CHICO: &str = "ui/marco_slot_chico";
+    pub const BOTON: &str = "ui/marco_boton";
+    pub const BOTON_ANCHO: &str = "ui/marco_boton_ancho";
+    pub const HUECO: &str = "ui/marco_hueco";
+}
+
+// ---------------------------------------------------------------------------
+// La escala
+// ---------------------------------------------------------------------------
+
+/// **El único factor de escala de la interfaz.** El mockup mide 2400 de ancho.
+pub fn k(touch: &TouchLayout) -> f32 {
+    (touch.width.max(320.0) / 2400.0).clamp(0.18, 3.0)
+}
+
+/// Alto del lienzo del mockup, en sus propias unidades.
+pub const ALTO: f32 = 1080.0;
+/// Ancho del lienzo del mockup.
+pub const ANCHO: f32 = 2400.0;
+
+/// **El lienzo: 2400 × 1080 escalados, pegado ARRIBA.**
+///
+/// Todo lo demás se cuelga de acá con coordenadas del mockup. Si la ventana es
+/// más alta que 20:9, lo que sobra queda ABAJO y lo llena el fondo — nunca se
+/// estira el contenido para tapar el hueco, que es lo que deformaría el pixel.
+///
+/// **Por qué arriba y no centrado.** Centrado dejaba una franja vacía entre el
+/// borde de la pantalla y la barra de estado, y esa barra es justamente lo que
+/// tiene que estar pegado al borde: se ve como si la interfaz estuviera
+/// flotando. Lo dijo el usuario mirando la primera captura.
+pub fn lienzo(k: f32) -> Node {
+    Node {
+        position_type: PositionType::Absolute,
+        left: Val::Percent(50.0),
+        top: Val::Px(0.0),
+        width: Val::Px(ANCHO * k),
+        height: Val::Px(ALTO * k),
+        margin: UiRect { left: Val::Px(-ANCHO * k / 2.0), ..default() },
+        ..default()
+    }
+}
+
+/// Un nodo absoluto en coordenadas del mockup.
+pub fn caja(x: f32, y: f32, w: f32, h: f32, k: f32) -> Node {
+    Node {
+        position_type: PositionType::Absolute,
+        left: Val::Px(x * k),
+        top: Val::Px(y * k),
+        width: Val::Px(w * k),
+        height: Val::Px(h * k),
+        ..default()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Las piezas
+// ---------------------------------------------------------------------------
+
+/// **Un marco de 9 partes en su coordenada.** Devuelve el `EntityCommands` para
+/// que quien llame le cuelgue el contenido adentro.
+///
+/// Sin arte (el manifest todavía sin importar) cae a un rectángulo del color del
+/// panel: la pantalla sigue siendo legible y no queda un agujero — es la regla
+/// de los fallbacks dibujados por código.
+pub fn marco<'a>(
+    c: &'a mut ChildBuilder,
+    art: &ArtLibrary,
+    clave: &str,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    k: f32,
+) -> EntityCommands<'a> {
+    let nodo = caja(x, y, w, h, k);
+    match art.ui_frame_node(clave) {
+        Some(img) => c.spawn((nodo, img)),
+        None => c.spawn((nodo, BackgroundColor(Color::srgb(0.796, 0.706, 0.580)))),
+    }
+}
+
+/// **Un icono encajado en un cuadrado, sin deformarlo.**
+///
+/// Es el `icono_en` del mockup: el dibujo entra entero en el cuadrado y se
+/// centra, conservando su proporción. Estirarlo a la fuerza es lo que hace que
+/// una lupa de 26 × 20 salga como un huevo.
+pub fn icono(c: &mut ChildBuilder, art: &ArtLibrary, clave: &str, x: f32, y: f32, lado: f32, k: f32) {
+    let Some(img) = art.ui_icon(clave) else { return };
+    let (w, h) = match art.ui_icon_px(clave) {
+        Some(px) if px.x > 0.0 && px.y > 0.0 => {
+            let f = (lado / px.x).min(lado / px.y);
+            (px.x * f, px.y * f)
+        }
+        _ => (lado, lado),
+    };
+    c.spawn((caja(x + (lado - w) / 2.0, y + (lado - h) / 2.0, w, h, k), img, ZIndex(ICONO_Z)));
+}
+
+/// **Este botón no lleva marco.** El reskin del HUD (`hud::skin_ui_from_art`)
+/// le pone `ui/button` a todo botón que no traiga imagen; un área táctil
+/// invisible —el nombre del personaje, el fondo de un modal— quedaba con una
+/// tabla de madera detrás. Con esta marca se lo saltea.
+#[derive(Component)]
+pub struct SinMarco;
+
+/// Dónde cae el texto respecto de la `x` que se le pasa.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Ancla {
+    /// `x` es el borde izquierdo (el `lm` del mockup).
+    Izq,
+    /// `x` es el centro (`mm`).
+    Medio,
+    /// `x` es el borde derecho (`rm`).
+    Der,
+}
+
+/// **Texto anclado como en el mockup**: `y` es siempre el MEDIO de la línea.
+///
+/// Se planta dentro de una caja de alto conocido y centrado vertical, que es la
+/// única forma de que el texto de Bevy caiga donde el `anchor="lm"` de PIL.
+pub fn texto(
+    c: &mut ChildBuilder,
+    txt: impl Into<String>,
+    px: f32,
+    color: Color,
+    x: f32,
+    y: f32,
+    ancla: Ancla,
+    k: f32,
+) {
+    let alto = px * 1.6;
+    // Ancho generoso: el texto no se corta y el centrado usa la caja, no el glifo.
+    let ancho = ANCHO;
+    let izq = match ancla {
+        Ancla::Izq => x,
+        Ancla::Medio => x - ancho / 2.0,
+        Ancla::Der => x - ancho,
+    };
+    let justificado = match ancla {
+        Ancla::Izq => JustifyContent::FlexStart,
+        Ancla::Medio => JustifyContent::Center,
+        Ancla::Der => JustifyContent::FlexEnd,
+    };
+    let mut nodo = caja(izq, y - alto / 2.0, ancho, alto, k);
+    nodo.justify_content = justificado;
+    nodo.align_items = AlignItems::Center;
+    nodo.overflow = Overflow::visible();
+    // **El texto va SIEMPRE por encima del marco.** Los rótulos chiquitos
+    // ("NOMBRE", "SEMILLA") caen justo arriba de su campo y el campo se dibuja
+    // después: sin esto la mitad de abajo de la palabra desaparecía.
+    c.spawn((nodo, ZIndex(TEXTO_Z))).with_children(|t| {
+        t.spawn((
+            Text::new(txt),
+            TextFont { font_size: px * k, ..default() },
+            TextColor(color),
+            TextLayout::new_with_no_wrap(),
+        ));
+    });
+}
+
+/// Capa de dibujo del texto dentro de una pantalla del kit.
+const TEXTO_Z: i32 = 3;
+/// Capa de los iconos: por encima del marco, por debajo del texto.
+const ICONO_Z: i32 = 2;
+/// Capa del recuadro de "esto está elegido": arriba de todo.
+const ELEGIDO_Z: i32 = 4;
+
+/// **El cartel de un panel.** Un título nunca es texto pelado: va en su chapa,
+/// colgada del borde de arriba, con el filo interno y los dos clavos.
+pub fn cartel(
+    c: &mut ChildBuilder,
+    art: &ArtLibrary,
+    etiqueta: &str,
+    cx: f32,
+    y: f32,
+    ancho: f32,
+    alto: f32,
+    px: f32,
+    k: f32,
+) {
+    let x = cx - ancho / 2.0;
+    marco(c, art, marco::BOTON, x, y, ancho, alto, k);
+    // El filo interno, 15 px adentro (mock_menu::cartel).
+    let mut filo = caja(x + 15.0, y + 15.0, ancho - 30.0, alto - 30.0, k);
+    filo.border = UiRect::all(Val::Px(3.0 * k));
+    c.spawn((filo, BorderColor(Pack::CLAVO)));
+    texto(c, etiqueta, px, Pack::TINTA, cx, y + alto / 2.0, Ancla::Medio, k);
+    for lado in [-1.0_f32, 1.0] {
+        let rx = cx + lado * (ancho / 2.0 - 30.0);
+        c.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px((rx - 7.0) * k),
+                top: Val::Px((y + alto / 2.0 - 7.0) * k),
+                width: Val::Px(14.0 * k),
+                height: Val::Px(14.0 * k),
+                ..default()
+            },
+            BackgroundColor(Pack::CLAVO),
+            BorderRadius::all(Val::Percent(50.0)),
+        ));
+    }
+}
+
+/// **El recuadro amarillo de "esto está elegido".**
+///
+/// En el mockup es un rectángulo de 6 px de filo corrido 3 px hacia arriba y a
+/// la izquierda respecto de la pieza. Se copia igual.
+pub fn elegido(c: &mut ChildBuilder, x: f32, y: f32, w: f32, h: f32, grosor: f32, k: f32) {
+    c.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px((x - 3.0) * k),
+            top: Val::Px((y - 3.0) * k),
+            width: Val::Px(w * k),
+            height: Val::Px(h * k),
+            border: UiRect::all(Val::Px(grosor * k)),
+            ..default()
+        },
+        BorderColor(Pack::ACENTO),
+        ZIndex(ELEGIDO_Z),
+    ));
+}
+
+/// El relleno amarillo de un botón fuerte (el que llama a la acción).
+pub fn relleno_fuerte(c: &mut ChildBuilder, x: f32, y: f32, w: f32, h: f32, k: f32) {
+    c.spawn((caja(x, y, w, h, k), BackgroundColor(Pack::ACENTO)));
+}
+
+/// **Un botón del kit**: marco + (relleno si es fuerte) + etiqueta y/o icono.
+///
+/// La `accion` es el componente que identifica al botón para el sistema de
+/// toques de cada pantalla; se le agrega `Button` para que Bevy le siga la
+/// `Interaction`.
+#[allow(clippy::too_many_arguments)]
+pub fn boton<A: Component>(
+    c: &mut ChildBuilder,
+    art: &ArtLibrary,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    etiqueta: Option<&str>,
+    icono_clave: Option<&str>,
+    fuerte: bool,
+    px: f32,
+    accion: A,
+    k: f32,
+) {
+    let nodo = caja(x, y, w, h, k);
+    let mut ec = match art.ui_frame_node(marco::BOTON) {
+        Some(img) => c.spawn((nodo, img, Button, accion)),
+        None => c.spawn((nodo, BackgroundColor(Color::srgb(0.796, 0.706, 0.580)), Button, accion)),
+    };
+    ec.with_children(|b| {
+        if fuerte {
+            b.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(18.0 * k),
+                    top: Val::Px(16.0 * k),
+                    width: Val::Px((w - 36.0) * k),
+                    height: Val::Px((h - 32.0) * k),
+                    ..default()
+                },
+                BackgroundColor(Pack::ACENTO),
+            ));
+        }
+        if let Some(clave) = icono_clave {
+            if let Some(img) = art.ui_icon(clave) {
+                b.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px((w / 2.0 - 32.0) * k),
+                        top: Val::Px((h / 2.0 - 32.0) * k),
+                        width: Val::Px(64.0 * k),
+                        height: Val::Px(64.0 * k),
+                        ..default()
+                    },
+                    img,
+                ));
+            }
+        }
+        if let Some(et) = etiqueta {
+            let color = if fuerte { Pack::SOBRE_ACENTO } else { Pack::TINTA };
+            let alto = px * 1.6;
+            b.spawn(Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px((h / 2.0 - alto / 2.0) * k),
+                width: Val::Px(w * k),
+                height: Val::Px(alto * k),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|t| {
+                t.spawn((
+                    Text::new(et.to_string()),
+                    TextFont { font_size: px * k, ..default() },
+                    TextColor(color),
+                    TextLayout::new_with_no_wrap(),
+                ));
+            });
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// La barra de estado
+// ---------------------------------------------------------------------------
+
+/// Una ficha de la barra de arriba: icono, etiqueta chiquita y valor.
+pub struct Ficha<'a> {
+    pub icono: &'a str,
+    pub etiqueta: &'a str,
+    pub valor: String,
+}
+
+/// **La barra de arriba**: la chapa del juego + las fichas con su separador.
+///
+/// Es la misma en las cinco pantallas de menú; lo único que cambia son las
+/// fichas. Sale literal de `mock_menu::barra_estado`.
+pub fn barra_estado(c: &mut ChildBuilder, art: &ArtLibrary, cuerpo: &str, fichas: &[Ficha], k: f32) {
+    marco(c, art, marco::LISO, 18.0, 12.0, ANCHO - 36.0, 114.0, k);
+    marco(c, art, marco::BOTON, 36.0, 24.0, 570.0, 90.0, k);
+    texto(c, "KI", 56.0, Pack::TINTA, 66.0, 66.0, Ancla::Izq, k);
+    texto(c, "MUNDO", 26.0, Pack::ETIQUETA, 146.0, 50.0, Ancla::Izq, k);
+    texto(c, "ABIERTO", 26.0, Pack::ETIQUETA, 146.0, 82.0, Ancla::Izq, k);
+    c.spawn((caja(300.0, 40.0, 4.0, 58.0, k), BackgroundColor(Pack::SEPARADOR)));
+    icono(c, art, cuerpo, 356.0 - 29.0, 68.0 - 29.0, 58.0, k);
+    texto(c, "TIERRA", 30.0, Pack::TINTA, 400.0, 68.0, Ancla::Izq, k);
+    let mut x = 700.0;
+    for (i, f) in fichas.iter().enumerate() {
+        c.spawn((caja(x - 30.0, 32.0, 4.0, 62.0, k), BackgroundColor(Pack::SEPARADOR)));
+        icono(c, art, f.icono, x, 42.0, 64.0, k);
+        texto(c, f.etiqueta, 24.0, Pack::ETIQUETA, x + 76.0, 50.0, Ancla::Izq, k);
+        // El VALOR lleva marca con su posición: así una pantalla puede
+        // refrescar "CAPA: PELO" sin rehacer la barra entera.
+        texto_marcado(c, f.valor.clone(), 34.0, Pack::TINTA, x + 76.0, 84.0, Ancla::Izq, k,
+                      FichaValor(i));
+        x += 424.0;
+    }
+}
+
+/// El valor de la ficha número `.0` de la barra de estado.
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub struct FichaValor(pub usize);
+
+/// Como [`texto`], pero le cuelga un componente al nodo del texto para poder
+/// refrescarlo después.
+#[allow(clippy::too_many_arguments)]
+pub fn texto_marcado<M: Component>(
+    c: &mut ChildBuilder,
+    txt: impl Into<String>,
+    px: f32,
+    color: Color,
+    x: f32,
+    y: f32,
+    ancla: Ancla,
+    k: f32,
+    marca: M,
+) {
+    let alto = px * 1.6;
+    let ancho = ANCHO;
+    let izq = match ancla {
+        Ancla::Izq => x,
+        Ancla::Medio => x - ancho / 2.0,
+        Ancla::Der => x - ancho,
+    };
+    let justificado = match ancla {
+        Ancla::Izq => JustifyContent::FlexStart,
+        Ancla::Medio => JustifyContent::Center,
+        Ancla::Der => JustifyContent::FlexEnd,
+    };
+    let mut nodo = caja(izq, y - alto / 2.0, ancho, alto, k);
+    nodo.justify_content = justificado;
+    nodo.align_items = AlignItems::Center;
+    nodo.overflow = Overflow::visible();
+    c.spawn((nodo, ZIndex(TEXTO_Z))).with_children(|t| {
+        t.spawn((
+            Text::new(txt),
+            TextFont { font_size: px * k, ..default() },
+            TextColor(color),
+            TextLayout::new_with_no_wrap(),
+            marca,
+        ));
+    });
+}
+
+/// El nombre del cuerpo celeste que muestra la barra (siempre la Tierra por
+/// ahora: los planetas son el gameplay de adentro de una partida, no una
+/// pantalla de menú).
+pub const CUERPO_TIERRA: &str = "ui/menu_tierra";
+
+// ---------------------------------------------------------------------------
+// El muñeco
+// ---------------------------------------------------------------------------
+
+use crate::chargen::{Chargen, Layer, LookDef};
+
+/// La grilla de la hoja de personaje, compartida por todas las pantallas que
+/// dibujan un muñeco (el menú, la lista de personajes, las miniaturas de "viven
+/// acá"). Se arma una vez.
+#[derive(Resource, Default)]
+pub struct HojaPj(pub Handle<TextureAtlasLayout>);
+
+pub struct UiPackPlugin;
+
+impl Plugin for UiPackPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<HojaPj>()
+            .init_resource::<HaloTex>()
+            .add_systems(Startup, preparar_halo)
+            .add_systems(Update, preparar_hoja);
+    }
+}
+
+fn preparar_halo(mut tex: ResMut<HaloTex>, mut images: ResMut<Assets<Image>>) {
+    tex.0 = pintar_halo(&mut images);
+}
+
+fn preparar_hoja(
+    mut hoja: ResMut<HojaPj>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    cg: Option<Res<Chargen>>,
+    mut listo: Local<bool>,
+) {
+    if *listo {
+        return;
+    }
+    let Some(cg) = cg else { return };
+    if !cg.available() {
+        return;
+    }
+    hoja.0 = layouts.add(TextureAtlasLayout::from_grid(
+        UVec2::new(cg.index.cell[0], cg.index.cell[1]),
+        cg.index.cols.max(1),
+        cg.index.rows.max(1),
+        None,
+        None,
+    ));
+    *listo = true;
+}
+
+/// Las capas de un personaje, en el orden en que se apilan.
+const CAPAS: [Layer; 5] =
+    [Layer::Body, Layer::Eyes, Layer::Outfit, Layer::Hair, Layer::Accessory];
+
+fn indice_de(look: &LookDef, capa: Layer) -> Option<u32> {
+    match capa {
+        Layer::Body => Some(look.body),
+        Layer::Eyes => Some(look.eyes),
+        Layer::Outfit => Some(look.outfit),
+        Layer::Hair => Some(look.hair),
+        Layer::Accessory => look.accessory,
+    }
+}
+
+/// La celda de la hoja: quieto, mirando a donde diga `dir` (3 = de frente, en el
+/// orden `R, U, L, D` del pack).
+pub fn celda(dir: u32) -> usize {
+    match ha_assets::chargen_index::char_anim("walk") {
+        Some(a) => ha_assets::chargen_index::char_cell(a, dir, 0) as usize,
+        None => 0,
+    }
+}
+
+/// **Un personaje dibujado con sus capas**, en coordenadas del mockup.
+///
+/// `escala` es la del mockup (`PJ.personaje(look, FRENTE, escala=7)`): multiplica
+/// la celda de 32 × 64 del pack. Se apilan cinco `ImageNode` con atlas — lo
+/// mismo que hace la vitrina del creador, o sea que no compone ni hornea nada.
+///
+/// `x`, `y` es la esquina superior izquierda; devuelve el alto que ocupó para
+/// que quien lo llame lo pueda apoyar en el piso.
+#[allow(clippy::too_many_arguments)]
+pub fn muneco(
+    c: &mut ChildBuilder,
+    look: &LookDef,
+    cg: &Chargen,
+    assets: &AssetServer,
+    hoja: &HojaPj,
+    dir: u32,
+    x: f32,
+    y: f32,
+    escala: f32,
+    k: f32,
+) -> Vec2 {
+    let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32);
+    let medida = cel * escala;
+    let idx = celda(dir);
+    c.spawn(caja(x, y, medida.x, medida.y, k)).with_children(|pila| {
+        for capa in CAPAS {
+            let opt = indice_de(look, capa).and_then(|i| cg.options(capa).get(i as usize));
+            let Some(o) = opt else { continue };
+            pila.spawn((
+                ImageNode::from_atlas_image(
+                    assets.load(&o.png),
+                    TextureAtlas { layout: hoja.0.clone(), index: idx },
+                ),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+            ));
+        }
+    });
+    medida
+}
+
+/// La sombra ovalada bajo un personaje (el mockup la dibuja siempre).
+pub fn sombra(c: &mut ChildBuilder, cx: f32, y: f32, rx: f32, ry: f32, k: f32) {
+    c.spawn((
+        caja(cx - rx, y, rx * 2.0, ry * 2.0, k),
+        BackgroundColor(Pack::SOMBRA),
+        BorderRadius::all(Val::Percent(50.0)),
+    ));
+}
+
+/// La textura del claro de luz: un degradado radial suave, dibujado una vez.
+#[derive(Resource, Default)]
+pub struct HaloTex(pub Handle<Image>);
+
+/// **El claro de luz detrás del personaje.** Sin esto, con el parallax encima, un
+/// árbol del primer plano se lo come (nota del mockup, `mock_menu::halo`).
+///
+/// Va con TEXTURA y no con nodos redondeados apilados: cuatro elipses
+/// translúcidas una encima de otra se leen como un disco gris con el borde
+/// marcado —se vio en la primera captura—, mientras que el degradado del mockup
+/// no tiene borde en ningún lado.
+pub fn halo(c: &mut ChildBuilder, tex: &HaloTex, cx: f32, cy: f32, r: f32, k: f32) {
+    if tex.0 == Handle::default() {
+        return;
+    }
+    c.spawn((
+        caja(cx - r, cy - r * 0.92, r * 2.0, r * 1.84, k),
+        ImageNode::new(tex.0.clone()),
+    ));
+}
+
+/// Dibuja el degradado del halo. 96 × 96 alcanza: se ve a 600 px y es un
+/// degradado, o sea que ampliarlo no muestra ningún pixel.
+fn pintar_halo(images: &mut Assets<Image>) -> Handle<Image> {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    const N: usize = 96;
+    let mut px = vec![0u8; N * N * 4];
+    let c = (N as f32 - 1.0) / 2.0;
+    for y in 0..N {
+        for x in 0..N {
+            let d = (((x as f32 - c) / c).powi(2) + ((y as f32 - c) / c).powi(2)).sqrt();
+            // La misma curva del mockup: `52 · (1 − d)^1.5` de alfa.
+            let a = if d >= 1.0 { 0.0 } else { 52.0 * (1.0 - d).powf(1.5) };
+            let o = (y * N + x) * 4;
+            px[o] = 255;
+            px[o + 1] = 244;
+            px[o + 2] = 214;
+            px[o + 3] = a as u8;
+        }
+    }
+    images.add(Image::new(
+        Extent3d { width: N as u32, height: N as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        px,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// La viñeta
+// ---------------------------------------------------------------------------
+
+/// El azulejo de pasto de una viñeta, en coordenadas del mockup.
+const AZULEJO_VINETA: f32 = 64.0;
+
+/// **Una viñeta: un pedacito de mundo dentro de un recuadro.**
+///
+/// Es lo que hace que una fila de PARTIDAS diga de qué mundo se trata y que las
+/// fichas del menú no sean cinco rectángulos iguales. Pasto azulejado, los props
+/// que se le pasen apoyados en el piso, y el filo del mockup alrededor.
+///
+/// `separados` reparte los props a intervalos fijos (las fichas del menú);
+/// si no, los desparrama con la semilla (las filas de partidas).
+#[allow(clippy::too_many_arguments)]
+pub fn vineta(
+    c: &mut ChildBuilder,
+    art: &ArtLibrary,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    props: &[&str],
+    escala: f32,
+    separados: bool,
+    semilla: u64,
+    k: f32,
+) {
+    let mut caja_vin = caja(x, y, w, h, k);
+    caja_vin.overflow = Overflow::clip();
+    caja_vin.border = UiRect::all(Val::Px(3.0 * k));
+    c.spawn((caja_vin, BorderColor(Pack::FILO))).with_children(|v| {
+        match art.ui_icon("tiles/grass") {
+            Some(mut img) => {
+                img.image_mode = bevy::ui::widget::NodeImageMode::Tiled {
+                    tile_x: true,
+                    tile_y: true,
+                    stretch_value: AZULEJO_VINETA * k / 32.0,
+                };
+                v.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    img,
+                ));
+            }
+            None => {
+                v.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.278, 0.592, 0.341)),
+                ));
+            }
+        }
+        let mut estado = semilla.wrapping_mul(6364136223846793005).wrapping_add(7);
+        for (j, clave) in props.iter().enumerate() {
+            let Some(px) = art.ui_icon_px(clave) else { continue };
+            let Some(img) = art.ui_icon(clave) else { continue };
+            let (pw, ph) = (px.x * escala, px.y * escala);
+            let (px_x, px_y) = if separados {
+                (40.0 + j as f32 * 150.0, h - ph - 6.0)
+            } else {
+                estado = estado.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                let rx = ((estado >> 11) % 1000) as f32 / 1000.0;
+                estado = estado.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                let ry = ((estado >> 11) % 20) as f32;
+                ((w - pw).max(1.0) * rx, h - ph - ry)
+            };
+            let mut nodo = caja(px_x, px_y, pw, ph, k);
+            nodo.position_type = PositionType::Absolute;
+            v.spawn((nodo, img));
+        }
+    });
+}

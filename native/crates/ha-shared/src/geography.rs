@@ -375,13 +375,119 @@ fn ondula_el_borde(body: CelestialBody, tx: i64, tz: i64) -> f32 {
 /// acantilado se dibuja igual. Lo único que se mezcla es de qué está hecho el
 /// SUELO, que es lo que se pidió.
 pub fn pasa_el_escalon(body: CelestialBody, tx: i64, tz: i64, level: i8, umbral: i8) -> bool {
+    pasa_el_escalon_con(body, tx, tz, level, umbral, true, |x, z| {
+        crate::relief::nivel_fraccion(body, x, z)
+    })
+}
+
+/// **LA LÍNEA DE NIEVE SE DECIDE A ESCALA DE CORDILLERA.**
+///
+/// Misma trama de ajedrez, mismo ancho medido caminando; lo que cambia es sobre
+/// qué campo se traza la frontera: [`crate::relief::escalon_de_cordillera`] en vez
+/// del escalón de la celda.
+///
+/// # Por qué la nieve y no las demás gradas
+///
+/// **Ojo, esto estaba desactualizado y costó un bug.** Decía que sierra (5) y
+/// alta montaña (8) pintan el mismo material que el prado *"así que su frontera
+/// no se ve y da igual por dónde vaya"*. Dejó de ser cierto el día que
+/// `pasto_sierra` se volvió una losa propia: `tiles/grass` es (71,151,87) y
+/// `tiles/pasto_sierra` (106,148,88), y esa frontera **se ve**. Lo que sigue
+/// siendo cierto es que la nieve es la que más se ve —blanco contra verde— y por
+/// eso es la única que se traza sobre el campo de CORDILLERA, que no tiembla.
+///
+/// Las otras dos ya no van con ajedrez: van con la frontera trazada sobre el
+/// campo de la celda ([`pasa_la_grada`]), que es lo que le da a la orla del pack
+/// un borde que coser.
+///
+/// Medido en `relieve-0-pared.png` (1763,-5087), pantalla de 80×40 tiles: con el
+/// escalón de la celda salía **73 % nieve entreverada con 27 % montaña y el 34 %
+/// de las celdas dentro del damero** — confeti blanco y verde de borde a borde. El
+/// ancho de la franja no era el problema (1 tile de mediana al cruzarla): el
+/// problema era que la frontera pasaba por todas partes, porque el campo lleva la
+/// octava de lomas de 34 m. Ver [`crate::relief::campo_de_cordillera`].
+fn pasa_la_linea_de_nieve(body: CelestialBody, tx: i64, tz: i64, umbral: i8) -> bool {
+    let alto = |x: i64, z: i64| {
+        let (n, f) = crate::relief::escalon_de_cordillera(body, x, z);
+        (n - umbral) as f32 + f
+    };
+    let a = alto(tx, tz);
+    // Lejos de la línea no hay nada que sortear, y así el 97 % del mundo paga
+    // cuatro consultas en vez de doce.
+    if a >= 1.0 {
+        return true;
+    }
+    if a <= -1.0 {
+        return false;
+    }
+    // El ancho de la franja, medido CAMINANDO igual que en `pasa_el_escalon_con`:
+    // cuánta altura cambia en un paso, por [`AJEDREZ_EN_PASOS`].
+    let gx = (alto(tx + 1, tz) - alto(tx - 1, tz)) * 0.5;
+    let gz = (alto(tx, tz + 1) - alto(tx, tz - 1)) * 0.5;
+    let pendiente = (gx * gx + gz * gz).sqrt();
+    let ancho = (pendiente * AJEDREZ_EN_PASOS).clamp(1e-4, ANCHO_DE_TRANSICION);
+    // **Y ACÁ EL AJEDREZ ES SIMÉTRICO.** `pasa_el_escalon` sólo puede AÑADIR: si
+    // el escalón ya llegó devuelve `true` sin sortear, y sortea nada más en el
+    // escalón de abajo. Sobre el campo de la celda eso casi no se nota (la franja
+    // es angosta porque la pendiente es fuerte), pero sobre el campo de cordillera
+    // —que varía despacio— la franja mide sus ocho pasos de verdad y el sesgo se
+    // vuelve mensurable: medido sobre la Tierra entera, la nieve pasaba del
+    // **2,52 % al 4,78 %** de la tierra firme, o sea el doble, y la línea se
+    // corría ladera abajo en vez de ondular alrededor de su cota.
+    //
+    // Con la frontera centrada en cero, la mitad de las celdas de la franja
+    // adelanta la nieve y la otra mitad la retrasa: el borde ONDULA alrededor de
+    // su curva de nivel, que es lo que se pidió, y el área se conserva.
+    let borde = ondula_el_borde(body, tx, tz) * ancho;
+    let t = ((a - borde) / ancho + 0.5).clamp(0.0, 1.0);
+    let umbral_celda =
+        (BAYER[tz.rem_euclid(4) as usize][tx.rem_euclid(4) as usize] as f32 + 0.5) / 16.0;
+    t > umbral_celda
+}
+
+/// **La grada de sierra (5) y la de montaña (8), con la frontera TRAZADA.**
+///
+/// Es [`pasa_el_escalon`] sin el ajedrez: la misma frontera ondulada sobre el
+/// mismo campo, pero decidida por una línea en vez de por la trama de [`BAYER`].
+///
+/// # Por qué éstas no llevan damero y la nieve sí
+///
+/// El ajedrez existe para coser dos materiales cuando no hay pieza de
+/// transición. La nieve es blanco contra verde: ahí la trama se lee como
+/// difuminado y el usuario la pidió así. Sierra y montaña son **dos pastos** —
+/// `tiles/grass` (71,151,87) contra `tiles/pasto_sierra` (106,148,88)—, y el
+/// damero entre dos verdes parecidos no se lee como degradado: se lee como
+/// SUCIEDAD, un tablero de 4×4 celdas moteando la ladera. Es el moteado de la
+/// captura del 16 ago 2026.
+///
+/// Y hay una razón de fondo, no sólo de gusto: la costura entre dos pastos ahora
+/// la dibuja el pack (`world2d::spawn_chunk_orilla`), y una orla necesita una
+/// FRONTERA —una línea con un adentro y un afuera—, no una nube de celdas
+/// sorteadas. Con damero, cada celda del tablero pediría su propio ribete.
+fn pasa_la_grada(body: CelestialBody, tx: i64, tz: i64, level: i8, umbral: i8) -> bool {
+    pasa_el_escalon_con(body, tx, tz, level, umbral, false, |x, z| {
+        crate::relief::nivel_fraccion(body, x, z)
+    })
+}
+
+/// El cuerpo común: la frontera ondulada con el ancho medido en pasos sobre el
+/// campo que le pasen, resuelta con el ajedrez de [`BAYER`] (`ajedrez = true`) o
+/// con una línea (`false`, ver [`pasa_la_grada`]).
+fn pasa_el_escalon_con(
+    body: CelestialBody,
+    tx: i64,
+    tz: i64,
+    level: i8,
+    umbral: i8,
+    ajedrez: bool,
+    frac: impl Fn(i64, i64) -> f32,
+) -> bool {
     if level >= umbral {
         return true;
     }
     if level != umbral - 1 {
         return false;
     }
-    let frac = |x: i64, z: i64| crate::relief::nivel_fraccion(body, x, z);
     let f = frac(tx, tz);
     // **Cuánta altura cambia en UN PASO**, acá mismo. Es el dato que faltaba: sin
     // él, "el 7 % de arriba del escalón" es una orilla en la sierra y una provincia
@@ -396,8 +502,14 @@ pub fn pasa_el_escalon(body: CelestialBody, tx: i64, tz: i64, level: i8, umbral:
     // La frontera, ondulada, y la franja de ajedrez centrada en ella.
     let borde = (1.0 - ancho) + ondula_el_borde(body, tx, tz) * ancho;
     let t = ((f - borde) / ancho + 0.5).clamp(0.0, 1.0);
-    let umbral_celda =
-        (BAYER[tz.rem_euclid(4) as usize][tx.rem_euclid(4) as usize] as f32 + 0.5) / 16.0;
+    // Sin ajedrez, la frontera es la línea: pasa la mitad de arriba de la franja.
+    // El área se conserva —el umbral 0,5 es el promedio de la trama de Bayer—,
+    // así que cambiar de una a otra no mueve el reparto de biomas del mundo.
+    let umbral_celda = if ajedrez {
+        (BAYER[tz.rem_euclid(4) as usize][tx.rem_euclid(4) as usize] as f32 + 0.5) / 16.0
+    } else {
+        0.5
+    };
     t > umbral_celda
 }
 
@@ -417,13 +529,176 @@ pub fn biome_at(body: CelestialBody, tx: i64, tz: i64) -> Biome {
 /// **El bioma de la TERRAZA, sin difuminar.**
 ///
 /// Lo pide el relieve: un acantilado es una pieza de kit de tres celdas de alto y
-/// su material sale del suelo que corona (`world2d::cliff_material`). Si le
-/// pasáramos el bioma difuminado, una misma pared alternaría celda a celda entre
-/// el acantilado de nieve y el de pasto — un muro a rayas, que es peor que el
-/// corte que el difuminado viene a arreglar. La trama es del SUELO; la pared es
-/// de la terraza.
+/// su material sale del suelo que corona. Si le pasáramos el bioma difuminado,
+/// una misma pared alternaría celda a celda entre el acantilado de nieve y el de
+/// pasto — un muro a rayas, que es peor que el corte que el difuminado viene a
+/// arreglar. La trama es del SUELO; la pared es de la terraza.
+///
+/// **El juego no la llama**: quien quiera saber de qué es una celda pregunta por
+/// [`superficie_de`], que es la que garantiza que el suelo y la pared que lo
+/// corona contesten lo mismo. Tener dos entradas fue justamente el bug del anillo
+/// de la meseta. Queda pública para las MEDICIONES, que necesitan comparar el
+/// bioma liso con el difuminado (`mapa_de_la_nieve`, `coste_del_relieve`).
 pub fn biome_de_terraza(body: CelestialBody, tx: i64, tz: i64) -> Biome {
     biome_calc(body, tx, tz, false)
+}
+
+/// **De qué pasto es una celda.** El pasto es el único suelo con variantes de
+/// clima, y la losa concreta la elige el cliente (`world2d::losa_de_pasto`): acá
+/// vive la DECISIÓN, que es de la sim, para que el suelo y la pared que lo corona
+/// no puedan sacarla de dos tablas distintas.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum Pasto {
+    /// El de referencia: pradera, y todo lo que no es pasto.
+    Referencia,
+    Bosque,
+    Seco,
+    Pantano,
+    Sierra,
+}
+
+/// **LA SUPERFICIE DE UNA CELDA: de qué es, y si es pasto, de cuál.**
+///
+/// Una sola respuesta por celda, que consumen los tres que antes la sacaban por
+/// su cuenta: la malla del suelo (qué losa pinta), la orilla (¿cambia contra el
+/// vecino?) y el relieve (de qué material es la pared que corona esta celda).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub struct Superficie {
+    pub tile: Tile,
+    pub pasto: Pasto,
+}
+
+/// **LA FUENTE ÚNICA DE QUÉ SE PISA EN UNA CELDA.**
+///
+/// # El bug que vino a cerrar
+///
+/// Había dos respuestas para la misma pregunta y nadie obligaba a que
+/// coincidieran: la pared sacaba su material del bioma LISO ([`biome_de_terraza`])
+/// y la losa del suelo sacaba su clima del bioma DIFUMINADO ([`biome_at`]). En la
+/// franja del ajedrez eso es una pared de sierra sobre una losa de pradera —el
+/// borde de la meseta de un color y el relleno de otro, que es como lo describió
+/// el usuario el 16 ago 2026: *"es como si las mesetas no tuvieran su terreno"*.
+///
+/// # La regla
+///
+/// **El difuminado se suspende sobre el relieve.** Un canto, el cuerpo de su
+/// pared y su rampa son UNA pieza de kit: si la trama del ajedrez entra ahí, la
+/// pieza sale a rayas. Y como la malla pinta esa misma celda con esta misma
+/// función, borde y relleno no pueden discrepar — no por disciplina, por
+/// construcción.
+///
+/// Devuelve el suelo que hay DEBAJO del relieve: `Tile::Cliff` y `Tile::Slope`
+/// son geometría (dicen "acá se termina la terraza"), no material. La roca la
+/// dibuja el sprite que cuelga.
+pub fn superficie_de(body: CelestialBody, tx: i64, tz: i64) -> Superficie {
+    let b = superficie_epoca();
+    let slot = superficie_slot(tx, tz);
+    let cuerpo = body as u8;
+    SUPERFICIE_CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        let e = &mut c[slot];
+        if e.filled && e.body == cuerpo && e.tx == tx && e.tz == tz && e.epoca == b {
+            return e.s;
+        }
+        let s = superficie_sin_memo(body, tx, tz);
+        *e = SuperficieSlot { tx, tz, body: cuerpo, epoca: b, s, filled: true };
+        s
+    })
+}
+
+fn superficie_sin_memo(body: CelestialBody, tx: i64, tz: i64) -> Superficie {
+    // Sobre relieve manda la terraza; en llano, el bioma difuminado de siempre.
+    let manda_la_terraza = matches!(
+        crate::relief::relief_cell(body, tx, tz),
+        crate::relief::ReliefCell::Cliff
+            | crate::relief::ReliefCell::Pared
+            | crate::relief::ReliefCell::Ramp
+    );
+    let b = biome_calc(body, tx, tz, !manda_la_terraza);
+    let t = biome_tile(body, b, tx, tz);
+    // Un canto nunca tiene el pie mojado (`relief_cell` devuelve `Flat` contra el
+    // agua), pero el BIOMA de al lado sí puede serlo: el pantano sortea charcos
+    // celda a celda y el río pinta agua. Un acantilado con el pie mojado es
+    // exactamente lo que no puede pasar, así que ahí manda el pasto.
+    let t = match t {
+        Tile::Water | Tile::WaterDeep if manda_la_terraza => Tile::Grass,
+        otro => otro,
+    };
+    // **El pasto es del CLIMA, no del tile.** Una celda de charco de pantano o de
+    // arena de playa no pinta pasto, pero la orilla que la separa del prado sí
+    // tiene que llevar el verde del pantano — y lo mismo la pared que corona un
+    // canto. Atarlo al tile dejaba la orla de todo el pantano con el verde de
+    // referencia.
+    Superficie { tile: t, pasto: pasto_de(b) }
+}
+
+/// La misma respuesta partiendo de un tile YA resuelto por el mundo (una edición
+/// del jugador, obra civil, el piso de una casa): sólo refina de qué pasto es.
+///
+/// Es lo que pide la malla, que ya preguntó `render_tile` y no puede tirar esa
+/// respuesta a la basura: lo que el jugador cavó gana sobre lo que dice el bioma.
+pub fn superficie_de_tile(body: CelestialBody, tile: Tile, tx: i64, tz: i64) -> Superficie {
+    Superficie { tile, pasto: superficie_de(body, tx, tz).pasto }
+}
+
+/// Los cuatro climas que crían su propio pasto. El resto va al de referencia: la
+/// playa y el desierto no son pasto (son arena) y la cumbre es nieve.
+///
+/// **La montaña comparte el de la sierra**: son la misma pastura de altura, y
+/// darle losa propia a cada grada era una losa por escalón — arte y atlas que el
+/// Redmi no necesita. Lo que separa una terraza de la de abajo es su TONO, que ya
+/// da el aclarado por escalón (`world2d::gris_de_celda`).
+fn pasto_de(b: Biome) -> Pasto {
+    match b {
+        Biome::Forest => Pasto::Bosque,
+        Biome::Savanna => Pasto::Seco,
+        Biome::Swamp => Pasto::Pantano,
+        Biome::Highland | Biome::Mountain => Pasto::Sierra,
+        _ => Pasto::Referencia,
+    }
+}
+
+// La caché de superficie es la misma tabla directa que usa `relief`: índice
+// posicional (sin hash, para que un recorrido por filas no se pise a sí mismo) y
+// la época de la partida en la clave, o la primera partida nueva sale con
+// parches del mundo anterior. Ver `relief::slot_espacial`.
+const SUPERFICIE_LADO: i64 = 128;
+const SUPERFICIE_SLOTS: usize = (SUPERFICIE_LADO * SUPERFICIE_LADO) as usize;
+
+#[derive(Clone, Copy)]
+struct SuperficieSlot {
+    tx: i64,
+    tz: i64,
+    body: u8,
+    epoca: u32,
+    s: Superficie,
+    filled: bool,
+}
+
+thread_local! {
+    static SUPERFICIE_CACHE: std::cell::RefCell<Vec<SuperficieSlot>> = std::cell::RefCell::new(
+        vec![
+            SuperficieSlot {
+                tx: i64::MIN,
+                tz: i64::MIN,
+                body: 0,
+                epoca: 0,
+                s: Superficie { tile: Tile::Grass, pasto: Pasto::Referencia },
+                filled: false,
+            };
+            SUPERFICIE_SLOTS
+        ],
+    );
+}
+
+#[inline]
+fn superficie_slot(tx: i64, tz: i64) -> usize {
+    (tz.rem_euclid(SUPERFICIE_LADO) * SUPERFICIE_LADO + tx.rem_euclid(SUPERFICIE_LADO)) as usize
+}
+
+#[inline]
+fn superficie_epoca() -> u32 {
+    crate::partida::epoca()
 }
 
 fn biome_calc(body: CelestialBody, tx: i64, tz: i64, difuminar: bool) -> Biome {
@@ -448,7 +723,17 @@ fn biome_calc(body: CelestialBody, tx: i64, tz: i64, difuminar: bool) -> Biome {
             return Biome::Beach;
         }
     }
-    if river_here(body, tx, tz, h, sea) {
+    // **EL RÍO ES UN TRAZADO SOBRE EL TERRENO, NO UNA GRADA DEL RELIEVE.**
+    //
+    // Pintar agua es cosa del SUELO; de qué está hecha la ladera que el río cruza
+    // lo dice la ladera. Sin el `difuminar &&`, una celda de acantilado con río
+    // daba River → `Tile::Water` → `superficie_de` la forzaba a pasto → material
+    // `"pasto"`, o sea **acantilados con el kit de PASTO en plena zona de nieve**,
+    // que es lo que se ve alrededor del cauce en la captura de la sierra.
+    //
+    // El camino sin difuminar es exactamente el del relieve (ver `superficie_de`
+    // y [`biome_de_terraza`]), así que esto no le cambia un tile al suelo.
+    if difuminar && river_here(body, tx, tz, h, sea) {
         return Biome::River;
     }
     if cold > 0.70 {
@@ -475,12 +760,32 @@ fn biome_calc(body: CelestialBody, tx: i64, tz: i64, difuminar: bool) -> Biome {
     // necesita el acantilado ([`biome_de_terraza`]).
     let sube = |umbral: i8| {
         if difuminar {
-            pasa_el_escalon(body, tx, tz, level, umbral)
+            pasa_la_grada(body, tx, tz, level, umbral)
         } else {
             level >= umbral
         }
     };
-    if sube(NIVEL_NIEVE) {
+    // **LA NIEVE VA POR SU PROPIO CAMPO** (ver [`pasa_la_linea_de_nieve`]): es la
+    // única grada cuya frontera se VE —blanco contra verde— y con el escalón de
+    // la celda salía entreverada en vez de trazada. Sin difuminar es el mismo
+    // umbral sobre el mismo campo suave, para que el acantilado siga sacando un
+    // material por terraza y no uno por celda.
+    //
+    // **Y sólo se pregunta cerca de la cota.** El campo suave cuesta una
+    // plataforma y dos octavas, y `biome_at` se llama varias veces por celda: si
+    // se consultara en toda la Tierra, el 97,8 % del planeta (que está por debajo
+    // del escalón 9, medido en `auditoria_del_mapa::de_que_esta_hecha_la_tierra`)
+    // lo pagaría para que le dijeran que no nieva. Quitar las dos octavas finas
+    // mueve el campo como mucho su amplitud —(0,13+0,07) × 0,42 ≈ 0,084, o sea
+    // menos de dos escalones— así que por debajo de `NIVEL_NIEVE − 3` la
+    // respuesta es no y no hace falta calcularla.
+    let nieva = level >= NIVEL_NIEVE - 3
+        && if difuminar {
+            pasa_la_linea_de_nieve(body, tx, tz, NIVEL_NIEVE)
+        } else {
+            crate::relief::escalon_de_cordillera(body, tx, tz).0 >= NIVEL_NIEVE
+        };
+    if nieva {
         return Biome::Snow;
     }
     if sube(8) {
@@ -1346,6 +1651,66 @@ pub fn building_tile(body: CelestialBody, tx: i64, tz: i64) -> Option<Tile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **SOBRE RELIEVE MANDA LA TERRAZA, NO LA TRAMA DEL SUELO.**
+    ///
+    /// Es el guardián del anillo de la meseta por el lado del material. Había DOS
+    /// respuestas para "de qué es esta celda": la pared la sacaba del bioma LISO
+    /// ([`biome_de_terraza`]) y la losa del suelo del DIFUMINADO ([`biome_at`]),
+    /// y nadie obligaba a que coincidieran — en la franja de transición eso es
+    /// una pared de sierra plantada sobre una losa de pradera, o sea el borde de
+    /// la meseta de un color y el relleno de otro.
+    ///
+    /// [`superficie_de`] contesta una sola vez, y sobre un canto, un cuerpo de
+    /// pared o una rampa contesta con la TERRAZA. El test lo comprueba celda a
+    /// celda **y exige que la muestra tenga casos donde las dos respuestas
+    /// difieren**: sin eso, la afirmación se cumpliría sola y no guardaría nada.
+    #[test]
+    fn sobre_relieve_manda_la_terraza() {
+        use crate::relief::{relief_cell, ReliefCell};
+        let b = CelestialBody::Earth;
+        let (mut celdas, mut discrepan) = (0u32, 0u32);
+        for (cx, cz) in [(0i64, 0i64), (1_400, -5_200), (2_400, -1_800), (-3_100, 900)] {
+            for tz in cz - 120..cz + 120 {
+                for tx in cx - 120..cx + 120 {
+                    if matches!(relief_cell(b, tx, tz), ReliefCell::Flat) {
+                        continue;
+                    }
+                    celdas += 1;
+                    let s = superficie_de(b, tx, tz);
+                    assert_eq!(
+                        s.pasto,
+                        pasto_de(biome_de_terraza(b, tx, tz)),
+                        "el relieve de ({tx},{tz}) saca su pasto de la trama del suelo"
+                    );
+                    if pasto_de(biome_at(b, tx, tz)) != s.pasto {
+                        discrepan += 1;
+                    }
+                }
+            }
+        }
+        assert!(celdas > 500, "muestra corta: {celdas} celdas de relieve");
+        // **Y la afirmación de arriba tiene que poder fallar.** Las dos respuestas
+        // difieren sólo en la franja de transición de una grada, que es angosta:
+        // si en la muestra no cae ninguna, se busca en grande antes de dar el test
+        // por bueno.
+        if discrepan == 0 {
+            'busca: for i in -60..60i64 {
+                for j in -60..60i64 {
+                    let (tx, tz) = (i * 137, j * 137);
+                    if pasto_de(biome_at(b, tx, tz)) != pasto_de(biome_de_terraza(b, tx, tz)) {
+                        discrepan += 1;
+                        break 'busca;
+                    }
+                }
+            }
+        }
+        assert!(
+            discrepan > 0,
+            "en {celdas} celdas de relieve el bioma difuminado y el de terraza \
+             nunca difieren: el test no está guardando nada"
+        );
+    }
 
     /// **La tierra pelada se CAVA, no se genera.** Ver el comentario de
     /// [`biome_tile`]: `Tile::Dirt` no tiene losa en el pack, así que cada celda

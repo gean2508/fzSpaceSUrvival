@@ -28,14 +28,81 @@ pub struct TreeInstance {
 /// Trunk hit radius for the look ray (generous — aiming on mobile is coarse).
 const TREE_HIT_RADIUS: f32 = 1.3;
 
+/// **La clave de arte del prop que estás tocando**, para que levantarlo sepa qué
+/// era. `Cow` y no `String` a propósito: el mundo siembra cientos de props por
+/// chunk y sus claves salen de las tablas de `worldgen`, que ya son `'static` —
+/// el camino caliente no asigna nada. Sólo el decor autorado (lo que el usuario
+/// puso a mano en el editor, que son unos pocos) trae la clave en propiedad.
+#[derive(Component, Clone, Debug)]
+pub struct PropArt(pub std::borrow::Cow<'static, str>);
+
+impl PropArt {
+    /// Nombre humano para el cartel del HUD; si el slot no está en el catálogo,
+    /// la clave pelada, que sigue siendo más útil que "objeto".
+    pub fn label(&self) -> &str {
+        ha_assets::slots::slot_label(&self.0).unwrap_or(&self.0)
+    }
+}
+
 pub struct HarvestPlugin;
 
 impl Plugin for HarvestPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FloraHarvest>()
             .add_systems(Startup, load_harvest_on_startup)
-            .add_systems(Update, debounced_harvest_save);
+            .add_systems(Update, (debounced_harvest_save, pick_up_prop));
     }
+}
+
+/// **Levantar un prop del mundo.** Misma gramática que levantar lo que colocaste
+/// (`structures::pick_up_structure`) y que picar un bloque: mantener el dedo
+/// encima lo saca del mundo. La diferencia es de quién es el objeto — éste lo
+/// sembró el generador, así que la baja se anota en el set de removidos, que es
+/// lo mismo que ya hacía un árbol talado.
+///
+/// Y devuelve material sólo si el objeto está en el catálogo de colocables: un
+/// banco cuesta madera y la madera vuelve. Lo que no tiene receta (una mata, un
+/// charco, una hoja) se levanta igual y no da nada — que se pueda tocar TODO no
+/// significa que todo valga algo.
+#[allow(clippy::too_many_arguments)]
+fn pick_up_prop(
+    mut commands: Commands,
+    mut hold: ResMut<crate::input::HoldInteractState>,
+    target: Res<crate::targeting::LookTarget>,
+    props: Query<&PropArt>,
+    ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
+    editor: Res<crate::ui_editor::UiEditorState>,
+    mut flora: ResMut<FloraHarvest>,
+    mut inv_ui: ResMut<crate::hud::inventory_ui::InventoryUiState>,
+    mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
+    mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
+) {
+    if target.kind != Some(ha_shared::InteractTargetKind::Prop) || !hold.completed {
+        return;
+    }
+    let Some(entity) = target.entity else { return };
+    hold.completed = false;
+
+    if !editor.creative {
+        if let Ok(prop) = props.get(entity) {
+            if let Some(a) = ha_shared::placeables::PLACEABLES
+                .iter()
+                .find(|a| a.art == prop.0.as_ref())
+            {
+                crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, a.cost_item, a.cost_qty);
+                crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+                persist.mark_immediate();
+            }
+        }
+    }
+    // La baja va al set de removidos ANTES de matar la entidad: si no, el chunk
+    // lo vuelve a sembrar en cuanto se re-streamea y el banco "resucita".
+    if let Some((cx, cz, id)) = target.flora_cell {
+        let body = crate::world2d::active_surface_body(&ctx, &planet);
+        flora.harvest(body, cx, cz, id);
+    }
+    commands.entity(entity).despawn_recursive();
 }
 
 #[derive(Resource, Default)]

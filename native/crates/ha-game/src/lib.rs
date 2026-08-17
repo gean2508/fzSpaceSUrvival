@@ -21,11 +21,16 @@ mod structures;
 mod walls;
 mod weather;
 mod partida;
+mod personajes;
+mod menu_listas;
+mod objetivo;
 mod world_edits;
 mod companion;
 mod dialog;
 mod fauna;
 mod ambient;
+mod consola;
+mod marca;
 mod light2d;
 mod game_menu;
 mod game_time;
@@ -67,6 +72,7 @@ pub mod map_item;
 pub mod torches;
 mod transition;
 mod ui_editor;
+mod ui_pack;
 mod ui_theme;
 mod vault;
 mod ui;
@@ -280,6 +286,9 @@ fn run_app_inner() {
             SurvivalStatsPlugin,
             ColonyPlugin,
         ))
+        // El fondo parallax de las pantallas de menú. En su propia llamada
+        // porque el tuple de al lado ya llegó al tope de 16 que admite `Plugins`.
+        .add_plugins((ui_pack::UiPackPlugin, marca::ParallaxPlugin, consola::ConsolaPlugin, menu_listas::MenuListasPlugin, objetivo::ObjetivoPlugin))
         .add_plugins((
             FollowCameraPlugin,
             TelemetryPlugin,

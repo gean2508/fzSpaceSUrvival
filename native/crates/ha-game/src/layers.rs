@@ -166,6 +166,16 @@ pub fn depth(layer: Option<ArtLayer>, foot_z: f32) -> f32 {
     }
 }
 
+/// **¿Este asset ES suelo?** Lo plano (`Floor`) y el glow (`Light`) no se
+/// levantan de la baldosa: son parte de ella. Se usa para decidir qué puede ser
+/// objetivo del dedo — un charco o una alfombra no se "levantan", y si fueran
+/// tocables le robarían el toque a la celda que hay debajo (cavar y colocar
+/// dejarían de funcionar sobre cualquier baldosa decorada).
+#[inline]
+pub fn es_piso(layer: Option<ArtLayer>) -> bool {
+    matches!(layer, Some(ArtLayer::Floor) | Some(ArtLayer::Light))
+}
+
 /// Marca un sprite de la banda [`OVERHEAD`] con la huella (en TILES) que cubre:
 /// cuando el jugador entra ahí abajo, el sprite se desvanece a [`INSIDE_ALPHA`] y
 /// podés verte a vos mismo. Es el mecanismo genérico del techo — lo usan tanto

@@ -10,15 +10,20 @@
 
 use bevy::app::AppExit;
 use bevy::prelude::*;
+use crate::marca::Paleta;
 use ha_shared::Ps1Retro;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::ui::FocusPolicy;
 use bevy::window::{MonitorSelection, PrimaryWindow, WindowMode};
 
-use crate::game_phase::{has_savegame, load_savegame, GamePhase, SelectedCharacter};
+use crate::game_phase::{load_savegame, GamePhase, SelectedCharacter};
 use crate::input::TouchLayout;
 
-const SPLASH_SECS: f32 = 1.8;
+/// **Dura lo que dura el sonido de la marca.** El WAV de `audio/splash.wav` mide
+/// 2,60 s medidos; cortar la splash antes deja el golpe de sonido colgado, que es
+/// peor que no tenerlo. Los 0,25 de más son el aire para que el logo respire
+/// antes de irse.
+const SPLASH_SECS: f32 = 2.85;
 const BG_FPS: f32 = 8.0;
 const NEON_CYAN: Color = Color::srgb(Ps1Retro::TEXT[0], Ps1Retro::TEXT[1], Ps1Retro::TEXT[2]);
 const NEON_MAGENTA: Color = Color::srgb(Ps1Retro::SELECT[0], Ps1Retro::SELECT[1], Ps1Retro::SELECT[2]);
@@ -32,15 +37,20 @@ impl Plugin for BootUiPlugin {
         app.init_resource::<MenuBg>()
             .init_resource::<SplashTimer>()
             .init_resource::<MenuShot>()
+            .init_resource::<SonoSplash>()
+            .init_resource::<RehacerMenu>()
             .add_systems(Startup, load_menu_bg)
             .add_systems(OnEnter(GamePhase::Splash), spawn_splash)
             .add_systems(OnExit(GamePhase::Splash), despawn_boot)
             .add_systems(OnEnter(GamePhase::MainMenu), spawn_main_menu)
             .add_systems(OnExit(GamePhase::MainMenu), despawn_boot)
-            .add_systems(Update, tick_splash.run_if(in_state(GamePhase::Splash)))
             .add_systems(
                 Update,
-                (menu_button_system, settings_button_system, menu_screenshot)
+                (tick_splash, animar_splash, sonar_splash).run_if(in_state(GamePhase::Splash)),
+            )
+            .add_systems(
+                Update,
+                (menu_button_system, settings_button_system, menu_screenshot, rehacer_menu)
                     .run_if(in_state(GamePhase::MainMenu)),
             )
             .add_systems(Update, (animate_bg, boot_pulse))
@@ -112,22 +122,45 @@ fn animate_bg(time: Res<Time<bevy::time::Real>>, mut bg: ResMut<MenuBg>, mut q: 
 // ── marcadores ─────────────────────────────────────────────────────────────
 
 #[derive(Component)]
-struct BootRoot;
+pub struct BootRoot;
 #[derive(Component)]
 struct BootPulse;
 #[derive(Component, Clone, Copy)]
 enum MenuAction {
+    /// **Lo que se toca casi siempre**: entra a la última partida jugada. Por eso
+    /// se lleva el ancho entero en el menú.
+    Continuar,
+    /// Abre la lista de mundos.
+    Partidas,
+    /// Abre la lista de personajes, que es OTRA lista: un personaje no pertenece
+    /// a un mundo.
+    Personajes,
     NewGame,
-    Load,
     Settings,
     Quit,
+    /// El riel de la izquierda del mockup.
+    Controles,
+    Actualizar,
+    Creditos,
+    /// Las flechas al lado del personaje: cambian cuál está elegido.
+    PjAnterior,
+    PjSiguiente,
 }
 #[derive(Component)]
 struct SettingsPanel;
-#[derive(Component, Clone, Copy)]
+
+/// El texto de la versión, que cambia mientras se lo toca.
+#[derive(Component)]
+struct VersionLabel;
+#[derive(Component, Clone, Copy, PartialEq)]
 enum SettingsAction {
     ToggleFullscreen,
     Close,
+    /// **La versión, que es un botón sin parecerlo.** Siete toques destraban la
+    /// consola (`crate::consola`). Es el gesto de las opciones de desarrollador
+    /// de Android, así que no hay que explicárselo a nadie — y quien no lo
+    /// conozca sólo ve el número de build, que es para lo que está ahí.
+    Version,
 }
 
 fn despawn_boot(mut commands: Commands, q: Query<Entity, With<BootRoot>>) {
@@ -172,64 +205,338 @@ fn root_with_bg<'a>(commands: &'a mut Commands, bg: &MenuBg, touch: &TouchLayout
         BootRoot,
         Name::new("BootOverlay"),
     ));
-    if !bg.frames.is_empty() {
-        ec.with_children(|root| {
-            root.spawn((
-                ImageNode::new(bg.frames[0].clone()),
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    ..default()
-                },
-                MenuBgImage,
-            ));
-        });
-    }
+    // **El fondo es PARALLAX, no un video de PNG.**
+    //
+    // Antes esto pegaba una secuencia de imágenes de pantalla completa
+    // (`art/ui/menu_bg/*.png`) reproducida a 8 fps. En Android ni siquiera
+    // existía —no hay readdir del APK— así que el menú quedaba en un color
+    // sólido, que es exactamente como se veía en el celu. Y donde sí existía
+    // costaba N texturas de pantalla completa residentes para algo que se mira
+    // diez segundos. Tres nodos de color que derivan cuestan cero textura.
+    let _ = bg;
+    ec.with_children(|root| {
+        crate::marca::fondo(root, crate::marca::Ambiente::Menu, s);
+    });
     ec
 }
 
+/// El título del menú, con la paleta de la marca. El "KI" es del juego; el
+/// renglón de abajo va en el cartel, que es la regla: **un rótulo nunca es texto
+/// pelado**.
 fn title(root: &mut ChildBuilder, s: f32) {
+    use crate::marca::Paleta;
     root.spawn((
         Text::new("KI"),
         TextFont { font_size: (58.0 * s).clamp(30.0, 66.0), ..default() },
-        TextColor(NEON_CYAN),
+        TextColor(Paleta::TEXTO),
     ));
-    root.spawn((
-        Text::new("MUNDO ABIERTO"),
-        TextFont { font_size: (18.0 * s).clamp(12.0, 20.0), ..default() },
-        TextColor(NEON_MAGENTA),
-    ));
+    crate::marca::cartel(root, "Mundo abierto", s);
     root.spawn((
         Node {
             width: Val::Px(220.0 * s),
-            height: Val::Px(4.0),
+            height: Val::Px(3.0),
             margin: UiRect::top(Val::Px(6.0 * s)),
             ..default()
         },
-        BackgroundColor(NEON_MAGENTA),
+        BackgroundColor(Paleta::TURQUESA),
+        BorderRadius::all(Val::Px(2.0)),
         BootPulse,
     ));
 }
 
+/// Una mancha de pintura de la splash.
+#[derive(Component)]
+struct Salpicon {
+    /// Índice: decide cuándo entra (`i * 0,075` de `paso`).
+    i: f32,
+    /// Centro en coordenadas del mockup (2400 × 1080).
+    centro: Vec2,
+    /// Lado final del dibujo, en coordenadas del mockup.
+    lado: f32,
+    k: f32,
+}
+
+/// El texto de la marca, que entra cuando ya hay pintura debajo.
+#[derive(Component)]
+struct MarcaTexto {
+    /// Valor de `paso` a partir del cual aparece.
+    desde: f32,
+    /// Cuánto crece la tipografía mientras entra (0 = no crece).
+    crece: f32,
+    base: f32,
+    k: f32,
+}
+
+/// Marca al reproductor de sonido para no spawnearlo dos veces.
+#[derive(Resource, Default)]
+struct SonoSplash(bool);
+
+/// **El reparto de manchas del mockup**, en su espacio de 400 × 180 (la splash
+/// se dibuja en baja resolución y se amplía con vecino más cercano, que es lo que
+/// le da el borde escalonado). `(cx, cy, r, color)`.
+const MANCHAS: [(f32, f32, f32, Color); 8] = [
+    (132.0, 76.0, 34.0, MORADO),
+    (268.0, 118.0, 32.0, TURQUESA),
+    (238.0, 54.0, 19.0, NARANJA),
+    (152.0, 146.0, 20.0, FUCSIA),
+    (316.0, 64.0, 14.0, MORADO_HI),
+    (78.0, 132.0, 15.0, TURQUESA_HI),
+    (200.0, 156.0, 11.0, NARANJA),
+    (296.0, 26.0, 10.0, FUCSIA),
+];
+
+/// La paleta de FZ STUDIOS, tal cual el mockup.
+const MORADO: Color = Color::srgb(0.486, 0.243, 0.839);
+const MORADO_HI: Color = Color::srgb(0.635, 0.416, 0.941);
+const TURQUESA: Color = Color::srgb(0.149, 0.878, 0.773);
+const TURQUESA_HI: Color = Color::srgb(0.494, 0.965, 0.886);
+const NARANJA: Color = Color::srgb(1.0, 0.541, 0.165);
+const FUCSIA: Color = Color::srgb(0.941, 0.235, 0.627);
+const NEGRO: Color = Color::srgb(0.071, 0.063, 0.102);
+const CREMA: Color = Color::srgb(0.941, 0.957, 0.949);
+
+/// Cuánto dura la parte animada, en segundos. Sale de atar la animación al
+/// sonido: la mancha `i` aterriza en `0,288 + i · 0,135` s y el WAV pega su pop
+/// en `0,06 + i · 0,135` — con el audio arrancando `0,228` s después del dibujo,
+/// los ocho golpes caen exactamente sobre las ocho manchas.
+const PASO_SEGS: f32 = 1.8;
+/// Cuánto se atrasa el audio para que los pops caigan sobre las manchas.
+const RETARDO_AUDIO: f32 = 0.228;
+
+/// **La mancha, dibujada pixel a pixel.** Es el port de `mock_menu::salpicon`:
+/// un núcleo deforme de once gotas, siete chorros que se afinan y un rocío de
+/// gotitas. Va PLANA — un degradado la convierte en una pelota.
+///
+/// Se dibuja en una textura chica (el radio por ocho) y se amplía con vecino más
+/// cercano, así el borde queda escalonado como el pixel del juego. Es la misma
+/// razón por la que el mockup dibuja a un sexto y agranda.
+fn pintar_mancha(r: f32, color: Color, semilla: u64) -> Image {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+
+    let lado = ((r * 8.0).ceil() as usize).max(8);
+    let mut px = vec![0u8; lado * lado * 4];
+    let c = color.to_srgba();
+    let rgba = [
+        (c.red * 255.0) as u8,
+        (c.green * 255.0) as u8,
+        (c.blue * 255.0) as u8,
+        255u8,
+    ];
+    let centro = lado as f32 / 2.0;
+
+    let mut estado = semilla.wrapping_mul(6364136223846793005).wrapping_add(1);
+    let mut az = move || {
+        estado = estado.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((estado >> 11) % 1_000_000) as f32 / 1_000_000.0
+    };
+
+    let mut gota = |px: &mut Vec<u8>, cx: f32, cy: f32, rr: f32| {
+        let r2 = rr * rr;
+        let x0 = ((cx - rr).floor().max(0.0)) as usize;
+        let x1 = ((cx + rr).ceil().min(lado as f32 - 1.0)) as usize;
+        let y0 = ((cy - rr).floor().max(0.0)) as usize;
+        let y1 = ((cy + rr).ceil().min(lado as f32 - 1.0)) as usize;
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let dx = x as f32 + 0.5 - cx;
+                let dy = y as f32 + 0.5 - cy;
+                if dx * dx + dy * dy <= r2 {
+                    let o = (y * lado + x) * 4;
+                    px[o..o + 4].copy_from_slice(&rgba);
+                }
+            }
+        }
+    };
+
+    const TAU: f32 = std::f32::consts::TAU;
+    // El núcleo: once gotas desparramadas dentro del radio.
+    for _ in 0..11 {
+        let a = az() * TAU;
+        let d = az() * r * 0.72;
+        gota(&mut px, centro + d * a.cos(), centro + d * a.sin() * 0.8, r * (0.38 + az() * 0.34));
+    }
+    // Los chorros, que se afinan hacia la punta, con su gota al final.
+    for _ in 0..7 {
+        let a = az() * TAU;
+        let largo = r * (1.3 + az() * 1.5);
+        for i in 0..9 {
+            let t = (i + 1) as f32 / 9.0;
+            let rr = (r * 0.42 * (1.0 - t).powf(1.5)).max(0.6);
+            gota(&mut px, centro + largo * t * a.cos(), centro + largo * t * a.sin() * 0.82, rr);
+        }
+        if az() < 0.7 {
+            let gr = r * (0.10 + az() * 0.10);
+            gota(
+                &mut px,
+                centro + (largo + gr * 2.4) * a.cos(),
+                centro + (largo + gr * 2.4) * a.sin() * 0.82,
+                gr,
+            );
+        }
+    }
+    // El rocío.
+    for _ in 0..21 {
+        let a = az() * TAU;
+        let largo = r * (1.6 + az() * 2.0);
+        let rr = (r * (0.04 + az() * 0.09)).max(0.6);
+        gota(&mut px, centro + largo * a.cos(), centro + largo * a.sin() * 0.82, rr);
+    }
+
+    Image::new(
+        Extent3d { width: lado as u32, height: lado as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        px,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+/// **La splash: FZ STUDIOS con manchas de pintura.**
+///
+/// Es la pantalla de la imagen de referencia, no una versión parecida: las ocho
+/// manchas están en sus coordenadas, entran escalonadas con el mismo rebote
+/// corto al aterrizar, y el logo aparece cuando ya hay pintura debajo. El sonido
+/// —los ocho pops y el acorde final— es el WAV que ya viene en el APK, y arranca
+/// atrasado [`RETARDO_AUDIO`] para que cada golpe caiga sobre su mancha.
 fn spawn_splash(
     mut commands: Commands,
-    bg: Res<MenuBg>,
     touch: Res<TouchLayout>,
     mut timer: ResMut<SplashTimer>,
+    mut sono: ResMut<SonoSplash>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     timer.0 = 0.0;
-    let s = ui_scale(&touch);
-    root_with_bg(&mut commands, &bg, &touch, s).with_children(|root| {
-        title(root, s);
-        root.spawn((
-            Text::new("cargando..."),
-            TextFont { font_size: (13.0 * s).clamp(10.0, 15.0), ..default() },
-            TextColor(Color::srgb(0.7, 0.75, 0.85)),
-        ));
-    });
+    sono.0 = false;
+    let k = crate::ui_pack::k(&touch);
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(NEGRO),
+            GlobalZIndex(1000),
+            FocusPolicy::Block,
+            BootRoot,
+            Name::new("Splash"),
+        ))
+        .with_children(|root| {
+            root.spawn(crate::ui_pack::lienzo(k)).with_children(|l| {
+                for (i, (cx, cy, r, color)) in MANCHAS.into_iter().enumerate() {
+                    // El espacio del mockup es 400 × 180; la pantalla, 2400 × 1080.
+                    let escala = 6.0;
+                    let img = images.add(pintar_mancha(r, color, 20 + i as u64));
+                    let lado_dibujo = (r * 8.0).ceil() * escala;
+                    let centro = Vec2::new(cx * escala, cy * escala);
+                    l.spawn((
+                        crate::ui_pack::caja(centro.x, centro.y, 0.0, 0.0, k),
+                        ImageNode::new(img),
+                        Salpicon { i: i as f32, centro, lado: lado_dibujo, k },
+                        Name::new("Mancha"),
+                    ));
+                }
+                // El logo. La sombra va primero, corrida como en el mockup.
+                for (sombra, color) in [(true, Color::srgba(0.157, 0.125, 0.157, 0.75)), (false, CREMA)] {
+                    let d = if sombra { 10.0 } else { 0.0 };
+                    l.spawn(Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(d * k),
+                        top: Val::Px((534.0 - 120.0 + d) * k),
+                        width: Val::Px(crate::ui_pack::ANCHO * k),
+                        height: Val::Px(240.0 * k),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
+                    .with_children(|t| {
+                        t.spawn((
+                            Text::new("FZ STUDIOS"),
+                            TextFont { font_size: 120.0 * k, ..default() },
+                            TextColor(color.with_alpha(0.0)),
+                            TextLayout::new_with_no_wrap(),
+                            MarcaTexto { desde: 0.55, crece: 84.0, base: 120.0, k },
+                        ));
+                    });
+                }
+                l.spawn(Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px((672.0 - 40.0) * k),
+                    width: Val::Px(crate::ui_pack::ANCHO * k),
+                    height: Val::Px(80.0 * k),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|t| {
+                    t.spawn((
+                        Text::new("presenta"),
+                        TextFont { font_size: 50.0 * k, ..default() },
+                        TextColor(TURQUESA_HI.with_alpha(0.0)),
+                        TextLayout::new_with_no_wrap(),
+                        MarcaTexto { desde: 0.85, crece: 0.0, base: 50.0, k },
+                    ));
+                });
+            });
+        });
+}
+
+/// Las manchas caen escalonadas con un rebote corto, y el logo entra al final.
+///
+/// La curva es la del mockup, literal: `crecer = k · (1,12 − 0,12 k)`, o sea que
+/// pasa de largo un 12 % y se asienta. Sin ese sobrepaso la mancha se infla como
+/// un globo.
+fn animar_splash(
+    timer: Res<SplashTimer>,
+    mut manchas: Query<(&mut Node, &Salpicon)>,
+    mut textos: Query<(&mut TextColor, &mut TextFont, &MarcaTexto)>,
+) {
+    let paso = (timer.0 / PASO_SEGS).clamp(0.0, 1.0);
+    for (mut nodo, m) in &mut manchas {
+        let t0 = m.i * 0.075;
+        let k = ((paso - t0) / 0.16).clamp(0.0, 1.0);
+        if k <= 0.0 {
+            continue;
+        }
+        let crecer = k * (1.12 - 0.12 * k);
+        let lado = m.lado * crecer;
+        nodo.width = Val::Px(lado * m.k);
+        nodo.height = Val::Px(lado * m.k);
+        nodo.left = Val::Px((m.centro.x - lado / 2.0) * m.k);
+        nodo.top = Val::Px((m.centro.y - lado / 2.0) * m.k);
+    }
+    for (mut color, mut fuente, t) in &mut textos {
+        if paso <= t.desde {
+            continue;
+        }
+        let k = ((paso - t.desde) / 0.2).clamp(0.0, 1.0);
+        color.0 = color.0.with_alpha(1.0);
+        fuente.font_size = (t.base + t.crece * k) * t.k;
+    }
+}
+
+/// El sonido de la marca, atrasado para que los pops caigan sobre las manchas.
+fn sonar_splash(
+    timer: Res<SplashTimer>,
+    mut sono: ResMut<SonoSplash>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    if sono.0 || timer.0 < RETARDO_AUDIO {
+        return;
+    }
+    sono.0 = true;
+    commands.spawn((
+        AudioPlayer::<AudioSource>::new(asset_server.load("audio/splash.wav")),
+        PlaybackSettings::DESPAWN,
+        Name::new("SplashSonido"),
+    ));
 }
 
 fn tick_splash(
@@ -250,93 +557,377 @@ fn tick_splash(
     }
 }
 
-fn spawn_main_menu(mut commands: Commands, bg: Res<MenuBg>, touch: Res<TouchLayout>) {
-    let load_label = if has_savegame() { "CARGAR PARTIDA" } else { "CARGAR (vacio)" };
+/// **El menú principal, tal cual la imagen de referencia.**
+///
+/// La barra de estado arriba, el riel de opciones a la izquierda, el personaje
+/// elegido en el medio con sus flechas y su nombre, y el panel MENÚ a la derecha
+/// con cinco fichas: CONTINUAR se lleva el ancho entero porque es lo que se toca
+/// casi siempre, y debajo van PARTIDAS, PERSONAJES, NUEVA PARTIDA y SALIR.
+///
+/// Cada número de acá está transcripto del mockup (`mock_menu::menu`): las
+/// coordenadas son las de 2400 × 1080 y las escala [`crate::ui_pack::k`].
+#[allow(clippy::too_many_arguments)]
+fn spawn_main_menu(
+    mut commands: Commands,
+    touch: Res<TouchLayout>,
+    art: Res<crate::art2d::ArtLibrary>,
+    cg: Res<crate::chargen::Chargen>,
+    hoja: Res<crate::ui_pack::HojaPj>,
+    halo_tex: Res<crate::ui_pack::HaloTex>,
+    assets: Res<AssetServer>,
+    selected: Res<SelectedCharacter>,
+) {
+    construir_menu(&mut commands, &touch, &art, &cg, &hoja, &halo_tex, &assets, &selected);
+}
+
+/// **Rehacer el menú sin salir de él.** Las flechas del personaje cambian lo que
+/// se ve en media pantalla; volver a entrar al estado no dispara `OnEnter`
+/// cuando el estado no cambió, así que el redibujo se pide por bandera.
+#[derive(Resource, Default)]
+pub struct RehacerMenu(pub bool);
+
+#[allow(clippy::too_many_arguments)]
+fn rehacer_menu(
+    mut flag: ResMut<RehacerMenu>,
+    mut commands: Commands,
+    raices: Query<Entity, With<BootRoot>>,
+    touch: Res<TouchLayout>,
+    art: Res<crate::art2d::ArtLibrary>,
+    cg: Res<crate::chargen::Chargen>,
+    hoja: Res<crate::ui_pack::HojaPj>,
+    halo_tex: Res<crate::ui_pack::HaloTex>,
+    assets: Res<AssetServer>,
+    selected: Res<SelectedCharacter>,
+) {
+    if !flag.0 {
+        return;
+    }
+    flag.0 = false;
+    for e in &raices {
+        commands.entity(e).despawn_recursive();
+    }
+    construir_menu(&mut commands, &touch, &art, &cg, &hoja, &halo_tex, &assets, &selected);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn construir_menu(
+    commands: &mut Commands,
+    touch: &TouchLayout,
+    art: &crate::art2d::ArtLibrary,
+    cg: &crate::chargen::Chargen,
+    hoja: &crate::ui_pack::HojaPj,
+    halo_tex: &crate::ui_pack::HaloTex,
+    assets: &AssetServer,
+    selected: &SelectedCharacter,
+) {
+    use crate::ui_pack::{self as up, Ancla, Pack};
+
+    let k = up::k(&touch);
     let s = ui_scale(&touch);
-    // Ancho de botón acotado también por el ancho útil: en pantallas angostas
-    // (o con notch lateral) 260 px fijos se comían el margen.
-    let usable_w = (touch.width - touch.insets.left as f32 - touch.insets.right as f32 - 32.0).max(160.0);
-    let btn_w = (260.0 * s).clamp(150.0, 300.0).min(usable_w);
-    // DOS COLUMNAS en apaisado. El teléfono da un lienzo LÓGICO de 873x377 (2400
-    // fisicos / 2.75 de densidad): muy ancho y muy bajo. Apilado en una sola
-    // columna el titulo mas los cuatro botones median ~375 de los 377 de alto —
-    // o sea que vivia a dos pixeles de cortarse, y se corto en cuanto la fuente
-    // nueva trajo metricas un poco mas altas (`SALIR` quedaba sin borde). Con el
-    // titulo a la izquierda y los botones a la derecha el alto necesario se parte
-    // al medio y de paso se usan los 873 de ancho, que antes eran margen muerto.
-    let apaisado = touch.width > touch.height * 1.5;
-    root_with_bg(&mut commands, &bg, &touch, s).with_children(|root| {
-        let botones = |col: &mut ChildBuilder| {
-            menu_button(col, "NUEVA PARTIDA", MenuAction::NewGame, NEON_CYAN, btn_w, s);
-            menu_button(col, load_label, MenuAction::Load, NEON_CYAN, btn_w, s);
-            menu_button(col, "AJUSTES", MenuAction::Settings, NEON_CYAN, btn_w, s);
-            menu_button(col, "SALIR", MenuAction::Quit, NEON_MAGENTA, btn_w, s);
-        };
-        if apaisado {
-            root.spawn(Node {
+    let fichas_partida = crate::partida::listar();
+    let ultima = fichas_partida.first().cloned();
+    let hay_partidas = !fichas_partida.is_empty();
+    let personajes = crate::personajes::listar();
+    let look = selected.look.or_else(|| personajes.first().and_then(|p| p.look));
+    let nombre_pj = personajes
+        .first()
+        .map(|p| p.nombre.to_uppercase())
+        .unwrap_or_else(|| "SIN PERSONAJE".to_string());
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
                 width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::SpaceEvenly,
-                column_gap: Val::Px(24.0 * s),
+                height: Val::Percent(100.0),
                 ..default()
-            })
-            .with_children(|fila| {
-                fila.spawn(Node {
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|izq| title(izq, s));
-                fila.spawn((
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        row_gap: Val::Px(10.0 * s),
-                        ..default()
-                    },
-                    Name::new("MainMenuButtons"),
-                ))
-                .with_children(botones);
-            });
-        } else {
-            title(root, s);
-            root.spawn((
-                Node {
-                    margin: UiRect::top(Val::Px(20.0 * s)),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    row_gap: Val::Px(10.0 * s),
-                    ..default()
-                },
-                Name::new("MainMenuButtons"),
-            ))
-            .with_children(botones);
+            },
+            BackgroundColor(VOID),
+            GlobalZIndex(1000),
+            FocusPolicy::Block,
+            BootRoot,
+            Name::new("BootOverlay"),
+        ))
+        .with_children(|root| {
+            // El bosque del mockup, con el arte del pack.
+            crate::marca::bosque::fondo(root, art, crate::marca::Ambiente::Menu, k);
+
+            root.spawn((up::lienzo(k), MenuContenido, Name::new("MenuLienzo")))
+                .with_children(|l| {
+                    // ── la barra de arriba ────────────────────────────────
+                    up::barra_estado(
+                        l,
+                        art,
+                        up::CUERPO_TIERRA,
+                        &[
+                            up::Ficha {
+                                icono: "ui/ic_grilla",
+                                etiqueta: "SEMILLA",
+                                valor: ultima
+                                    .as_ref()
+                                    .map(|f| separar_miles(f.semilla))
+                                    .unwrap_or_else(|| "—".into()),
+                            },
+                            up::Ficha {
+                                icono: "ui/ic_casa",
+                                etiqueta: "PARTIDA",
+                                valor: ultima
+                                    .as_ref()
+                                    .map(|f| f.nombre.clone())
+                                    .unwrap_or_else(|| "—".into()),
+                            },
+                            up::Ficha {
+                                icono: "ui/ic_reloj",
+                                etiqueta: "DÍA",
+                                valor: ultima
+                                    .as_ref()
+                                    .map(|f| f.dia.to_string())
+                                    .unwrap_or_else(|| "—".into()),
+                            },
+                            up::Ficha {
+                                icono: "ui/ic_persona",
+                                etiqueta: "PERSONAJES",
+                                valor: personajes.len().to_string(),
+                            },
+                        ],
+                        k,
+                    );
+
+                    // ── el riel de la izquierda ───────────────────────────
+                    let riel: [(&str, &str, MenuAction); 4] = [
+                        ("ui/ic_engranaje", "AJUSTES", MenuAction::Settings),
+                        ("ui/ic_controles", "CONTROLES", MenuAction::Controles),
+                        ("ui/ic_bajar", "ACTUALIZAR", MenuAction::Actualizar),
+                        ("ui/ic_interrogacion", "CRÉDITOS", MenuAction::Creditos),
+                    ];
+                    for (i, (ic, et, accion)) in riel.into_iter().enumerate() {
+                        let yy = 200.0 + i as f32 * 126.0;
+                        up::marco(l, art, up::marco::SLOT, 40.0, yy, 96.0, 96.0, k)
+                            .insert((Button, accion));
+                        up::icono(l, art, ic, 56.0, yy + 16.0, 64.0, k);
+                        up::texto(l, et, 32.0, Pack::TEXTO, 156.0, yy + 50.0, Ancla::Izq, k);
+                    }
+
+                    // ── el personaje ──────────────────────────────────────
+                    let cx = 900.0;
+                    up::halo(l, halo_tex, cx, 690.0, 300.0, k);
+                    up::sombra(l, cx, 878.0, 108.0, 18.0, k);
+                    if let Some(look) = look {
+                        // El mockup lo apoya en y = 900 y lo centra en cx.
+                        let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * 7.0;
+                        up::muneco(
+                            l, &look, &cg, &assets, &hoja, 3,
+                            cx - cel.x / 2.0, 900.0 - cel.y, 7.0, k,
+                        );
+                    }
+                    for (dx, ic, accion) in [
+                        (-330.0_f32, "ui/ic_flecha_izq", MenuAction::PjAnterior),
+                        (330.0, "ui/ic_flecha_der", MenuAction::PjSiguiente),
+                    ] {
+                        let bx = cx + dx - 48.0;
+                        up::marco(l, art, up::marco::SLOT, bx, 640.0, 96.0, 96.0, k)
+                            .insert((Button, accion));
+                        up::icono(l, art, ic, bx + 16.0, 656.0, 64.0, k);
+                    }
+                    up::texto(l, nombre_pj, 52.0, Pack::TEXTO, cx, 960.0, Ancla::Medio, k);
+                    for i in 0..3 {
+                        let col = if i == 0 { Pack::ACENTO } else { Color::srgb(0.588, 0.510, 0.471) };
+                        let px0 = cx - 34.0 + i as f32 * 34.0;
+                        l.spawn((
+                            up::caja(px0 - 8.0, 1000.0, 16.0, 16.0, k),
+                            BackgroundColor(col),
+                            BorderRadius::all(Val::Percent(50.0)),
+                        ));
+                    }
+
+                    // ── el panel MENÚ ─────────────────────────────────────
+                    let (pxu, pyu, pw, ph) = (1344.0_f32, 186.0_f32, 1020.0_f32, 828.0_f32);
+                    up::marco(l, art, up::marco::PANEL, pxu, pyu, pw, ph, k);
+                    let (ox, oy, tw, th, gap) = (pxu + 42.0, pyu + 84.0, 462.0_f32, 216.0_f32, 24.0_f32);
+
+                    // CONTINUAR: el ancho entero, y elegido.
+                    ficha_menu(
+                        l, art, cg, assets, hoja, ox, oy, tw * 2.0 + gap, 228.0, "CONTINUAR",
+                        &["nature/arbol_1", "room/casa_1", "prop/farol_de_calle_1"], None,
+                        hay_partidas, MenuAction::Continuar, k,
+                    );
+                    let resto: [(&str, &[&str], Option<&[LookDeMuestra]>, MenuAction); 4] = [
+                        ("PARTIDAS", &["edificio/local", "nature/piedra_1"], None, MenuAction::Partidas),
+                        ("PERSONAJES", &[], Some(&[]), MenuAction::Personajes),
+                        ("NUEVA PARTIDA", &["agua/bote_abajo_1", "nature/arbol_10"], None, MenuAction::NewGame),
+                        ("SALIR", &["door/wood", "prop/farol_de_calle_1"], None, MenuAction::Quit),
+                    ];
+                    for (i, (et, deco, caras, accion)) in resto.into_iter().enumerate() {
+                        let tx = ox + (i % 2) as f32 * (tw + gap);
+                        let ty = oy + 228.0 + gap + (i / 2) as f32 * (th + gap);
+                        let looks: Vec<crate::chargen::LookDef> = if caras.is_some() {
+                            personajes.iter().filter_map(|p| p.look).take(3).collect()
+                        } else {
+                            Vec::new()
+                        };
+                        ficha_menu_caras(
+                            l, art, cg, assets, hoja, tx, ty, tw, th, et, deco, &looks, false,
+                            accion, k,
+                        );
+                    }
+                    up::cartel(l, art, "MENÚ", pxu + pw / 2.0, pyu - 48.0, 420.0, 96.0, 54.0, k);
+                });
+
+            // Los paneles que se abren desde el riel. Nacen ocultos.
+            paneles_del_riel(root, art, k, s);
+        });
+}
+
+/// Tipo de relleno para la firma de la tabla de fichas (sólo marca "acá van
+/// caras"): las caras reales salen de los personajes guardados.
+type LookDeMuestra = ();
+
+/// Un número de semilla con el punto de los miles, como en el mockup ("48 213").
+pub fn separar_miles(n: u32) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            out.push(' ');
         }
-        // Si la partida anterior se cerró sola, acá se lee POR QUÉ. En Android el
-        // hook de pánico hace `process::exit(1)`: se cierra sin diálogo y sin
-        // rastro visible, y con el APK por URL nadie tiene un cable a mano para
-        // mirar `adb logcat -s ha-crash`.
-        if let Some(line) = crate::debug::last_crash_line() {
-            eprintln!("ha-crash previo: {line}");
-            root.spawn((
-                Text::new(line),
-                TextFont { font_size: (11.0 * s).clamp(9.0, 13.0), ..default() },
-                TextColor(NEON_MAGENTA),
-                Node {
-                    margin: UiRect::top(Val::Px(14.0 * s)),
-                    max_width: Val::Percent(90.0),
-                    ..default()
-                },
-                Name::new("LastCrashLine"),
-            ));
-            crate::debug::clear_last_crash();
+        out.push(c);
+    }
+    out.chars().rev().collect()
+}
+
+/// Una ficha del panel MENÚ: casilla + viñeta + rótulo abajo.
+#[allow(clippy::too_many_arguments)]
+fn ficha_menu(
+    l: &mut ChildBuilder,
+    art: &crate::art2d::ArtLibrary,
+    cg: &crate::chargen::Chargen,
+    assets: &AssetServer,
+    hoja: &crate::ui_pack::HojaPj,
+    tx: f32,
+    ty: f32,
+    tw: f32,
+    th: f32,
+    etiqueta: &str,
+    deco: &[&str],
+    _caras: Option<&[LookDeMuestra]>,
+    activa: bool,
+    accion: MenuAction,
+    k: f32,
+) {
+    ficha_menu_caras(l, art, cg, assets, hoja, tx, ty, tw, th, etiqueta, deco, &[], activa, accion, k)
+}
+
+/// La ficha de verdad. Si `looks` no está vacío, la viñeta muestra personajes en
+/// vez de props — que es lo que hace la ficha PERSONAJES en el mockup.
+#[allow(clippy::too_many_arguments)]
+fn ficha_menu_caras(
+    l: &mut ChildBuilder,
+    art: &crate::art2d::ArtLibrary,
+    cg: &crate::chargen::Chargen,
+    assets: &AssetServer,
+    hoja: &crate::ui_pack::HojaPj,
+    tx: f32,
+    ty: f32,
+    tw: f32,
+    th: f32,
+    etiqueta: &str,
+    deco: &[&str],
+    looks: &[crate::chargen::LookDef],
+    activa: bool,
+    accion: MenuAction,
+    k: f32,
+) {
+    use crate::ui_pack::{self as up, Ancla, Pack};
+    up::marco(l, art, up::marco::SLOT, tx, ty, tw, th, k).insert((Button, accion));
+    let (vw, vh) = (tw - 48.0, th - 108.0);
+    if looks.is_empty() {
+        up::vineta(l, art, tx + 24.0, ty + 22.0, vw, vh, deco, 2.0, true, 1, k);
+    } else {
+        // La viñeta con caras: mismo pasto, y los personajes apoyados.
+        up::vineta(l, art, tx + 24.0, ty + 22.0, vw, vh, &[], 2.0, true, 1, k);
+        let cel = cg.index.cell[1] as f32 * 2.0;
+        for (j, look) in looks.iter().enumerate() {
+            up::muneco(
+                l, look, cg, assets, hoja, 3,
+                tx + 24.0 + 60.0 + j as f32 * 90.0,
+                ty + 22.0 + vh - cel - 4.0,
+                2.0, k,
+            );
         }
-    })
-    // Panel de ajustes: overlay CENTRADO propio (oculto hasta tocar AJUSTES).
-    // Antes era un hermano más de la columna: al abrirlo empujaba los botones
-    // fuera de la pantalla en teléfonos bajos.
-    .with_children(|root| {
+    }
+    up::texto(l, etiqueta, 40.0, Pack::TINTA, tx + tw / 2.0, ty + th - 30.0, Ancla::Medio, k);
+    if activa {
+        up::elegido(l, tx, ty, tw, th, 6.0, k);
+    }
+}
+
+/// Marca el lienzo del menú: las listas lo esconden para abrirse encima sin que
+/// se lean los botones detrás.
+#[derive(Component)]
+pub struct MenuContenido;
+
+/// Cuál de los cuatro paneles del riel es éste.
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub enum PanelRiel {
+    Ajustes,
+    Controles,
+    Actualizar,
+    Creditos,
+}
+
+/// **Los cuatro paneles del riel de la izquierda.** Nacen ocultos y se muestran
+/// al tocar su ficha. Van con el marco del pack, como todo el resto.
+fn paneles_del_riel(root: &mut ChildBuilder, art: &crate::art2d::ArtLibrary, k: f32, s: f32) {
+    use crate::ui_pack::{self as up, Ancla, Pack};
+
+    let contenido: [(PanelRiel, &str, f32, Vec<(String, bool)>); 4] = [
+        (
+            PanelRiel::Ajustes,
+            "AJUSTES",
+            520.0,
+            vec![],
+        ),
+        (
+            PanelRiel::Controles,
+            "CONTROLES",
+            560.0,
+            vec![
+                ("Mover · el stick de la izquierda".to_string(), false),
+                ("Mirar y tocar · el dedo sobre el mundo".to_string(), false),
+                ("Volar · mantené SALTAR en el aire".to_string(), false),
+                ("Mochila · el botón de abajo a la derecha".to_string(), false),
+                ("Acercar y alejar · pellizcá la pantalla".to_string(), false),
+            ],
+        ),
+        (
+            PanelRiel::Actualizar,
+            "ACTUALIZAR",
+            560.0,
+            vec![
+                (format!("Estás en la versión {}.", env!("CARGO_PKG_VERSION")), false),
+                ("El APK nuevo se baja de la misma dirección".to_string(), false),
+                ("desde la que instalaste éste.".to_string(), false),
+            ],
+        ),
+        (
+            PanelRiel::Creditos,
+            "CRÉDITOS",
+            560.0,
+            vec![
+                ("Ki · Mundo Abierto — FZ STUDIOS".to_string(), false),
+                ("Pixel art · LimeZu (Modern Interiors,".to_string(), false),
+                ("Modern Exteriors, Modern UI)".to_string(), false),
+                ("Motor · Bevy".to_string(), false),
+            ],
+        ),
+    ];
+
+    for (cual, titulo, pw, lineas) in contenido {
+        let ph = 560.0_f32;
+        let pxu = (up::ANCHO - pw) / 2.0;
+        let pyu = (up::ALTO - ph) / 2.0;
         root.spawn((
             Node {
                 position_type: PositionType::Absolute,
@@ -344,61 +935,78 @@ fn spawn_main_menu(mut commands: Commands, bg: Res<MenuBg>, touch: Res<TouchLayo
                 top: Val::Px(0.0),
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
                 display: Display::None,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.06, 0.88)),
+            BackgroundColor(Color::srgba(0.047, 0.039, 0.078, 0.72)),
             FocusPolicy::Block,
+            GlobalZIndex(1200),
+            cual,
             SettingsPanel,
+            Name::new("PanelRiel"),
         ))
         .with_children(|wrap| {
-            wrap.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    row_gap: Val::Px(10.0 * s),
-                    padding: UiRect::all(Val::Px(14.0 * s)),
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BorderColor(NEON_CYAN),
-                BackgroundColor(Color::srgb(0.06, 0.08, 0.12)),
-            ))
-            .with_children(|panel| {
-                panel.spawn((
-                    Text::new("AJUSTES"),
-                    TextFont { font_size: (20.0 * s).clamp(14.0, 22.0), ..default() },
-                    TextColor(NEON_CYAN),
-                ));
-                settings_button(panel, "PANTALLA COMPLETA", SettingsAction::ToggleFullscreen, s);
-                settings_button(panel, "VOLVER", SettingsAction::Close, s);
-                // HISTORIAL DE CIERRES. El renglón del menú se borra apenas se
-                // muestra, y con el APK por URL nadie tiene un cable para hacer
-                // `adb pull`: sin esto, el motivo de un cierre se pierde en
-                // cuanto uno pestañea. Acá queda para leerlo cuando se te ocurra.
-                let historial = crate::debug::crash_history_lines(3);
-                if !historial.is_empty() {
-                    panel.spawn((
-                        Text::new("CIERRES ANTERIORES"),
-                        TextFont { font_size: (11.0 * s).clamp(9.0, 13.0), ..default() },
-                        TextColor(NEON_MAGENTA),
-                        Node { margin: UiRect::top(Val::Px(10.0 * s)), ..default() },
-                    ));
+            wrap.spawn(up::lienzo(k)).with_children(|l| {
+                up::marco(l, art, up::marco::PANEL, pxu, pyu, pw, ph, k);
+                up::cartel(l, art, titulo, pxu + pw / 2.0, pyu - 48.0, 460.0, 96.0, 44.0, k);
+                let ix = pxu + 66.0;
+                let mut y = pyu + 110.0;
+                for (linea, _) in &lineas {
+                    up::texto(l, linea.clone(), 30.0, Pack::SUAVE, ix, y, Ancla::Izq, k);
+                    y += 56.0;
+                }
+                if cual == PanelRiel::Ajustes {
+                    // La única con controles de verdad.
+                    up::boton(
+                        l, art, ix, pyu + 110.0, pw - 132.0, 92.0,
+                        Some("PANTALLA COMPLETA"), None, false, 34.0,
+                        SettingsAction::ToggleFullscreen, k,
+                    );
+                    // La versión: siete toques y aparece la consola.
+                    let vy = pyu + ph - 210.0;
+                    up::marco(l, art, up::marco::BOTON, ix, vy, 360.0, 76.0, k)
+                        .insert((Button, SettingsAction::Version));
+                    l.spawn(up::caja(ix, vy, 360.0, 76.0, k)).with_children(|t| {
+                        t.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(0.0),
+                                top: Val::Px(22.0 * k),
+                                width: Val::Px(360.0 * k),
+                                height: Val::Px(40.0 * k),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            Name::new("VersionCaja"),
+                        ))
+                        .with_children(|t| {
+                            t.spawn((
+                                Text::new(format!("v{}", env!("CARGO_PKG_VERSION"))),
+                                TextFont { font_size: 30.0 * k, ..default() },
+                                TextColor(Pack::TINTA),
+                                TextLayout::new_with_no_wrap(),
+                                VersionLabel,
+                            ));
+                        });
+                    });
+                    // Historial de cierres: con el APK por URL nadie tiene un
+                    // cable para hacer `adb pull`.
+                    let historial = crate::debug::crash_history_lines(3);
+                    let mut hy = pyu + 250.0;
                     for linea in historial {
-                        panel.spawn((
-                            Text::new(linea),
-                            TextFont { font_size: (10.0 * s).clamp(8.0, 12.0), ..default() },
-                            TextColor(Color::srgb(0.75, 0.75, 0.8)),
-                            Node { max_width: Val::Percent(92.0), ..default() },
-                        ));
+                        up::texto(l, linea, 22.0, Pack::SUAVE, ix, hy, Ancla::Izq, k);
+                        hy += 40.0;
                     }
                 }
+                up::boton(
+                    l, art, pxu + pw - 66.0 - 260.0, pyu + ph - 66.0 - 92.0, 260.0, 92.0,
+                    Some("VOLVER"), None, true, 34.0, SettingsAction::Close, k,
+                );
             });
         });
-    });
+    }
+    let _ = s;
 }
 
 fn menu_button(parent: &mut ChildBuilder, label: &str, action: MenuAction, color: Color, w: f32, s: f32) {
@@ -454,56 +1062,91 @@ fn settings_button(parent: &mut ChildBuilder, label: &str, action: SettingsActio
 }
 
 #[allow(clippy::type_complexity)]
+/// El sistema de toques del menú. El realce de "tocado" ya no es un cambio de
+/// color de fondo —los botones son marcos del pack, no rectángulos— sino un
+/// tinte sobre la imagen, que es lo que respeta el pixel del marco.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn menu_button_system(
-    mut interactions: Query<(&Interaction, &MenuAction, &mut BackgroundColor), Changed<Interaction>>,
+    mut interactions: Query<
+        (&Interaction, &MenuAction, Option<&mut ImageNode>),
+        Changed<Interaction>,
+    >,
     mut next: ResMut<NextState<GamePhase>>,
     mut selected: ResMut<SelectedCharacter>,
     mut exit: EventWriter<AppExit>,
-    mut panels: Query<&mut Node, With<SettingsPanel>>,
+    mut panels: Query<(&mut Node, &PanelRiel), With<SettingsPanel>>,
+    mut pantalla: ResMut<crate::menu_listas::Pantalla>,
+    mut borrador: ResMut<crate::menu_listas::BorradorPartida>,
+    mut cual: Local<usize>,
+    mut rehacer: ResMut<RehacerMenu>,
 ) {
-    for (interaction, action, mut bg) in &mut interactions {
-        match interaction {
-            Interaction::Pressed => {
-                *bg = BackgroundColor(Color::srgb(0.16, 0.24, 0.36));
-                match action {
-                    // **NUEVA PARTIDA = MUNDO NUEVO.** Se sortea la semilla y se
-                    // tira el estado de la anterior antes de que exista un solo
-                    // tile: si esto corriera después, el mundo ya se habría
-                    // generado con la semilla vieja (ver `crate::partida`).
-                    MenuAction::NewGame => {
-                        crate::partida::nueva();
-                        next.set(GamePhase::CharacterCreate);
+    for (interaction, action, img) in &mut interactions {
+        if let Some(mut img) = img {
+            img.color = match interaction {
+                Interaction::Pressed => Color::srgb(0.82, 0.82, 0.82),
+                Interaction::Hovered => Color::srgb(0.93, 0.93, 0.93),
+                Interaction::None => Color::WHITE,
+            };
+        }
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let mut abrir = |quien: PanelRiel| {
+            for (mut node, p) in &mut panels {
+                node.display = if *p == quien && node.display == Display::None {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+            }
+        };
+        match action {
+            // **CONTINUAR = la última partida que jugaste.** Abrirla es lo
+            // primero que pasa: la semilla tiene que estar puesta ANTES de que
+            // exista un solo tile, o el mundo se genera con la del mundo
+            // anterior (ver `crate::partida`).
+            MenuAction::Continuar => {
+                if let Some(f) = crate::partida::ultima() {
+                    crate::partida::abrir(&f.id);
+                    if let Some(saved) = load_savegame() {
+                        *selected = saved;
                     }
-                    MenuAction::Load => {
-                        if let Some(saved) = load_savegame() {
-                            // Cargar recupera la semilla guardada: el mundo que
-                            // dejaste es el que abre.
-                            crate::partida::cargar();
-                            *selected = saved;
-                            next.set(GamePhase::Loading);
-                        } else {
-                            // Sin partida guardada → arranca creación de personaje,
-                            // y eso es una partida nueva como cualquier otra.
-                            crate::partida::nueva();
-                            next.set(GamePhase::CharacterCreate);
-                        }
-                    }
-                    MenuAction::Settings => {
-                        if let Ok(mut node) = panels.get_single_mut() {
-                            node.display = if node.display == Display::None {
-                                Display::Flex
-                            } else {
-                                Display::None
-                            };
-                        }
-                    }
-                    MenuAction::Quit => {
-                        exit.send(AppExit::Success);
-                    }
+                    next.set(GamePhase::Loading);
                 }
             }
-            Interaction::Hovered => *bg = BackgroundColor(Color::srgb(0.14, 0.20, 0.30)),
-            Interaction::None => *bg = BackgroundColor(BTN_IDLE),
+            MenuAction::Partidas => *pantalla = crate::menu_listas::Pantalla::Partidas,
+            MenuAction::Personajes => *pantalla = crate::menu_listas::Pantalla::Personajes,
+            // **NUEVA PARTIDA ya no crea nada acá**: abre la pantalla donde se
+            // eligen nombre, semilla y modo. El creativo se decide cuando nace
+            // el mundo (decisión del 15 ago 2026, y por eso ya no hay ficha
+            // CREATIVO).
+            MenuAction::NewGame => {
+                crate::menu_listas::preparar_borrador(&mut borrador);
+                *pantalla = crate::menu_listas::Pantalla::Nueva;
+            }
+            MenuAction::Settings => abrir(PanelRiel::Ajustes),
+            MenuAction::Controles => abrir(PanelRiel::Controles),
+            MenuAction::Actualizar => abrir(PanelRiel::Actualizar),
+            MenuAction::Creditos => abrir(PanelRiel::Creditos),
+            // Las flechas del mockup: pasan de personaje sin salir del menú.
+            MenuAction::PjAnterior | MenuAction::PjSiguiente => {
+                let lista = crate::personajes::listar();
+                if lista.is_empty() {
+                    continue;
+                }
+                let n = lista.len();
+                *cual = if matches!(action, MenuAction::PjSiguiente) {
+                    (*cual + 1) % n
+                } else {
+                    (*cual + n - 1) % n
+                };
+                *selected = crate::personajes::a_seleccionado(&lista[*cual]);
+                // Redibujar el menú es lo que muestra al nuevo elegido.
+                rehacer.0 = true;
+            }
+            MenuAction::Quit => {
+                exit.send(AppExit::Success);
+            }
         }
     }
 }
@@ -513,6 +1156,8 @@ fn settings_button_system(
     mut interactions: Query<(&Interaction, &SettingsAction, &mut BackgroundColor), Changed<Interaction>>,
     mut panels: Query<&mut Node, With<SettingsPanel>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut consola: ResMut<crate::consola::Consola>,
+    mut etiqueta: Query<&mut Text, With<VersionLabel>>,
 ) {
     for (interaction, action, mut bg) in &mut interactions {
         match interaction {
@@ -534,10 +1179,36 @@ fn settings_button_system(
                             node.display = Display::None;
                         }
                     }
+                    SettingsAction::Version => {
+                        // Ya destrabada, el toque la ABRE: no hay otra puerta.
+                        if consola.desbloqueada {
+                            consola.abierta = true;
+                        } else {
+                            consola.toque_en_version();
+                            // Se avisa sólo en los últimos tres, para que quien
+                            // llegó por accidente no descubra que hay algo.
+                            let faltan = consola.faltan();
+                            let destrabada = consola.desbloqueada;
+                            if let Ok(mut txt) = etiqueta.get_single_mut() {
+                                txt.0 = if destrabada {
+                                    "CONSOLA DESTRABADA".to_string()
+                                } else if faltan <= 3 {
+                                    format!("v{} — faltan {faltan}", env!("CARGO_PKG_VERSION"))
+                                } else {
+                                    format!("v{}", env!("CARGO_PKG_VERSION"))
+                                };
+                            }
+                        }
+                    }
                 }
             }
-            Interaction::Hovered => *bg = BackgroundColor(Color::srgb(0.14, 0.20, 0.30)),
-            Interaction::None => *bg = BackgroundColor(BTN_IDLE),
+            Interaction::Hovered if *action != SettingsAction::Version => {
+                *bg = BackgroundColor(Color::srgb(0.14, 0.20, 0.30))
+            }
+            Interaction::None if *action != SettingsAction::Version => {
+                *bg = BackgroundColor(BTN_IDLE)
+            }
+            _ => {}
         }
     }
 }

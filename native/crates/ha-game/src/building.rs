@@ -178,9 +178,62 @@ impl Plugin for BuildingPlugin {
     }
 }
 
-/// Sprite del techo: pose etiquetada Techo del slot, o un quad oscuro de
-/// fallback (así el sistema se ve/prueba sin arte asignado).
-fn roof_sprite(art: &ArtLibrary, key: Option<&str>, size: Vec2) -> Sprite {
+/// Cuánto se puede agrandar una fachada sobre su tamaño dibujado. Ver
+/// [`roof_layout`]: pasado esto, lo que se ve es el pixel ampliado, no el
+/// edificio.
+pub(crate) const AGRANDE_MAX: f32 = 1.4;
+
+/// **Cuánto mide en pantalla la fachada de un lote, y dónde apoya.**
+///
+/// Devuelve `(tamaño, alto_extra)`: el tamaño con el que se dibuja el sprite y
+/// cuánto sobresale por arriba de la huella edificada.
+///
+/// Las fachadas de Modern Exteriors están dibujadas en 3/4: el alto del PNG es
+/// techo **más** pared de frente, mientras que la huella del lote es sólo el
+/// suelo que ocupa la casa. Estiradas al rectángulo del suelo —que es lo que
+/// hacía `world_sprite(key, rect)`— salían aplastadas al 50 % de su alto: casas
+/// derretidas, con el techo comido y las ventanas ovaladas.
+///
+/// Así que la fachada se dibuja **a su propia proporción** (celdas del pack ×
+/// [`crate::art2d::ESCALA_ARTE`], la escala de todo el resto del pack) y se
+/// APOYA en el borde de adelante de la huella, creciendo hacia arriba. Es la
+/// misma regla con la que se dibuja cualquier objeto alto del mundo: el pie va
+/// donde está la cosa y el dibujo sube. El desvanecido al entrar sigue midiéndose
+/// contra la huella del suelo, que es por donde se camina.
+///
+/// Sin arte (`None`), el respaldo ocupa la huella tal cual: un techo plano.
+fn roof_layout(art: &ArtLibrary, key: Option<&str>, huella: Vec2) -> (Vec2, f32) {
+    let Some(size) = key.and_then(|k| art.draw_tiles(k, None)) else {
+        return (huella, 0.0);
+    };
+    let size = size * TILE_M;
+    // El ancho se ajusta a la huella (la casa mide lo que mide el terreno) y el
+    // alto acompaña, para no deformar. Que el dibujo suba por encima del lote es
+    // correcto: eso es la altura del edificio, no su suelo.
+    // **Y con tope: un dibujo no se agranda más allá de su propio pixel.** El
+    // pack no tiene una estación de tren entera (viene en piezas modulares), así
+    // que el mejor candidato para una parcela de 50 tiles mide 8; sin tope, ese
+    // sprite se estiraba ×6 y la estación quedaba como una foto ampliada. Con
+    // tope, el edificio se dibuja de su talle y le sobra terreno alrededor —que
+    // es exactamente lo que pasa en un predio de estación.
+    let k = (huella.x / size.x.max(0.001)).min(AGRANDE_MAX);
+    let size = size * k;
+    (size, (size.y - huella.y).max(0.0))
+}
+
+/// Sprite del techo/fachada del lote, **y su animación si la tiene**.
+///
+/// Lo segundo importa desde que hay lotes cuyo arte del pack está ANIMADO: el
+/// molino de la central eléctrica son cuatro frames girando
+/// (`anim/additional_houses_wind_mill`). Sin devolver la animación, el sprite se
+/// dibujaba con la tira entera de cuatro molinos pegados en vez de con uno que
+/// gira. Es la regla de "usar siempre el arte animado": si el pack lo dibujó
+/// animado, el juego lo pide animado.
+fn roof_sprite(
+    art: &ArtLibrary,
+    key: Option<&str>,
+    size: Vec2,
+) -> (Sprite, Option<crate::art2d::ArtAnimated>) {
     if let Some(key) = key {
         // El techo puede estar en su propia hoja (edificio armado con varios PNG).
         if let Some((pose, rect_px)) = art.pose_with_layer_named(key, ArtLayer::Roof) {
@@ -192,7 +245,7 @@ fn roof_sprite(art: &ArtLibrary, key: Option<&str>, size: Vec2) -> Sprite {
                     Vec2::new(x as f32, y as f32),
                     Vec2::new((x + w) as f32, (y + h) as f32),
                 ));
-                return s;
+                return (s, None);
             }
         }
         // **La FACHADA ENTERA del pack.** Los edificios de Modern Exteriors son
@@ -200,12 +253,12 @@ fn roof_sprite(art: &ArtLibrary, key: Option<&str>, size: Vec2) -> Sprite {
         // sin ninguna pose etiquetada `Roof`. Sin esta rama, apuntar al arte
         // correcto no alcanzaba: se caía igual al cuadrado marrón, y por eso
         // todas las casas del mapa se veían como cajas.
-        if let Some((s, _)) = art.world_sprite(key, size) {
-            return s;
+        if let Some((s, anim)) = art.world_sprite(key, size) {
+            return (s, anim);
         }
     }
     // Fallback: techo plano oscuro (dos tonos para que se lea como techo).
-    Sprite::from_color(Color::srgb(0.36, 0.26, 0.20), size)
+    (Sprite::from_color(Color::srgb(0.36, 0.26, 0.20), size), None)
 }
 
 /// Spawn/despawn de techos cerca del jugador: sitios generados (deterministas,
@@ -300,17 +353,31 @@ fn stream_roofs(
         if live.contains(&r.min) {
             continue;
         }
-        let size = Vec2::new(r.w as f32 * TILE_M, r.h as f32 * TILE_M);
-        let cx = r.min.0 as f32 * TILE_M + size.x * 0.5;
-        let cz = r.min.1 as f32 * TILE_M + size.y * 0.5;
+        // **Una casa distinta por parcela.** El lote dice QUÉ es (`casa_mediana`)
+        // y el arte trae hasta doce fachadas para ese qué; cuál le toca a esta
+        // parcela lo decide su esquina, así que siempre es la misma casa en el
+        // mismo sitio sin guardar un byte por instancia. Sin esto, el barrio
+        // entero —el 60 % de la ciudad— era la misma casa fotocopiada.
+        let clave = art_key.map(|k| art.variant_key_seeded(k, crate::world2d::celda_semilla(r.min.0, r.min.1)));
+        let huella = Vec2::new(r.w as f32 * TILE_M, r.h as f32 * TILE_M);
+        let (size, sube) = roof_layout(&art, clave.as_deref(), huella);
+        let cx = r.min.0 as f32 * TILE_M + huella.x * 0.5;
+        let cz = r.min.1 as f32 * TILE_M + huella.y * 0.5;
         let pos = render_xy(cx, cz);
-        commands.spawn((
+        // `render_xy` deja +Y hacia el norte, así que "crecer hacia arriba" es
+        // sumarle la mitad de lo que sobresale.
+        let pos = Vec2::new(pos.x, pos.y + sube * 0.5);
+        let (sprite, anim) = roof_sprite(&art, clave.as_deref(), size);
+        let mut ent = commands.spawn((
             BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
-            roof_sprite(&art, art_key, size),
+            sprite,
             // Banda de techos: encima de todo el mundo Y-sorted y del ghost de
             // build (5.7). Ver `crate::layers` para la escalera completa.
             Transform::from_xyz(pos.x, pos.y, crate::layers::OVERHEAD),
         ));
+        if let Some(a) = anim {
+            ent.insert(a);
+        }
     }
 }
 

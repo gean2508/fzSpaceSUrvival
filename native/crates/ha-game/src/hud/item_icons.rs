@@ -10,8 +10,6 @@ use ha_shared::{palette_rgb, PaletteKey};
 /// Faint chrome for empty inventory / hotbar cells.
 pub const SLOT_EMPTY_ID: &str = "_slot_empty";
 pub const BAG_SLOT_ID: &str = "_bag";
-/// Prefijo de caché para la variante sin fondo (ítem en la mano).
-const HAND_ICON_PREFIX: &str = "_hand:";
 
 /// **Un icono y su recorte.** El recorte es la mitad que faltaba: el arte del pack
 /// puede venir de un ATLAS (el editor guarda el rect del slot en `art/manifest.json`),
@@ -63,26 +61,17 @@ impl ItemIconCache {
         if let Some(hit) = self.cache.get(item_id) {
             return hit.clone();
         }
-        let icon = ItemIcon { image: images.add(rasterize_item_icon(item_id)), rect: None };
+        let icon = ItemIcon { image: images.add(rasterize_item(item_id)), rect: None };
         self.cache.insert(item_id.to_string(), icon.clone());
         icon
     }
 
-    /// Igual que [`Self::icon`] pero SIN el cuadrado de fondo: es el sprite que
-    /// el personaje lleva en la mano dentro del mundo (un icono con fondo se
-    /// vería como una cajita negra flotando junto al brazo). Con arte del pack no
-    /// hay diferencia — ese PNG ya viene transparente.
+    /// El icono para la mano del personaje. Hoy es exactamente [`Self::icon`]:
+    /// desde que el raster dejó de pintar su propio cuadrado ya no hay dos
+    /// variantes que distinguir. Se mantiene el nombre porque el sitio de uso
+    /// (`held_item.rs`) se lee mejor así.
     pub fn hand_icon(&mut self, item_id: &str, images: &mut Assets<Image>) -> ItemIcon {
-        if let Some(hit) = self.cache.get(item_id) {
-            return hit.clone();
-        }
-        let key = format!("{HAND_ICON_PREFIX}{item_id}");
-        if let Some(hit) = self.cache.get(&key) {
-            return hit.clone();
-        }
-        let icon = ItemIcon { image: images.add(rasterize_item(item_id, false)), rect: None };
-        self.cache.insert(key, icon.clone());
-        icon
+        self.icon(item_id, images)
     }
 
     pub fn empty_slot(&mut self, images: &mut Assets<Image>) -> ItemIcon {
@@ -94,21 +83,18 @@ impl ItemIconCache {
     }
 }
 
-pub fn rasterize_item_icon(item_id: &str) -> Image {
-    rasterize_item(item_id, true)
-}
-
-fn rasterize_item(item_id: &str, with_bg: bool) -> Image {
+/// **El icono se dibuja sobre nada.** Hasta el 15 ago 2026 esta función pintaba
+/// primero los 40×40 enteros con `Night` al 92 % y recién después el ítem: cada
+/// icono cargaba su propio cuadrado negro. En la hotbar eso se apilaba con el
+/// fondo que ya pinta el slot (`ui_theme::button_bg`) y las diez casillas se
+/// leían como manchas oscuras — se ve en la captura del Redmi de esa mañana. Y
+/// en el mundo era peor: el cofre y las máquinas usan este mismo raster como
+/// `Sprite`, así que el cuadrado viajaba al suelo del juego.
+///
+/// El fondo lo pone quien enmarca, no quien dibuja.
+fn rasterize_item(item_id: &str) -> Image {
     let size = 40u32;
     let mut data = vec![0u8; (size * size * 4) as usize];
-    if with_bg {
-        let bg = rgba(PaletteKey::Night, 0.92);
-        for y in 0..size {
-            for x in 0..size {
-                put_px(&mut data, size, x, y, bg);
-            }
-        }
-    }
     match item_id {
         SLOT_EMPTY_ID => draw_empty_slot(&mut data, size),
         BAG_SLOT_ID => draw_bag(&mut data, size),

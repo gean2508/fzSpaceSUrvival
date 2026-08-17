@@ -1,0 +1,97 @@
+[
+ {
+  "id": "pj1",
+  "nombre": "Leo",
+  "look": {
+   "body": 2,
+   "eyes": 1,
+   "outfit": 20,
+   "hair": 56,
+   "accessory": null
+  },
+  "sheet": "art/player/character.png",
+  "tint": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "creado": 1786847519
+ },
+ {
+  "id": "pj2",
+  "nombre": "Mica",
+  "look": {
+   "body": 5,
+   "eyes": 3,
+   "outfit": 80,
+   "hair": 24,
+   "accessory": null
+  },
+  "sheet": "art/player/character.png",
+  "tint": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "creado": 1786847419
+ },
+ {
+  "id": "pj3",
+  "nombre": "Tobi",
+  "look": {
+   "body": 7,
+   "eyes": 4,
+   "outfit": 110,
+   "hair": 120,
+   "accessory": 3
+  },
+  "sheet": "art/player/character.png",
+  "tint": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "creado": 1786847319
+ },
+ {
+  "id": "pj4",
+  "nombre": "Nube",
+  "look": {
+   "body": 1,
+   "eyes": 2,
+   "outfit": 60,
+   "hair": 96,
+   "accessory": null
+  },
+  "sheet": "art/player/character.png",
+  "tint": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "creado": 1786847219
+ },
+ {
+  "id": "pj5",
+  "nombre": "Rulo",
+  "look": {
+   "body": 3,
+   "eyes": 5,
+   "outfit": 12,
+   "hair": 8,
+   "accessory": 20
+  },
+  "sheet": "art/player/character.png",
+  "tint": [
+   1.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "creado": 1786847119
+ }
+]

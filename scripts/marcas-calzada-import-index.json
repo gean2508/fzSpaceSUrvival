@@ -1,0 +1,24 @@
+{
+ "sprites": [
+  "road/bahia_bus",
+  "road/cajon"
+ ],
+ "medidas": {
+  "bahia_ns": [
+   3,
+   6
+  ],
+  "bahia_ew": [
+   7,
+   3
+  ],
+  "cajon_ns": [
+   3,
+   5
+  ],
+  "cajon_ew": [
+   5,
+   3
+  ]
+ }
+}

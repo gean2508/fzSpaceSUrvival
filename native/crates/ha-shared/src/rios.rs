@@ -47,7 +47,7 @@
 //! —un descenso por ahí se mete en el primer hoyo y se queda—. La plataforma es
 //! suave y es la que dice de verdad hacia dónde cae el continente. El ruido lo
 //! pone el mundo después, y para que no le levante una loma al cauce por el medio,
-//! **el río excava** ([`hondura_del_cauce`]).
+//! **el río excava** ([`perfil_del_cauce`]).
 //!
 //! ## Por qué esto se puede consultar por celda
 //!
@@ -145,9 +145,43 @@ const BLOQUE: i64 = 128;
 const ANCHO_NACIENTE: f32 = 1.2;
 const ANCHO_BOCA: f32 = 4.0;
 
-/// **CUÁNTO SE HUNDE EL FONDO DEL CAUCE bajo la plataforma**, en unidades de
-/// campo. Un tercio de escalón: lo justo para que el agua tenga orillas.
-const HONDURA: f32 = 0.030;
+/// **CUÁNTO SE HUNDE EL FONDO DEL CAUCE bajo la plataforma, EN ESCALONES.**
+///
+/// # Por qué en escalones y no en unidades de campo
+///
+/// Era `0.030` de campo, a ojo *"un tercio de escalón"*. Medido, un escalón vale
+/// `(1 − sea_level) / LEVELS_UP` = **0,0467** en la Tierra: 0,030 es menos que
+/// uno, así que la talla **no bajaba el cauce ni un nivel** — sólo corría la
+/// frontera de cuantización. El nivel de la orilla parpadeaba a lo largo del
+/// curso y por eso los farallones cruzaban el río en zig-zag en vez de dejarlo
+/// pasar (la captura de la sierra del 16 ago 2026).
+///
+/// # Por qué UN escalón exacto y no más
+///
+/// Se probó con 1,15 —la idea era que el redondeo no dejara tramos empatados con
+/// su orilla— y **el número lo desmintió la ciudad**: con esa hondura, la ribera
+/// de Ciudad Central mete un borde de terraza más en el casco, y `city::lot_at`
+/// no planta parcelas a caballo de un escalón. Medido con
+/// `city::la_ciudad_no_esta_llena_de_baldios`: **135 de 218 manzanas** (62 %),
+/// por debajo del dos de cada tres que separa una ciudad de un descampado.
+///
+/// Con 1,0 pasan las dos cosas, y de hecho el río sale MEJOR
+/// (`medir_rios`, ventana de sierra de 1.200 tiles):
+///
+/// | | antes (0,030 de campo) | 1,15 | **1,0** |
+/// |---|---|---|---|
+/// | cauce cortado por roca (sierra) | 21,75 % | 4,39 % | **4,12 %** |
+/// | cauce cortado por roca (llano) | 0,52 % | 1,11 % | **0,01 %** |
+/// | salto de campo p99 en el valle | 0,0317 | 0,0214 | **0,0199** |
+/// | cauce por debajo de su ribera (sierra) | 83,6 % | — | **96,1 %** |
+const HONDURA_EN_ESCALONES: f32 = 1.0;
+
+/// La hondura del cauce en unidades de campo, para este cuerpo. Un escalón de
+/// terraza mide distinto según dónde tenga el mar cada planeta.
+fn hondura(body: CelestialBody) -> f32 {
+    let paso = (1.0 - crate::relief::sea_level(body)).max(1e-3) / crate::relief::LEVELS_UP as f32;
+    paso * HONDURA_EN_ESCALONES
+}
 
 /// **Cuántas veces más ancho que el agua es el VALLE**, el trozo de terreno que
 /// el río aplana a su alrededor.
@@ -155,6 +189,35 @@ const HONDURA: f32 = 0.030;
 /// Sin valle, el cauce sería una zanja de paredes rectas. Con 3, un río de cinco
 /// tiles baja por una vaguada de quince y la orilla se camina.
 const VALLE: f32 = 3.0;
+
+/// **Y NUNCA MENOS DE ESTO, EN TILES.** Lo que gobierna el dibujo del valle no es
+/// la proporción, es la PENDIENTE.
+///
+/// Un río de naciente mide 1,2 tiles y su valle proporcional 3,6: en esos 3,6
+/// tiles el campo pasaba de la cota lisa del cauce al terreno con el ruido
+/// entero, o sea hasta `RELIEF_AMPLITUDE/2` = 0,21 — **0,06 por tile, el triple
+/// de `relief::MAX_FIELD_STEP_PER_TILE`**. Y esa cota no es decorativa: el
+/// descarte barato de `relief::near_step_boundary` se apoya en ella. El propio
+/// empalme del valle fabricaba los escalones que después cortan el cauce.
+///
+/// Con 8 tiles y el ruido atenuado ([`RUIDO_EN_EL_CAUCE`]) el peor salto queda en
+/// `0,75 × 0,21 / 8 ≈ 0,020`, o sea dentro de la cota. Se calibra con
+/// `medir_rios::el_campo_no_salta_en_el_valle`.
+const VALLE_MINIMO: f32 = 8.0;
+
+/// **CUÁNTO RUIDO DE TERRENO SOBREVIVE EN EL EJE DEL CAUCE.**
+///
+/// El empalme anterior anulaba el ruido por completo en el eje (`peso = 1`) y lo
+/// devolvía entero en el borde del valle: pegaba un campo liso contra uno
+/// rugoso, y esa costura es un escalón. Dejando pasar un cuarto, el fondo del río
+/// sigue ondulando con el terreno —que es lo que hace un río de verdad— y lo que
+/// el río impone es su HONDURA relativa, no una cota plana de hormigón.
+pub(crate) const RUIDO_EN_EL_CAUCE: f32 = 0.25;
+
+/// El valle de un cauce de ancho `a`, en tiles. Ver [`VALLE_MINIMO`].
+fn valle_de(a: f32) -> f32 {
+    (a * VALLE).max(VALLE_MINIMO)
+}
 
 /// **Dónde termina un cauce.** Lo devuelve [`destinos`], que es la medición que
 /// importa de este módulo: un río que no termina en agua no es un río.
@@ -203,6 +266,128 @@ impl Trazo {
     }
 }
 
+/// **LADO DE LA REJILLA DE UN BLOQUE**, en sub-celdas. Con [`BLOQUE`] = 128 y 8
+/// de lado, cada sub-celda mide 16 tiles.
+const REJILLA: i64 = 8;
+const SUBCELDA: f32 = (BLOQUE / REJILLA) as f32;
+
+/// **HASTA DÓNDE PUEDE LLEGAR UN TRAMO.** El valle más ancho posible es el de la
+/// desembocadura ([`ANCHO_BOCA`] × [`VALLE`]); un tile más de margen por el
+/// redondeo de la celda. Ningún tramo más lejos que esto puede imponerle cota a
+/// una celda, y por eso la rejilla puede descartarlo sin mirar.
+const ALCANCE_MAX: f32 = {
+    let proporcional = ANCHO_BOCA * VALLE;
+    // `f32::max` no es const: el valle más ancho es el mayor de los dos.
+    if proporcional > VALLE_MINIMO { proporcional + 1.0 } else { VALLE_MINIMO + 1.0 }
+};
+
+/// **LOS TRAMOS DE UN BLOQUE, INDEXADOS POR SUB-CELDA.**
+///
+/// El filtro por caja del bloque deja una lista corta comparada con los 25
+/// trazados de la vecindad, pero sigue siendo TODA la cuenca que cruza esos 128
+/// tiles — decenas de tramos, y `perfil_del_cauce` los recorría enteros por
+/// celda. Medido (`coste_del_relieve::reparto_del_campo`, release), el río era
+/// **1,3 µs de los 2,0 que cuesta el campo de altura en el llano**: más que la
+/// plantilla del mundo y el ruido juntos.
+///
+/// Un tramo sólo puede afectar a lo que tenga a menos de `ancho × VALLE` (como
+/// mucho [`ANCHO_BOCA`] × [`VALLE`] = 12 tiles), así que se reparte en una
+/// rejilla y cada celda mira sólo su casilla. La rejilla se arma UNA vez por
+/// bloque, junto con la lista; la consulta pasa a ser un índice y dos o tres
+/// distancias.
+struct BloqueRios {
+    tramos: Vec<Tramo>,
+    /// CSR: los candidatos de la sub-celda `i` son `orden[inicio[i]..inicio[i+1]]`.
+    inicio: Vec<u32>,
+    orden: Vec<u16>,
+    /// Esquina del bloque, en tiles.
+    x0: f32,
+    z0: f32,
+}
+
+impl BloqueRios {
+    fn vacio() -> Self {
+        BloqueRios {
+            tramos: Vec::new(),
+            inicio: vec![0; (REJILLA * REJILLA) as usize + 1],
+            orden: Vec::new(),
+            x0: 0.0,
+            z0: 0.0,
+        }
+    }
+
+    fn armar(tramos: Vec<Tramo>, x0: f32, z0: f32) -> Self {
+        // Los índices de la rejilla son `u16`. Un bloque de 128 tiles guarda
+        // decenas de tramos, no decenas de miles, pero un truncamiento silencioso
+        // acá saldría como un río que desaparece en un trozo del mapa.
+        debug_assert!(
+            tramos.len() <= u16::MAX as usize,
+            "el bloque tiene {} tramos y la rejilla indexa con u16",
+            tramos.len()
+        );
+        let n = (REJILLA * REJILLA) as usize;
+        let mut cuenta = vec![0u32; n + 1];
+        // Dos pasadas (contar, colocar) para no reservar un `Vec` por casilla.
+        //
+        // **El alcance es el MÁXIMO del mundo y no el de cada tramo**, y eso es lo
+        // que hace la rejilla exactamente equivalente a recorrer la lista entera.
+        // Con un alcance por tramo, un afluente estrecho que pasara más cerca
+        // podía tapar al río ancho de al lado y el valle desaparecía en un trozo.
+        // Con el máximo, todo tramo a menos de [`ALCANCE_MAX`] está en la casilla,
+        // y ningún tramo que quede fuera puede ganar: su distancia ya es mayor que
+        // cualquier valle posible. La poda sigue siendo enorme (13 tiles contra los
+        // 128 del bloque).
+        let caja = |t: &Tramo| {
+            let alcance = ALCANCE_MAX;
+            let (minx, maxx) = (t.x0.min(t.x1) - alcance, t.x0.max(t.x1) + alcance);
+            let (minz, maxz) = (t.z0.min(t.z1) - alcance, t.z0.max(t.z1) + alcance);
+            let ix0 = (((minx - x0) / SUBCELDA).floor() as i64).clamp(0, REJILLA - 1);
+            let ix1 = (((maxx - x0) / SUBCELDA).floor() as i64).clamp(0, REJILLA - 1);
+            let iz0 = (((minz - z0) / SUBCELDA).floor() as i64).clamp(0, REJILLA - 1);
+            let iz1 = (((maxz - z0) / SUBCELDA).floor() as i64).clamp(0, REJILLA - 1);
+            (ix0, ix1, iz0, iz1)
+        };
+        for t in &tramos {
+            let (ix0, ix1, iz0, iz1) = caja(t);
+            for iz in iz0..=iz1 {
+                for ix in ix0..=ix1 {
+                    cuenta[(iz * REJILLA + ix) as usize + 1] += 1;
+                }
+            }
+        }
+        for i in 0..n {
+            cuenta[i + 1] += cuenta[i];
+        }
+        let total = cuenta[n] as usize;
+        let mut orden = vec![0u16; total];
+        let mut cursor = cuenta.clone();
+        for (i, t) in tramos.iter().enumerate() {
+            let (ix0, ix1, iz0, iz1) = caja(t);
+            for iz in iz0..=iz1 {
+                for ix in ix0..=ix1 {
+                    let c = &mut cursor[(iz * REJILLA + ix) as usize];
+                    orden[*c as usize] = i as u16;
+                    *c += 1;
+                }
+            }
+        }
+        BloqueRios { tramos, inicio: cuenta, orden, x0, z0 }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.tramos.is_empty()
+    }
+
+    /// Los tramos que pueden alcanzar el punto `(x, z)`.
+    fn candidatos(&self, x: f32, z: f32) -> impl Iterator<Item = &Tramo> {
+        let ix = (((x - self.x0) / SUBCELDA).floor() as i64).clamp(0, REJILLA - 1);
+        let iz = (((z - self.z0) / SUBCELDA).floor() as i64).clamp(0, REJILLA - 1);
+        let i = (iz * REJILLA + ix) as usize;
+        let (a, b) = (self.inicio[i] as usize, self.inicio[i + 1] as usize);
+        self.orden[a..b].iter().map(move |&k| &self.tramos[k as usize])
+    }
+}
+
 /// La clave de un memo de mundo: `(cuerpo, época de la semilla, celda)`.
 type Clave = (u8, u32, i64, i64);
 
@@ -211,17 +396,17 @@ thread_local! {
     /// malla de 7×7 que necesita una consulta ([`RADIO_CUENCAS`]) entra dos veces,
     /// que es lo que hace que moverse al bloque de al lado no vuelva a trazar
     /// nada — comparten 42 de las 49 cuencas.
-    static TRAZOS: RefCell<Vec<(Clave, Trazo)>> = const { RefCell::new(Vec::new()) };
+    static TRAZOS: RefCell<Vec<(Clave, Rc<Trazo>)>> = const { RefCell::new(Vec::new()) };
     /// Los tramos que tocan un bloque de [`BLOQUE`] tiles, ya filtrados por caja.
     /// Es lo que hace que la consulta de una celda mire una lista corta en vez de
     /// los 25 trazados de la vecindad.
-    static BLOQUES: RefCell<Vec<(Clave, Rc<Vec<Tramo>>)>> = const { RefCell::new(Vec::new()) };
+    static BLOQUES: RefCell<Vec<(Clave, Rc<BloqueRios>)>> = const { RefCell::new(Vec::new()) };
     /// **El último bloque consultado.** `compute_field` pregunta por CADA celda del
     /// mundo y las celdas llegan en orden: un chunk son 256 consultas seguidas al
     /// mismo bloque. Sin este atajo, cada una recorría la lista de [`BLOQUES`]
     /// comparando claves. Medido por `cuevas::preguntar_por_la_cueva_es_barato`,
     /// que es el guardián de coste del generador.
-    static ULTIMO: RefCell<Option<(Clave, Rc<Vec<Tramo>>)>> = const { RefCell::new(None) };
+    static ULTIMO: RefCell<Option<(Clave, Rc<BloqueRios>)>> = const { RefCell::new(None) };
 }
 
 const MEMO_TRAZOS: usize = 256;
@@ -461,14 +646,19 @@ fn rumbo_entre(a: (f32, f32, f32), b: (f32, f32, f32)) -> (f32, f32) {
     }
 }
 
-fn trazo_de(body: CelestialBody, cx: i64, cz: i64) -> Trazo {
+/// **`Rc` y no `Trazo`: esto se devolvía CLONADO en cada acierto.** Armar un
+/// bloque consulta las 121 cuencas de la vecindad ([`RADIO_CUENCAS`]) y cada
+/// trazo son ~50 tramos, así que cada bloque pagaba 121 reservas y copias de
+/// vector antes siquiera de empezar a filtrar. El `Rc` deja el acierto en un
+/// contador.
+fn trazo_de(body: CelestialBody, cx: i64, cz: i64) -> Rc<Trazo> {
     let clave = (body as u8, crate::partida::epoca(), cx, cz);
     if let Some(t) = TRAZOS.with(|m| {
         m.borrow().iter().find(|(k, _)| *k == clave).map(|(_, v)| v.clone())
     }) {
         return t;
     }
-    let t = trazar(body, cx, cz);
+    let t = Rc::new(trazar(body, cx, cz));
     TRAZOS.with(|m| {
         let mut m = m.borrow_mut();
         if m.len() >= MEMO_TRAZOS {
@@ -480,7 +670,7 @@ fn trazo_de(body: CelestialBody, cx: i64, cz: i64) -> Trazo {
 }
 
 /// Los tramos que pueden tocar el bloque de `(bx, bz)`.
-fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Rc<Vec<Tramo>> {
+fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Rc<BloqueRios> {
     let clave = (body as u8, crate::partida::epoca(), bx, bz);
     // **El bloque de la consulta anterior, sin recorrer nada.** Ver [`ULTIMO`].
     if let Some(v) = ULTIMO.with(|u| {
@@ -533,7 +723,7 @@ fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Rc<Vec<Tramo>> {
     // reserva de memoria y una copia — por celda, en el camino caliente de
     // `relief::compute_field`. Es lo que puso el generador en 2,27 µs/celda
     // contra un presupuesto de 2,0.
-    let out = Rc::new(out);
+    let out = Rc::new(BloqueRios::armar(out, x0, z0));
     BLOQUES.with(|m| {
         let mut m = m.borrow_mut();
         if m.len() >= MEMO_BLOQUES {
@@ -571,15 +761,15 @@ pub fn cauce_en(body: CelestialBody, tx: i64, tz: i64) -> bool {
 }
 
 /// La distancia al cauce más cercano y su ancho ahí, o `None` si no hay ninguno
-/// en el bloque. Lo usa además [`hondura_del_cauce`] para cavar el valle.
+/// en el bloque. Lo usa además [`perfil_del_cauce`] para cavar el valle.
 fn cerca_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f32)> {
-    let tramos = tramos_del_bloque(body, tx.div_euclid(BLOQUE), tz.div_euclid(BLOQUE));
-    if tramos.is_empty() {
+    let bloque = tramos_del_bloque(body, tx.div_euclid(BLOQUE), tz.div_euclid(BLOQUE));
+    if bloque.is_empty() {
         return None;
     }
     let (x, z) = (tx as f32 + 0.5, tz as f32 + 0.5);
     let mut mejor: Option<(f32, f32)> = None;
-    for t in tramos.iter() {
+    for t in bloque.candidatos(x, z) {
         let (d, a, _) = distancia(t, x, z);
         if mejor.is_none_or(|(md, _)| d < md) {
             mejor = Some((d, a));
@@ -610,20 +800,20 @@ fn cerca_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f32)> 
 /// Así el fondo es monótono —seguir el agua es siempre bajar— y la orilla empalma
 /// suave con el terreno de al lado en vez de ser el filo de una zanja.
 pub fn perfil_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f32)> {
-    let tramos = tramos_del_bloque(body, tx.div_euclid(BLOQUE), tz.div_euclid(BLOQUE));
-    if tramos.is_empty() {
+    let bloque = tramos_del_bloque(body, tx.div_euclid(BLOQUE), tz.div_euclid(BLOQUE));
+    if bloque.is_empty() {
         return None;
     }
     let (x, z) = (tx as f32 + 0.5, tz as f32 + 0.5);
     let mut mejor: Option<(f32, f32, f32)> = None;
-    for t in tramos.iter() {
+    for t in bloque.candidatos(x, z) {
         let (d, a, h) = distancia(t, x, z);
         if mejor.is_none_or(|(md, _, _)| d < md) {
             mejor = Some((d, a, h));
         }
     }
     let (d, a, h) = mejor?;
-    let valle = a * VALLE;
+    let valle = valle_de(a);
     if d >= valle {
         return None;
     }
@@ -631,7 +821,7 @@ pub fn perfil_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f
     // borde del valle. Un apagado lineal deja una arista visible en la orilla.
     let t = 1.0 - d / valle;
     let peso = t * t * (3.0 - 2.0 * t);
-    Some((h - HONDURA, peso))
+    Some((h - hondura(body), peso))
 }
 
 /// **DÓNDE TERMINAN LOS RÍOS DE UNA CUENCA.** Es la medición del módulo: la

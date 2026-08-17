@@ -15,6 +15,14 @@ pub enum InteractTargetKind {
     GemBlue,
     GemRed,
     Block,
+    /// **Cualquier cosa que el mundo haya sembrado**: el banco de la vereda, el
+    /// farol, la mata, el cajón del galpón, el nenúfar. No es `Entity` —eso es lo
+    /// que colocó el jugador y vive en `BuiltStructures`— ni `Container`: es
+    /// decorado del generador, y hasta el 15 ago 2026 no se podía ni tocar.
+    ///
+    /// Se levanta con el mismo gesto que todo lo demás y lo resuelve
+    /// `harvest::pick_up_prop`.
+    Prop,
     LaunchModule,
     LaunchIgnition,
     SpaceReentry,
@@ -124,6 +132,12 @@ pub static INTERACTION_RULES: &[InteractionRule] = &[
     rule("hand", InteractTargetKind::Block, InteractActionKind::Mine, 750, None, None),
     rule("pickaxe", InteractTargetKind::Block, InteractActionKind::Mine, 350, None, None),
     rule("axe", InteractTargetKind::Block, InteractActionKind::Mine, 450, None, None),
+    // **Un prop se levanta con la mano, sin herramienta y rápido.** Sin `item_id`
+    // a propósito: lo que devuelve sale del CATÁLOGO del propio objeto (una
+    // heladera devuelve lo que costó), y eso lo sabe `harvest::pick_up_prop`, no
+    // esta tabla estática. 550 ms es corto porque es lo que más se va a hacer:
+    // el mundo está lleno de props y pelear medio segundo con cada uno cansa.
+    rule("hand", InteractTargetKind::Prop, InteractActionKind::Gather, 550, None, None),
     rule("hand", InteractTargetKind::Rock, InteractActionKind::None, 0, None, None),
     rule("hand", InteractTargetKind::OreIron, InteractActionKind::None, 0, None, None),
     rule("hand", InteractTargetKind::OreGold, InteractActionKind::None, 0, None, None),
@@ -353,8 +367,9 @@ mod tests {
     #[test]
     fn rule_count_stable() {
         // 28 base + 10 tiered tool rules (wood/stone axe + pickaxe, jul 2026)
-        // + 1 abrir cofre (`InteractTargetKind::Chest`).
-        assert_eq!(INTERACTION_RULES.len(), 39);
+        // + 1 abrir cofre (`InteractTargetKind::Chest`)
+        // + 1 levantar prop del mundo (`InteractTargetKind::Prop`, 15 ago 2026).
+        assert_eq!(INTERACTION_RULES.len(), 40);
     }
 
     #[test]

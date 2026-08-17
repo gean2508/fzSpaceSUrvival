@@ -230,6 +230,12 @@ impl Plugin for AutoDrivePlugin {
         // único que importa de este sistema: que se entra caminando (nadie
         // teletransporta a nadie) y que el afuera se apaga en GRADIENTE, no de
         // golpe. HA_CUEVATEST=1.
+        // **¿Se deja tocar todo?** HA_PROPTEST=1 — ver `prop_test_drive`.
+        if crate::flags::var("HA_PROPTEST").is_ok() {
+            app.init_resource::<PropTestState>();
+            app.add_systems(Update, prop_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         if crate::flags::var("HA_CUEVATEST").is_ok() {
             app.init_resource::<CuevaTestState>();
             app.add_systems(Update, cueva_test_drive.before(aplicar_actuacion_del_driver));
@@ -1444,7 +1450,7 @@ fn agua_test_drive(world: &mut World) {
 ///
 /// El casco es lo caro de los tres (`settlement_covering` barre nueve celdas de
 /// sitio), así que sólo se pregunta por celdas que YA son cara sur.
-fn relieve_pick_sites() -> [(f32, f32, &'static str); 4] {
+fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
     use ha_shared::relief::{alto_de_pared, relief_cell, ReliefCell};
     let body = ha_shared::CelestialBody::Earth;
     // **La pared que se captura es la MÁS ALTA que se encuentre**, no la primera.
@@ -1536,16 +1542,36 @@ fn relieve_pick_sites() -> [(f32, f32, &'static str); 4] {
         eprintln!("ha-relievetest: la cumbre más alta es {n} ({cx},{cz}), escalón {l}");
     }
     let cumbre_xy = cumbre.map(|(_, _, cx, cz)| (cx as f32, cz as f32 + 10.0)).unwrap_or(d);
+    // **LA LÍNEA DE NIEVE**, que es lo único que no se ve en ninguna de las otras
+    // cuatro: la cumbre es toda blanca y la pared está por debajo. Se busca la
+    // celda de nieve que tenga tierra SIN nieve a la vista, o sea la frontera —
+    // que es donde se juzga si el borde es una curva de nivel o una greca
+    // (`geography::pasa_la_linea_de_nieve`). Bajando desde la cumbre, que es el
+    // sitio del mundo donde la frontera existe seguro.
+    let nieve_xy = cumbre
+        .and_then(|(_, _, cx, cz)| {
+            let nieva = |x: i64, z: i64| {
+                ha_shared::geography::biome_at(body, x, z) == ha_shared::geography::Biome::Snow
+            };
+            // Se baja en línea recta hasta salir de la nieve, y se retrata el
+            // punto justo por encima de donde se salió.
+            (0..1_200).find_map(|d| {
+                let z = cz + d;
+                (!nieva(cx, z) && nieva(cx, z - 12)).then_some((cx as f32, z as f32 - 6.0))
+            })
+        })
+        .unwrap_or(cumbre_xy);
     [
         (pared_xy.0, pared_xy.1, "pared"),
         (rampa.unwrap_or(d).0, rampa.unwrap_or(d).1, "rampa"),
         (urbano.unwrap_or(d).0, urbano.unwrap_or(d).1, "urbano"),
         (cumbre_xy.0, cumbre_xy.1, "cumbre"),
+        (nieve_xy.0, nieve_xy.1, "linea-de-nieve"),
     ]
 }
 
 #[derive(Resource, Clone, Copy)]
-struct RelieveSites([(f32, f32, &'static str); 4]);
+struct RelieveSites([(f32, f32, &'static str); 5]);
 
 /// Planta al jugador en los tres sitios de relieve y captura cada uno.
 ///
@@ -3979,6 +4005,14 @@ fn tester_poll_command(world: &mut World, now: f32) {
             world.resource_mut::<crate::companion::CompanionOrder>().0 =
                 crate::companion::CompanionTask::Pray;
         }
+        // Abrir/cerrar la mochila: es la pantalla que hay que poder capturar
+        // para comparar contra la imagen de referencia, y sin esto la única
+        // forma de verla era tocar el botón a mano en el teléfono.
+        "mochila" | "bolsa" | "bag" => {
+            let mut b = world.resource_mut::<crate::hud::BagPanelState>();
+            b.open = !b.open;
+            eprintln!("ha-tester: mochila {}", if b.open { "abierta" } else { "cerrada" });
+        }
         _ => eprintln!("ha-tester: unknown command '{cmd}'"),
     }
 }
@@ -4944,6 +4978,186 @@ fn casa_test_drive(world: &mut World) {
             if st.step > 14 {
                 std::process::exit(if fallo { 1 } else { 0 });
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HA_PROPTEST — **¿se deja tocar TODO?**
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct PropTestState {
+    step: u32,
+    next_t: f32,
+    fallo: bool,
+    /// Los props que hay alrededor, con el punto de pantalla donde se dibujan.
+    cola: Vec<(Entity, Vec2)>,
+    /// A cuál le estamos apuntando el dedo AHORA (se lee el objetivo el frame
+    /// siguiente: el targeting corre en su propio sitio del schedule, y leerlo en
+    /// el mismo frame en que se mueve el cursor mide el frame anterior).
+    apuntando: Option<Entity>,
+    idx: usize,
+    enganchados: usize,
+    tocables: usize,
+}
+
+/// **El driver de "todo es tocable".** Planta al jugador en un casco poblado,
+/// junta los props que tiene al alcance del brazo y le apunta el dedo a uno por
+/// uno —**un prop por frame**—: cada uno tiene que resolverse como objetivo.
+///
+/// Mide dos cosas que a ojo no se distinguen:
+///
+/// 1. **Cobertura** — cuántos de los props al alcance contestan al dedo. Antes
+///    del 15 ago 2026 la respuesta era CERO: sólo árboles, rocas y vetas
+///    declaraban objetivo, y el resto del mundo era pintura de fondo.
+/// 2. **Precisión** — el objetivo que sale es el prop apuntado y no un vecino. Es
+///    la otra mitad del pedido: el margen de perdón no puede volverse un imán que
+///    elige por vos.
+///
+/// El barrido va de a un frame porque el objetivo lo calcula `targeting` en SU
+/// sitio del schedule: correr el schedule a mano desde acá sería re-entrar en
+/// este mismo sistema.
+/// La captura del driver, **salteable**. En una máquina sin GPU real (software
+/// GL) `Screenshot::primary_window` se cuelga y el driver no llega ni a dar su
+/// veredicto: con `HA_NOSHOT=1` se mide igual y la vista se comprueba en el
+/// teléfono, que es donde manda de todos modos (regla 12).
+fn foto(world: &mut World, nombre: &str) {
+    if crate::flags::var("HA_NOSHOT").is_ok() {
+        eprintln!("ha-prop: (sin captura) {nombre}");
+        return;
+    }
+    shot(world, &format!("{}/{nombre}", flytest_dir()));
+}
+
+fn prop_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+
+    // ── Barrido en curso: leer lo que dio el dedo del frame anterior y pasar al
+    // siguiente prop. Corre TODOS los frames, sin el respiro de `next_t`.
+    if let Some(esperada) = world.resource::<PropTestState>().apuntando {
+        let salio = world.resource::<crate::targeting::LookTarget>().entity;
+        let mut st = world.resource_mut::<PropTestState>();
+        if salio == Some(esperada) {
+            st.enganchados += 1;
+        }
+        st.apuntando = None;
+    }
+    let pendiente = {
+        let st = world.resource::<PropTestState>();
+        (st.idx < st.cola.len()).then(|| st.cola[st.idx])
+    };
+    if let Some((entidad, punto)) = pendiente {
+        {
+            let mut c = world.resource_mut::<crate::input::AimCursor>();
+            // `AimCursor::world` es suelo `(x, z)`; el punto del sprite viene en
+            // pantalla, así que se deshace `render_xy`.
+            c.world = Vec2::new(punto.x, -punto.y);
+            c.initialized = true;
+            c.active = true;
+            c.locked = true;
+        }
+        let mut st = world.resource_mut::<PropTestState>();
+        st.apuntando = Some(entidad);
+        st.idx += 1;
+        return;
+    }
+
+    if now < world.resource::<PropTestState>().next_t {
+        return;
+    }
+    let step = world.resource::<PropTestState>().step;
+    {
+        let mut st = world.resource_mut::<PropTestState>();
+        st.step += 1;
+        st.next_t = now + 0.4;
+    }
+
+    match step {
+        // **Se mide donde el jugador aparece, sin teletransportes.** Se probó
+        // saltar al centro de un casco y no vale la pena: el casco más cercano
+        // está a 4.400 tiles, el salto obliga a re-streamear el mundo entero y el
+        // driver se pasa minutos cargando arte. Y no hace falta — el campo
+        // abierto también está sembrado de props (matas, hongos, flores,
+        // troncos), que es exactamente la categoría que hasta hoy no se tocaba.
+        0..=4 => {}
+        // Foto del mundo sin dedo apoyado: no puede haber NINGÚN resaltado.
+        5 => foto(world, "prop-1-sin-dedo.png"),
+        // **Tres rondas, no una.** Al aire libre hay dos o tres props al alcance
+        // del brazo, y "2/2" no prueba gran cosa. Entre ronda y ronda el jugador
+        // salta 14 tiles —un paseo, no un viaje: el anillo streameado ya cubre
+        // esa distancia y no hay que recargar el mundo— y se vuelve a medir.
+        6 | 8 | 10 => {
+            let (px, pz) = {
+                let mut q = world.query_filtered::<&SimState, With<Player>>();
+                let s = q.single(world);
+                (s.body.x, s.body.z)
+            };
+            let jugador = Vec2::new(px, pz);
+            let mut cerca: Vec<(Entity, Vec2)> = Vec::new();
+            {
+                let mut q = world.query::<(
+                    Entity,
+                    &GlobalTransform,
+                    &crate::targeting::InteractTarget,
+                )>();
+                for (e, gtf, t) in q.iter(world) {
+                    if t.kind != ha_shared::InteractTargetKind::Prop {
+                        continue;
+                    }
+                    let p = gtf.translation().truncate();
+                    if jugador.distance(Vec2::new(p.x, -p.y)) <= 3.5 {
+                        cerca.push((e, p));
+                    }
+                }
+            }
+            cerca.truncate(24);
+            let mut st = world.resource_mut::<PropTestState>();
+            st.tocables += cerca.len();
+            let n = cerca.len();
+            st.cola = cerca;
+            st.idx = 0;
+            eprintln!("ha-prop: ronda con {n} props al alcance (acumulado {})", st.tocables);
+        }
+        // Foto CON el dedo sobre el último prop: acá se ve si el corchete lo abraza.
+        7 => foto(world, "prop-2-resaltado.png"),
+        // Caminata corta entre rondas.
+        9 | 11 => {
+            let (px, pz) = {
+                let mut q = world.query_filtered::<&SimState, With<Player>>();
+                let s = q.single(world);
+                (s.body.x, s.body.z)
+            };
+            bt_teleport(world, px + 14.0, pz + 14.0);
+        }
+        // Veredicto.
+        _ => {
+            let (total, ok) = {
+                let st = world.resource::<PropTestState>();
+                (st.tocables, st.enganchados)
+            };
+            eprintln!("ha-prop: {ok}/{total} props contestaron al dedo");
+            if total == 0 {
+                report_bug(
+                    "props",
+                    "hay_props_tocables_alrededor",
+                    "me paré en el casco y no había ni un prop con objetivo al alcance",
+                );
+                world.resource_mut::<PropTestState>().fallo = true;
+            } else if ok < total {
+                report_bug(
+                    "props",
+                    "todo_prop_contesta_al_dedo",
+                    &format!("apunté a {total} props y sólo {ok} se resolvieron como objetivo"),
+                );
+                world.resource_mut::<PropTestState>().fallo = true;
+            }
+            let fallo = world.resource::<PropTestState>().fallo;
+            eprintln!("ha-verify: PROPTEST {}", if fallo { "FAIL" } else { "DONE" });
+            std::process::exit(i32::from(fallo));
         }
     }
 }

@@ -925,19 +925,41 @@ mod tests {
     /// **Las cascadas existen y son de tres tiles.** Donde un río cruza un
     /// escalón tiene que haber salto; si no aparece ninguno en un barrido serio,
     /// la regla no se está cumpliendo y el arte de cascada no lo ve nadie.
+    ///
+    /// # Y SE BUSCAN EN LA SIERRA, NO ALREDEDOR DEL ORIGEN
+    ///
+    /// Este test barría 1.800×1.800 tiles centrados en el spawn, que es **llano**
+    /// (medido: `auditoria_del_mapa::de_que_esta_hecha_la_tierra`, el 67 % de la
+    /// tierra está en los escalones 0-2). Ahí encontraba saltos, y ésos eran
+    /// justamente el defecto: el cauce cruzaba una frontera de cuantización cada
+    /// treinta tiles porque la talla del río pegaba un campo liso contra uno
+    /// rugoso (ver `rios::VALLE_MINIMO`), así que la pradera tenía cascadas de
+    /// diez pisos en mitad del prado y el río salía cortado a trozos.
+    ///
+    /// Con el río tallado de verdad, el llano ya no tiene saltos —y está bien: un
+    /// salto es de montaña—. Se buscan donde tienen que estar. Medido con el
+    /// cambio: **56 anclas** en la primera sierra de terraza ≥ 5, contra 49 antes.
     #[test]
     fn hay_cascadas_donde_el_rio_cruza_un_escalon() {
         let body = CelestialBody::Earth;
+        // Las ventanas se escriben y no se buscan porque "la primera terraza ≥ 5"
+        // cae en cualquier loma alta, y una loma no tiene río: para que haya salto
+        // hacen falta las DOS cosas juntas, montaña y cauce.
+        // Medidas con `medir_rios::donde_estan_las_cascadas`, no elegidas: son las
+        // ventanas de cordillera NOROESTE donde el cauce cruza escalones de verdad.
+        const SIERRAS: &[(i64, i64)] = &[(-6_100, -6_100), (-7_000, -6_100), (-4_300, -6_100)];
         let mut saltos = 0;
-        for tz in -900..900 {
-            for tx in -900..900 {
-                if let Some(pisos) = cascada_at(body, tx, tz) {
-                    assert!((1..=PISOS_MAX).contains(&pisos), "salto de {pisos} pisos");
-                    saltos += 1;
+        for &(cx, cz) in SIERRAS {
+            for tz in cz - 300..cz + 300 {
+                for tx in cx - 300..cx + 300 {
+                    if let Some(pisos) = cascada_at(body, tx, tz) {
+                        assert!((1..=PISOS_MAX).contains(&pisos), "salto de {pisos} pisos");
+                        saltos += 1;
+                    }
                 }
             }
         }
-        assert!(saltos > 0, "ni una cascada en 1.800x1.800 tiles");
+        assert!(saltos > 0, "ni una cascada en las tres ventanas de cordillera");
     }
 
     /// **La playa se queda en la playa, y el resto del líquido bebe con pasto.**
@@ -1193,6 +1215,49 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// **NINGÚN TRAMO DE RÍO CORTADO POR UN ACANTILADO.**
+    ///
+    /// Era el guardián que faltaba, y por eso el bug vivió tanto: los nueve tests
+    /// de "acantilado contra agua" de este módulo y de `relief` preguntan por
+    /// `relief_level < 0` —mar y lagos— o por el tile ya pintado, y **un río corre
+    /// en nivel ≥ 0**. Medido antes de arreglarlo
+    /// (`medir_rios::el_cauce_no_lo_corta_un_acantilado`, ventana de sierra de
+    /// 1.200 tiles): **21,75 % de las celdas de cauce eran roca**, o sea el río
+    /// partido en trozos por farallones en zig-zag.
+    ///
+    /// Lo arregla el retiro de `relief::es_canto`, que ahora conoce el cauce igual
+    /// que conoce el mar. Lo que queda —y por eso el tope no es cero— son los
+    /// CRUCES: donde el cauce baja un escalón hay roca a los lados, con cascada o
+    /// con rápido, y eso es correcto. Bajó a 4,39 % en la misma ventana; el tope
+    /// se pone en 8 % para que no vuelva a subir sin que nadie se entere.
+    #[test]
+    fn ningun_tramo_de_rio_esta_cortado_por_un_acantilado() {
+        let body = CelestialBody::Earth;
+        let (mut cauce, mut roca) = (0u32, 0u32);
+        for &(cx, cz) in VENTANAS {
+            for tz in cz - 120..cz + 120 {
+                for tx in cx - 120..cx + 120 {
+                    if !crate::geography::hay_rio(body, tx, tz) {
+                        continue;
+                    }
+                    cauce += 1;
+                    if matches!(
+                        relief::relief_cell(body, tx, tz),
+                        relief::ReliefCell::Cliff | relief::ReliefCell::Pared
+                    ) && !en_la_garganta(body, tx, tz)
+                    {
+                        roca += 1;
+                    }
+                }
+            }
+        }
+        let pct = 100.0 * roca as f32 / cauce.max(1) as f32;
+        assert!(
+            pct <= 8.0,
+            "{roca} de {cauce} celdas de cauce son roca ({pct:.2} %): el río vuelve a estar cortado"
+        );
     }
 
     /// **NINGUNA PARED CON LOS PIES EN EL AGUA — ni la primera fila ni las que

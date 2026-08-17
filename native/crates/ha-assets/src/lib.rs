@@ -22,7 +22,7 @@ pub use art_manifest::{
     Interaccion, Requisito, ESTADOS, VERBOS,
     namespace_layer, placement_center_tiles, placement_min_tile, split_variant, variant_key,
     ArtAnim, ArtEntry, ArtLayer, ArtManifest, ArtValue, CellRect, CollisionFootprint, Emission,
-    ObjectDef, Pose, StripDir, VariantDef, VARIANT_SEP,
+    ObjectDef, Pose, SliceBorder, StripDir, VariantDef, VARIANT_SEP,
 };
 pub use chargen_index::{ChargenIndex, LayerOption, LookDef};
 pub use pngs::list_pngs;

@@ -124,11 +124,24 @@ ARENA_DEL_PACK = (230, 174, 85)
 NIEVE_DEL_KIT = (212, 225, 239)
 
 #: Los materiales que llevan orilla. `None` = el kit sin teñir.
+#:
+#: Los tres primeros muerden el pasto y su color se mide del pack. Los cuatro
+#: **pastos de clima** se agregan en `main` porque su destino se mide del tile
+#: que el juego ya pinta (`tiles/pasto_*`) y eso necesita el manifiesto abierto.
 MATERIALES = [
     ("tierra", None, "Orilla de tierra"),
     ("arena", ARENA_DEL_PACK, "Orilla de arena"),
     ("nieve", NIEVE_DEL_KIT, "Orilla de nieve"),
 ]
+
+#: **El orden total de los pastos**, espejo de `world2d::rango_de_pasto`.
+#:
+#: Una costura la dibuja el pasto de MAYOR rango y su fleco se tiñe del de menor,
+#: así que sólo hacen falta las combinaciones en ese sentido: `pasto_sierra` con
+#: fleco de bosque existe, `pasto_bosque` con fleco de sierra no se pide nunca.
+#: Si el orden cambia allá y no acá sobran claves, no faltan: el juego cae a la
+#: variante de referencia y no se pierde una celda.
+RANGO_DE_PASTO = {"": 0, "bosque": 1, "seco": 2, "pantano": 3, "sierra": 4}
 
 #: Los climas de pasto contra los que puede tocar una orilla. La clave es el sufijo
 #: de la clave del slot; el color se MIDE del tile que el juego ya pinta al lado
@@ -220,20 +233,43 @@ def paleta(kit):
     return verde, set(todos) - verde
 
 
-def mapa_anclado(origen, ancla, destino):
+def mapa_anclado(origen, ancla, destino, aplana=1.0):
     """`{color: color teñido}` con el dominante clavado en `destino`.
 
     Mismo criterio que `import-acantilado.py::mapa_por_losa`: el tono que manda
     va exactamente al color pedido y el resto lo sigue por luminancia, así que la
     parte plana de la pieza queda indistinguible del tile de al lado y las matas
     y las piedritas conservan su volumen.
+
+    `aplana` comprime la rampa hacia el ancla (1,0 = tal cual). Existe por la
+    costura entre dos pastos: el lóbulo de material del kit es tierra con
+    piedritas y el pasto es mucho más liso, así que teñido tal cual el borde
+    salía empedrado. El número lo mide [`compresion_de_grano`].
     """
     base = max(luminancia(ancla), 1.0)
     out = {}
     for c in origen:
         f = luminancia(c) / base
+        f = 1.0 + (f - 1.0) * aplana
         out[c] = tuple(min(255, max(0, int(destino[k] * f))) for k in range(3))
     return out
+
+
+def compresion_de_grano(verde, material):
+    """Cuánto hay que comprimir la rampa del material para que granule como el pasto.
+
+    Es el cociente de los dos RANGOS de luminancia, medido sobre los colores del
+    propio kit. Se imprime en cada corrida: si el pack cambia, el número cambia
+    con él y no hay que tocar nada.
+    """
+    def rango(cs):
+        ls = [luminancia(c) for c in cs]
+        return max(ls) - min(ls) if ls else 0.0
+
+    rv, rm = rango(verde), rango(material)
+    if rm <= 1e-3:
+        return 1.0
+    return min(1.0, rv / rm)
 
 
 def tenir(im, mapa):
@@ -312,12 +348,42 @@ def main():
             continue
         climas.append((sufijo, c))
 
+    # **LA COSTURA ENTRE DOS PASTOS ES LA MISMA PIEZA.** Lo único que cambia es
+    # que el lóbulo de material va a otro VERDE en vez de a un marrón: la sierra
+    # contra la pradera es un cambio de losa tan visible como la arena contra el
+    # pasto —(106,148,88) contra (71,151,87)— y sin pieza salía a escuadra.
+    materiales = list(MATERIALES)
+    nombre_del_clima = {"bosque": "bosque", "seco": "sabana", "pantano": "pantano", "sierra": "sierra"}
+    for sufijo, losa in CLIMAS:
+        c = color_de_la_losa(losa)
+        if c is None:
+            print(f"  (sin {losa} curado: no hay costura de {sufijo})")
+            continue
+        materiales.append((f"pasto_{sufijo}", c, f"Costura de {nombre_del_clima[sufijo]}"))
+
     pagina = Hoja()
     sprites = {}
     objetos = {}
-    for mat, destino, etiqueta in MATERIALES:
-        mapa_mat = mapa_anclado(material, TIERRA_ANCLA, destino) if destino else {}
+    for mat, destino, etiqueta in materiales:
+        # **El grano del lóbulo de material se comprime al del pasto.** La pieza
+        # del kit es tierra con piedritas y el pasto es mucho más liso: teñida de
+        # verde tal cual, la costura entre dos pastos salía empedrada. La
+        # compresión es el cociente MEDIDO de los dos rangos de luminancia, no un
+        # número a ojo, y sólo se aplica a las costuras pasto-pasto: en la tierra,
+        # la arena y la nieve el grano es del material y tiene que estar.
+        aplana = compresion_de_grano(verde, material) if mat.startswith("pasto_") else 1.0
+        if aplana != 1.0:
+            print(f"  {mat}: grano del material comprimido x{aplana:.2f} (medido del kit)")
+        mapa_mat = (
+            mapa_anclado(material, TIERRA_ANCLA, destino, aplana) if destino else {}
+        )
         for sufijo, verde_destino in climas:
+            # Una costura contra sí misma no existe, y contra un pasto de rango
+            # mayor tampoco: la dibuja el otro lado (ver [`RANGO_DE_PASTO`]).
+            if mat.startswith("pasto_"):
+                mio = mat.removeprefix("pasto_")
+                if RANGO_DE_PASTO[sufijo] >= RANGO_DE_PASTO[mio]:
+                    continue
             mapa = dict(mapa_mat)
             if verde_destino:
                 mapa.update(mapa_anclado(verde, VERDE_ANCLA, verde_destino))

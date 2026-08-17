@@ -2055,6 +2055,71 @@ pero se ve mal" — el método de siempre.
   cumbre lo pide y vuelve a 30, porque piedra asomando entre la nieve **es** lo
   que tiene que verse.
 
+### LA LÍNEA DE NIEVE ES UNA CURVA DE NIVEL, NO UNA GRECA (16 ago 2026)
+
+La sección de arriba dejó la nieve donde tenía que estar —el escalón 9, medido— y
+con su losa. Lo que no arregló, porque no se veía hasta que los chunks se armaron
+enteros (§10, el arreglo del coste de `relief_cell`), es **la forma de la
+frontera**. En `relieve-0-pared.png` fresco, la cresta de la cordillera salía así,
+medido con `ha-shared/tests/mapa_de_la_nieve.rs` sobre la pantalla de 80×40 tiles:
+
+| | |
+|---|---|
+| nieve / montaña en el cuadro | **73 % / 27 %, entreveradas** |
+| celdas dentro del damero de transición | **33,9 % de la pantalla** |
+| ancho de la franja al CRUZARLA | 1 tile de mediana, 95 % por debajo de 8 |
+
+Las dos últimas filas juntas son el diagnóstico, y son lo contrario de lo que
+parecía. **El ancho de la franja estaba perfecto** —`AJEDREZ_EN_PASOS` cumple: se
+cruza en ocho pasos—; lo que pasaba es que **la frontera pasaba por todas
+partes**. Un tercio de la pantalla estaba a menos de dos tiles de un borde. En
+pantalla: confeti blanco y verde de horizonte a horizonte, la misma queja que
+`ANCHO_DE_TRANSICION` documenta haber perseguido tres veces bajando un número.
+
+**Por qué, y por qué bajar el número nunca lo iba a arreglar.** El campo de altura
+lleva la octava de lomas de 34 m y la local de 110 m (`relief::terrain_noise`).
+Sólo la de 110 m mueve el terreno **0,055 unidades de campo**, y un escalón mide
+0,047: una sola octava fina hace cruzar la cota más de un escalón entero. La
+frontera de *cualquier* umbral sobre un campo así no es una curva de nivel, es una
+greca fractal — y donde el campo ronda la cota en una zona ancha (la cresta de la
+cordillera es exactamente eso), la greca **llena la zona**. Ninguna calibración del
+ancho toca eso, porque el problema no es el ancho.
+
+**El arreglo: la nieve tiene su propio campo.** `relief::campo_de_cordillera` es
+la plataforma del mundo más las dos octavas GRANDES (continental y regional),
+renormalizadas — o sea el mismo terreno sin el temblor de las lomas. Sobre ese
+campo la frontera vuelve a ser una curva de nivel, y el ajedrez de Bayer se dibuja
+alrededor de ella (`geography::pasa_la_linea_de_nieve`, con el mismo ancho medido
+caminando). Resultado en el sitio de la captura: **0 % de damero**, y una diagonal
+limpia con su franja de ocho pasos en `relieve-4-linea-de-nieve.png`.
+
+**Sólo la nieve, y por un motivo concreto.** Sierra (5) y alta montaña (8) pintan
+el MISMO material en un mundo templado (`biome_tile` → `Tile::Grass` con la losa
+`pasto_sierra`), así que su frontera no se ve y da igual por dónde vaya. La nieve
+pinta `Tile::Ice`: blanco contra verde. Es la única grada cuya frontera el ojo lee.
+
+**No toca la geometría.** Escalones, acantilados y rampas siguen saliendo del campo
+completo; lo único que decide el campo suave es de qué está hecho el suelo — que es
+lo que ya hacía el difuminado.
+
+**Lo que costó, dicho sin maquillaje.** La nieve pasa del **2,52 % al 4,73 % de la
+tierra firme** (medido con las dos reglas completas, con su ajedrez, sobre la
+Tierra entera). No es un efecto del sesgo del difuminado —se probó centrarlo y
+sólo movió 0,05 puntos—: es que una ladera tiene más superficie por debajo de su
+línea de nieve que por encima, así que cualquier franja de transición ancha suma
+neto. Se acepta a propósito:
+
+- la regla de la casa es cualitativa —*la nieve es el techo del mundo, no aparece
+  en ninguna loma*— y el campo suave la cumple MEJOR, porque sólo puede nevar donde
+  la plataforma levanta cordillera, nunca donde un montículo cruzó el umbral;
+- subir el umbral a 10 la devolvería al 0,53 % **y dejaría la cordillera Monte
+  Altísimo sin nieve** (corona en el escalón 9), que es justo lo que la sección de
+  arriba fue a buscar.
+
+Guardianes de medida (no son asserts, son números para leer):
+`mapa_de_la_nieve::cuanto_de_la_pantalla_es_damero`,
+`::las_dos_reglas_de_nieve_lado_a_lado`, `::a_que_escalon_va_la_linea_de_nieve`.
+
 ### El río sabe que hay lagos (14 ago 2026)
 
 > ⚠ **SUPERADA EL MISMO DÍA.** El tirón del sumidero que describe esta sección
@@ -2890,6 +2955,63 @@ misma IA frugal, que lo sigue y evoluciona sola (hill-climb + persistencia).
 
 ## §7 Presentación
 
+### La interfaz de Ki — el kit del pack y las imágenes de referencia
+
+**La interfaz entera se rehizo el 15-16 ago 2026** siguiendo la propuesta que el
+usuario aprobó (*Interfaz de Ki*). La consigna fue textual: *"quiero que el juego
+se vea tal cual en las imágenes de referencia"*, *"no quiero variaciones"*.
+
+**Las imágenes viven en el repo**: `scripts/maqueta/` — los PNG/GIF aprobados y
+los scripts de Python que los compusieron. Ese directorio es la verdad de cómo
+tiene que verse cada pantalla; ver su `LEEME.md` para los comandos de captura.
+
+#### Las tres piezas del sistema
+
+1. **`scripts/import-ui-kit.py`** recorta del pack (Modern UI Style 1) los ocho
+   marcos de 9 partes y los botones-icono, y los publica como `ui/marco_*` y
+   `ui/ic_*`. Los recortes NO están alineados a la grilla de 32 —el panel empieza
+   en el pixel 116— así que la página va con `grid: [1,1]` (rects en píxeles) y
+   cada marco declara su **borde** (`slice`), que es lo que `art2d::ui_frame_node`
+   necesita para estirar el centro sin deformar las esquinas. El script verifica
+   el SHA-256 de la hoja del pack: si el pack cambia, se planta.
+2. **`ha-game/src/ui_pack.rs`** es el gemelo en Bevy de `scripts/maqueta/uikit.py`:
+   marcos, cartel, botón, texto anclado, iconos, la barra de estado, el muñeco por
+   capas, la viñeta y el halo.
+3. **Las coordenadas son las del mockup.** Todo se dibuja en un lienzo de
+   **2400 × 1080** —el Redmi apaisado— y un solo factor `ui_pack::k = ancho / 2400`
+   lo escala. El lienzo va **anclado arriba**: centrado dejaba una franja vacía
+   entre el borde de la pantalla y la barra de estado.
+
+> Si algo no entra, el número está mal en la maqueta y se cambia en la maqueta.
+> Acá no se corrigen números a ojo.
+
+#### Trampas que ya costaron una vuelta
+
+- **`hud::skin_ui_from_art` le pone `ui/button` a todo botón sin imagen.** Los
+  botones del kit ya traen su marco; el reskin se los pisaba y todo salía con el
+  interior marrón oscuro de `ui/button` (107,80,82). Ahora se saltea al que ya
+  tiene `ImageNode`, y un área táctil invisible se marca con `ui_pack::SinMarco`
+  (si no, el velo de un modal sale como una tabla de madera a pantalla completa).
+- **Las grillas van con `Display::Grid`, no con `flex_wrap`.** 7 × 130 + 6 × 12 da
+  982 clavados: basta que taffy redondee un pixel para que la séptima casilla se
+  caiga a la fila de abajo.
+- **El texto va con `ZIndex` por encima del marco.** Los rótulos chiquitos
+  ("NOMBRE", "SEMILLA") caen justo arriba de su campo, que se dibuja después.
+- **La miniatura de una casilla del creador necesita `CcThumb` en la casilla y
+  `CcThumbSlot` en un hijo** — `stream_thumbs` los busca en padre/hijo. En el
+  mismo nodo, la grilla entera sale con la misma prenda.
+
+#### Cómo se mira sin el teléfono
+
+```bash
+cd native
+HA_MENUSHOT=/tmp/menu.png            ./target/release-native/ha-game
+HA_LISTASHOT=/tmp/lista              ./target/release-native/ha-game
+HA_CCSHOT=/tmp/cc                    ./target/release-native/ha-game
+HA_AUTOPLAY=1 HA_BAGSHOT=/tmp/juego  ./target/release-native/ha-game
+```
+
+
 ### Cámara
 
 - **Siempre centrada** en el jugador. El zoom **nunca** mueve al personaje.
@@ -3151,6 +3273,60 @@ sin consumir sostiene el punto unos frames.
 **Picado por rectángulo:** los sprites con `custom_size` se pican por su rectángulo
 y el alcance se mide **a su pie**, no a su centro — tocar la copa de un árbol agarra
 el árbol.
+
+### Todo el mundo se deja tocar (15 ago 2026)
+
+Hasta acá el dedo sólo encontraba **árboles, rocas, vetas, cofres, NPCs y lo que
+vos hubieras colocado**. El banco de la vereda, el farol, el cajón del galpón, el
+tronco flotante y las 7.821 claves del pack eran **pintura de fondo**: se veían,
+tapaban, daban sombra, y no contestaban. Un mundo donde la mitad de lo que ves no
+responde al dedo se siente roto.
+
+Tres cambios, y los tres al servicio de la misma frase del usuario — *"lo mejor
+sería ir directamente a tocar"*:
+
+1. **Todo prop declara objetivo.** `spawn_chunk_small_decor` y el decor autorado
+   ponen `InteractTarget { kind: Prop }` + `PropArt` (la clave de arte, en `Cow`
+   para no asignar nada en el camino caliente). Se levanta con el MISMO gesto que
+   todo lo demás —mantener— y lo resuelve `harvest::pick_up_prop`, que anota la
+   baja en el set de removidos (así no resucita al re-streamear) y devuelve el
+   material si el objeto está en el catálogo de colocables. El cartel dice su
+   nombre real, sacado de `ha_assets::slots::slot_label`.
+   - **Menos lo que es PISO.** Charcos, musgo, hojas caídas, alfombras y la
+     textura del agua están marcados `Floor` porque no se levantan de la baldosa:
+     **son** la baldosa. Si fueran objetivo le robarían el toque a la celda y
+     cavar/colocar dejarían de funcionar sobre cualquier suelo decorado. El
+     portero es `layers::es_piso`.
+2. **Margen de perdón del dedo** (`targeting::PICK_FORGIVENESS`, 0,55 m), y con
+   la cuenta hecha: a pie la cámara encuadra 30 m sobre ~1080 px → **36 px por
+   metro**, un tile es 1 m, y la yema apoya 40-60 px. **El dedo es más grande que
+   el banco.** Pero es una SEGUNDA pasada, no un imán: `grado_de_toque` devuelve
+   0 si caíste dentro del rectángulo y 1 si entraste por el margen, y el grado
+   ordena antes que la distancia. De tres árboles pegados **gana el que tocaste**
+   — eso es lo que no se negocia. Y en **modo CONSTRUIR el margen no juega**: ahí
+   la intención es la celda, y un prop que se cuela por el margen no es una ayuda,
+   es una pieza que no se colocó (el rectángulo exacto sí sigue valiendo, así se
+   saca del medio el arbusto que estorba sin salir del modo).
+3. **El resaltado abraza al OBJETO, no a la celda.** Los corchetes amarillos se
+   estiran al rectángulo del sprite apuntado (`sync_cursor_highlight`), con los
+   brazos a grosor constante — escalar el nodo engordaba el trazo y sobre una casa
+   de cuatro tiles quedaba un marco gordo. Sin objetivo con cuerpo (cavar, colocar
+   un bloque) vuelven a la celda, que ahí sí es lo que va a pasar.
+
+⚠ **Anti-regresión:** el margen NO puede crecer hasta elegir por el jugador, y
+nunca puede haber un "seleccionar el más cercano" ni un ciclador de objetivos: si
+hay que apuntar, se toca. Lo cuidan `el_rectangulo_tocado_le_gana_al_margen_del_vecino`
+y `el_margen_tiene_final` (`targeting.rs`).
+
+**Driver:** `HA_PROPTEST=1` planta el dedo sobre cada prop al alcance, uno por
+frame, y exige que TODOS se resuelvan como objetivo (cobertura) y que salga el
+apuntado y no un vecino (precisión). Deja `prop-1-sin-dedo.png` y
+`prop-2-resaltado.png`.
+
+**Lo que todavía NO se toca:** las **máquinas** colocadas (`machines.rs` no tiene
+`InteractTarget` ni API de baja en `MachineWorld`) y la **arquitectura generada**
+—fachadas, muros y techos de `edificios.rs`/`walls.rs`/`building.rs`—, que se
+tocan como tiles (`Block`) y no como objetos.
 
 **Menos texto en pantalla:** el bloque de estado nace oculto y sólo habla cuando hay
 algo que decir. La chuleta de controles es documentación: **sólo en modo CREATIVO**,
@@ -4881,6 +5057,115 @@ teléfono **MENU → PERF**) tiene una línea `blit`: `blit off` = la cámara de
 dibuja directo a la ventana; `blit 0.80 1920x864` = la escala de render está activa.
 **Si el mundo se ve negro**, esa línea dice si el culpable es la escala de render.
 
+### RESUELTO (16 ago 2026) — el chunk costaba caro porque `relief_cell` costaba 8 µs
+
+Ésta era la "ganancia grande que queda" de la sección de abajo, y no estaba en
+`spawn_chunk_decor`: estaba en **preguntarle al relieve**.
+
+`relief::relief_cell` es la consulta que el cliente hace por CADA tile de CADA
+chunk, y varias veces (malla, decoración, orilla, sombra, cascadas, cordón).
+Medido en release (`ha-shared/tests/coste_del_relieve.rs`):
+
+| | antes | después |
+|---|---|---|
+| `relief_cell` (niveles ya cacheados) | **8–10 µs** | **0,31–0,48 µs** |
+| `alto_de_pared` | 0,83–1,36 µs | 0,03–0,14 µs |
+| chunk de 32×32, sólo consultar el relieve | **11–26 ms** | 0,4–5,9 ms |
+
+Once a veintiséis milisegundos **por chunk y sólo para preguntar**, contra los
+16 ms que dura un fotograma entero en el Redmi. En pantalla eso no se lee como
+"va lento", se lee como **mundo roto**: el anillo llega a medio armar y lo que
+falta es el color de fondo. La captura `relieve-3-cumbre.png` salía vacía por
+esto —no por falta de arte: `tiles/ice` tiene su losa— y el driver
+`HA_RELIEVETEST` se colgaba indefinidamente al teletransportarse a la ladera.
+
+**Las tres causas, y las tres son de estructura, no de calibración:**
+
+1. **La caché de niveles se mapeaba por HASH y tenía 1.024 ranuras.** Su
+   comentario decía "el esténcil de 5 puntos de un chunk necesita ~3 filas
+   vivas", y para `relief_level` suelto es cierto. Pero `relief_cell` no es un
+   esténcil de 5 puntos: llama a `pie_de_pared` (11 filas al norte) y cada una a
+   `alto_de_pared` (10 al norte por `meseta_detras` + 23 al sur por
+   `hueco_al_sur`) — del orden de **300 consultas por celda**, repartidas por una
+   ventana de 32×80 tiles. 2.560 celdas contra 1.024 ranuras, y encima chocando
+   entre ellas. Arreglo: **el índice es la posición**, no un hash — los bits bajos
+   de `(tx, tz)` sobre `CACHE_LADO` = 128, así cualquier ventana de 128×128 entra
+   sin un solo choque se recorra en el orden que se recorra. Sigue siendo tabla
+   directa: un acceso disperso sigue costando una evaluación y nada más.
+2. **`alto_de_pared` y la clasificación se recalculaban once veces cada una.**
+   `relief_cell(x, z)` pregunta por el canto que tiene al norte y `relief_cell(x,
+   z+1)` pregunta por el mismo. Las dos son funciones puras de
+   `(cuerpo, celda, época)`: se memorizan con el mismo índice espacial.
+3. **`paso_de_meseta_chica` resolvía "¿ya vi esta celda?" con `Vec::contains`**
+   dentro del bucle de vecinos: hasta 18.000 comparaciones por celda, y se
+   pregunta por cada celda que iba a ser pared, o sea toda la ladera de una
+   montaña. Ahora el "visto" es un mapa de bits de 97×97 en la pila.
+
+Y una cuarta, en `rios.rs`, que era **la mitad del campo de altura en frío**
+(1,3 µs de 2,0): `perfil_del_cauce` recorría TODOS los tramos del bloque de
+128×128. Ahora el bloque trae una **rejilla** de 8×8 sub-celdas y la consulta
+mira sólo su casilla. El alcance con que se indexa es el MÁXIMO del mundo
+(`ANCHO_BOCA × VALLE`) y no el de cada tramo: así la poda es **exactamente
+equivalente** a recorrer la lista entera —ningún tramo descartado puede ganarle
+al más cercano— y el terreno no cambia ni un tile. Además `trazo_de` devolvía su
+`Vec` de ~50 tramos **clonado** en cada acierto, y armar un bloque consulta 121
+cuencas: ahora es un `Rc`.
+
+**El mundo es idéntico**: 263 pruebas de `ha-shared` en verde, incluidos los
+guardianes de terreno (`the_cheap_reject_never_hides_a_cliff`,
+`every_terrace_edge_has_a_pass`, `everything_below_zero_is_liquid`).
+
+Lecciones que valen más que el arreglo:
+
+- **Una caché mapeada por hash no sirve para un recorrido espacial.** Si el
+  acceso es una ventana, el índice tiene que ser la posición.
+- **El comentario de una caché envejece con quien la usa.** El de ésta describía
+  correctamente a su llamador de 2026-07; para cuando `relief_cell` creció a 300
+  consultas, seguía ahí diciendo que tres filas alcanzaban.
+- **Un coste de generación se ve como un bug de dibujo.** Nadie reporta "el
+  chunk tarda": reporta "la montaña sale vacía".
+
+### RESUELTO (16 ago 2026) — un presupuesto en FILAS no acota nada
+
+Encontrado con `HA_STAGES=1` mientras se buscaba por qué el driver del relieve
+no terminaba nunca:
+
+```text
+ha-stages: frames=1 frame_ms=59441.1 | update=59382.8
+ha-sys: bake_body_textures=59268.6 stream_tile_chunks=198.2 spawn_chunk_decor=107.9
+```
+
+**Un fotograma de 59 segundos**, y el 99,8 % en `universe::bake_body_textures`.
+La cortina de carga se rinde por tiempo ("se acabó el tiempo (20 s) con 45 chunks
+y 1 discos pendientes — entro igual") y el jugador entra a un mundo a medio armar:
+eso, y no un error de dibujo, era la cumbre vacía de `relieve-3-cumbre.png`.
+
+El horneado ya estaba repartido por franjas — pero el presupuesto era
+`DISC_BAKE_ROWS_PER_FRAME = 8` **filas**, y una fila no es una unidad de tiempo.
+Cuesta 512 píxeles × 4 muestras de terreno, y cuánto vale una muestra de terreno
+cambia con el build, con la máquina y con si ese trozo de planeta tiene relieve,
+río o ciudad. Ocho filas son 4,5 ms en el Redmi en release y **casi un minuto** en
+depuración: el mismo número, dos órdenes de magnitud de diferencia.
+
+Arreglo: **se mira el reloj**. `DiscBakeRows` pasa a llevar un plazo
+(`DISC_BAKE_MS_PER_FRAME = 4`, y 40 detrás de la cortina) y las filas quedan sólo
+de techo por tanda. Se pinta al menos una —el disco siempre avanza— y se sigue
+mientras quede plazo. El mismo código da doscientas filas en un escritorio, ocho
+en el teléfono y una en un build lento, y en los tres respeta el fotograma. Con
+eso el driver `HA_RELIEVETEST` terminó por primera vez y dejó sus capturas.
+
+La lección es general y aplica a los otros presupuestos del juego
+(`CHUNK_BUILD_BUDGET_PER_FRAME`, `DECOR_DESPAWN_BUDGET_PER_FRAME`): **contar
+unidades de trabajo sólo acota el frame si todas las unidades cuestan lo mismo**,
+y en un generador procedural nunca cuestan lo mismo.
+
+Lo que NO cambia y sigue pendiente: un disco son 512² × 4 = **un millón de
+muestras de terreno**, y las muestras están a metros unas de otras, así que la
+caché de celdas no las ayuda (cada tap es un fallo). Repartirlo bien evita el
+tirón; no baja el trabajo. Las salidas, por orden de menos a más invasiva:
+hornear en `AsyncComputeTaskPool`, bajar los 2×2 taps a 1 (el `box_blur_rgb` ya
+suaviza) o bajar `DISC_TEX_N`.
+
 ### El costo de construir un chunk — la ganancia grande que queda
 
 | Sistema | µs por frame (escritorio) |
@@ -5070,11 +5355,52 @@ frontera de su celda y kilómetros de puente sobre el océano—, **ninguno de l
 cuales rompía un test**. Si vas a tocar la trama urbana, volcala antes y después:
 un vistazo caza lo que ningún invariante escrito de antemano ve venir.
 
+### Auditar el mapa — el mundo ENTERO, medido por PANTALLA (16 ago 2026)
+
+```bash
+cargo test -p ha-shared --release --test auditoria_del_mapa -- --ignored --nocapture
+cargo test -p ha-shared --release --test coste_del_relieve  -- --ignored --nocapture
+cargo test -p ha-shared --release --test mapa_de_la_nieve    -- --ignored --nocapture
+```
+
+Tampoco afirman nada: son números para leer. Existen por **tres errores de método
+que costaron caro y que conviene no repetir**, y los tres son sobre CÓMO se mide,
+no sobre qué:
+
+1. **Medir sólo alrededor del spawn.** La Tierra son 60 km de lado (±30.000
+   tiles); una ventana de ±1.500 es el **0,25 % del área** y encima la parte más
+   llana. Medida ahí, la Tierra da 78 % sabana, 0 % bosque, 0 % montaña y 0,03 %
+   océano — y todo "pasa". Con esa medida se estuvo a punto de reescribir
+   `moisture_at` por una avería que no existía: barrido el planeta entero, la
+   humedad se reparte bien (8 % desierto, 30 % sabana, 47 % pradera, 15 % bosque).
+2. **Promediar sobre el planeta.** El jugador no ve el planeta, ve **una
+   pantalla**. Una pantalla de ladera puede ser 90 % roca mientras la media del
+   mundo dice 1,45 %. Por eso la medida que manda es *cuántas ventanas del tamaño
+   de la cámara salen ilegibles* — hoy, de 2.150 ventanas, **ninguna pasa del
+   22 % de roca de pared** y 2.102 están por debajo del 10 %.
+3. **Barrer un cuadrado sobre un mundo que es un disco.** El borde se hunde en mar
+   abierto desde `d = 0,80` del radio y la latitud del clima es la distancia al
+   centro, así que las esquinas del cuadrado —**el 21,5 % de las muestras**— caen
+   todas en el mismo sitio: el mar polar. Eso solo ponía `Ice` en el 42 % del
+   censo. `auditoria_del_mapa::dentro_del_mundo` las descarta.
+
+Y una medida que no es del mapa sino del generador: `coste_del_relieve` mide
+cuántos microsegundos cuesta cada consulta y cuántos milisegundos sale un chunk.
+Es el instrumento que encontró el bug de §10 (`relief_cell` a 8-10 µs). **Un coste
+de generación se ve como un bug de dibujo** — nadie reporta "el chunk tarda",
+reporta "la montaña sale vacía" — así que si algo del mundo se ve a medias, este
+test va antes que mirar el dibujo.
+
 ### Drivers de QA — el juego se prueba solo, en la compu
 
 Manejan el juego por el **pipeline real de input** (ButtonInput virtual en
 `PreUpdate`) y afirman invariantes; sacan capturas PNG al scratchpad. Sirven para
 depurar sin el Redmi. Skill: `swarm-sim`.
+
+**Y si un driver no termina, la sonda es `HA_STAGES=1`**, no el depurador: imprime
+en qué etapa del `Main` se va el frame y `ha-sys` lo reparte por sistema. Fue lo
+que cazó el fotograma de 59 segundos de §10 en una sola corrida, con el proceso
+imposible de adjuntar (`ptrace_scope = 1`).
 
 | Driver | Qué prueba |
 |---|---|
@@ -5324,6 +5650,78 @@ marco rompió la Luna por no ver que la cámara asumía el marco estático.
 
 ## §13 Pendientes
 
+### El canal urbano: el río que cruza el pueblo ya lleva muro (15 ago 2026)
+
+`1_Terrains_and_Fences` trae **tres familias `Wall_*`, 58 piezas**, y no las usaba
+nadie: la 1 es el coronamiento de piedra visto en cenital (autotile) y la 2/3 el
+paramento de ladrillo en tres alturas. Son exactamente el canal de las referencias
+de LimeZu — el agua encajonada entre dos muros en vez de un arroyo de orilla de
+pasto cruzando el centro.
+
+- `scripts/import-muelle.py` publica el coronamiento como `quay/muro`. La pose
+  sale **del pixel**, con la misma idea que el cordón: el LABIO (banda oscura) más
+  el alfa son "el borde", y qué franjas ocupa dice si es `edge_*` o `corner_*`.
+  Salen las ocho de `Wall_1_{1,4,5,8,9,10,11,12}`.
+- **Cóncavas no hay.** Se buscaron: las piezas 13–20 son diagonales de media
+  celda, no muescas. El cliente cae al borde recto del lado que corresponda —un
+  rincón resuelto con un tramo recto no llama la atención; uno sin dibujar sí.
+- `world2d::spawn_chunk_muelle` lo siembra sobre la celda de TIERRA pegada al
+  agua, mirando al agua, **sólo dentro de un casco**
+  (`geography::settlement_covering`, preguntado una vez por chunk). Fuera del
+  pueblo el río sigue con su orilla de pasto, que es lo que le corresponde a un
+  río de campo — y así el muro no cuesta una consulta en los millones de celdas
+  de costa del planeta. Sobre la calzada tampoco: ahí el río se cruza por puente.
+
+**El pack está importado ENTERO** — se midió el 15 ago 2026 con
+`import-pack-masivo.py --dry-run`: 11.691 singles → 10.918 dibujos distintos (348
+repetidos) → 7.821 objetos → 12.057 entradas de manifest. Lo que falta nunca es el
+pixel: es el sistema que lo pide.
+
+### El barrio residencial dejó de ser cajas de color (15 ago 2026)
+
+Era lo más grande que quedaba, y no era falta de arte: el pack tiene 215 casas
+sueltas (`24_Additional_Houses`) y 194 villas (`7_Villas`), y **estaban
+importadas**. Lo que fallaba era la cadena de cuatro eslabones que va del pack a
+la parcela, y los cuatro estaban rotos a la vez:
+
+1. **`import-edificios.py` emparejaba por PREFIJO de clave** (`building/casas_…`).
+   Cuando el importador masivo se volvió idempotente dejó de anteponer el tema, y
+   ese prefijo pasó a emparejar **1 clave de 215**. Con un candidato,
+   `casa_chica`, `casa_mediana`, `casa_grande` y `casa_country` recibían las
+   cuatro la misma villa, y otros veinte lotes se quedaban sin fachada. Ahora el
+   tema es la **PÁGINA de atlas**, que sale de la carpeta del pack y no de cómo se
+   bautizó nada.
+2. **Medía con `ESCALA_TILE = 1,5`** — el valor viejo, elegido a ojo — mientras el
+   juego dibuja con 0,95. Cada fachada se medía un 58 % más grande de lo que se
+   iba a ver, así que siempre elegía edificios demasiado chicos. El test
+   `el_importador_usa_la_misma_escala` sólo miraba `import-pack-masivo.py`; ahora
+   mira todos.
+3. **El filtro del pie descartaba 23 de las 32 casas.** Pedía que la última fila
+   del RECTÁNGULO estuviera llena, y una fachada en 3/4 casi nunca lo está (hay
+   un cantero, un sendero, un farol que baja más que la pared). Se cambió por
+   "¿sigue siendo ancho abajo?": el quinto inferior contra la fila más ancha del
+   propio dibujo. Las 12 casas dan 0,66–1,00 y el toldo suelto 0,07.
+4. **Se comparaba contra la PARCELA, no contra la casa.** La casa ocupa el 55 %
+   del ancho del lote, así que para un lote de 16×12 la casa mide 8×6 — y se
+   estaba eligiendo la fachada para 16×12. Encima el cliente ESTIRABA el sprite a
+   la huella del suelo, aplastando un dibujo en 3/4 (que es techo **más** pared
+   de frente) a la mitad de su alto: casas derretidas. Ahora la fachada se dibuja
+   a su propia proporción y **apoya en el frente**, creciendo hacia arriba
+   (`building::roof_layout`), con tope de ×1,4 para no ampliar el pixel.
+
+Y encima de eso, lo que faltaba para que fuera un barrio: **cada slot se lleva
+hasta doce fachadas distintas** como variantes y la parcela elige la suya por su
+esquina (`variant_key_seeded`). Las parcelas residenciales se agrandaron para que
+una casa del pack entre entera (una casa de LimeZu mide de 9 a 23 tiles de
+frente) y `building/villa_6` —que era el nombre que el importador masivo le puso
+a un recorte de UNA CELDA— se cambió por `building/villa`.
+
+Lo cuida `art2d::ningun_lote_de_la_ciudad_se_dibuja_como_una_caja`: comprueba que
+cada clave de `LOT_PROGRAMS` tenga pixel **y** que ese pixel mida como un
+edificio. Ese guardián no existía —`ningun_slot_se_queda_sin_pixel` mira el
+catálogo de slots, y los lotes apuntan a claves del pack, que no están ahí— y por
+eso el agujero estuvo abierto sin que nada fallara.
+
 ### La calle: lo que quedó del pack sin consumir (8 ago 2026)
 
 La vereda de ciudad ya entró con su **cordón** — el autotile de 12 poses de
@@ -5344,17 +5742,40 @@ listado, sin abrir las piezas. Abiertas una por una, esto es lo que el pack tien
 | `Sidewalk_N_29…36` (64×32 y 32×64) | **la cebra**, en dos orientaciones y tres tramos — no la alcantarilla, que es lo que decía esta tabla | ✅ entran los tramos del medio, recortados a pintura (§8) |
 | Alcantarilla / cuneta | la **rejilla del sumidero**, dibujada en la cara del cordón norte (`Sidewalk_N_19`). No es una pieza aparte: es una variante de `edge_n` — y ya estaba en uso, sólo que en TODAS las celdas | ✅ ahora entra con periodo (§8) |
 | Esquinas redondeadas | tampoco son de 2×2: `Sidewalk_1_11…14` son las esquinas **redondeadas** de 32×32 y `15…16` las cuadradas. La tabla a mano mezclaba dos de cada | ✅ el detector elige las cuatro redondeadas, que es lo que el pack dibujó como juego (§8) |
-| `Sidewalk_N_37…41`, `42…46`, `48…54` | **isletas y bahías pintadas**: un círculo de 4×4, una isleta de 6×4 partida en tres, estacionamiento (`P`, 3×5 y 5×2) y parada de bus (`BUS`, 3×6, y el poste con su plataforma, 3×4) | ☐ ver abajo |
+| `Sidewalk_N_37…41`, `42…46`, `48…54` | **isletas y bahías pintadas**: un círculo de 4×4, una isleta de 6×4 partida en tres, estacionamiento (`P`, 3×5 y 5×2) y parada de bus (`BUS`, 3×6, y el poste con su plataforma, 3×4) | ✅ la bahía de BUS y el cajón `P`, 15 ago 2026 (ver abajo). ☐ la isleta y el círculo |
 
-**Lo único que queda es lo grande, y su bloqueo no es de arte.** Son piezas de 3 a
-6 tiles que van **sobre la calzada**, no sobre la vereda: una bahía de
-estacionamiento se pinta a lo largo del carril de la derecha y una isleta va en el
-eje de una avenida ancha. Ninguna se puede sortear por celda (`*_decor_at`) sin
-dejar una `P` cruzada en mitad de un cruce, y ninguna entra en el ancho de calle
-que genera hoy `roads.rs`. Necesitan lo que este mismo §13 ya tiene anotado como
-**H3, plantillas de ciudad**: un sitio autorado donde el generador sepa que hay
-lugar para una bahía o una isleta. Hasta que eso exista, meterlas sería sembrar
-piezas de kit — justo lo que prohíbe la regla 8.
+#### La bahía de BUS y el cajón `P` — resueltos midiendo la calzada (15 ago 2026)
+
+Esta fila decía que el bloqueo **no era de arte** sino de sitio: que una bahía de
+3×6 no se podía sortear por celda sin dejar una `P` cruzada en mitad de un cruce,
+y que hacía falta **H3, plantillas de ciudad** — un sitio autorado donde el
+generador supiera que hay lugar. Resultó que no hacía falta autorar nada: **el
+sitio ya está en la geometría de la calzada y sólo había que medirlo**, que es lo
+mismo que ya hacían el eje de la línea divisoria (`es_eje_con`) y el cruce
+(`es_cruce_con`).
+
+- **El arte** lo recorta `scripts/import-marcas-calzada.py`, y **no tiene ni un
+  número escrito a ojo**: la bahía se encuentra por sus manchas de amarillo vial,
+  el cajón por su glifo `P` más el PASO entre dos `P` vecinas, y el fondo del
+  banco por sus líneas blancas. Salen 3×6 y 7×3 la bahía, 3×5 y 5×3 el cajón. El
+  script se planta si eso no coincide con lo que declara `roads.rs`.
+- **Cada tile es una pose** (`ns_2_4` = columna 2, fila 4), recortada a
+  calcomanía contra el asfalto liso igual que `road/linea`, así que debajo se
+  sigue viendo la variante de asfalto de la celda.
+- **La ubicación** la decide `roads::marca_rect_con`: la marca se pega al cordón,
+  tiene que dejar libre al menos `ANCHO_MINIMO_LINEA` de calzada (con eso salen
+  solas en las avenidas y no en las calles de manzana), se ancla cada
+  `PASO_MARCA` tiles y se sortea.
+- **Todo se decide en el ANCLA, no en la celda.** Es la parte que hay que
+  entender: `calzada_seguida` se topa con `ALCANCE_EJE` y cerca de una esquina la
+  calzada "sigue" hacia la calle que cruza, así que dos celdas del mismo
+  rectángulo medían anchos distintos y la marca salía con agujeros. Lo cazó
+  `las_marcas_de_calzada_van_sobre_el_asfalto_y_salen_enteras` con un cajón de 5
+  de 15 casillas y una bahía de 3 de 18.
+
+Lo que sigue pendiente de esta fila es la **isleta** y el **círculo del
+retorno**: ésos sí van en el eje de la avenida, no contra el cordón, y su sitio
+todavía no está medido.
 
 ### Mundo — relieve y agua (14 ago 2026)
 

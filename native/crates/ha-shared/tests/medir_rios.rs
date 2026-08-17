@@ -345,3 +345,178 @@ fn donde_termina_cada_rio() {
     let llegan = cuenta.get("mar").copied().unwrap_or(0) + cuenta.get("lago").copied().unwrap_or(0);
     println!("LLEGAN AL AGUA: {llegan} de {total} ({:.1} %)", 100.0 * llegan as f32 / total.max(1) as f32);
 }
+
+// ---------------------------------------------------------------------------
+// LA TALLA DEL VALLE: las tres preguntas que hay que responder con un número
+// antes de tocar `HONDURA_EN_ESCALONES`, `VALLE_MINIMO` o `RUIDO_EN_EL_CAUCE`
+// ---------------------------------------------------------------------------
+
+/// **¿SE PUEDE CAMINAR EL VALLE, O EL PROPIO RÍO FABRICA EL FARALLÓN?**
+///
+/// `relief::MAX_FIELD_STEP_PER_TILE` (0,020) es la cota de cuánto puede cambiar
+/// el campo entre dos celdas vecinas, y no es decorativa: el descarte barato de
+/// `near_step_boundary` se apoya en ella. La talla del río la violaba —el empalme
+/// pasaba de la cota lisa del cauce al ruido entero en 3,6 tiles, hasta 0,06 por
+/// tile— y de ahí salían los acantilados en zig-zag cruzando el agua.
+///
+/// ```sh
+/// cargo test -p ha-shared --release --test medir_rios el_campo_no_salta -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn el_campo_no_salta_en_el_valle() {
+    let b = CelestialBody::Earth;
+    const COTA: f32 = 0.020;
+    for (nombre, x0, z0, lado) in VENTANAS {
+        let mut saltos: Vec<f32> = Vec::new();
+        for tz in *z0..z0 + lado {
+            for tx in *x0..x0 + lado {
+                // Sólo dentro del valle: fuera, el campo es el de siempre.
+                if ha_shared::rios::perfil_del_cauce(b, tx, tz).is_none() {
+                    continue;
+                }
+                let h = campo(b, tx, tz);
+                let mut peor = 0.0f32;
+                for (dx, dz) in [(1i64, 0i64), (0, 1), (1, 1), (1, -1)] {
+                    peor = peor.max((campo(b, tx + dx, tz + dz) - h).abs());
+                }
+                saltos.push(peor);
+            }
+        }
+        if saltos.is_empty() {
+            println!("{nombre:<14} sin valle en la ventana");
+            continue;
+        }
+        saltos.sort_by(|a, c| a.partial_cmp(c).unwrap());
+        let p = |q: f32| saltos[((saltos.len() as f32 - 1.0) * q) as usize];
+        let fuera = saltos.iter().filter(|s| **s > COTA).count();
+        println!(
+            "{nombre:<14} celdas de valle {:6} | mediana {:.4} p99 {:.4} max {:.4} | \
+             por encima de {COTA}: {fuera} ({:.2} %)",
+            saltos.len(),
+            p(0.5),
+            p(0.99),
+            saltos[saltos.len() - 1],
+            100.0 * fuera as f32 / saltos.len() as f32,
+        );
+    }
+}
+
+/// **¿EL CAUCE ESTÁ MÁS ABAJO QUE SU ORILLA?**
+///
+/// Es la pregunta que `HONDURA` no contestaba: valía 0,030 de campo y un escalón
+/// mide 0,0467, así que la talla no bajaba el cauce ni un nivel — sólo corría la
+/// frontera de cuantización. Un río que va al mismo nivel que su orilla no tiene
+/// orilla: el relieve le planta el canto de la terraza encima.
+#[test]
+#[ignore]
+fn el_cauce_baja_de_terraza() {
+    let b = CelestialBody::Earth;
+    for (nombre, x0, z0, lado) in VENTANAS {
+        let (mut cauce, mut baja) = (0u32, 0u32);
+        for tz in *z0..z0 + lado {
+            for tx in *x0..x0 + lado {
+                if !hay_rio(b, tx, tz) {
+                    continue;
+                }
+                cauce += 1;
+                let mio = relief_level(b, tx, tz);
+                // La orilla: la celda seca más cercana a lo ancho, en las cuatro
+                // direcciones, hasta 6 tiles.
+                // **La orilla se busca FUERA del valle**, no a la primera celda
+                // seca: el valle está aplanado a propósito (`rios::VALLE_MINIMO`)
+                // y medir contra él era medir el ancho del valle, no la talla.
+                let mut orilla = mio;
+                for (dx, dz) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)] {
+                    for k in 1..=14 {
+                        let (x, z) = (tx + dx * k, tz + dz * k);
+                        if ha_shared::rios::perfil_del_cauce(b, x, z).is_none() {
+                            orilla = orilla.max(relief_level(b, x, z));
+                            break;
+                        }
+                    }
+                }
+                if orilla > mio {
+                    baja += 1;
+                }
+            }
+        }
+        println!(
+            "{nombre:<14} cauce {cauce:6} celdas | con la orilla más alta: {baja} ({:.1} %)",
+            100.0 * baja as f32 / cauce.max(1) as f32
+        );
+    }
+}
+
+/// **¿CUÁNTAS VECES CORTA UN ACANTILADO EL CAUCE?**
+///
+/// Ninguno de los guardianes viejos cubre esto: `agua::ningun_acantilado_toca_el_agua`
+/// y `relief::the_shore_is_never_a_cliff` preguntan por `relief_level < 0`, o sea
+/// mar y lagos, y un río vive en nivel ≥ 0. Un corte es una celda de cauce que es
+/// roca **y no es la garganta de una cascada**: ahí el agua tiene que pasar y el
+/// recorte del pack ya trae su roca a los dos lados.
+#[test]
+#[ignore]
+fn el_cauce_no_lo_corta_un_acantilado() {
+    use ha_shared::relief::{relief_cell, ReliefCell};
+    let b = CelestialBody::Earth;
+    for (nombre, x0, z0, lado) in VENTANAS {
+        let (mut cauce, mut roca, mut garganta) = (0u32, 0u32, 0u32);
+        for tz in *z0..z0 + lado {
+            for tx in *x0..x0 + lado {
+                if !hay_rio(b, tx, tz) {
+                    continue;
+                }
+                cauce += 1;
+                if !matches!(relief_cell(b, tx, tz), ReliefCell::Cliff | ReliefCell::Pared) {
+                    continue;
+                }
+                if ha_shared::agua::en_la_garganta(b, tx, tz) {
+                    garganta += 1;
+                } else {
+                    roca += 1;
+                }
+            }
+        }
+        println!(
+            "{nombre:<14} cauce {cauce:6} | CORTADO por roca {roca} ({:.2} %) | \
+             en garganta (correcto) {garganta}",
+            100.0 * roca as f32 / cauce.max(1) as f32
+        );
+    }
+}
+
+/// **DÓNDE ESTÁN LAS CASCADAS**, para apuntar el guardián a una ventana que las
+/// tenga. Temporal.
+#[test]
+#[ignore]
+fn donde_estan_las_cascadas() {
+    use ha_shared::relief::relief_level;
+    let b = CelestialBody::Earth;
+    let mut sitios = Vec::new();
+    'busca: for cz in (-16_000..16_000).step_by(900) {
+        for cx in (-16_000..16_000).step_by(900) {
+            if relief_level(b, cx, cz) < 5 {
+                continue;
+            }
+            let mut n = 0;
+            for tz in cz - 250..cz + 250 {
+                for tx in cx - 250..cx + 250 {
+                    if ha_shared::agua::cascada_at(b, tx, tz).is_some() {
+                        n += 1;
+                    }
+                }
+            }
+            if n > 0 {
+                sitios.push((cx, cz, n));
+                if sitios.len() >= 8 {
+                    break 'busca;
+                }
+            }
+        }
+    }
+    for (x, z, n) in &sitios {
+        println!("cascadas en ({x},{z}): {n}");
+    }
+    println!("total de ventanas con cascada: {}", sitios.len());
+}

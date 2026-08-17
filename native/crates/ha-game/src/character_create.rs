@@ -69,7 +69,7 @@ impl Plugin for CharacterCreatePlugin {
             .add_systems(OnExit(GamePhase::CharacterCreate), despawn_screen)
             .add_systems(
                 Update,
-                (name_input, button_system, resolver_toque, refresh, sync_grid, marcar_seleccion, animate_showcase, sync_keyboard, scroll_grid)
+                (name_input, button_system, resolver_toque, refresh, sync_grid, sincronizar_colores, animate_showcase, sync_keyboard, scroll_grid)
                     .chain()
                     .run_if(in_state(GamePhase::CharacterCreate)),
             )
@@ -80,7 +80,7 @@ impl Plugin for CharacterCreatePlugin {
             // SIGKILL. Este orden es la mitad del arreglo, no un detalle.
             .add_systems(
                 PostUpdate,
-                (recortar_miniaturas, stream_thumbs)
+                (recortar_miniaturas, stream_thumbs, mover_pulgar)
                     .chain()
                     .after(bevy::ui::UiSystem::Layout)
                     .run_if(in_state(GamePhase::CharacterCreate)),
@@ -318,6 +318,10 @@ enum CcAction {
     KeyBack,
     /// Cerrar el teclado.
     KeyDone,
+    /// Volver al look con el que se abrió la pantalla (el botón REINICIAR).
+    Reset,
+    /// Elegir un color del estilo actual, por su posición dentro del estilo.
+    PickColor(Layer, usize),
 }
 
 // ── el look como (estilo, color) ────────────────────────────────────────────
@@ -428,21 +432,36 @@ fn color_text(cg: &Chargen, look: &LookDef, layer: Layer) -> String {
 // ── pantalla ────────────────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
+/// **El creador de personaje, tal cual la imagen de referencia.**
+///
+/// A la izquierda el personaje grande con su nombre, sus tres poses y su claro
+/// de luz; a la derecha el panel con las cinco pestañas, la grilla de ESTILOS,
+/// la fila de COLORES y los tres botones. El fondo es el mismo bosque del menú
+/// pero de noche, con faroles y luciérnagas — el creador es otro sitio.
+///
+/// Cada número sale de `mock_menu::crear_personaje`.
+#[allow(clippy::too_many_arguments)]
 fn spawn_screen(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
-    mut images: ResMut<Assets<Image>>,
-    mut jobs: ResMut<ChargenJobs>,
     cg: Res<Chargen>,
     mut selected: ResMut<SelectedCharacter>,
     touch: Res<crate::input::TouchLayout>,
+    art: Res<crate::art2d::ArtLibrary>,
+    halo_tex: Res<crate::ui_pack::HaloTex>,
     grid_layer: Res<GridLayer>,
     mut sheet_res: ResMut<CcSheetLayout>,
 ) {
+    use crate::ui_pack::{self as up, Ancla, Pack};
+
     // Sin look previo (partida nueva) se arranca con uno sorteado: la pantalla
     // nunca abre con un maniquí vacío.
     let look = *selected.look.get_or_insert_with(|| cg.index.look_from_seed(rand_seed()));
+    if selected.name.trim().is_empty() {
+        selected.name = "Viajero".into();
+    }
+    let nombre = selected.name.clone();
 
     let cell = UVec2::new(cg.index.cell[0], cg.index.cell[1]);
     let sheet_layout = layouts.add(TextureAtlasLayout::from_grid(
@@ -452,39 +471,11 @@ fn spawn_screen(
         None,
         None,
     ));
-    let portrait_layout = layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::new(cg.index.portrait_cell[0], cg.index.portrait_cell[1]),
-        cg.index.portrait_cols.max(1),
-        1,
-        None,
-        None,
-    ));
-    let portrait = portrait_for(look, &cg, &mut jobs, &mut images, &asset_server);
-    // La cuadricula reusa este layout (una sola vez, no uno por celda).
     sheet_res.0 = sheet_layout.clone();
 
-    // ── Escalado responsive ────────────────────────────────────────────────
-    // **TODO ENTRA EN UNA PANTALLA. NO HAY SCROLL.** Antes esto era una columna
-    // con `Overflow::scroll_y()`: en apaisado de teléfono (~400 px de alto
-    // lógico) la vitrina se comía la mitad y las últimas ruedas, el nombre y
-    // hasta JUGAR quedaban abajo del pliegue. Ponerle scroll tapaba el síntoma;
-    // el pedido fue que entre todo.
-    //
-    // Lo que sobra en apaisado es ANCHO, así que la pantalla es una FILA:
-    // vitrina + retrato a la izquierda, ruedas + nombre a la derecha. Las
-    // medidas salen del alto disponible (`s`) y las dos columnas se reparten el
-    // ancho con `flex_grow`, así que se acomoda sola en vez de depender de que
-    // los números elegidos a mano den justo.
-    let vh = touch.height.max(240.0);
-    let vw = touch.width.max(320.0);
-    let s = (vh / 720.0).clamp(0.45, 1.15);
-    let bar_h = (72.0 * s).clamp(44.0, 84.0);
-    // La vitrina son 4 muñecos (ancho = alto/2) + el retrato (0.62) + huecos
-    // ≈ 2.8 alturas. Ahora la columna izquierda se lleva ~45 % del ancho, no el
-    // 80 % de antes, así que el límite por ancho es más estricto.
-    let by_h = (vh * 0.26).clamp(52.0, 170.0);
-    let by_w = (vw * 0.45) / 2.8;
-    let preview_h = by_h.min(by_w).max(48.0);
+    let k = up::k(&touch);
+    let capa = grid_layer.0;
+    let cel = Vec2::new(cell.x as f32, cell.y as f32);
 
     commands
         .spawn((
@@ -494,9 +485,6 @@ fn spawn_screen(
                 top: Val::Px(0.0),
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::FlexStart,
-                align_items: AlignItems::Stretch,
                 ..default()
             },
             BackgroundColor(VOID),
@@ -506,374 +494,334 @@ fn spawn_screen(
             Name::new("CharacterCreate"),
         ))
         .with_children(|root| {
-            root.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    justify_content: JustifyContent::Center,
-                    padding: UiRect::top(Val::Px(touch.insets.top as f32 + 4.0 * s)),
-                    flex_shrink: 0.0,
-                    ..default()
-                },
-                Name::new("CcTitle"),
-            ))
-            .with_children(|slot| {
-                slot.spawn((
-                    Text::new("CREA TU PERSONAJE"),
-                    TextFont { font_size: (20.0 * s).clamp(13.0, 26.0), ..default() },
-                    TextColor(NEON_CYAN),
+            crate::marca::bosque::fondo(root, &art, crate::marca::Ambiente::Creador, k);
+            root.spawn(up::lienzo(k)).with_children(|l| {
+                // ── la barra de arriba ────────────────────────────────────
+                up::barra_estado(
+                    l,
+                    &art,
+                    up::CUERPO_TIERRA,
+                    &[
+                        up::Ficha {
+                            icono: "ui/ic_lista",
+                            etiqueta: "HUECOS",
+                            valor: format!(
+                                "{} de {}",
+                                crate::personajes::listar().len(),
+                                crate::personajes::MAXIMO
+                            ),
+                        },
+                        up::Ficha {
+                            icono: "ui/ic_grilla",
+                            etiqueta: "CAPA",
+                            valor: etiqueta_capa(capa).to_string(),
+                        },
+                        up::Ficha {
+                            icono: "ui/ic_persona",
+                            etiqueta: "NOMBRE",
+                            valor: nombre.clone(),
+                        },
+                    ],
+                    k,
+                );
+
+                // ── el personaje ──────────────────────────────────────────
+                let cx = 560.0_f32;
+                up::halo(l, &halo_tex, cx, 650.0, 300.0, k);
+                up::sombra(l, cx, 838.0, 108.0, 18.0, k);
+                muneco_animado(l, &look, &cg, &asset_server, &sheet_layout, 3,
+                               cx - cel.x * 7.0 / 2.0, 860.0 - cel.y * 7.0, 7.0, k);
+                for (i, (dir, et)) in
+                    [(0u32, "DERECHA"), (1, "DE ESPALDAS"), (2, "IZQUIERDA")].into_iter().enumerate()
+                {
+                    let x = cx - 216.0 + i as f32 * 156.0;
+                    up::marco(l, &art, up::marco::SLOT, x, 890.0, 132.0, 144.0, k);
+                    muneco_animado(l, &look, &cg, &asset_server, &sheet_layout, dir,
+                                   x + 66.0 - cel.x, 898.0, 2.0, k);
+                    up::texto(l, et, 22.0, Color::srgb(0.839, 0.792, 0.729), x + 66.0, 1056.0,
+                              Ancla::Medio, k);
+                }
+                // El nombre se toca para cambiarlo.
+                // El nombre se toca para cambiarlo. `SinMarco` porque este botón
+                // es invisible a propósito: es el área del texto, y sin la marca
+                // el reskin del HUD le pinta un botón de madera detrás.
+                l.spawn((
+                    up::caja(cx - 300.0, 158.0, 600.0, 56.0, k),
+                    Button,
+                    crate::ui_pack::SinMarco,
+                    CcAction::OpenKeyboard,
                 ));
-            });
+                nombre_grande(l, &nombre, cx, 186.0, k);
+                up::texto(l, "tocá el nombre para cambiarlo", 26.0,
+                          Color::srgb(0.776, 0.729, 0.667), cx, 238.0, Ancla::Medio, k);
+                etiqueta_estilo(l, &cg, &look, capa, cx, 292.0, k);
 
-            // ── El cuerpo: dos columnas que se reparten lo que queda de alto ──
-            root.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    flex_basis: Val::Px(0.0),
-                    min_height: Val::Px(0.0),
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(10.0 * s),
-                    padding: UiRect::horizontal(Val::Px(
-                        touch.insets.left.max(touch.insets.right) as f32 + 10.0,
-                    )),
-                    ..default()
-                },
-                Name::new("CcBody"),
-            ))
-            .with_children(|body| {
-                // ── IZQUIERDA: vitrina, retrato y lo que el retrato opina ──
-                card(body, s).with_children(|card| {
-                    card.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::FlexEnd,
-                        justify_content: JustifyContent::Center,
-                        column_gap: Val::Px(8.0 * s),
-                        ..default()
-                    })
-                    .with_children(|row| {
-                        for (dir, caption) in SHOWCASE {
-                            row.spawn(Node {
-                                flex_direction: FlexDirection::Column,
-                                align_items: AlignItems::Center,
-                                row_gap: Val::Px(2.0 * s),
-                                ..default()
-                            })
-                            .with_children(|slot| {
-                                // Las cinco capas apiladas: un contenedor del
-                                // tamaño del muñeco y cinco hijos absolutos.
-                                slot.spawn(Node {
-                                    width: Val::Px(preview_h * 0.5),
-                                    height: Val::Px(preview_h),
-                                    ..default()
-                                })
-                                .with_children(|stack| {
-                                    for layer in ROWS {
-                                        let opt = index_of(&look, layer)
-                                            .and_then(|i| cg.options(layer).get(i as usize));
-                                        stack.spawn((
-                                            ImageNode::from_atlas_image(
-                                                opt.map(|o| asset_server.load(&o.png))
-                                                    .unwrap_or_default(),
-                                                TextureAtlas {
-                                                    layout: sheet_layout.clone(),
-                                                    index: showcase_cell(dir, 0),
-                                                },
-                                            ),
-                                            Node {
-                                                position_type: PositionType::Absolute,
-                                                left: Val::Px(0.0),
-                                                top: Val::Px(0.0),
-                                                width: Val::Percent(100.0),
-                                                height: Val::Percent(100.0),
-                                                ..default()
-                                            },
-                                            if opt.is_some() {
-                                                Visibility::Inherited
-                                            } else {
-                                                Visibility::Hidden
-                                            },
-                                            PreviewLayer { layer, dir },
-                                        ));
-                                    }
-                                });
-                                slot.spawn((
-                                    Text::new(caption),
-                                    TextFont {
-                                        font_size: (9.0 * s).clamp(7.0, 11.0),
-                                        ..default()
-                                    },
-                                    TextColor(DIM),
-                                ));
-                            });
-                        }
+                // ── el panel ──────────────────────────────────────────────
+                let (pxu, pyu, pw, ph) = (1170.0_f32, 186.0_f32, 1194.0_f32, 828.0_f32);
+                up::marco(l, &art, up::marco::PANEL, pxu, pyu, pw, ph, k);
+                let (ix, iy) = (pxu + 66.0, pyu + 54.0);
+                let inner_w = pw - 132.0;
 
-                        // Separador: la vitrina y el retrato son dos cosas
-                        // distintas (cómo te ves andando / cómo te ven al hablar).
-                        row.spawn((
-                            Node {
-                                width: Val::Px(1.0),
-                                height: Val::Px(preview_h * 0.8),
-                                margin: UiRect::horizontal(Val::Px(5.0 * s)),
-                                ..default()
-                            },
-                            BackgroundColor(CARD_EDGE),
-                        ));
+                // Las cinco pestañas.
+                let tab_w = (inner_w - 4.0 * 9.0) / 5.0;
+                for (i, cap) in ROWS.into_iter().enumerate() {
+                    let tx = ix + i as f32 * (tab_w + 9.0);
+                    let act = cap == capa;
+                    let marco = if act { up::marco::SLOT } else { up::marco::SLOT_CHICO };
+                    up::marco(l, &art, marco, tx, iy, tab_w, 84.0, k)
+                        .insert((Button, CcAction::PickLayer(cap), CcLayerTab(cap)));
+                    up::texto(l, etiqueta_capa(cap), 28.0, Pack::TINTA, tx + tab_w / 2.0,
+                              iy + 44.0, Ancla::Medio, k);
+                    if act {
+                        up::elegido(l, tx, iy, tab_w, 84.0, 6.0, k);
+                    }
+                }
 
-                        // El retrato con el que vas a hablar con la gente.
-                        row.spawn(Node {
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Center,
-                            row_gap: Val::Px(2.0 * s),
-                            ..default()
-                        })
-                        .with_children(|col| {
-                            let d = preview_h * 0.62;
-                            col.spawn((
-                                ImageNode::from_atlas_image(
-                                    portrait.clone().unwrap_or_default(),
-                                    TextureAtlas { layout: portrait_layout.clone(), index: 0 },
-                                ),
-                                Node { width: Val::Px(d), height: Val::Px(d), ..default() },
-                                PortraitPreview,
-                            ));
-                            col.spawn((
-                                Text::new("TU RETRATO"),
-                                TextFont {
-                                    font_size: (9.0 * s).clamp(7.0, 11.0),
-                                    ..default()
-                                },
-                                TextColor(DIM),
-                            ));
-                        });
-                    });
-
-                    // **Lo que el retrato opina.** Un globo de diálogo debajo de
-                    // la vitrina: cada vez que le cambiás algo, el personaje
-                    // comenta. Rompe la cuarta pared a propósito — todavía no
-                    // empezó la partida, así que acá te puede hablar a VOS.
-                    card.spawn((
+                // La grilla de estilos: siete por tres, con su canaleta.
+                let gy = iy + 84.0 + 21.0;
+                let grid_w = COLS_GRID as f32 * LADO_GRID
+                    + (COLS_GRID as f32 - 1.0) * SEP_GRID;
+                let grid_h = FILAS_GRID as f32 * LADO_GRID
+                    + (FILAS_GRID as f32 - 1.0) * SEP_GRID;
+                let mut vista = up::caja(ix, gy, grid_w, grid_h, k);
+                vista.overflow = Overflow::scroll_y();
+                l.spawn((vista, CcScroll, Name::new("CcVista"))).with_children(|v| {
+                    v.spawn((
                         Node {
-                            width: Val::Percent(100.0),
-                            min_height: Val::Px((26.0 * s).clamp(20.0, 32.0)),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)),
-                            border: UiRect::all(Val::Px(1.0)),
+                            // **Siete columnas EXACTAS.** Con `flex_wrap` la
+                            // séptima casilla se caía a la fila de abajo: 7 × 130
+                            // + 6 × 12 da 982 clavados y basta que taffy redondee
+                            // un pixel para que no entre. Una grilla declarada no
+                            // depende del redondeo.
+                            display: Display::Grid,
+                            width: Val::Px(grid_w * k + 2.0),
+                            grid_template_columns: vec![RepeatedGridTrack::px(
+                                COLS_GRID as u16,
+                                LADO_GRID * k,
+                            )],
+                            column_gap: Val::Px(SEP_GRID * k),
+                            row_gap: Val::Px(SEP_GRID * k),
                             ..default()
                         },
-                        BorderRadius::all(Val::Px(6.0)),
-                        BorderColor(Color::srgba(1.0, 0.18, 0.62, 0.35)),
-                        BackgroundColor(Color::srgb(0.06, 0.05, 0.09)),
-                    ))
-                    .with_children(|bubble| {
-                        bubble.spawn((
-                            Text::new(quip_for(None, rand_seed())),
-                            TextFont {
-                                font_size: (12.0 * s).clamp(9.0, 14.0),
-                                ..default()
-                            },
-                            TextColor(NEON_MAGENTA),
-                            TextLayout::new_with_justify(JustifyText::Center),
-                            PortraitQuip,
-                        ));
-                    });
+                        crate::hud::ScrollContent,
+                        CcGrid,
+                        Name::new("CcGrid"),
+                    ));
                 });
+                // La canaleta. El pulgar lo mueve `mover_pulgar`.
+                let sx = ix + grid_w + 14.0;
+                up::marco(l, &art, up::marco::HUECO, sx, gy, 24.0, grid_h, k);
+                l.spawn((
+                    up::caja(sx + 6.0, gy, 12.0, 90.0, k),
+                    BackgroundColor(Color::srgb(0.690, 0.463, 0.322)),
+                    PulgarScroll { x: sx + 6.0, y0: gy, alto: grid_h, k },
+                ));
 
-                // ── DERECHA: las ruedas y el nombre ──
-                body.spawn(Node {
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    min_width: Val::Px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    row_gap: Val::Px(6.0 * s),
-                    ..default()
-                })
-                .with_children(|col| {
-                    // ── CUADRICULA DE ICONOS ──
-                    // Antes esto eran cinco ruedas `< NOMBRE >`: para ver un
-                    // gorro habia que pasarlos de a uno y leer "GORRA 14".
-                    // Ahora se ve la PRENDA y se elige tocandola. La fila de
-                    // arriba cambia de capa; abajo va la cuadricula de esa capa.
-                    card(col, s).with_children(|card| {
-                        card.spawn(Node {
-                            flex_direction: FlexDirection::Row,
-                            column_gap: Val::Px(4.0 * s),
-                            flex_wrap: FlexWrap::Wrap,
-                            justify_content: JustifyContent::Center,
-                            ..default()
-                        })
-                        .with_children(|row| {
-                            for layer in ROWS {
-                                layer_tab(row, layer, layer == grid_layer.0, s);
-                            }
-                        });
-                        // El marco de la cuadricula: alto fijo y `scroll_y`. Es
-                        // una LISTA (hay ~200 prendas), no un menu: aca el
-                        // scroll si va, igual que en la mochila.
-                        card.spawn((
-                            Node {
-                                width: Val::Percent(100.0),
-                                flex_grow: 1.0,
-                                // Que se vean CUATRO filas, no una. Con
-                                // `min_height: 0` el marco se quedaba en el alto
-                                // de su contenido y la cuadricula era una franja
-                                // de una fila sola.
-                                min_height: Val::Px(celda_px(touch.width) * 4.0),
-                                // ARRIBA, no estirado. El marco es una FILA y en
-                                // una fila el eje cruzado es el alto: con el
-                                // `Stretch` por defecto la cuadricula se estiraba
-                                // al alto del marco, o sea `contenido == vista`, y
-                                // `max_scroll` daba 0. Mismo bug que tenian las
-                                // tres pestanas de la mochila.
-                                align_items: AlignItems::FlexStart,
-                                overflow: Overflow::scroll_y(),
-                                ..default()
-                            },
-                            ScrollPosition::default(),
-                            CcScroll,
-                            Name::new("CcGridFrame"),
-                        ))
-                        .with_children(|frame| {
-                            frame.spawn((
-                                Node {
-                                    width: Val::Percent(100.0),
-                                    // CUADRICULA DE 3, no un `flex_wrap` que
-                                    // mete las que entren. Con el wrap el ancho
-                                    // de la celda mandaba y en el Redmi entraban
-                                    // seis prendas de 52 px: no se veia cual era
-                                    // cual. Con 3 columnas fraccionarias la
-                                    // celda mide un tercio del panel — grande,
-                                    // siempre alineada, y la fila no cambia de
-                                    // largo al rotar el telefono.
-                                    // TRES POR FILA con flex-wrap, no con
-                                    // `Display::Grid`. Con grilla, una celda
-                                    // cuadrada por `aspect_ratio` inflaba la
-                                    // PISTA a ~3 veces su alto: el panel crecia
-                                    // tanto que empujaba las pestanas y el campo
-                                    // NOMBRE fuera de la pantalla. En flex el
-                                    // alto de la linea ES el de la celda, asi que
-                                    // no hay nada que inflar; y con 31% de ancho
-                                    // entran exactamente tres.
-                                    flex_direction: FlexDirection::Row,
-                                    flex_wrap: FlexWrap::Wrap,
-                                    justify_content: JustifyContent::Center,
-                                    align_content: AlignContent::FlexStart,
-                                    max_width: Val::Px(grilla_px(touch.width, s)),
-                                    column_gap: Val::Px(6.0 * s),
-                                    row_gap: Val::Px(6.0 * s),
-                                    padding: UiRect::all(Val::Px(4.0 * s)),
-                                    // Sin esto no hay scroll: ver hud.rs.
-                                    flex_shrink: 0.0,
-                                    ..default()
-                                },
-                                crate::hud::ScrollContent,
-                                CcGrid,
-                            ));
-                        });
-                    });
+                // La fila de COLORES y el contador.
+                let cy = gy + grid_h + 20.0;
+                l.spawn((up::caja(ix, cy, inner_w, 62.0, k), FilaColores { ix, cy, k },
+                         Name::new("FilaColores")));
+                up::texto(l, "COLOR", 26.0, Color::srgb(0.839, 0.769, 0.659), ix, cy + 30.0,
+                          Ancla::Izq, k);
+                contador_estilos(l, &cg, &look, capa, ix + inner_w, cy + 30.0, k);
 
-                    // ── NOMBRE ──
-                    // El recuadro es un BOTÓN: tocarlo abre el teclado en
-                    // pantalla (`CcAction::OpenKeyboard`). En el teléfono no hay
-                    // teclado físico, así que sin esto el nombre no se podía
-                    // escribir — quedaba el que vino sorteado. En escritorio se
-                    // sigue tecleando directo (`name_input`).
-                    card(col, s).with_children(|card| {
-                        card.spawn(Node {
-                            flex_direction: FlexDirection::Row,
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::Center,
-                            column_gap: Val::Px(8.0 * s),
-                            ..default()
-                        })
-                        .with_children(|row| {
-                            row.spawn(Node {
-                                width: Val::Px(label_w(s)),
-                                justify_content: JustifyContent::FlexEnd,
-                                ..default()
-                            })
-                            .with_children(|slot| {
-                                slot.spawn((
-                                    Text::new("NOMBRE:"),
-                                    TextFont {
-                                        font_size: (13.0 * s).clamp(10.0, 15.0),
-                                        ..default()
-                                    },
-                                    TextColor(DIM),
-                                ));
-                            });
-                            row.spawn((
-                                Button,
-                                Node {
-                                    min_width: Val::Px((220.0 * s).clamp(140.0, 240.0)),
-                                    height: Val::Px((36.0 * s).clamp(28.0, 40.0)),
-                                    border: UiRect::all(Val::Px(2.0)),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    padding: UiRect::horizontal(Val::Px(10.0)),
-                                    ..default()
-                                },
-                                BorderRadius::all(Val::Px(6.0)),
-                                BorderColor(NEON_CYAN),
-                                BackgroundColor(idle_bg(CcAction::OpenKeyboard)),
-                                CcAction::OpenKeyboard,
-                            ))
-                            .with_children(|b| {
-                                b.spawn((
-                                    Text::new(selected.name.clone()),
-                                    TextFont {
-                                        font_size: (18.0 * s).clamp(13.0, 22.0),
-                                        ..default()
-                                    },
-                                    TextColor(Color::WHITE),
-                                    NameText,
-                                ));
-                            });
-                        });
-                        card.spawn((
-                            Text::new("(tocalo para escribir)"),
-                            TextFont { font_size: (10.0 * s).clamp(8.0, 12.0), ..default() },
-                            TextColor(DIM),
-                        ));
-                    });
-                });
-            });
-
-            // Barra de acción al pie: hermana del contenido (no hija), con alto
-            // propio → JUGAR/VOLVER siempre visibles y a un toque.
-            root.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Px(bar_h + touch.insets.bottom as f32),
-                    flex_shrink: 0.0,
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(10.0),
-                    padding: UiRect::bottom(Val::Px(touch.insets.bottom as f32)),
-                    border: UiRect::top(Val::Px(2.0)),
-                    ..default()
-                },
-                BorderColor(Color::srgba(0.16, 0.94, 1.0, 0.35)),
-                BackgroundColor(Color::srgb(0.03, 0.04, 0.08)),
-                Name::new("CcButtons"),
-            ))
-            .with_children(|row| {
-                let w_play = (180.0 * s).clamp(110.0, 200.0);
-                let w_rand = (140.0 * s).clamp(96.0, 150.0);
-                let w_back = (120.0 * s).clamp(84.0, 140.0);
-                // VOLVER primero, JUGAR último y relleno: se lee de izquierda a
-                // derecha y la acción que avanza queda del lado del pulgar.
-                action_button(row, "VOLVER", CcAction::Back, Color::srgb(0.6, 0.6, 0.7), w_back, s, false);
-                action_button(row, "AL AZAR", CcAction::Random, NEON_MAGENTA, w_rand, s, false);
-                action_button(row, "JUGAR >", CcAction::Play, NEON_CYAN, w_play, s, true);
+                // Los tres botones.
+                let by = pyu + ph - 54.0 - 84.0;
+                let anchos: [(f32, &str, bool, CcAction); 3] = [
+                    (300.0, "ALEATORIO", false, CcAction::Random),
+                    (300.0, "REINICIAR", false, CcAction::Reset),
+                    (390.0, "CONFIRMAR", true, CcAction::Play),
+                ];
+                let tot: f32 = anchos.iter().map(|a| a.0).sum::<f32>() + 24.0 * 2.0;
+                let mut bx = ix + inner_w - tot;
+                for (ancho, et, fuerte, accion) in anchos {
+                    up::boton(l, &art, bx, by, ancho, 84.0, Some(et), None, fuerte, 34.0,
+                              accion, k);
+                    bx += ancho + 24.0;
+                }
+                up::cartel(l, &art, "CREAR PERSONAJE", pxu + pw / 2.0, pyu - 48.0, 640.0, 96.0,
+                           44.0, k);
+                // VOLVER, en la franja libre entre la barra y el panel.
+                up::boton(l, &art, 40.0, 134.0, 200.0, 76.0, Some("VOLVER"), None, false,
+                          30.0, CcAction::Back, k);
             });
         });
+}
+
+/// **El nombre de una capa en la interfaz.** `Layer::label` dice "GORRO" y las
+/// imágenes de referencia dicen ACCESORIOS: la pestaña incluye vinchas, barbas y
+/// máscaras, no sólo gorros.
+fn etiqueta_capa(capa: Layer) -> &'static str {
+    match capa {
+        Layer::Accessory => "ACCESORIOS",
+        otra => otra.label(),
+    }
+}
+
+/// Cuántas casillas entran de ancho y de alto en la grilla del mockup.
+const COLS_GRID: usize = 7;
+const FILAS_GRID: usize = 3;
+/// El lado de una casilla y la separación, en coordenadas del mockup.
+const LADO_GRID: f32 = 130.0;
+const SEP_GRID: f32 = 12.0;
+
+/// El pulgar de la canaleta: se mueve siguiendo el scroll de la grilla.
+#[derive(Component)]
+struct PulgarScroll {
+    x: f32,
+    y0: f32,
+    alto: f32,
+    k: f32,
+}
+
+/// El nodo que contiene la fila de colores; se rehace al cambiar de estilo.
+#[derive(Component)]
+struct FilaColores {
+    ix: f32,
+    cy: f32,
+    k: f32,
+}
+
+/// El nombre grande de arriba a la izquierda.
+fn nombre_grande(l: &mut ChildBuilder, nombre: &str, cx: f32, y: f32, k: f32) {
+    l.spawn(Node {
+        position_type: PositionType::Absolute,
+        left: Val::Px((cx - 600.0) * k),
+        top: Val::Px((y - 45.0) * k),
+        width: Val::Px(1200.0 * k),
+        height: Val::Px(90.0 * k),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    })
+    .with_children(|t| {
+        t.spawn((
+            Text::new(nombre.to_uppercase()),
+            TextFont { font_size: 56.0 * k, ..default() },
+            TextColor(crate::ui_pack::Pack::TEXTO),
+            TextLayout::new_with_no_wrap(),
+            NameText,
+        ));
+    });
+}
+
+/// La etiqueta de lo elegido, debajo del nombre ("PELO 10").
+fn etiqueta_estilo(
+    l: &mut ChildBuilder,
+    cg: &Chargen,
+    look: &LookDef,
+    capa: Layer,
+    cx: f32,
+    y: f32,
+    k: f32,
+) {
+    let (estilo, _) = style_color(cg, look, capa);
+    let txt = if cg.styles_of(capa).is_empty() {
+        format!("{} {}", etiqueta_capa(capa), index_of(look, capa).map(|i| i + 1).unwrap_or(0))
+    } else {
+        format!("{} {}", etiqueta_capa(capa), estilo + 1)
+    };
+    l.spawn(Node {
+        position_type: PositionType::Absolute,
+        left: Val::Px((cx - 600.0) * k),
+        top: Val::Px((y - 28.0) * k),
+        width: Val::Px(1200.0 * k),
+        height: Val::Px(56.0 * k),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    })
+    .with_children(|t| {
+        t.spawn((
+            Text::new(txt),
+            TextFont { font_size: 34.0 * k, ..default() },
+            TextColor(crate::ui_pack::Pack::ACENTO),
+            TextLayout::new_with_no_wrap(),
+            StyleLabel(capa),
+        ));
+    });
+}
+
+/// El contador "10/29" de la esquina de la grilla.
+fn contador_estilos(
+    l: &mut ChildBuilder,
+    cg: &Chargen,
+    look: &LookDef,
+    capa: Layer,
+    x: f32,
+    y: f32,
+    k: f32,
+) {
+    let (estilo, _) = style_color(cg, look, capa);
+    let total = if cg.styles_of(capa).is_empty() {
+        cg.options(capa).len()
+    } else {
+        cg.styles_of(capa).len()
+    };
+    let pos = if cg.styles_of(capa).is_empty() {
+        index_of(look, capa).map(|i| i as usize + 1).unwrap_or(0)
+    } else {
+        estilo + 1
+    };
+    l.spawn(Node {
+        position_type: PositionType::Absolute,
+        left: Val::Px((x - 600.0) * k),
+        top: Val::Px((y - 24.0) * k),
+        width: Val::Px(600.0 * k),
+        height: Val::Px(48.0 * k),
+        justify_content: JustifyContent::FlexEnd,
+        align_items: AlignItems::Center,
+        ..default()
+    })
+    .with_children(|t| {
+        t.spawn((
+            Text::new(format!("{pos}/{total}")),
+            TextFont { font_size: 30.0 * k, ..default() },
+            TextColor(Color::srgb(0.839, 0.769, 0.659)),
+            TextLayout::new_with_no_wrap(),
+            ColorLabel(capa),
+        ));
+    });
+}
+
+/// **Un muñeco animado**, apilando las cinco capas con el atlas de la hoja.
+/// Es el mismo mecanismo de la vitrina de siempre; lo que cambia es dónde se
+/// planta.
+#[allow(clippy::too_many_arguments)]
+fn muneco_animado(
+    l: &mut ChildBuilder,
+    look: &LookDef,
+    cg: &Chargen,
+    assets: &AssetServer,
+    hoja: &Handle<TextureAtlasLayout>,
+    dir: u32,
+    x: f32,
+    y: f32,
+    escala: f32,
+    k: f32,
+) {
+    let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * escala;
+    l.spawn(crate::ui_pack::caja(x, y, cel.x, cel.y, k)).with_children(|pila| {
+        for capa in ROWS {
+            let opt = index_of(look, capa).and_then(|i| cg.options(capa).get(i as usize));
+            pila.spawn((
+                ImageNode::from_atlas_image(
+                    opt.map(|o| assets.load(&o.png)).unwrap_or_default(),
+                    TextureAtlas { layout: hoja.clone(), index: showcase_cell(dir, 0) },
+                ),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                if opt.is_some() { Visibility::Inherited } else { Visibility::Hidden },
+                PreviewLayer { dir, layer: capa },
+            ));
+        }
+    });
 }
 
 /// Semilla de arranque: la hora. No hace falta determinismo acá — es el sorteo de
@@ -1174,7 +1122,15 @@ fn name_input(
 #[allow(clippy::type_complexity)]
 fn button_system(
     mut commands: Commands,
-    mut interactions: Query<(&Interaction, &CcAction, &mut BackgroundColor), Changed<Interaction>>,
+    mut interactions: Query<
+        (
+            &Interaction,
+            &CcAction,
+            Option<&mut BackgroundColor>,
+            Option<&mut ImageNode>,
+        ),
+        Changed<Interaction>,
+    >,
     cg: Res<Chargen>,
     mut selected: ResMut<SelectedCharacter>,
     mut next: ResMut<NextState<GamePhase>>,
@@ -1184,15 +1140,36 @@ fn button_system(
     mut name_text: Query<&mut Text, (With<NameText>, Without<PortraitQuip>)>,
     mut quip: Query<&mut Text, With<PortraitQuip>>,
     mut toque: ResMut<Toque>,
+    mut inicial: Local<LookDef>,
+    mut hubo_inicial: Local<bool>,
 ) {
+    if !*hubo_inicial {
+        *inicial = selected.look.unwrap_or_default();
+        *hubo_inicial = true;
+    }
     let mut look = selected.look.unwrap_or_default();
     let mut dirty = false;
     // Lo que el retrato va a decir este frame, si es que dice algo.
     let mut say: Option<String> = None;
-    for (interaction, action, mut bg) in &mut interactions {
+    for (interaction, action, bg, img) in &mut interactions {
+        // El realce: los botones del kit son marcos del pack (una imagen), así
+        // que se tiñen; los que quedan del layout viejo siguen con su fondo.
+        if let Some(mut img) = img {
+            img.color = match interaction {
+                Interaction::Pressed => Color::srgb(0.82, 0.82, 0.82),
+                Interaction::Hovered => Color::srgb(0.93, 0.93, 0.93),
+                Interaction::None => Color::WHITE,
+            };
+        }
+        if let Some(mut bg) = bg {
+            *bg = BackgroundColor(match interaction {
+                Interaction::Pressed => Color::srgb(0.16, 0.24, 0.36),
+                Interaction::Hovered => Color::srgb(0.14, 0.20, 0.30),
+                Interaction::None => idle_bg(*action),
+            });
+        }
         match interaction {
             Interaction::Pressed => {
-                *bg = BackgroundColor(Color::srgb(0.16, 0.24, 0.36));
                 match *action {
                     CcAction::Play => {
                         start_game(&selected);
@@ -1219,6 +1196,24 @@ fn button_system(
                         say = Some(quip_for(Some(layer), rand_seed()));
                     }
                     CcAction::PickLayer(layer) => grid_layer.0 = layer,
+                    // REINICIAR: vuelve al look con el que se abrió la pantalla.
+                    CcAction::Reset => {
+                        look = *inicial;
+                        dirty = true;
+                    }
+                    // Un color del estilo actual, elegido tocando su muestra.
+                    CcAction::PickColor(layer, pos) => {
+                        let grupos = cg.styles_of(layer);
+                        let (estilo, _) = style_color(&cg, &look, layer);
+                        let extra = if layer == Layer::Accessory { 1 } else { 0 };
+                        if let Some(grupo) = grupos.get(estilo.saturating_sub(extra)) {
+                            if let Some(&idx) = grupo.get(pos) {
+                                set_index(&mut look, layer, Some(idx as u32));
+                                dirty = true;
+                                say = Some(quip_for(Some(layer), rand_seed()));
+                            }
+                        }
+                    }
                     // NO se elige al apoyar el dedo: se anota como candidata y
                     // `resolver_toque` la aplica al soltar, si no hubo arrastre.
                     CcAction::PickOption(layer, idx) => {
@@ -1255,11 +1250,7 @@ fn button_system(
                     }
                 }
             }
-            // El reposo vuelve al fondo QUE LE TOCA a ese botón: JUGAR es el
-            // único relleno, y pintarlo del mismo gris que los demás al soltarlo
-            // le borraba la jerarquía en cuanto lo tocabas una vez.
-            Interaction::Hovered => *bg = BackgroundColor(Color::srgb(0.14, 0.20, 0.30)),
-            Interaction::None => *bg = BackgroundColor(idle_bg(*action)),
+            _ => {}
         }
     }
     if let (Some(line), Ok(mut bubble)) = (say, quip.get_single_mut()) {
@@ -1290,7 +1281,9 @@ fn refresh(
         Query<&mut ImageNode, With<PortraitPreview>>,
         Query<(&mut Text, &StyleLabel)>,
         Query<(&mut Text, &ColorLabel)>,
+        Query<(&mut Text, &crate::ui_pack::FichaValor)>,
     )>,
+    grid_layer: Res<GridLayer>,
 ) {
     let Ok(root) = dirty.get_single() else { return };
     commands.entity(root).remove::<Dirty>();
@@ -1313,15 +1306,51 @@ fn refresh(
     ) {
         node.image = h;
     }
-    for (mut text, StyleLabel(layer)) in &mut sets.p2() {
-        text.0 = style_text(&cg, &look, *layer);
+    // La etiqueta de abajo del nombre y el contador siguen a la capa ACTIVA,
+    // no a la que tenían cuando se armó la pantalla.
+    let capa = grid_layer.0;
+    let (estilo, _) = style_color(&cg, &look, capa);
+    let sin_estilos = cg.styles_of(capa).is_empty();
+    let pos = if sin_estilos {
+        index_of(&look, capa).map(|i| i as usize + 1).unwrap_or(0)
+    } else {
+        estilo + 1
+    };
+    let total = if sin_estilos { cg.options(capa).len() } else { cg.styles_of(capa).len() };
+    for (mut text, _) in &mut sets.p2() {
+        text.0 = format!("{} {}", etiqueta_capa(capa), pos);
     }
-    for (mut text, ColorLabel(layer)) in &mut sets.p3() {
-        text.0 = color_text(&cg, &look, *layer);
+    for (mut text, _) in &mut sets.p3() {
+        text.0 = format!("{pos}/{total}");
+    }
+    for (mut text, marca) in &mut sets.p4() {
+        if marca.0 == 1 {
+            text.0 = capa.label().to_string();
+        } else if marca.0 == 2 {
+            text.0 = selected.name.clone();
+        }
     }
 }
 
 fn start_game(selected: &SelectedCharacter) {
+    // **El personaje también entra a la lista, no sólo al savegame.** Desde el
+    // 15 ago 2026 los personajes viven aparte de los mundos (`personajes.rs`):
+    // sin esto, el que acabás de crear jugaría bien pero no aparecería en la
+    // pantalla PERSONAJES, que es donde se lo elige para la próxima partida.
+    let p = crate::personajes::de_seleccionado("", selected);
+    if !crate::personajes::guardar(&p) {
+        eprintln!(
+            "character-create: la lista de personajes está llena ({}), no se guardó «{}»",
+            crate::personajes::MAXIMO,
+            selected.name
+        );
+    }
+    // Y si se llegó acá sin partida abierta (NUEVA PARTIDA la crea antes, pero
+    // se puede entrar desde CREAR PERSONAJE), se le hace una para que el mundo
+    // tenga dónde guardarse en vez de escribir suelto en la raíz.
+    if crate::partida::activa().is_none() {
+        crate::partida::crear("Partida", None, false);
+    }
     save_savegame(selected);
     eprintln!(
         "character-create: JUGAR name='{}' look={:?}",
@@ -1475,12 +1504,20 @@ const KEY_ROWS: [&str; 4] = ["ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789 -
 struct KeyboardOpen(bool);
 
 /// Abre/cierra el teclado sin recrear la pantalla entera.
+/// **El teclado para el nombre, con el marco del pack.**
+///
+/// La maqueta no lo dibuja —el nombre ya aparece escrito— pero escribirlo hace
+/// falta, así que se arma con las mismas piezas que el resto: panel, cartel y
+/// botones del kit. Va sobre un velo, que es lo único que tapa la pantalla de
+/// atrás mientras se escribe.
 fn sync_keyboard(
     open: Res<KeyboardOpen>,
     mut commands: Commands,
     touch: Res<crate::input::TouchLayout>,
+    art: Res<crate::art2d::ArtLibrary>,
     live: Query<Entity, With<CcKeyboard>>,
 ) {
+    use crate::ui_pack::{self as up, Ancla, Pack};
     let want = open.0;
     let has = !live.is_empty();
     if want == has {
@@ -1492,9 +1529,7 @@ fn sync_keyboard(
         }
         return;
     }
-    let vh = touch.height.max(240.0);
-    let s = (vh / 720.0).clamp(0.45, 1.15);
-    let key = (34.0 * s).clamp(26.0, 40.0);
+    let k = up::k(&touch);
     commands
         .spawn((
             Node {
@@ -1503,47 +1538,71 @@ fn sync_keyboard(
                 top: Val::Px(0.0),
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(4.0 * s),
                 ..default()
             },
             // Encima de la pantalla de creacion (que va en 1000).
             GlobalZIndex(1100),
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.06, 0.94)),
+            BackgroundColor(Color::srgba(0.047, 0.039, 0.078, 0.78)),
             bevy::ui::FocusPolicy::Block,
             CcKeyboard,
             Name::new("CcKeyboard"),
         ))
-        .with_children(|kb| {
-            kb.spawn((
-                Text::new("ESCRIBI TU NOMBRE"),
-                TextFont { font_size: (15.0 * s).clamp(11.0, 18.0), ..default() },
-                TextColor(NEON_CYAN),
-                Node { margin: UiRect::bottom(Val::Px(6.0 * s)), ..default() },
-            ));
-            for row in KEY_ROWS {
-                kb.spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(4.0 * s),
-                    ..default()
-                })
-                .with_children(|line| {
-                    for c in row.chars() {
-                        key_button(line, c, key, s);
-                    }
+        .with_children(|root| {
+            root.spawn(up::lienzo(k)).with_children(|l| {
+                let (pw, ph) = (1800.0_f32, 680.0_f32);
+                let (pxu, pyu) = ((up::ANCHO - pw) / 2.0, 200.0_f32);
+                up::marco(l, &art, up::marco::PANEL, pxu, pyu, pw, ph, k);
+                up::cartel(l, &art, "TU NOMBRE", pxu + pw / 2.0, pyu - 48.0, 520.0, 96.0, 44.0, k);
+
+                let ix = pxu + 66.0;
+                up::marco(l, &art, up::marco::BOTON_ANCHO, ix, pyu + 50.0, pw - 132.0, 92.0, k);
+                l.spawn((
+                    up::caja(ix + 36.0, pyu + 96.0 - 32.0, pw - 200.0, 64.0, k),
+                    Name::new("CcNombreCaja"),
+                ))
+                .with_children(|t| {
+                    t.spawn(Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        justify_content: JustifyContent::FlexStart,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
+                    .with_children(|t| {
+                        t.spawn((
+                            Text::new(String::new()),
+                            TextFont { font_size: 44.0 * k, ..default() },
+                            TextColor(Pack::TINTA),
+                            TextLayout::new_with_no_wrap(),
+                            NameText,
+                        ));
+                    });
                 });
-            }
-            kb.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(8.0 * s),
-                margin: UiRect::top(Val::Px(6.0 * s)),
-                ..default()
-            })
-            .with_children(|line| {
-                wide_key(line, "BORRAR", CcAction::KeyBack, key, s);
-                wide_key(line, "LISTO", CcAction::KeyDone, key, s);
+
+                let ancho_t = 118.0_f32;
+                let alto_t = 84.0_f32;
+                let sep = 8.0_f32;
+                for (f, fila) in KEY_ROWS.iter().enumerate() {
+                    let n = fila.chars().count() as f32;
+                    let total = n * ancho_t + (n - 1.0) * sep;
+                    let x0 = pxu + (pw - total) / 2.0;
+                    let y = pyu + 180.0 + f as f32 * (alto_t + sep);
+                    for (i, c) in fila.chars().enumerate() {
+                        up::boton(
+                            l, &art, x0 + i as f32 * (ancho_t + sep), y, ancho_t, alto_t,
+                            Some(&c.to_string()), None, false, 34.0, CcAction::Key(c), k,
+                        );
+                    }
+                }
+                let y = pyu + 180.0 + KEY_ROWS.len() as f32 * (alto_t + sep);
+                up::boton(l, &art, pxu + 66.0, y, 320.0, alto_t, Some("BORRAR"), None, false,
+                          32.0, CcAction::KeyBack, k);
+                up::boton(l, &art, pxu + pw - 66.0 - 320.0, y, 320.0, alto_t, Some("LISTO"),
+                          None, true, 32.0, CcAction::KeyDone, k);
+                let _ = Ancla::Izq;
             });
         });
 }
@@ -1685,148 +1744,320 @@ fn layer_tab(parent: &mut ChildBuilder, layer: Layer, active: bool, s: f32) {
 /// Rellena la cuadricula con las opciones de `layer`, marcando la elegida.
 /// Se llama al entrar y cada vez que cambia la capa o la eleccion.
 #[allow(clippy::too_many_arguments)]
+/// **La grilla de ESTILOS del mockup.**
+///
+/// Lo que se muestra no es el catálogo plano sino los ESTILOS de la capa, que es
+/// como el creador ya modela el look (`Chargen::styles_of`): una casilla por
+/// corte de pelo, y los colores de ese corte en la fila de abajo. En PIEL y
+/// OJOS, que no tienen color aparte, la grilla ES el catálogo — por eso el
+/// mockup muestra 9 y 7 casillas ahí.
+#[allow(clippy::too_many_arguments)]
 fn fill_grid(
     commands: &mut Commands,
-    grid: Entity,
+    art: &crate::art2d::ArtLibrary,
     cg: &Chargen,
     look: &LookDef,
     layer: Layer,
-    ancho_pantalla: f32,
-    s: f32,
+    hoja: &Handle<TextureAtlasLayout>,
+    assets: &AssetServer,
+    grid: Entity,
+    k: f32,
 ) {
-    let d = celda_px(ancho_pantalla);
-    let current = index_of(look, layer);
+    let grupos = cg.styles_of(layer);
+    let (estilo_actual, color_actual) = style_color(cg, look, layer);
     commands.entity(grid).despawn_descendants();
     commands.entity(grid).with_children(|grid| {
-        // El accesorio puede NO estar: "sin gorro" es una eleccion, no un hueco.
+        // El accesorio suma NINGUNO al principio: "sin gorro" es una elección.
         if layer == Layer::Accessory {
-            grid_cell(grid, layer, None, current.is_none(), d, s, None);
+            celda_estilo(grid, art, cg, look, layer, None, index_of(look, layer).is_none(),
+                         hoja, assets, k);
         }
-        for (i, opt) in cg.options(layer).iter().enumerate() {
-            let idx = i as u32;
-            grid_cell(grid, layer, Some(idx), current == Some(idx), d, s, Some(opt.png.clone()));
+        if grupos.is_empty() {
+            for (i, _) in cg.options(layer).iter().enumerate() {
+                let idx = i as u32;
+                celda_estilo(grid, art, cg, look, layer, Some(idx),
+                             index_of(look, layer) == Some(idx), hoja, assets, k);
+            }
+        } else {
+            let extra = if layer == Layer::Accessory { 1 } else { 0 };
+            for (g, grupo) in grupos.iter().enumerate() {
+                // La casilla muestra el estilo EN EL COLOR ELEGIDO: cambiar de
+                // color repinta la grilla entera, que es lo que hace el mockup.
+                let idx = grupo[color_actual.min(grupo.len() - 1)] as u32;
+                let elegida = g + extra == estilo_actual;
+                celda_estilo(grid, art, cg, look, layer, Some(idx), elegida, hoja, assets, k);
+            }
         }
     });
 }
 
+/// **Una casilla de la grilla.** Es la casilla del pack con el personaje entero
+/// adentro: las cuatro capas que NO cambian se dibujan con la hoja que ya está
+/// en memoria (la del look actual) y la que sí cambia se pide en miniatura
+/// recortada, que es lo que evita cargar doscientas hojas de 9 MB.
 #[allow(clippy::too_many_arguments)]
-fn grid_cell(
+fn celda_estilo(
     parent: &mut ChildBuilder,
+    art: &crate::art2d::ArtLibrary,
+    cg: &Chargen,
+    look: &LookDef,
     layer: Layer,
     idx: Option<u32>,
-    selected: bool,
-    d: f32,
-    s: f32,
-    png: Option<String>,
+    elegida: bool,
+    hoja: &Handle<TextureAtlasLayout>,
+    assets: &AssetServer,
+    k: f32,
 ) {
-    let mut cell = parent.spawn((
-        Button,
-        Node {
-            // La celda llena SU COLUMNA (un tercio del panel) y se mantiene
-            // cuadrada. Antes era un cuadrado fijo de 52 px como mucho: en una
-            // pantalla de 2400 px de ancho sobraba panel a los costados y la
-            // prenda se veia como una estampilla.
-            // Cuadrada por `aspect_ratio` sobre el ancho de la columna.
-            //
-            // Probe el truco de CSS de `height: 0` + `padding-top: 100%` creyendo
-            // que taffy resolvia el padding porcentual contra el ANCHO como el
-            // navegador: NO lo hace. Las celdas colapsaban a alto ~0 y la
-            // cuadricula quedaba en tres tiras rayadas. `aspect_ratio` es lo que
-            // funciona aca.
-            // PIXELES FIJOS. Con el ancho en porcentaje la celda se resolvia
-            // contra un contenedor que no podia encogerse (`flex_shrink: 0`) y
-            // el resultado eran barras anchisimas que se salian de la pantalla.
-            // Fijo no puede explotar, y el tamano sale del ancho REAL del panel
-            // (medido en el telefono: ~21% del ancho de pantalla) dividido en 3.
-            width: Val::Px(d),
-            height: Val::Px(d),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(if selected { 3.0 } else { 1.0 })),
-            overflow: Overflow::clip(),
-            ..default()
-        },
-        BorderRadius::all(Val::Px(10.0 * s)),
-        // La elegida se marca con BORDE y FONDO, no solo con el borde: en el
-        // telefono a plena luz un borde de 2 px no se distingue de uno de 1.
-        BorderColor(if selected { NEON_MAGENTA } else { CARD_EDGE }),
-        // La celda VACIA tiene que leerse como celda. El gris de antes
-        // (0.08,0.10,0.16) era casi el mismo azul del panel: mientras todas las
-        // prendas estaban cargadas no se notaba, pero al cargar solo las
-        // visibles (`stream_thumbs`) las demas quedaban como agujeros y la
-        // cuadricula parecia rota, con dos filas sueltas flotando. Con un fondo
-        // que contrasta se ve la grilla completa y las que faltan se leen como
-        // "todavia no cargo", que es la verdad.
-        BackgroundColor(if selected {
-            Color::srgb(0.24, 0.07, 0.15)
-        } else {
-            Color::srgb(0.15, 0.17, 0.23)
-        }),
-        CcAction::PickOption(layer, idx),
-        CcCell(layer, idx),
-    ));
-    match png {
-        Some(ruta) => {
-            // OJO: acá NO se carga la textura. Se anota la ruta y el hueco donde
-            // va, y `stream_thumbs` la trae cuando la celda entra en pantalla.
-            // Cargarlas todas era 1,2 GB y el SIGKILL de Android (ver `CcThumb`).
-            cell.insert(CcThumb(ruta));
-            cell.with_children(|c| {
-                c.spawn((
-                    // El muneco es 1:2; la celda es cuadrada. Se dibuja alto y
-                    // angosto y centrado, que es como se ve la prenda puesta.
-                    // En PORCENTAJE de la celda, no en pixeles fijos: asi la
-                    // prenda crece con la celda en vez de quedar chiquita en el
-                    // medio de un recuadro grande.
-                    Node {
-                        // ABSOLUTO a proposito. La celda saca su alto de su
-                        // `aspect_ratio` sobre el ancho de la columna; si el
-                        // sprite queda EN EL FLUJO, taffy intenta a la vez sacar
-                        // el alto de la celda de su hijo y el alto del hijo de la
-                        // celda, y resuelve el ciclo inflando la fila a ~3 veces
-                        // lo que mide la celda (se veian tres huecos enormes con
-                        // una prenda chiquita en el medio). Fuera del flujo, la
-                        // celda manda y el sprite la sigue.
-                        // Centrado por las CUATRO inserciones, no por
-                        // `aspect_ratio` + centrado del padre: 44% de ancho y 88%
-                        // de alto sobre una celda cuadrada dan justo el 1:2 del
-                        // muneco, y quedan centradas por construccion. Como la
-                        // celda saca su alto del padding, el sprite ya no puede
-                        // inflar la fila.
-                        // ACERCAMIENTO. La celda del atlas trae la prenda sola
-                        // sobre transparente y ocupando una parte chica de sus
-                        // 32x64: dibujada "entera" se veia como una estampilla
-                        // en el medio de un recuadro grande. Se dibuja MAS
-                        // GRANDE que la celda y la celda recorta (`overflow:
-                        // clip`), que es un zoom hecho desde el juego — sin
-                        // tocar el recorte del manifest, que lo pinta el
-                        // usuario en el editor (regla 7).
-                        // La imagen YA es la celda recortada (`Miniaturas`), no
-                        // la hoja entera: dibujarla agrandada y recortada dejaba
-                        // ver el medio del muneco, que en una capa de ropa es
-                        // transparente. Se dibuja entera y centrada.
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(24.0),
-                        right: Val::Percent(24.0),
-                        top: Val::Percent(4.0),
-                        bottom: Val::Percent(4.0),
-                        ..default()
-                    },
-                    CcThumbSlot,
-                ));
-            });
-        }
-        None => {
-            cell.with_children(|c| {
-                c.spawn((
+    use crate::ui_pack as up;
+    // ¿Se ve el cuerpo entero o sólo la cabeza? El mockup muestra el muñeco
+    // completo en ROPA y ACCESORIOS, y un retrato en PIEL, OJOS y PELO.
+    let cuerpo_entero = matches!(layer, Layer::Outfit | Layer::Accessory);
+    // **El retrato va al DOBLE de escala que el cuerpo entero.** La cabeza son
+    // 26 de los 64 píxeles del muñeco: dibujada a la misma escala que el cuerpo
+    // ocupa un tercio de la casilla y la casilla se ve vacía. En la imagen de
+    // referencia el retrato llena la casilla.
+    let escala = if cuerpo_entero { 2.0_f32 } else { 4.0 };
+    let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * escala;
+    // El encuadre: el cuerpo entero se apoya arriba; el retrato se centra en la
+    // cabeza, que ocupa de la fila 4 a la 30 de la celda de 64.
+    let (off_x, off_y) = if cuerpo_entero {
+        (LADO_GRID / 2.0 - cel.x / 2.0, 2.0)
+    } else {
+        (LADO_GRID / 2.0 - cel.x / 2.0, LADO_GRID / 2.0 - 17.0 * escala)
+    };
+
+    let mut nodo = Node {
+        width: Val::Px(LADO_GRID * k),
+        height: Val::Px(LADO_GRID * k),
+        overflow: Overflow::clip(),
+        ..default()
+    };
+    nodo.position_type = PositionType::Relative;
+    // **La miniatura la pide `stream_thumbs`**, y para encontrarla necesita el
+    // `CcThumb` en la CASILLA y el `CcThumbSlot` en un hijo. Ponerlos en el
+    // mismo nodo (primer intento) dejaba la grilla entera con la misma prenda.
+    let png_variable = idx
+        .and_then(|i| cg.options(layer).get(i as usize))
+        .map(|o| o.png.clone());
+    let mut celda = match art.ui_frame_node(up::marco::SLOT) {
+        Some(img) => parent.spawn((nodo, img, Button, CcAction::PickOption(layer, idx), CcCell(layer, idx))),
+        None => parent.spawn((
+            nodo,
+            BackgroundColor(Color::srgb(0.796, 0.706, 0.580)),
+            Button,
+            CcAction::PickOption(layer, idx),
+            CcCell(layer, idx),
+        )),
+    };
+    if let Some(png) = png_variable {
+        celda.insert(CcThumb(png));
+    }
+    celda.with_children(|c| {
+        let Some(elegido) = idx else {
+            c.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Name::new("SinAccesorio"),
+            ))
+            .with_children(|t| {
+                t.spawn((
                     Text::new("NINGUNO"),
-                    TextFont { font_size: (13.0 * s).clamp(10.0, 18.0), ..default() },
-                    TextColor(DIM),
+                    TextFont { font_size: 22.0 * k, ..default() },
+                    TextColor(up::Pack::SUAVE),
                 ));
             });
+            return;
+        };
+        // Las cinco capas del retrato. La que se está eligiendo va con SU
+        // opción; las otras cuatro, con las del look actual.
+        for capa in ROWS {
+            let propia = capa == layer;
+            let opt = if propia {
+                cg.options(capa).get(elegido as usize)
+            } else {
+                index_of(look, capa).and_then(|i| cg.options(capa).get(i as usize))
+            };
+            let Some(o) = opt else { continue };
+            let hueco = Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(off_x * k),
+                top: Val::Px(off_y * k),
+                width: Val::Px(cel.x * k),
+                height: Val::Px(cel.y * k),
+                ..default()
+            };
+            if propia {
+                // El hueco de la miniatura: lo llena `stream_thumbs` cuando la
+                // casilla entra en pantalla (ver `CcThumb`).
+                c.spawn((hueco, CcThumbSlot));
+            } else {
+                c.spawn((
+                    hueco,
+                    ImageNode::from_atlas_image(
+                        assets.load(&o.png),
+                        TextureAtlas { layout: hoja.clone(), index: grid_cell_index() },
+                    ),
+                ));
+            }
         }
+    });
+    if elegida {
+        // El recuadro del mockup: 6 px, corrido 3 hacia arriba y a la izquierda.
+        celda.with_children(|c| {
+            c.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(-3.0 * k),
+                    top: Val::Px(-3.0 * k),
+                    width: Val::Px(LADO_GRID * k),
+                    height: Val::Px(LADO_GRID * k),
+                    border: UiRect::all(Val::Px(6.0 * k)),
+                    ..default()
+                },
+                BorderColor(up::Pack::ACENTO),
+                MarcaElegida,
+            ));
+        });
     }
 }
+
+/// **La fila de COLORES.** Es la otra mitad del creador: la grilla muestra los
+/// cortes y esta fila, los colores del corte elegido. Se rehace cuando cambia la
+/// capa o el estilo, no cada frame.
+#[allow(clippy::too_many_arguments)]
+fn sincronizar_colores(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    cg: Res<Chargen>,
+    selected: Res<SelectedCharacter>,
+    grid_layer: Res<GridLayer>,
+    assets: Res<AssetServer>,
+    sheet: Res<CcSheetLayout>,
+    fila: Query<(Entity, &FilaColores)>,
+    mut ultimo: Local<Option<(Layer, usize)>>,
+) {
+    let Ok((e, f)) = fila.get_single() else {
+        *ultimo = None;
+        return;
+    };
+    let capa = grid_layer.0;
+    let look = selected.look.unwrap_or_default();
+    let (estilo, color_actual) = style_color(&cg, &look, capa);
+    if *ultimo == Some((capa, estilo)) {
+        return;
+    }
+    *ultimo = Some((capa, estilo));
+
+    let extra = if capa == Layer::Accessory { 1 } else { 0 };
+    let grupo: Vec<usize> = cg
+        .styles_of(capa)
+        .get(estilo.saturating_sub(extra))
+        .cloned()
+        .unwrap_or_default();
+    let k = f.k;
+    commands.entity(e).despawn_descendants();
+    if grupo.len() < 2 {
+        // Piel y ojos no tienen color aparte: la fila queda vacía, como en el
+        // mockup (las pestañas PIEL y OJOS no la dibujan).
+        return;
+    }
+    commands.entity(e).with_children(|c| {
+        for (pos, &idx) in grupo.iter().enumerate() {
+            let x = 130.0 + pos as f32 * 74.0;
+            let mut cuadro = crate::ui_pack::caja(x, 0.0, 62.0, 62.0, k);
+            cuadro.overflow = Overflow::clip();
+            let mut ec = match art.ui_frame_node(crate::ui_pack::marco::SLOT_CHICO) {
+                Some(img) => c.spawn((cuadro, img, Button, CcAction::PickColor(capa, pos))),
+                None => c.spawn((
+                    cuadro,
+                    BackgroundColor(Color::srgb(0.796, 0.706, 0.580)),
+                    Button,
+                    CcAction::PickColor(capa, pos),
+                )),
+            };
+            // La muestra: el propio dibujo de esa opción, recortado a un
+            // cuadradito. Es más honesto que inventar un color plano — el color
+            // de una prenda del pack no es un número, es su pixel.
+            ec.with_children(|m| {
+                if let Some(o) = cg.options(capa).get(idx) {
+                    // La muestra encuadra el TORSO: la cabeza no dice nada del
+                    // color de una remera, y para el pelo el encuadre igual cae
+                    // sobre la melena.
+                    m.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(0.0),
+                            top: Val::Px(-46.0 * k),
+                            width: Val::Px(62.0 * k),
+                            height: Val::Px(124.0 * k),
+                            ..default()
+                        },
+                        ImageNode::from_atlas_image(
+                            assets.load(&o.png),
+                            TextureAtlas { layout: sheet.0.clone(), index: grid_cell_index() },
+                        ),
+                    ));
+                }
+            });
+            if pos == color_actual {
+                ec.with_children(|m| {
+                    m.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(-3.0 * k),
+                            top: Val::Px(-3.0 * k),
+                            width: Val::Px(62.0 * k),
+                            height: Val::Px(62.0 * k),
+                            border: UiRect::all(Val::Px(5.0 * k)),
+                            ..default()
+                        },
+                        BorderColor(crate::ui_pack::Pack::ACENTO),
+                    ));
+                });
+            }
+        }
+    });
+}
+
+/// El pulgar de la canaleta sigue al scroll de la grilla. Sin esto la canaleta
+/// sería un adorno: el mockup la dibuja con el pulgar proporcional.
+fn mover_pulgar(
+    vistas: Query<(&ScrollPosition, &ComputedNode, &Children), With<CcScroll>>,
+    contenidos: Query<&ComputedNode, With<crate::hud::ScrollContent>>,
+    mut pulgares: Query<(&mut Node, &PulgarScroll)>,
+) {
+    let Ok((sp, vista, hijos)) = vistas.get_single() else { return };
+    let alto_vista = vista.size().y * vista.inverse_scale_factor();
+    let alto_contenido = hijos
+        .iter()
+        .filter_map(|c| contenidos.get(*c).ok())
+        .map(|c| c.size().y * c.inverse_scale_factor())
+        .fold(0.0f32, f32::max);
+    if alto_contenido <= 0.0 {
+        return;
+    }
+    let frac = (alto_vista / alto_contenido).clamp(0.08, 1.0);
+    let tope = crate::hud::max_scroll(alto_vista, alto_contenido);
+    let avance = if tope > 0.0 { (sp.offset_y / tope).clamp(0.0, 1.0) } else { 0.0 };
+    for (mut nodo, p) in &mut pulgares {
+        let alto = (p.alto * frac).max(90.0);
+        nodo.height = Val::Px(alto * p.k);
+        nodo.top = Val::Px((p.y0 + (p.alto - alto) * avance) * p.k);
+        nodo.display = if frac >= 1.0 { Display::None } else { Display::Flex };
+    }
+}
+
+/// El recuadro amarillo de la casilla elegida.
+#[derive(Component)]
+struct MarcaElegida;
 
 /// Rehace la cuadricula cuando cambio la capa o la eleccion. Va aparte de
 /// `refresh` porque esa repinta lo que YA existe y esto crea/destruye celdas.
@@ -1838,8 +2069,11 @@ fn sync_grid(
     cg: Res<Chargen>,
     touch: Res<crate::input::TouchLayout>,
     grid: Query<Entity, With<CcGrid>>,
-    mut tabs: Query<(&CcLayerTab, &mut BorderColor, &mut BackgroundColor)>,
+    mut tabs: Query<(&CcLayerTab, &mut BorderColor)>,
     mut last: Local<Option<(Layer, Option<u32>)>>,
+    art: Res<crate::art2d::ArtLibrary>,
+    sheet: Res<CcSheetLayout>,
+    assets: Res<AssetServer>,
 ) {
     let Ok(grid_e) = grid.get_single() else {
         *last = None;
@@ -1852,22 +2086,14 @@ fn sync_grid(
     // 132 celdas: de ahi el titileo, y el pico de trabajo que dejaba al juego al
     // borde de que Android lo matara. Lo que cambia al elegir es un BORDE, y eso
     // lo pinta `marcar_seleccion` sin tocar la jerarquia.
-    let key = (layer, None);
+    let key = (layer, index_of(&look, layer));
     if *last == Some(key) {
         return;
     }
     *last = Some(key);
-    let s = (touch.height.max(240.0) / 720.0).clamp(0.45, 1.15);
-    fill_grid(&mut commands, grid_e, &cg, &look, layer, touch.width, s);
-    for (tab, mut border, mut bg) in &mut tabs {
-        let active = tab.0 == layer;
-        *border = BorderColor(if active { NEON_CYAN } else { CARD_EDGE });
-        *bg = BackgroundColor(if active {
-            Color::srgb(0.10, 0.22, 0.30)
-        } else {
-            Color::srgb(0.08, 0.10, 0.16)
-        });
-    }
+    let k = crate::ui_pack::k(&touch);
+    fill_grid(&mut commands, &art, &cg, &look, layer, &sheet.0, &assets, grid_e, k);
+    let _ = &mut tabs;
 }
 
 /// El layout de atlas de las hojas del pack. Lo arma `spawn_screen` y lo reusa

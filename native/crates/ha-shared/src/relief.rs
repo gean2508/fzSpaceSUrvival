@@ -157,6 +157,62 @@ pub fn relief_field(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     cached_cell(body, tx, tz).0
 }
 
+/// Peso conjunto de las dos octavas GRANDES en [`terrain_noise`] (continental y
+/// regional). Sirve para renormalizar cuando se descartan las dos finas: sin
+/// esto el campo suave quedaría centrado en 0,40 en vez de en 0,50 y toda la
+/// cordillera bajaría dos escalones.
+const PESO_DE_LAS_GRANDES: f32 = 0.55 + 0.25;
+
+/// **LA ALTURA A ESCALA DE CORDILLERA** — el campo sin el temblor de las lomas.
+///
+/// # Para qué hace falta un segundo campo
+///
+/// El campo de altura lleva encima la octava de lomas de 34 m
+/// ([`terrain_noise`]), que es la que hace que caminar por una terraza no sea
+/// caminar por una alfombra. Perfecta para la geometría, **veneno para una línea
+/// de nieve**: la frontera de cualquier umbral sobre un campo así no es una curva
+/// de nivel, es una greca fractal, y donde el campo pasa cerca del umbral en una
+/// zona ancha —la cresta de la cordillera— la greca **llena la zona**.
+///
+/// Medido en el sitio que retrata `relieve-0-pared.png` (1763,-5087): la pantalla
+/// salía **73 % nieve y 27 % montaña entreveradas**, con el **34 % de las celdas
+/// dentro del damero de transición**. Y no era el ancho de la franja —medida al
+/// cruzarla da 1 tile de mediana y el 95 % por debajo de 8, que es justo lo que
+/// pide `AJEDREZ_EN_PASOS`—: era que la frontera pasa por todas partes. En
+/// pantalla eso es confeti blanco y verde de borde a borde.
+///
+/// La nieve es un fenómeno de **escala de cordillera**, no de loma: a qué altura
+/// empieza no lo deciden los montículos de treinta metros. Así que para ESA
+/// decisión —y sólo para ésa— el campo se promedia en una cruz de
+/// [`RADIO_DE_CORDILLERA`] tiles. Nueve consultas, todas contra la caché de
+/// celdas, que desde el arreglo de la caché espacial cuestan ~0,006 µs cada una.
+///
+/// **No toca la geometría**: los escalones, los acantilados y las rampas siguen
+/// saliendo del campo completo. Lo único que se decide acá es de qué está hecho
+/// el suelo, que es exactamente lo que ya hacía el difuminado.
+pub fn campo_de_cordillera(body: CelestialBody, tx: i64, tz: i64) -> f32 {
+    let seed = body_terrain_seed(body);
+    let continental = fbm(seed, tx, tz, 9_000);
+    let regional = fbm(seed ^ 0x5EA1_1000, tx, tz, 1_400);
+    let n = (continental * 0.55 + regional * 0.25) / PESO_DE_LAS_GRANDES;
+    let h = crate::world_map::platform(body, tx, tz) + (n - 0.5) * crate::world_map::RELIEF_AMPLITUDE;
+    h.clamp(0.0, 1.0)
+}
+
+/// El escalón que le tocaría a una celda **según la altura de cordillera**, y en
+/// qué parte de ese escalón está. Es el par que usa la línea de nieve
+/// (`geography::biome_calc`), con la misma escalera que el resto del mundo.
+pub fn escalon_de_cordillera(body: CelestialBody, tx: i64, tz: i64) -> (i8, f32) {
+    let h = campo_de_cordillera(body, tx, tz);
+    let sea = sea_level(body);
+    if sea > 0.0 && h < sea {
+        return (level_from_field(body, h), 0.0);
+    }
+    let top = (1.0 - sea).max(1e-3);
+    let t = ((h - sea) / top).clamp(0.0, 1.0) * LEVELS_UP as f32;
+    (level_from_field(body, h), (t - t.floor()).clamp(0.0, 1.0))
+}
+
 /// El campo SIN caché. Sólo lo llama la caché; el resto del mundo usa
 /// [`relief_field`].
 fn compute_field(body: CelestialBody, tx: i64, tz: i64) -> f32 {
@@ -178,8 +234,23 @@ fn compute_field(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     // No hay recursión: `perfil_del_cauce` sólo consulta la plataforma y las
     // lagunas, nunca el campo ni el escalón — que además se calculan dentro del
     // préstamo de `LEVEL_CACHE`.
+    //
+    // **EL RUIDO SE ATENÚA, NO SE ANULA.** El empalme era
+    // `base × (1−peso) + cota × peso`, y como `base` lleva el ruido dentro, en el
+    // eje del cauce el terreno quedaba perfectamente liso y a tres tiles volvía
+    // entero: pegaba un campo suave contra uno rugoso en el ancho del valle, y
+    // esa costura ES un escalón. Medido, hasta 0,06 de campo por tile, el triple
+    // de [`MAX_FIELD_STEP_PER_TILE`] — el propio río fabricaba los farallones que
+    // después lo cortaban en zig-zag. Ahora la plataforma se lleva a la cota y el
+    // ruido se atenúa aparte con el mismo peso suave: el fondo sigue ondulando
+    // con el terreno y lo que el río impone es su hondura RELATIVA.
     let h = match crate::rios::perfil_del_cauce(body, tx, tz) {
-        Some((cota, peso)) => base * (1.0 - peso) + cota * peso,
+        Some((cota, peso)) => {
+            let ondula = (n - 0.5)
+                * crate::world_map::RELIEF_AMPLITUDE
+                * (1.0 - peso * (1.0 - crate::rios::RUIDO_EN_EL_CAUCE));
+            platform * (1.0 - peso) + cota * peso + ondula
+        }
         None => base,
     };
     h.clamp(0.0, 1.0)
@@ -409,6 +480,28 @@ pub fn altura_de_terraza(nivel: i8) -> i32 {
 /// no la respuesta: si abajo no hay sitio, la cara se dibuja más baja y la
 /// diferencia la sigue contando la terraza siguiente, que está a un paso.
 pub fn alto_de_pared(body: CelestialBody, tx: i64, tz: i64) -> i64 {
+    // Memorizada: hasta once celdas seguidas hacia el sur preguntan por ESTE
+    // canto (ver [`PARED_CACHE`]), y el cliente recorre cada chunk varias veces.
+    let b = body as u8;
+    let epoca = crate::partida::epoca();
+    let slot = slot_espacial(tx, tz);
+    if let Some(v) = PARED_CACHE.with(|c| {
+        let c = c.borrow();
+        let e = &c[slot];
+        (e.filled && e.body == b && e.tx == tx && e.tz == tz && e.epoca == epoca)
+            .then_some(e.alto as i64)
+    }) {
+        return v;
+    }
+    let alto = alto_de_pared_sin_memo(body, tx, tz);
+    PARED_CACHE.with(|c| {
+        c.borrow_mut()[slot] =
+            ParedSlot { tx, tz, body: b, alto: alto as i16, filled: true, epoca };
+    });
+    alto
+}
+
+fn alto_de_pared_sin_memo(body: CelestialBody, tx: i64, tz: i64) -> i64 {
     let l = relief_level(body, tx, tz);
     if l <= 0 {
         return 0;
@@ -775,6 +868,41 @@ fn es_canto(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
             }
         }
     }
+    // **Y NINGUNA PARED SOBRE UN RÍO.** Es la hermana de "ninguna montaña dentro
+    // del agua", y faltaba: los dos retiros de arriba preguntan por `nivel < 0`,
+    // o sea mar y lagos, y un río corre en nivel ≥ 0. Medido antes de tocarlo
+    // (`medir_rios::el_cauce_no_lo_corta_un_acantilado`, ventana de sierra):
+    // **el 21,75 % de las celdas de cauce eran roca** — el río cortado en seco
+    // por farallones en zig-zag de la captura del 16 ago 2026. Y no queda ahí:
+    // `relief_tile` gana sobre el bioma (`geography::natural_tile`), así que esa
+    // roca además SECA hasta tres filas más de cauce
+    // (`bajo_el_dibujo_de_una_pared`) — las orlas marrones alrededor del agua.
+    //
+    // **La excepción es la GARGANTA**: donde el cauce CRUZA el escalón —río
+    // arriba y río abajo de esta celda— el agua tiene que pasar, el salto es
+    // correcto y el recorte del pack ya trae su propia roca a los dos lados.
+    // Sacar también ésas dejaría el mundo sin cascadas.
+    //
+    // Se pregunta con `hay_rio`, que mira el CAUCE y no el tile pintado: sólo
+    // consulta el nivel y el trazado (`rios::cauce_en`), nunca `relief_cell`, así
+    // que no hay recursión. Es la misma llamada que ya hace `garganta_exenta`.
+    //
+    // Y "cruzar" son TRES cosas, no dos: agua arriba, agua abajo **y que el
+    // terreno baje ahí**. Con sólo las dos primeras, un río que corre de norte a
+    // sur por un llano cumple siempre —cada celda del cauce tiene agua a los dos
+    // lados— y la excepción se tragaba el retiro entero: medido, el cauce seguía
+    // cortado en el 7,4 % de la sierra. Un salto sin desnivel no es un salto.
+    let cruza = s < l
+        && crate::geography::hay_rio(body, tx, tz - 1)
+        && crate::geography::hay_rio(body, tx, tz + 1);
+    if !cruza {
+        let filas = if s < l { alto_entre(l, s) + 1 } else { 0 };
+        for k in 0..=filas {
+            if crate::geography::hay_rio(body, tx, tz + k) {
+                return false;
+            }
+        }
+    }
     true
 }
 
@@ -841,10 +969,30 @@ fn es_paso(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
 /// aunque le caiga roca de otro más alto; sólo si no es canto se pregunta si
 /// está debajo del dibujo de una pared ajena.
 pub fn relief_cell(body: CelestialBody, tx: i64, tz: i64) -> ReliefCell {
+    // Descarte antes de la memoria: en el llano y bajo el agua la respuesta sale
+    // de la caché de niveles y no vale la pena ocupar una ranura con ella.
     let (h, l) = cached_cell(body, tx, tz);
     if l <= 0 {
         return ReliefCell::Flat;
     }
+    let b = body as u8;
+    let epoca = crate::partida::epoca();
+    let slot = slot_espacial(tx, tz);
+    if let Some(v) = CELL_CACHE.with(|c| {
+        let c = c.borrow();
+        let e = &c[slot];
+        (e.filled && e.body == b && e.tx == tx && e.tz == tz && e.epoca == epoca).then_some(e.cell)
+    }) {
+        return v;
+    }
+    let cell = relief_cell_sin_memo(body, tx, tz, h, l);
+    CELL_CACHE.with(|c| {
+        c.borrow_mut()[slot] = CellSlot { tx, tz, body: b, cell, filled: true, epoca };
+    });
+    cell
+}
+
+fn relief_cell_sin_memo(body: CelestialBody, tx: i64, tz: i64, h: f32, l: i8) -> ReliefCell {
     // Descarte barato: en el medio de una terraza no puede haber ningún canto.
     // Ojo — descarta el CANTO, no el pie: una celda bien plantada en su terraza
     // puede estar igual debajo del farallón de la terraza de arriba.
@@ -907,11 +1055,31 @@ const MESETA_RADIO: i64 = 48;
 ///
 /// Es determinista y sin estado: el ancla es la celda menor de la meseta, que no
 /// depende de por dónde se empezó a rellenar.
+///
+/// # El "visto" es un mapa de bits, no un `Vec::contains`
+///
+/// Era `celdas.contains(&(nx, nz))` dentro del bucle de vecinos: con 96 celdas y
+/// cuatro vecinos cada una, **hasta 18.000 comparaciones por celda del mundo** —
+/// y esto se pregunta por cada celda que iba a ser pared, o sea toda la ladera de
+/// una montaña. Medido, era la mitad de los 8-10 µs que costaba `relief_cell`.
+/// La ventana está acotada por [`MESETA_RADIO`], así que "ya lo vi" cabe en un
+/// mapa de bits de 97×97 en la pila y la pregunta pasa a ser un desplazamiento.
 fn paso_de_meseta_chica(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
+    const LADO: i64 = MESETA_RADIO * 2 + 1;
+    const PALABRAS: usize = ((LADO * LADO) as usize).div_ceil(64);
+    let mut visto = [0u64; PALABRAS];
+    let mut marcar = |visto: &mut [u64; PALABRAS], x: i64, z: i64| -> bool {
+        let i = ((z - tz + MESETA_RADIO) * LADO + (x - tx + MESETA_RADIO)) as usize;
+        let (w, b) = (i / 64, 1u64 << (i % 64));
+        let ya = visto[w] & b != 0;
+        visto[w] |= b;
+        ya
+    };
     // Relleno acotado de la meseta: celdas del MISMO nivel, 4-conexas.
     let mut celdas: Vec<(i64, i64)> = Vec::with_capacity(MESETA_CHICA + 1);
     let mut pila = vec![(tx, tz)];
     celdas.push((tx, tz));
+    marcar(&mut visto, tx, tz);
     while let Some((x, z)) = pila.pop() {
         for (dx, dz) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)] {
             let (nx, nz) = (x + dx, z + dz);
@@ -919,7 +1087,7 @@ fn paso_de_meseta_chica(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
                 // Tan lejos que ya no es una loma: no hace falta terminar.
                 return false;
             }
-            if relief_level(body, nx, nz) != l || celdas.contains(&(nx, nz)) {
+            if relief_level(body, nx, nz) != l || marcar(&mut visto, nx, nz) {
                 continue;
             }
             if celdas.len() >= MESETA_CHICA {
@@ -1111,10 +1279,43 @@ pub fn is_liquid(body: CelestialBody, tx: i64, tz: i64) -> bool {
 // La caché por celda no tiene ese pozo: un acceso disperso cuesta exactamente una
 // evaluación, ni una más.
 //
-// Directa, 1024 entradas, `thread_local` (sin candados, sin cambiar el API). El
-// esténcil de 5 puntos de un chunk necesita ~3 filas vivas: entra de sobra.
+// # Y EL ÍNDICE ES LA POSICIÓN, NO UN HASH — 1.024 RANURAS NO ERAN NINGUNA
+//
+// Ésta era la línea: `hash2(...) % 1024`. El comentario de arriba dice "el
+// esténcil de 5 puntos necesita ~3 filas vivas", y para `relief_level` suelto es
+// verdad. Pero **`relief_cell` no es un esténcil de 5 puntos**: por dentro llama
+// a `pie_de_pared` (11 filas al norte), y cada fila de ésas a `alto_de_pared`
+// (hasta 10 al norte por `meseta_detras` + 23 al sur por `hueco_al_sur`). Son
+// del orden de **300 consultas de nivel por celda**, repartidas por una ventana
+// de 32×80 tiles — 2.560 celdas distintas contra 1.024 ranuras, y encima
+// mapeadas por hash, o sea chocándose entre ellas.
+//
+// Medido (`coste_del_relieve::reparto_del_coste`, release): `relief_level`
+// cacheado costaba 0,6 µs y `relief_cell` **8 a 10 µs**, o sea quince campos de
+// altura recalculados por celda. En un chunk de 32×32 eso son **11 a 26 ms**,
+// más que un fotograma entero de los 16 ms del Redmi — por eso el mundo llegaba
+// a medio armar y la captura de la cumbre salía vacía: el chunk nunca terminaba.
+//
+// El arreglo no es "más ranuras": es **dejar de hashear**. El índice son los bits
+// bajos de la posición, así que cualquier ventana de [`CACHE_LADO`]×[`CACHE_LADO`]
+// entra ENTERA sin un solo choque, se recorra en el orden que se recorra. 128 de
+// lado cubre de sobra la ventana que toca `relief_cell` (32×80) y un chunk con su
+// margen; y sigue siendo una tabla directa, así que un acceso disperso sigue
+// costando exactamente una evaluación.
+//
+// El coste en memoria es de ~400 KB por tabla y por hilo — el precio de que la
+// montaña se dibuje.
 
-const CACHE_SLOTS: usize = 1024;
+/// Lado, en tiles, de la ventana que la caché mapea sin choques.
+const CACHE_LADO: i64 = 128;
+const CACHE_SLOTS: usize = (CACHE_LADO * CACHE_LADO) as usize;
+
+/// La ranura de una celda: su posición módulo [`CACHE_LADO`]. Sin hash — es lo
+/// que hace que un recorrido por filas no se pise a sí mismo.
+#[inline]
+fn slot_espacial(tx: i64, tz: i64) -> usize {
+    (tz.rem_euclid(CACHE_LADO) * CACHE_LADO + tx.rem_euclid(CACHE_LADO)) as usize
+}
 
 #[derive(Clone, Copy)]
 struct LevelSlot {
@@ -1137,8 +1338,8 @@ struct LevelSlot {
 }
 
 thread_local! {
-    static LEVEL_CACHE: RefCell<[LevelSlot; CACHE_SLOTS]> = RefCell::new(
-        [LevelSlot { tx: 0, tz: 0, body: 0, field: 0.0, level: 0, filled: false, epoca: 0 }; CACHE_SLOTS],
+    static LEVEL_CACHE: RefCell<Vec<LevelSlot>> = RefCell::new(
+        vec![LevelSlot { tx: i64::MIN, tz: i64::MIN, body: 0, field: 0.0, level: 0, filled: false, epoca: 0 }; CACHE_SLOTS],
     );
 }
 
@@ -1146,7 +1347,7 @@ thread_local! {
 fn cached_cell(body: CelestialBody, tx: i64, tz: i64) -> (f32, i8) {
     let b = body as u8;
     let epoca = crate::partida::epoca();
-    let slot = (hash2(0x5b10_c000, tx, tz) as usize) % CACHE_SLOTS;
+    let slot = slot_espacial(tx, tz);
     LEVEL_CACHE.with(|c| {
         let mut c = c.borrow_mut();
         let e = &mut c[slot];
@@ -1162,6 +1363,48 @@ fn cached_cell(body: CelestialBody, tx: i64, tz: i64) -> (f32, i8) {
 
 fn cached_level(body: CelestialBody, tx: i64, tz: i64) -> i8 {
     cached_cell(body, tx, tz).1
+}
+
+// ---------------------------------------------------------------------------
+// Caché del ALTO DE PARED y de la CLASIFICACIÓN
+// ---------------------------------------------------------------------------
+//
+// La caché de niveles arregla el fondo del pozo, pero no la redundancia de
+// arriba: `relief_cell(x, z)` pregunta por el canto que tiene al norte, y
+// `relief_cell(x, z+1)` pregunta por EL MISMO canto — hasta once celdas seguidas
+// repiten `alto_de_pared` y `es_paso` sobre la misma fila. Y el cliente recorre
+// cada chunk varias veces (malla, decoración, orilla, sombra, cascadas, cordón):
+// otra vez lo mismo, entero.
+//
+// Las dos memorias son puras: dependen sólo de `(cuerpo, celda, época)`.
+
+#[derive(Clone, Copy)]
+struct ParedSlot {
+    tx: i64,
+    tz: i64,
+    body: u8,
+    alto: i16,
+    filled: bool,
+    epoca: u32,
+}
+
+#[derive(Clone, Copy)]
+struct CellSlot {
+    tx: i64,
+    tz: i64,
+    body: u8,
+    cell: ReliefCell,
+    filled: bool,
+    epoca: u32,
+}
+
+thread_local! {
+    static PARED_CACHE: RefCell<Vec<ParedSlot>> = RefCell::new(
+        vec![ParedSlot { tx: i64::MIN, tz: i64::MIN, body: 0, alto: 0, filled: false, epoca: 0 }; CACHE_SLOTS],
+    );
+    static CELL_CACHE: RefCell<Vec<CellSlot>> = RefCell::new(
+        vec![CellSlot { tx: i64::MIN, tz: i64::MIN, body: 0, cell: ReliefCell::Flat, filled: false, epoca: 0 }; CACHE_SLOTS],
+    );
 }
 
 /// Cota superior de cuánto puede cambiar el campo de altura entre dos celdas

@@ -323,6 +323,71 @@ const ALCANCE_EJE: i64 = 12;
 /// se conduce; el callejón de dos queda sin pintar, como en la vida.
 pub const ANCHO_MINIMO_LINEA: i64 = 3;
 
+// ---------------------------------------------------------------------------
+// Las marcas de calzada que ocupan un RECTÁNGULO: la bahía de bus y el cajón
+// ---------------------------------------------------------------------------
+
+/// **Cuánto mide cada marca de calzada, en tiles `(x, z)`.**
+///
+/// No se eligen: las MIDE `scripts/import-marcas-calzada.py` sobre la hoja del
+/// pack (busca el marco amarillo de la bahía y las líneas blancas del cajón) y se
+/// planta si lo que encuentra no coincide con lo que dice acá. O sea que estos
+/// cuatro números son el pack, no una preferencia — si el pack cambia, el
+/// importador avisa en vez de dibujar media bahía.
+///
+/// Hay dos de cada una porque el pack las dibujó para las dos orientaciones: la
+/// bahía de una calle norte-sur es angosta y larga, la de una este-oeste es al
+/// revés. No es la misma rotada — el texto `BUS` se lee en cada una.
+pub const BAHIA_NS: (i64, i64) = (3, 6);
+/// Ver [`BAHIA_NS`].
+pub const BAHIA_EW: (i64, i64) = (7, 3);
+/// Ver [`BAHIA_NS`]. El cajón de estacionamiento en batería.
+pub const CAJON_NS: (i64, i64) = (3, 5);
+/// Ver [`BAHIA_NS`].
+pub const CAJON_EW: (i64, i64) = (5, 3);
+
+/// Cada cuántos tiles a lo largo de una calle se ancla una marca. Es el paso de
+/// la retícula sobre la que se sortean: grande a propósito, porque una avenida
+/// con una bahía de bus cada veinte metros no es una avenida.
+const PASO_MARCA: i64 = 24;
+
+/// De cada cien anclajes, cuántos llevan marca. El resto de la calle queda limpia
+/// — que la pintura sea escasa es lo que hace que signifique algo.
+const PROB_MARCA: u32 = 55;
+
+/// De los anclajes con marca, cuántos son bahía de bus (el resto, cajones). Se
+/// estaciona en muchos más sitios de los que para el colectivo.
+const PROB_BAHIA: u32 = 30;
+
+/// Qué se pintó en este rectángulo de calzada. Ver [`Pintura::Marca`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Marca {
+    /// La bahía donde el colectivo se sale del carril para parar.
+    BahiaBus,
+    /// El cajón de estacionamiento, con su `P`.
+    Cajon,
+}
+
+impl Marca {
+    /// Cuánto mide en tiles `(x, z)` según por dónde corra la calle.
+    pub fn medida(self, calle_ns: bool) -> (i64, i64) {
+        match (self, calle_ns) {
+            (Marca::BahiaBus, true) => BAHIA_NS,
+            (Marca::BahiaBus, false) => BAHIA_EW,
+            (Marca::Cajon, true) => CAJON_NS,
+            (Marca::Cajon, false) => CAJON_EW,
+        }
+    }
+
+    /// El slot de arte. Lo escribe `scripts/import-marcas-calzada.py`.
+    pub fn slot(self) -> &'static str {
+        match self {
+            Marca::BahiaBus => "road/bahia_bus",
+            Marca::Cajon => "road/cajon",
+        }
+    }
+}
+
 /// Cuántas celdas de calzada hay seguidas en una dirección, hasta [`ALCANCE_EJE`].
 fn calzada_seguida(calzada: &impl Fn(i64, i64) -> bool, tx: i64, tz: i64, dx: i64, dz: i64) -> i64 {
     (1..=ALCANCE_EJE).take_while(|i| calzada(tx + dx * i, tz + dz * i)).count() as i64
@@ -470,6 +535,23 @@ pub enum Pintura {
     /// dibujan paralelas a ese tránsito. Es la orientación de la CALLE, no la del
     /// peatón: es lo que decide cómo van las barras.
     Senda { calle_ns: bool },
+    /// **Una marca de RECTÁNGULO** — la bahía de bus o el cajón de
+    /// estacionamiento — y qué celda de ella es ésta.
+    ///
+    /// A diferencia de la línea y la senda, que son una losa que se repite, esto
+    /// es un dibujo grande repartido en celdas: `(i, j)` es la casilla dentro del
+    /// rectángulo y sale directo del recorte del pack (la pose `ns_2_4` es la
+    /// columna 2, fila 4 de la bahía). `voltear_x` / `voltear_z` son para el
+    /// cordón de enfrente: la misma bahía espejada, sin pedirle al pack que la
+    /// dibuje dos veces.
+    Marca {
+        clase: Marca,
+        calle_ns: bool,
+        i: u8,
+        j: u8,
+        voltear_x: bool,
+        voltear_z: bool,
+    },
 }
 
 /// La pintura de una celda suelta. Para dibujar un chunk se usa
@@ -494,7 +576,155 @@ fn pintura_con(calzada: &impl Fn(i64, i64) -> bool, tx: i64, tz: i64) -> Option<
     if es_cruce_con(calzada, tx - 1, tz) || es_cruce_con(calzada, tx + 1, tz) {
         return Some(Pintura::Senda { calle_ns: false });
     }
+    if let Some(m) = marca_rect_con(calzada, tx, tz) {
+        return Some(m);
+    }
     marca_con(calzada, tx, tz).map(Pintura::Linea)
+}
+
+/// **¿Esta celda cae dentro de una bahía de bus o de un cajón de estacionamiento?**
+///
+/// Todo sale de medir la calzada, igual que el eje y el cruce — no de la retícula
+/// de la ciudad. Así funciona igual en el damero de un centro y en una ruta que
+/// entra a un pueblo, que son geometrías que no comparten una línea de código.
+///
+/// 1. **Por dónde corre la calle** y **dónde está el cordón**: cuánta calzada
+///    seguida hay a los cuatro lados. La calle va por donde hay más; el cordón
+///    está del lado donde se acaba.
+/// 2. **Si entra**: la marca se pega al cordón y tiene que dejar libre al menos
+///    una calzada de ancho mínimo, o el auto que pasa no pasa. Con eso, las
+///    bahías y los cajones salen solos en las avenidas y no en las calles de
+///    manzana, que es donde van.
+/// 3. **Dónde**: un anclaje cada [`PASO_MARCA`] tiles a lo largo de la calle,
+///    sorteado por su posición. La misma celda elige siempre lo mismo, así que no
+///    hay que guardar nada por instancia.
+/// 4. **Y que el rectángulo entre entero**: si la calzada se termina antes (viene
+///    el cruce), no se pinta nada. Media bahía cortada por una senda es peor que
+///    ninguna.
+///
+/// ## Todo se decide en el ANCLA, no en la celda
+///
+/// Es la parte que hay que entender para no volver a romperlo. La primera versión
+/// medía el ancho de la calzada, y si el rectángulo entraba, **en cada celda por
+/// separado** — y esas medidas NO son iguales para todas las celdas de un mismo
+/// rectángulo: `calzada_seguida` se topa con [`ALCANCE_EJE`], y cerca de una
+/// esquina la calzada "sigue" hacia la calle que cruza, así que la celda de más
+/// adentro mide una calzada mucho más ancha que la pegada al cordón. Resultado:
+/// unas celdas del rectángulo se pintaban y otras no. Lo cazó
+/// `las_marcas_de_calzada_van_sobre_el_asfalto_y_salen_enteras` con un cajón que
+/// salía con 5 de sus 15 casillas.
+///
+/// Ahora la celda sólo hace dos cosas: ubicar su ANCLA —el rincón del rectángulo
+/// contra el cordón— y preguntarle a ella. Todo lo demás (el sorteo, el ancho de
+/// la calzada, si el tramo es lo bastante largo) se mide **una vez, ahí**. Dos
+/// celdas del mismo rectángulo comparten ancla, así que no pueden discrepar.
+fn marca_rect_con(
+    calzada: &impl Fn(i64, i64) -> bool,
+    tx: i64,
+    tz: i64,
+) -> Option<Pintura> {
+    let (w, e) = (
+        calzada_seguida(calzada, tx, tz, -1, 0),
+        calzada_seguida(calzada, tx, tz, 1, 0),
+    );
+    let (n, s) = (
+        calzada_seguida(calzada, tx, tz, 0, -1),
+        calzada_seguida(calzada, tx, tz, 0, 1),
+    );
+    // La calle corre por donde la calzada sigue de largo.
+    let calle_ns = n + s > w + e;
+    // Hacia dónde queda el cordón más cerca, y a cuántos tiles. `paso` es hacia
+    // dónde crece el rectángulo desde él.
+    let (hasta_cordon, paso) = if calle_ns {
+        if w <= e { (w, 1) } else { (e, -1) }
+    } else if n <= s {
+        (n, 1)
+    } else {
+        (s, -1)
+    };
+    let coord_larga = if calle_ns { tz } else { tx };
+    let ancla = coord_larga - coord_larga.rem_euclid(PASO_MARCA);
+    let a_lo_largo = coord_larga - ancla;
+    // El rincón del rectángulo: contra el cordón y en el anclaje.
+    let (ax, az) = if calle_ns {
+        (tx - paso * hasta_cordon, ancla)
+    } else {
+        (ancla, tz - paso * hasta_cordon)
+    };
+    if !calzada(ax, az) {
+        return None;
+    }
+    let h = hash2(0x6d15_c0de, ax, az);
+    if h % 100 >= PROB_MARCA {
+        return None;
+    }
+    let clase = if (h >> 8) % 100 < PROB_BAHIA { Marca::BahiaBus } else { Marca::Cajon };
+    let (mw, mh) = clase.medida(calle_ns);
+    let (across, along) = if calle_ns { (mw, mh) } else { (mh, mw) };
+    if hasta_cordon >= across || a_lo_largo >= along {
+        return None;
+    }
+    // ── Y de acá para abajo, medido EN EL ANCLA ──────────────────────────────
+    let (aw, ae) = (
+        calzada_seguida(calzada, ax, az, -1, 0),
+        calzada_seguida(calzada, ax, az, 1, 0),
+    );
+    let (an, as_) = (
+        calzada_seguida(calzada, ax, az, 0, -1),
+        calzada_seguida(calzada, ax, az, 0, 1),
+    );
+    // El ancla tiene que SER el cordón y la calle tiene que correr para el mismo
+    // lado que dijo la celda. Si no, esta celda está mirando otra calle (pasa en
+    // las esquinas) y no le corresponde marca.
+    if (an + as_ > aw + ae) != calle_ns {
+        return None;
+    }
+    let (hacia_afuera, ancho) = if calle_ns {
+        (if paso > 0 { aw } else { ae }, aw + ae + 1)
+    } else {
+        (if paso > 0 { an } else { as_ }, an + as_ + 1)
+    };
+    if hacia_afuera != 0 {
+        return None;
+    }
+    // Tiene que quedar calle: la marca no puede comerse la calzada hasta dejarla
+    // más angosta que lo mínimo por lo que se conduce. Con esto, las bahías y los
+    // cajones salen en las avenidas y no en las calles de manzana.
+    if ancho - across < ANCHO_MINIMO_LINEA {
+        return None;
+    }
+    // Y el rectángulo tiene que entrar entero en el tramo recto de calzada.
+    let largo_adelante = if calle_ns { as_ } else { ae };
+    if largo_adelante < along - 1 {
+        return None;
+    }
+    // **Y sin tocar el cruce ni su senda.** Que la calzada "siga" no alcanza: si
+    // sigue es porque adelante está la esquina, y ahí la calzada se abre para los
+    // cuatro lados. Las celdas del rectángulo que caen sobre el cruce, o pegadas a
+    // él, ya se resolvieron antes como senda peatonal, así que la bahía salía con
+    // un agujero — se vio con una de 18 casillas que dibujaba 3 y se comía el
+    // resto contra la esquina de la manzana siguiente. Se mira el tramo entero
+    // **más una celda a cada punta**, que es el alcance de la senda.
+    let (dx, dz) = if calle_ns { (0, 1) } else { (1, 0) };
+    for k in -1..=along {
+        if es_cruce_con(calzada, ax + dx * k, az + dz * k) {
+            return None;
+        }
+    }
+    let (i, j) = if calle_ns {
+        (hasta_cordon, a_lo_largo)
+    } else {
+        (a_lo_largo, hasta_cordon)
+    };
+    // `paso < 0` es el cordón de enfrente: la misma marca, espejada.
+    Some(Pintura::Marca {
+        clase,
+        calle_ns,
+        i: i as u8,
+        j: j as u8,
+        voltear_x: calle_ns && paso < 0,
+        voltear_z: !calle_ns && paso < 0,
+    })
 }
 
 /// Devuelve `w * h` entradas en orden por filas (`z` externo, `x` interno).
@@ -1122,6 +1352,82 @@ mod tests {
         }
     }
 
+    /// **La bahía de bus y el cajón se pintan sobre la CALZADA, y enteros.**
+    ///
+    /// Era el pedido literal: "el arte está en el pack sin importar y necesitan
+    /// pintarse sobre la calzada, no sobre la vereda". Así que se afirman las dos
+    /// cosas sobre una ciudad de verdad:
+    ///
+    /// 1. **Cada celda marcada es calzada.** Si una sola cayera en la vereda, la
+    ///    `P` quedaría pintada sobre la baldosa.
+    /// 2. **Cada rectángulo aparece ENTERO.** Se junta cada marca por su esquina y
+    ///    se comprueba que estén sus `w × h` casillas, sin repetir ninguna. Media
+    ///    bahía cortada por una senda es peor que ninguna, y es exactamente lo que
+    ///    pasa si el sorteo no da lo mismo en todas las celdas del rectángulo.
+    #[test]
+    fn las_marcas_de_calzada_van_sobre_el_asfalto_y_salen_enteras() {
+        use std::collections::HashMap;
+        let body = CelestialBody::Earth;
+        let s = (-25..25)
+            .flat_map(|sx| (-25..25).map(move |sz| (sx, sz)))
+            .filter_map(|(sx, sz)| crate::geography::settlement_in(body, sx, sz))
+            .find(|s| s.tier == crate::geography::SettlementTier::City)
+            .expect("hay al menos una ciudad");
+        let (cx, cz) = s.center;
+        // `(esquina, clase, ns) -> casillas vistas`. La esquina se reconstruye
+        // restándole a la celda su posición dentro del rectángulo, así que todas
+        // las celdas de una misma marca caen en la misma entrada.
+        let mut vistas: HashMap<((i64, i64), Marca, bool), Vec<(u8, u8)>> = HashMap::new();
+        let r = 90;
+        for dz in -r..r {
+            for dx in -r..r {
+                let (tx, tz) = (cx + dx, cz + dz);
+                let Some(Pintura::Marca {
+                    clase,
+                    calle_ns,
+                    i,
+                    j,
+                    voltear_x,
+                    voltear_z,
+                }) = pintura_at(body, tx, tz)
+                else {
+                    continue;
+                };
+                assert!(
+                    es_calzada(body, tx, tz),
+                    "hay {clase:?} pintada fuera de la calzada en ({tx}, {tz})"
+                );
+                // La marca del cordón de ENFRENTE crece para el otro lado, así que
+                // su rincón se reconstruye sumando en vez de restando. Sin esto el
+                // test parte cada marca espejada en dieciocho marcas de una casilla.
+                let (px, pz) = (if voltear_x { -1 } else { 1 }, if voltear_z { -1 } else { 1 });
+                let esquina = (tx - px * i as i64, tz - pz * j as i64);
+                vistas.entry((esquina, clase, calle_ns)).or_default().push((i, j));
+            }
+        }
+        assert!(
+            !vistas.is_empty(),
+            "una ciudad entera y ni una bahía de bus ni un cajón de estacionamiento"
+        );
+        for ((esquina, clase, calle_ns), mut casillas) in vistas {
+            let (w, h) = clase.medida(calle_ns);
+            casillas.sort_unstable();
+            casillas.dedup();
+            // Las marcas del borde del barrido salen recortadas por el propio
+            // barrido, no por el algoritmo: sólo se exigen las de adentro.
+            if (esquina.0 - cx).abs() > r - w || (esquina.1 - cz).abs() > r - h {
+                continue;
+            }
+            assert_eq!(
+                casillas.len() as i64,
+                w * h,
+                "la {clase:?} de {esquina:?} salió a medias: {} de {} casillas",
+                casillas.len(),
+                w * h
+            );
+        }
+    }
+
     #[test]
     fn la_linea_no_sale_doble() {
         let body = CelestialBody::Earth;
@@ -1143,3 +1449,4 @@ mod tests {
         }
     }
 }
+

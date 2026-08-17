@@ -25,6 +25,19 @@ const TILE_REACH: f32 = AIM_MAX_REACH;
 /// árbol tiene que agarrar el árbol, y la copa está dos metros por encima de su
 /// centro.
 const POINT_PICK_RADIUS: f32 = 1.35;
+/// **Margen de perdón del dedo** (m). La cuenta, no el ojo: a pie la cámara
+/// encuadra 30 m de alto (`universe::view_h_for_alt`) sobre los ~1080 px del lado
+/// corto del Redmi, o sea **36 px por metro**, y un tile es 1 m (`TILE_M`). La
+/// yema apoya un óvalo de 7-10 mm ≈ 40-60 px: **el dedo es más grande que el
+/// banco de la vereda**, y el punto que reporta Android es su centroide, que cae
+/// medio tile de donde el jugador cree que apretó. Por eso apuntar a un prop
+/// fallaba más veces de las que acertaba. 0,55 m ≈ 20 px ≈ medio dedo.
+///
+/// No es un imán: sólo se usa en una SEGUNDA pasada, cuando el dedo no cayó
+/// dentro de ningún rectángulo. Si tocaste un árbol de los tres que están juntos,
+/// ese árbol gana por rectángulo y el margen no llega ni a mirarse — que es
+/// exactamente lo que hay que conservar: el dedo elige, no el algoritmo.
+const PICK_FORGIVENESS: f32 = 0.55;
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct InteractTarget {
@@ -68,7 +81,26 @@ impl Plugin for TargetingPlugin {
 /// launch modules etc. have their own lifecycle and are NOT removed this way.
 pub fn is_removable_decor(kind: InteractTargetKind) -> bool {
     use InteractTargetKind::*;
-    matches!(kind, Tree | Rock | OreIron | OreGold | GemBlue | GemRed)
+    // `Prop` entra acá porque un banco levantado tiene que quedarse levantado:
+    // sin `flora_cell` el chunk lo vuelve a sembrar en cuanto te alejás.
+    matches!(kind, Tree | Rock | OreIron | OreGold | GemBlue | GemRed | Prop)
+}
+
+/// **Los props se dan de baja en su propio casillero.** El set de removidos es
+/// `body → (cx, cz) → ids`, y todo el decor vivía en la clave `(0,0)` con el `id`
+/// = hash de la celda. Un prop y una veta pueden caer en la MISMA celda —el
+/// depósito no mira si hay una mata encima—, así que compartían id: levantar el
+/// arbusto se llevaba puesta la veta de hierro que había debajo. `(1,0)` no es
+/// una celda, es un espacio de nombres.
+pub const PROP_REMOVED_KEY: (i32, i32) = (1, 0);
+
+/// La clave con la que se anota (y se consulta) la baja de un objetivo removible.
+pub fn removed_key(kind: InteractTargetKind) -> (i32, i32) {
+    if kind == InteractTargetKind::Prop {
+        PROP_REMOVED_KEY
+    } else {
+        (0, 0)
+    }
 }
 
 /// **Cavar el suelo es picar, con lo que tengas.** Vale cualquier cosa que ya
@@ -83,6 +115,37 @@ pub fn is_removable_decor(kind: InteractTargetKind) -> bool {
 fn can_dig_down(item_id: &str) -> bool {
     resolve_interaction(Some(item_id), InteractTargetKind::Block)
         .is_some_and(|r| r.duration_ms > 0)
+}
+
+/// **Cuánto acertó el dedo a este sprite.** `Some(0)` = cayó DENTRO del
+/// rectángulo (o del radio, si el sprite no declara tamaño); `Some(1)` = entró
+/// por el margen de [`PICK_FORGIVENESS`]; `None` = ni cerca.
+///
+/// El grado es lo que mantiene juntas las dos cosas que el usuario pidió: que el
+/// toque siga siendo DIRECTO —de tres árboles pegados gana el que tocaste, porque
+/// su grado es 0 y el de los vecinos 1— y que igual no haya que pelear con un
+/// prop de un tile, porque cuando no acertaste a ninguno el margen sí decide.
+fn grado_de_toque(pick: Vec2, center: Vec2, size: Option<Vec2>) -> Option<u8> {
+    let (dentro, cerca) = match size {
+        Some(s) => {
+            let half = s.abs() * 0.5;
+            let dx = (pick.x - center.x).abs();
+            let dy = (pick.y - center.y).abs();
+            (
+                dx <= half.x && dy <= half.y,
+                dx <= half.x + PICK_FORGIVENESS && dy <= half.y + PICK_FORGIVENESS,
+            )
+        }
+        None => {
+            let d = center.distance(pick);
+            (d <= POINT_PICK_RADIUS, d <= POINT_PICK_RADIUS + PICK_FORGIVENESS)
+        }
+    };
+    match (dentro, cerca) {
+        (true, _) => Some(0),
+        (false, true) => Some(1),
+        _ => None,
+    }
 }
 
 pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionId) -> bool {
@@ -102,6 +165,7 @@ pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionI
                 | InteractTargetKind::Water
                 | InteractTargetKind::Block
                 | InteractTargetKind::Entity
+                | InteractTargetKind::Prop
         ),
         RegionId::Luna | RegionId::Planet(_) | RegionId::Cave(_) => matches!(
             kind,
@@ -115,6 +179,7 @@ pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionI
                 | InteractTargetKind::GemBlue
                 | InteractTargetKind::GemRed
                 | InteractTargetKind::Block
+                | InteractTargetKind::Prop
         ),
         RegionId::Space => matches!(
             kind,
@@ -166,35 +231,48 @@ fn update_look_target(
     let cursor_world = cursor.world;
     let pick = render_xy(cursor_world.x, cursor_world.y);
 
-    let mut best: Option<(Entity, InteractTargetKind, f32, Vec2, u32)> = None;
-    let mut consider = |entity: Entity, kind: InteractTargetKind, center: Vec2, id: u32, d: f32| {
-        if !target_allowed_in_region(kind, region.active) {
-            return;
-        }
-        let reach = interact_reach_for(kind).max(TILE_REACH);
-        if origin.distance(center) > reach {
-            return;
-        }
-        if best.map(|(_, _, bd, _, _)| d < bd).unwrap_or(true) {
-            best = Some((entity, kind, d, center, id));
-        }
-    };
+    // `grado`: 0 = el dedo cayó DENTRO del rectángulo, 1 = entró por el margen de
+    // perdón. Ordena antes que la distancia, así una pasada nunca le roba el
+    // objetivo a la otra.
+    let mut best: Option<(Entity, InteractTargetKind, f32, Vec2, u32, u8)> = None;
+    let mut consider =
+        |entity: Entity, kind: InteractTargetKind, center: Vec2, id: u32, d: f32, grado: u8| {
+            if !target_allowed_in_region(kind, region.active) {
+                return;
+            }
+            let reach = interact_reach_for(kind).max(TILE_REACH);
+            if origin.distance(center) > reach {
+                return;
+            }
+            let mejor = best
+                .map(|(_, _, bd, _, _, bg)| (grado, d) < (bg, bd))
+                .unwrap_or(true);
+            if mejor {
+                best = Some((entity, kind, d, center, id, grado));
+            }
+        };
 
     // Lo tocado: se pica por el RECTÁNGULO del sprite cuando declara tamaño (así
     // tocar la copa agarra el árbol y no el pasto de atrás), y por un radio
     // alrededor del centro cuando no. Entre varios candidatos gana el que tiene
     // el centro más cerca del dedo.
+    //
+    // Y si el dedo no cayó dentro de NADA, se vuelve a mirar con el margen de
+    // [`PICK_FORGIVENESS`] (grado 1). Es la diferencia entre "tocaste al lado del
+    // banco, no pasa nada" y "tocaste el banco": lo primero era el 90 % de los
+    // intentos sobre un prop de un tile.
     for (entity, gtf, target, sprite) in &targets {
         let center = gtf.translation().truncate();
         let size = sprite.and_then(|s| s.custom_size);
-        let hit = match size {
-            Some(s) => {
-                let half = s.abs() * 0.5;
-                (pick.x - center.x).abs() <= half.x && (pick.y - center.y).abs() <= half.y
-            }
-            None => center.distance(pick) <= POINT_PICK_RADIUS,
+        let Some(grado) = grado_de_toque(pick, center, size) else {
+            continue;
         };
-        if !hit {
+        // **En modo CONSTRUIR el margen no juega.** Ahí la intención es la CELDA:
+        // se está colocando una hilera y cada toque tiene que caer donde apuntó.
+        // Un prop vecino que se cuela por el margen no es una ayuda, es una
+        // pieza que no se colocó. El rectángulo exacto sí sigue valiendo — así se
+        // puede sacar del medio el arbusto que estorba sin salir del modo.
+        if grado > 0 && build_mode.active {
             continue;
         }
         // El alcance se mide al PIE del sprite, no a su centro: un árbol alto
@@ -204,14 +282,17 @@ fn update_look_target(
             Some(s) => Vec2::new(center.x, center.y - s.y.abs() * 0.5 + 0.3),
             None => center,
         };
-        consider(entity, target.kind, foot, target.id, center.distance(pick));
+        consider(entity, target.kind, foot, target.id, center.distance(pick), grado);
     }
 
-    if let Some((entity, kind, distance, hit, id)) = best {
+    if let Some((entity, kind, distance, hit, id, _)) = best {
         // Harvestable decor (trees, rocks, ore, gems) use a flat per-body removed
         // set at chunk key (0,0); `id` = packed global cell. Setting `flora_cell`
         // is what tells the HUD to REMOVE the prop from the world on harvest.
-        let flora_cell = is_removable_decor(kind).then_some((0, 0, id));
+        let flora_cell = is_removable_decor(kind).then(|| {
+            let (kx, kz) = removed_key(kind);
+            (kx, kz, id)
+        });
         *current = LookTarget {
             entity: Some(entity),
             kind: Some(kind),
@@ -310,4 +391,69 @@ fn update_look_target(
     }
 
     *current = LookTarget::default();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Un tile de arte con su centro donde lo pone el mundo.
+    fn prop(x: f32, y: f32) -> (Vec2, Option<Vec2>) {
+        (Vec2::new(x, y), Some(Vec2::splat(1.0)))
+    }
+
+    /// **El dedo elige, no el algoritmo.** Tres props pegados: el que tocaste
+    /// devuelve grado 0 y los vecinos grado 1, así que el desempate por grado lo
+    /// resuelve antes de mirar distancias. Es la garantía que pidió el usuario —
+    /// con varios árboles juntos no hay que pelear para agarrar el que querés.
+    #[test]
+    fn el_rectangulo_tocado_le_gana_al_margen_del_vecino() {
+        let (izq, s) = prop(0.0, 0.0);
+        let (medio, _) = prop(1.0, 0.0);
+        let (der, _) = prop(2.0, 0.0);
+        // Dedo justo en el prop del medio. Los dos vecinos caen DENTRO del margen
+        // (0,5 + 0,55 = 1,05 m y están a 1 m), así que sin el grado el desempate
+        // por distancia los pondría a competir con el que de verdad tocaste.
+        let dedo = Vec2::new(1.0, 0.0);
+        assert_eq!(grado_de_toque(dedo, medio, s), Some(0));
+        assert_eq!(grado_de_toque(dedo, izq, s), Some(1), "el vecino sólo entra por margen");
+        assert_eq!(grado_de_toque(dedo, der, s), Some(1), "el vecino sólo entra por margen");
+    }
+
+    /// El margen existe: tocar justo al lado de un prop de un tile lo agarra
+    /// igual, que es lo que hace que no sea una batalla en el teléfono.
+    #[test]
+    fn tocar_al_lado_de_un_prop_chico_igual_lo_agarra() {
+        let (p, s) = prop(0.0, 0.0);
+        // 0,7 m del centro: fuera del medio tile del rectángulo, dentro del margen.
+        assert_eq!(grado_de_toque(Vec2::new(0.7, 0.0), p, s), Some(1));
+    }
+
+    /// Y no es un imán: más allá del margen no hay objetivo. Sin esto el dedo
+    /// engancharía props que no se ven ni cerca del punto tocado.
+    #[test]
+    fn el_margen_tiene_final() {
+        let (p, s) = prop(0.0, 0.0);
+        let lejos = 0.5 + PICK_FORGIVENESS + 0.01;
+        assert_eq!(grado_de_toque(Vec2::new(lejos, 0.0), p, s), None);
+    }
+
+    /// Los props del mundo se sacan y se quedan sacados: sin esto el chunk los
+    /// vuelve a sembrar al re-streamear.
+    #[test]
+    fn un_prop_es_decor_removible() {
+        assert!(is_removable_decor(InteractTargetKind::Prop));
+    }
+
+    /// Un prop y una veta pueden caer en la MISMA celda, o sea con el mismo `id`.
+    /// Si compartieran casillero, levantar el arbusto se llevaría puesta la veta
+    /// de hierro que tiene debajo.
+    #[test]
+    fn el_prop_y_la_veta_no_comparten_casillero() {
+        assert_ne!(
+            removed_key(InteractTargetKind::Prop),
+            removed_key(InteractTargetKind::OreIron),
+        );
+        assert_eq!(removed_key(InteractTargetKind::Tree), (0, 0));
+    }
 }

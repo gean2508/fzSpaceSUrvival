@@ -130,7 +130,8 @@ mod tests {
     /// minutos y despues levanta solo".
     #[test]
     fn el_disco_se_cocina_mas_rapido_detras_de_la_cortina() {
-        assert!(LOADING_DISC_ROWS > DiscBakeRows::normal());
+        assert!(LOADING_DISC_ROWS > DiscBakeRows::normal().filas);
+        assert!(crate::universe::DISC_BAKE_MS_LOADING > DiscBakeRows::normal().ms);
     }
 }
 
@@ -170,12 +171,13 @@ struct ProgressText;
 
 fn boost_budget(mut budget: ResMut<ChunkBudget>, mut rows: ResMut<DiscBakeRows>) {
     budget.0 = LOADING_CHUNK_BUDGET;
-    rows.0 = LOADING_DISC_ROWS;
+    rows.filas = LOADING_DISC_ROWS;
+    rows.ms = crate::universe::DISC_BAKE_MS_LOADING;
 }
 
 fn restore_budget(mut budget: ResMut<ChunkBudget>, mut rows: ResMut<DiscBakeRows>) {
     budget.0 = ChunkBudget::normal();
-    rows.0 = DiscBakeRows::normal();
+    *rows = DiscBakeRows::normal();
 }
 
 /// Las claves de arte que el mundo va a dibujar apenas se levante la cortina:
@@ -245,11 +247,17 @@ fn claves_del_mundo() -> Vec<&'static str> {
     // recién cuando ya estás mirando la casa y mientras tanto se dibuja el quad
     // sin textura — los rectángulos grises que aparecían en el Redmi. Son ~25
     // claves y comparten pocas páginas, así que la cortina no se alarga.
+    //
+    // **Todas menos las de `lot/`**, que no llevan sprite: la plaza, el
+    // estacionamiento y el natatorio los dibujan sus tiles. Antes el filtro pedía
+    // `building/` y se quedaba corto — la ciudad también planta fachadas de
+    // `edificio/tienda_*`, el molino animado (`anim/…_wind_mill`) y el food truck
+    // (`vehicle/pizza_tuk_tuk_*`), y ésas llegaban tarde.
     claves.extend(
         ha_shared::city::LOT_PROGRAMS
             .iter()
             .map(|p| p.key)
-            .filter(|k| k.starts_with("building/")),
+            .filter(|k| !k.starts_with("lot/")),
     );
     claves
 }

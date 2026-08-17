@@ -101,7 +101,7 @@ pub fn save_savegame(ch: &SelectedCharacter) {
     // Las dos mitades del savegame se escriben juntas: el personaje y la SEMILLA
     // del mundo en el que vive (`crate::partida`). Guardar una sin la otra deja
     // un personaje en un planeta que no es el suyo.
-    crate::partida::guardar_semilla();
+    crate::partida::guardar_ficha(None, Some(&ch.name));
     let path = savegame_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);

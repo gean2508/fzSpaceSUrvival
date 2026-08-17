@@ -230,6 +230,10 @@ pub struct ArtLibrary {
     cells: HashMap<String, (u32, u32)>,
     /// Animación de sub-región (sheets con `strip`).
     strips: HashMap<String, StripInfo>,
+    /// **Borde de 9 partes declarado** (px de la hoja), para los marcos del kit
+    /// de interfaz. Lo publica `scripts/import-ui-kit.py`. Sin entrada acá,
+    /// `ui_frame_node` cae a la heurística de "una celda de la grilla".
+    slices: HashMap<String, [f32; 4]>,
     /// Poses nombradas por slot (aplica a CUALQUIER atlas, no sólo el jugador):
     /// clave del slot → nombre de pose ("idle_down", "walk_left"…) → frame.
     poses: HashMap<String, HashMap<String, PoseInfo>>,
@@ -906,10 +910,35 @@ impl ArtLibrary {
     /// `ImageNode` de UI para un slot `ui/*` (respeta el recorte de sheet si el
     /// usuario lo recortó de un atlas en el editor). `None` = sin arte → el HUD
     /// mantiene su dibujo procedural (cero regresión).
+    /// **El recorte de un slot de UI, venga de donde venga.**
+    ///
+    /// `self.rects` sólo se llena con el `rect` PLANO del manifest. Los marcos de
+    /// UI del pack están curados como POSES (`poses.center.rect`) porque son
+    /// autotile de 9 partes, así que para ellos ese mapa está vacío — y un
+    /// `ImageNode` sin `rect` dibuja **la hoja entera** escalada al widget.
+    ///
+    /// Eso es exactamente lo que se veía en el Redmi el 15 ago 2026: las diez
+    /// casillas de la hotbar con un tilesheet adentro, el joystick con la lámina
+    /// de gamepads del pack y el botón SALTAR encima de la misma lámina. Tres
+    /// "bugs" distintos que eran uno solo, y no se veía en el escritorio porque
+    /// ahí el arte del pack ni se cargaba.
+    fn rect_de_ui(&self, key: &str) -> Option<[u32; 4]> {
+        if let Some(r) = self.rects.get(key).copied() {
+            return Some(r);
+        }
+        let poses = self.poses.get(key)?;
+        // `center` es la pose del medio de un autotile, que es la que vale como
+        // imagen suelta. Si el slot tiene una sola pose, ésa.
+        poses
+            .get("center")
+            .or_else(|| poses.values().next().filter(|_| poses.len() == 1))
+            .map(|p| p.rect_px)
+    }
+
     pub fn ui_image_node(&self, key: &str) -> Option<bevy::ui::widget::ImageNode> {
         let image = self.get(key)?;
         let mut node = bevy::ui::widget::ImageNode::new(image);
-        if let Some([x, y, w, h]) = self.rects.get(key).copied() {
+        if let Some([x, y, w, h]) = self.rect_de_ui(key) {
             node.rect = Some(Rect::from_corners(
                 Vec2::new(x as f32, y as f32),
                 Vec2::new((x + w) as f32, (y + h) as f32),
@@ -934,22 +963,39 @@ impl ArtLibrary {
         use bevy::ui::widget::NodeImageMode;
         use bevy::sprite::{BorderRect, SliceScaleMode, TextureSlicer};
         let mut node = self.ui_image_node(key)?;
-        let [_, _, w, h] = self.rects.get(key).copied()?;
+        // Mismo respaldo que `ui_image_node`: los marcos del pack guardan su
+        // recorte como pose, no como `rect` plano. Con `self.rects` a secas esto
+        // devolvía `None` y el botón se quedaba con la hoja entera estirada.
+        let [_, _, w, h] = self.rect_de_ui(key)?;
         // La celda de la grilla es el borde natural del marco. Sin recorte
         // declarado no hay nada que cortar: se devuelve el nodo estirado.
-        let cell = self.cells.get(key).copied().unwrap_or((1, 1));
-        let (cw, ch) = (w / cell.0.max(1), h / cell.1.max(1));
-        let bx = (cw as f32).min(w as f32 / 3.0).max(1.0);
-        let by = (ch as f32).min(h as f32 / 3.0).max(1.0);
+        // **El borde declarado gana.** Las piezas del kit de interfaz
+        // (`ui/marco_*`) no están alineadas a la grilla de 32 y su borde va de 2
+        // a 11 px: adivinarlo con la celda dejaba el panel todo marco. Lo
+        // publica el importador, medido.
+        let declarado = self.slices.get(key).copied();
+        let [bl, br, bt, bb] = declarado.unwrap_or_else(|| {
+            let cell = self.cells.get(key).copied().unwrap_or((1, 1));
+            let (cw, ch) = (w / cell.0.max(1), h / cell.1.max(1));
+            let bx = (cw as f32).min(w as f32 / 3.0).max(1.0);
+            let by = (ch as f32).min(h as f32 / 3.0).max(1.0);
+            [bx, bx, by, by]
+        });
         node.image_mode = NodeImageMode::Sliced(TextureSlicer {
-            border: BorderRect { left: bx, right: bx, top: by, bottom: by },
+            border: BorderRect { left: bl, right: br, top: bt, bottom: bb },
             // El centro y los bordes se ESTIRAN, no se azulejan: con pixel art a
             // escalas no enteras, repetir deja costuras visibles entre copias.
             center_scale_mode: SliceScaleMode::Stretch,
             sides_scale_mode: SliceScaleMode::Stretch,
             // 4.0 dejaba una esquina de 128 px de arte a 32: el marco se comía
             // el panel. 2.0 sigue el escalado de UI del teléfono sin engordar.
-            max_corner_scale: 2.0,
+            //
+            // Los marcos del KIT son otra cosa: se piden a la escala de pixel-art
+            // de la pantalla (x3 en el Redmi apaisado) y su borde ya es chico —
+            // 8 px de botón a 2x sale de 16 y el mockup los tiene de 24. Con el
+            // borde declarado, el tope sube para que la esquina llegue a su
+            // escala real.
+            max_corner_scale: if declarado.is_some() { 6.0 } else { 2.0 },
         });
         Some(node)
     }
@@ -998,6 +1044,15 @@ impl ArtLibrary {
     /// animación): sólo entonces el mundo lo dibuja como sprite en vez de dejar
     /// el quad vertex-color barato. Un PNG estático plano NO califica (evita
     /// spawnear miles de sprites por el suelo base). Ver `world2d::spawn_chunk_tile_art`.
+    /// **Cuánto mide, en píxeles de la hoja, el icono de este slot.**
+    ///
+    /// Es lo que hace falta para dibujar un sprite del catálogo a escala entera
+    /// (x2, x3, x5) sin deformarlo: el nodo de UI se pide del tamaño del recorte
+    /// por la escala, no de un cuadrado inventado. Lo usa el parallax del menú.
+    pub fn ui_icon_px(&self, key: &str) -> Option<Vec2> {
+        self.ui_icon(key)?.rect.map(|r| r.size())
+    }
+
     pub fn tile_has_art(&self, key: &str) -> bool {
         self.has_poses(key)
             || self.anims.contains_key(key)
@@ -1368,6 +1423,10 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
             if let Some((cw, ch)) = cells {
                 art.cells.insert(key.clone(), (cw.max(1), ch.max(1)));
             }
+            if let Some(sl) = e.slice {
+                art.slices
+                    .insert(key.clone(), [sl.left, sl.right, sl.top, sl.bottom]);
+            }
             if let Some(strip) = e.strip {
                 // `strip` es el rect (celdas) del PRIMER frame → su w×h es el
                 // tamaño de cada frame. La cantidad de frames viene de `anim`
@@ -1582,6 +1641,45 @@ impl ArtLibrary {
 mod tests {
     use super::*;
 
+    /// **Un slot de UI curado como POSE tiene que traer su recorte.**
+    ///
+    /// Sin esto el `ImageNode` sale con `rect: None` y Bevy estira **la hoja
+    /// entera** dentro del widget. Es el bug que el 15 ago 2026 se vio en el
+    /// Redmi como tres cosas distintas —las diez casillas de la hotbar con un
+    /// tilesheet adentro, el joystick hecho un collage de gamepads y el botón
+    /// SALTAR encima de esa misma lámina— y que era uno solo: los marcos de UI
+    /// del pack guardan su recorte en `poses.center`, no en el `rect` plano que
+    /// era lo único que se leía.
+    ///
+    /// No se puede probar `ui_image_node` sin `AssetServer`, así que se prueba la
+    /// pieza que fallaba: la resolución del recorte.
+    #[test]
+    fn un_slot_de_ui_recortado_como_pose_no_pierde_su_recorte() {
+        let art = ArtLibrary::test_pose("ui/hotbar_slot", "center", (1, 1));
+        assert_eq!(
+            art.rect_de_ui("ui/hotbar_slot"),
+            Some([0, 0, 32, 32]),
+            "el recorte de la pose `center` no llegó: el widget dibujaría la hoja entera"
+        );
+    }
+
+    /// Con una sola pose, sea cual sea su nombre, ésa es la imagen del slot: no
+    /// hay ambigüedad que resolver y quedarse sin recorte sería peor.
+    #[test]
+    fn con_una_sola_pose_esa_es_el_recorte() {
+        let art = ArtLibrary::test_pose("ui/close_button", "normal", (2, 1));
+        assert_eq!(art.rect_de_ui("ui/close_button"), Some([0, 0, 64, 32]));
+    }
+
+    /// Y un slot sin recorte declarado sigue sin recorte — el respaldo no puede
+    /// inventar uno, porque un PNG suelto ES la imagen entera y recortarlo lo
+    /// rompería.
+    #[test]
+    fn un_png_suelto_se_queda_sin_recorte() {
+        let art = ArtLibrary::default();
+        assert_eq!(art.rect_de_ui("ui/loquesea"), None);
+    }
+
     /// **La escala del arte sale de una división, no de la intuición.**
     ///
     /// [`ESCALA_ARTE`] valió 1,5 durante toda la importación del pack con el
@@ -1607,22 +1705,31 @@ mod tests {
     /// La escala del dibujo y la de la huella son **el mismo número**. Viven en
     /// dos idiomas (Rust y el importador de Python), y si se separan el objeto se
     /// dibuja de un tamaño y frena de otro.
+    /// **Y TODOS los importadores, no sólo el masivo.** Este test miraba
+    /// únicamente `import-pack-masivo.py`, así que `import-edificios.py` se quedó
+    /// meses con el 1,5 viejo sin que nadie lo cazara: medía cada fachada un 58 %
+    /// más grande de lo que el juego la dibuja y por eso elegía siempre edificios
+    /// demasiado chicos para su parcela.
     #[test]
     fn el_importador_usa_la_misma_escala() {
-        let py = include_str!("../../../../scripts/import-pack-masivo.py");
-        let linea = py
-            .lines()
-            .find(|l| l.starts_with("ESCALA_TILE"))
-            .expect("import-pack-masivo.py declara ESCALA_TILE");
-        let valor: f32 = linea
-            .split('=')
-            .nth(1)
-            .and_then(|v| v.trim().parse().ok())
-            .expect("ESCALA_TILE es un número");
-        assert!(
-            (valor - ESCALA_ARTE).abs() < 1e-4,
-            "el importador escribe las huellas con {valor} y el juego dibuja con {ESCALA_ARTE}"
-        );
+        for (nombre, py) in [
+            ("import-pack-masivo.py", include_str!("../../../../scripts/import-pack-masivo.py")),
+            ("import-edificios.py", include_str!("../../../../scripts/import-edificios.py")),
+        ] {
+            let linea = py
+                .lines()
+                .find(|l| l.starts_with("ESCALA_TILE"))
+                .unwrap_or_else(|| panic!("{nombre} declara ESCALA_TILE"));
+            let valor: f32 = linea
+                .split('=')
+                .nth(1)
+                .and_then(|v| v.trim().parse().ok())
+                .expect("ESCALA_TILE es un número");
+            assert!(
+                (valor - ESCALA_ARTE).abs() < 1e-4,
+                "{nombre} escribe las huellas con {valor} y el juego dibuja con {ESCALA_ARTE}"
+            );
+        }
     }
 
     /// **Una animación avanza un frame entero, nunca un pedazo de frame.**
@@ -1784,6 +1891,77 @@ mod inventario_de_arte {
              cargo test -p ha-game inventario_de_arte -- --ignored --nocapture",
             sin.len(),
             &sin[..sin.len().min(12)]
+        );
+    }
+
+    /// **NINGUNA PARCELA DE LA CIUDAD SE DIBUJA COMO UNA CAJA DE COLOR.**
+    ///
+    /// El guardián que faltaba, y se notó: `ningun_slot_se_queda_sin_pixel` mira
+    /// el catálogo de slots (`ha_assets::game_slots`), pero los lotes de la ciudad
+    /// apuntan a claves del PACK que no están en ese catálogo — y ahí nadie
+    /// miraba. Con eso, la parcela más grande del barrio estuvo apuntando a
+    /// `building/villa_6`, que el importador masivo había bautizado sobre un
+    /// recorte de UNA CELDA, y cuatro programas residenciales a una clave que
+    /// existía pero era la misma para los cuatro. El barrio —el 60 % de la
+    /// ciudad— se veía como cajas.
+    ///
+    /// Se comprueban las dos mitades:
+    ///
+    /// 1. **Que la clave tenga pixel.** Sin entrada en el manifest, el lote se
+    ///    dibuja con el cuadrado marrón de respaldo.
+    /// 2. **Que el pixel LLENE la parcela.** Y esto no se mide contra un número
+    ///    inventado, sino contra lo que hace el render: `building::roof_layout`
+    ///    escala la fachada por el ancho de la huella y **no la agranda más de
+    ///    `AGRANDE_MAX`**, para no ampliar el pixel. O sea que un sprite de una
+    ///    celda en una parcela de doce tiles no sale "estirado": sale como una
+    ///    mota en un solar vacío. Se exige que, ya agrandado todo lo que se
+    ///    permite, el edificio cubra al menos la mitad del frente del lote.
+    #[test]
+    fn ningun_lote_de_la_ciudad_se_dibuja_como_una_caja() {
+        let m = ArtManifest::from_json(MANIFEST).expect("manifest legible");
+        let mut mal = Vec::new();
+        for p in ha_shared::city::LOT_PROGRAMS {
+            // `lot/*` no lleva edificio a propósito (la plaza, el estacionamiento,
+            // el natatorio): lo dibujan sus tiles, no un sprite.
+            if p.key.starts_with("lot/") {
+                continue;
+            }
+            let variantes: Vec<&String> = m
+                .sprites
+                .keys()
+                .filter(|k| k.as_str() == p.key || k.starts_with(&format!("{}#", p.key)))
+                .collect();
+            if variantes.is_empty() {
+                mal.push(format!("{}: sin una sola entrada en el manifest", p.key));
+                continue;
+            }
+            // Los animados no traen `rect` (traen tira) y se aceptan tal cual.
+            let Some(celdas) = variantes
+                .iter()
+                .filter_map(|k| m.sprites.get(k.as_str()))
+                .filter_map(|e| e.rect())
+                .map(|r| r.w)
+                .max()
+            else {
+                continue;
+            };
+            let huella = p.huella();
+            let dibujado = celdas as f32 * ESCALA_ARTE * crate::building::AGRANDE_MAX;
+            if dibujado < huella.0 as f32 * 0.5 {
+                mal.push(format!(
+                    "{}: su arte mide {celdas} celdas de frente ({dibujado:.0} tiles como mucho) \
+                     y la parcela pide {}: queda una mota en un solar vacío",
+                    p.key, huella.0
+                ));
+            }
+        }
+        assert!(
+            mal.is_empty(),
+            "{} lotes de ciudad cuyo arte no llena la parcela:\n  {}\n\
+             O se apunta el lote a una clave del pack que SÍ sea un edificio, o se \
+             achica `cells` hasta el talle del dibujo (ver `ha_shared::city::LOT_PROGRAMS`).",
+            mal.len(),
+            mal.join("\n  ")
         );
     }
 

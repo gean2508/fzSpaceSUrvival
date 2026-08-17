@@ -62,43 +62,179 @@ pub struct LotProgram {
     pub weight: u8,
 }
 
+/// Qué fracción del lote residencial ocupa la CASA, en porcentaje de cada lado.
+/// El resto es jardín, entrada de auto y pileta. Lo usan `residential_tile`,
+/// [`roofed_rect`] y [`LotProgram::huella`], que **tienen que dar lo mismo** o el
+/// techo se dibuja donde no está la casa.
+const CASA_DEL_LOTE: (i64, i64) = (55, 50);
+
+impl LotProgram {
+    /// **La huella EDIFICADA de esta parcela, en tiles** — lo que de verdad se
+    /// cubre con un edificio, no el lote entero.
+    ///
+    /// Es la cuenta que hay que hacer antes de elegirle una fachada: para un lote
+    /// residencial de 16×12 la casa mide 8×6, así que buscarle un edificio de
+    /// 16×12 trae uno del doble de grande que el hueco donde va a entrar. Era uno
+    /// de los cuatro motivos por los que el barrio se veía como cajas.
+    ///
+    /// Vive acá y no en el importador para que haya UNA sola cuenta: la consultan
+    /// `scripts/import-edificios.py` (leyéndola de este archivo), [`roofed_rect`]
+    /// y el test `ningun_lote_de_la_ciudad_se_dibuja_como_una_caja`.
+    pub fn huella(&self) -> (i64, i64) {
+        self.huella_de(self.cells.0, self.cells.1)
+    }
+
+    /// La huella edificada de un lote REAL de `w × d` tiles.
+    ///
+    /// No es lo mismo que [`Self::huella`] y la diferencia importa: `lot_at`
+    /// **recorta** el lote a lo que da la manzana (`p.cells.min(nx * block - …)`),
+    /// así que una parcela de 42 tiles declarados puede existir de 39. La casa
+    /// tiene que salir del lote que EXISTE o se dibuja saliéndose de su terreno —
+    /// y peor, `residential_tile` y `roofed_rect` dejarían de coincidir, que es lo
+    /// que pone el techo donde no está la casa.
+    pub fn huella_de(&self, w: i64, d: i64) -> (i64, i64) {
+        if self.district == District::Residential {
+            (
+                (w * CASA_DEL_LOTE.0 / 100).clamp(6, (w - 4).max(6)),
+                (d * CASA_DEL_LOTE.1 / 100).clamp(5, (d - 5).max(5)),
+            )
+        } else {
+            ((w - 2).max(1), (d - 2).max(1))
+        }
+    }
+}
+
 /// El catálogo. Los tamaños salen de lo que el edificio ES: una casa de pueblo
 /// entra en media manzana, un hospital necesita cuatro.
 pub const LOT_PROGRAMS: &[LotProgram] = &[
     // ── Residencial: la variedad vive acá, porque es el 60 % de la ciudad.
-    LotProgram { key: "building/casa_chica", cells: (12, 10), district: District::Residential, weight: 22 },
-    LotProgram { key: "building/casa_mediana", cells: (16, 12), district: District::Residential, weight: 26 },
-    LotProgram { key: "building/casa_grande", cells: (20, 15), district: District::Residential, weight: 16 },
-    LotProgram { key: "building/casa_country", cells: (24, 18), district: District::Residential, weight: 10 },
-    LotProgram { key: "building/villa", cells: (30, 22), district: District::Residential, weight: 6 },
-    LotProgram { key: "building/duplex", cells: (18, 11), district: District::Residential, weight: 12 },
-    // ── Comercio.
-    LotProgram { key: "building/tienda", cells: (14, 12), district: District::Commercial, weight: 24 },
-    LotProgram { key: "building/mercado", cells: (22, 16), district: District::Commercial, weight: 14 },
-    LotProgram { key: "building/gasolinera", cells: (18, 14), district: District::Commercial, weight: 8 },
-    LotProgram { key: "building/shopping", cells: (44, 32), district: District::Commercial, weight: 5 },
+    //
+    // **Las parcelas miden lo que miden las CASAS del pack, no al revés.** La
+    // casa ocupa el 55 % del ancho del lote (`residential_tile`), y las casas
+    // que LimeZu dibujó miden de 9 a 23 tiles de ancho — o sea que un lote de
+    // 12×10 dejaba un hueco de 6 tiles para una casa de 15. Con `world_sprite`
+    // estirando el dibujo al hueco, el barrio entero salía aplastado a la mitad
+    // de su alto. Ahora el lote se agranda hasta que la casa entre entera y el
+    // dibujo se apoya en el frente sin deformarse (`building::roof_layout`).
+    //
+    // La otra mitad del arreglo es que cada uno de estos slots tiene ahora
+    // ~10 fachadas distintas del pack (`scripts/import-edificios.py`) y la
+    // parcela elige la suya por su esquina: el barrio dejó de ser una casa
+    // fotocopiada 200 veces.
+    LotProgram { key: "building/casa_chica", cells: (17, 14), district: District::Residential, weight: 22 },
+    LotProgram { key: "building/casa_mediana", cells: (26, 18), district: District::Residential, weight: 26 },
+    LotProgram { key: "building/casa_grande", cells: (31, 22), district: District::Residential, weight: 16 },
+    LotProgram { key: "building/casa_country", cells: (42, 24), district: District::Residential, weight: 10 },
+    // **`building/villa`, no `building/villa_6`.** `villa_6` es el nombre que el
+    // importador masivo le puso a un recorte de UNA CELDA de la hoja de villas
+    // (un felpudo, una maceta): la parcela más grande del barrio apuntaba a un
+    // sprite de 32×32 px estirado a 30×22 tiles. `building/villa` es el slot
+    // curado que recibe las villas de verdad.
+    LotProgram { key: "building/villa", cells: (35, 34), district: District::Residential, weight: 6 },
+    LotProgram { key: "building/duplex", cells: (26, 24), district: District::Residential, weight: 12 },
+    // ── Comercio. **Los rubros son de verdad**, no un `building/tienda`
+    // genérico repetido: el pack dibujó dieciocho locales distintos con su
+    // vidriera y su cartel (`edificio/tienda_*`, `cartel/*`) y la ciudad los
+    // ignoraba, así que una cuadra comercial eran doce veces la misma tienda.
+    // Los pesos son bajos y parejos a propósito — lo que hace que una avenida
+    // se lea como avenida es que los locales SEAN distintos entre sí.
+    // **Las claves apuntan al arte que EXISTE**, no a nombres bonitos. El pack
+    // ya está importado (2.878 objetos) y el importador los nombró como los
+    // nombró el pack: hay `edificio/tienda_panaderia` con su vidriera, y NO hay
+    // ninguna `building/panaderia`. Inventar la clave linda deja el local
+    // dibujado como un cuadrado de color plano, que es peor que la tienda
+    // genérica que había. Es la regla 7 leída al derecho: ante la duda, se
+    // adapta el juego a los assets.
+    //
+    // **Y "que exista" no alcanza: tiene que LLENAR la parcela.** Apuntar a una
+    // clave del pack que existe pero mide una celda deja el mismo solar vacío que
+    // no apuntar a nada — es lo que pasaba con `building/almacen_1` (1×2 celdas en
+    // una parcela de 14 tiles), `building/heladeria_1` (2×3),
+    // `building/escuela_patio_tubo_modular_18` (1×2) y el cartel de precios de la
+    // estación de servicio, que era literalmente un CARTEL haciendo de edificio.
+    // Los que tenían edificio de verdad en otra clave se repuntaron; a los demás
+    // se les achicó la parcela hasta el talle del dibujo. Lo cuida
+    // `art2d::ningun_lote_de_la_ciudad_se_dibuja_como_una_caja`.
+    LotProgram { key: "edificio/tienda_panaderia", cells: (14, 12), district: District::Commercial, weight: 8 },
+    LotProgram { key: "edificio/tienda_heladeria", cells: (14, 12), district: District::Commercial, weight: 7 },
+    LotProgram { key: "edificio/tienda_carniceria", cells: (14, 12), district: District::Commercial, weight: 6 },
+    LotProgram { key: "edificio/tienda_juguetes", cells: (14, 12), district: District::Commercial, weight: 5 },
+    LotProgram { key: "edificio/tienda_mascotas", cells: (14, 12), district: District::Commercial, weight: 5 },
+    LotProgram { key: "edificio/tienda_gimnasio", cells: (18, 14), district: District::Commercial, weight: 5 },
+    LotProgram { key: "edificio/tienda_discos", cells: (14, 12), district: District::Commercial, weight: 4 },
+    LotProgram { key: "edificio/tienda_pesca", cells: (14, 12), district: District::Commercial, weight: 4 },
+    LotProgram { key: "edificio/tienda_galletas", cells: (14, 12), district: District::Commercial, weight: 4 },
+    LotProgram { key: "edificio/tienda_vidriera", cells: (14, 12), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/heladeria_1", cells: (7, 6), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/tienda", cells: (19, 13), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/mercado_chico_1", cells: (14, 12), district: District::Commercial, weight: 8 },
+    LotProgram { key: "building/mercado_mediano_1", cells: (18, 14), district: District::Commercial, weight: 8 },
+    LotProgram { key: "building/gasolinera", cells: (18, 14), district: District::Commercial, weight: 7 },
+    LotProgram { key: "building/shopping", cells: (19, 13), district: District::Commercial, weight: 5 },
     LotProgram { key: "lot/estacionamiento", cells: (20, 16), district: District::Commercial, weight: 10 },
+    // **LOS FOOD TRUCKS Y LOS PUESTOS DE FERIA.** Otro de los que figuraba como
+    // "no está en el manifest": el pack trae el tuk-tuk de pizza entero
+    // (`vehicle/pizza_tuk_tuk_*`, 6×6 celdas) y los puestos de feria de la
+    // escuela (`building/puestos_*`). No hay ninguna PIZZERÍA dibujada en este
+    // pack —ni ningún lavadero—, así que la pizza entra por donde el pack sí la
+    // dibujó: sobre ruedas. Es la regla 7 al derecho: se adapta el juego al
+    // asset, no al revés.
+    LotProgram { key: "vehicle/pizza_tuk_tuk_tuk_tuk_1", cells: (9, 9), district: District::Commercial, weight: 6 },
+    LotProgram { key: "building/puestos_1", cells: (7, 6), district: District::Commercial, weight: 7 },
     // ── Centro.
-    LotProgram { key: "building/oficina", cells: (22, 20), district: District::Downtown, weight: 22 },
+    LotProgram { key: "building/oficina", cells: (17, 19), district: District::Downtown, weight: 22 },
     LotProgram { key: "building/torre", cells: (30, 28), district: District::Downtown, weight: 18 },
-    LotProgram { key: "building/hotel", cells: (34, 24), district: District::Downtown, weight: 8 },
-    // ── Industria.
-    LotProgram { key: "building/nave_industrial", cells: (34, 26), district: District::Industrial, weight: 22 },
-    LotProgram { key: "building/deposito", cells: (24, 18), district: District::Industrial, weight: 16 },
-    LotProgram { key: "building/granero", cells: (20, 16), district: District::Industrial, weight: 8 },
-    // ── Parque.
-    LotProgram { key: "lot/plaza", cells: (26, 22), district: District::Park, weight: 20 },
-    LotProgram { key: "lot/cancha_basket", cells: (22, 14), district: District::Park, weight: 16 },
-    LotProgram { key: "lot/cancha_tenis", cells: (26, 14), district: District::Park, weight: 10 },
-    LotProgram { key: "lot/arboleda", cells: (24, 20), district: District::Park, weight: 18 },
+    LotProgram { key: "building/hotel", cells: (28, 22), district: District::Downtown, weight: 8 },
+    // La torre del reloj de la estación: el pack la dibujó entera y es el hito
+    // que se ve de lejos en las referencias.
+    LotProgram { key: "building/reloj_torre", cells: (14, 20), district: District::Downtown, weight: 5 },
+    // ── Industria. La central eléctrica con sus molinos es de las referencias:
+    // va en el borde, que es donde el pack la dibujó (contra la arboleda).
+    LotProgram { key: "building/nave_industrial", cells: (18, 16), district: District::Industrial, weight: 20 },
+    LotProgram { key: "building/deposito", cells: (13, 14), district: District::Industrial, weight: 14 },
+    LotProgram { key: "building/granero", cells: (10, 10), district: District::Industrial, weight: 8 },
+    LotProgram { key: "building/hangar", cells: (30, 24), district: District::Industrial, weight: 5 },
+    // Las casas rodantes del camping: el pack las trae en tres tamaños y son la
+    // escena del borde en las referencias (camping contra la arboleda).
+    LotProgram { key: "building/casa_rodante_grande_1", cells: (16, 12), district: District::Industrial, weight: 6 },
+    // **LA CENTRAL ELÉCTRICA CON SUS MOLINOS.** Estaba anotada como pendiente
+    // "porque no está en el manifest con ningún nombre" — y sí estaba, con el
+    // nombre que le puso el importador masivo: la subestación que `City_Props`
+    // dibujó entera (7×8 celdas, con sus transformadores y su escalera) se llama
+    // `building/energia_casa`, y el molino animado de cuatro frames
+    // `anim/additional_houses_wind_mill`. Lo que faltaba no era el pixel: era el
+    // lote que los planta. Van los dos en industria y con pesos parecidos, así
+    // que la central sale rodeada de molinos como en la referencia.
+    LotProgram { key: "building/energia_casa", cells: (11, 12), district: District::Industrial, weight: 8 },
+    LotProgram { key: "anim/additional_houses_wind_mill", cells: (7, 11), district: District::Industrial, weight: 10 },
+    // ── Parque. Los juegos y la pileta son los que hacen que un parque se
+    // JUEGUE en vez de sólo verse verde — y los dos están dibujados enteros.
+    LotProgram { key: "lot/plaza", cells: (26, 22), district: District::Park, weight: 18 },
+    LotProgram { key: "lot/cancha_basket", cells: (22, 14), district: District::Park, weight: 14 },
+    LotProgram { key: "lot/cancha_tenis", cells: (26, 14), district: District::Park, weight: 9 },
+    LotProgram { key: "lot/arboleda", cells: (24, 20), district: District::Park, weight: 16 },
+    // El parque de juegos, con las piezas que el pack dibujó: el patio de
+    // juguetes, el tubo modular de la escuela y las hamacas de las villas.
+    LotProgram { key: "building/patio_juguete_1", cells: (9, 8), district: District::Park, weight: 13 },
+    LotProgram { key: "building/villa_patio_juguete_hamaca_1", cells: (9, 8), district: District::Park, weight: 9 },
+    // **EL NATATORIO.** No lleva fachada y no la necesita: es agua de verdad
+    // —`Tile::ShallowWater`, o sea que se NADA— con su andén de baldosa y sus
+    // piezas de borde. El pack dibujó 48 recortes de pileta y 39 props
+    // (`swimming_pool`) y ninguno es un edificio, así que declararlo como
+    // `building/*` habría sido pedirle al pack algo que no dibujó. Ver
+    // `park_tile`.
+    LotProgram { key: "lot/natatorio", cells: (26, 20), district: District::Park, weight: 10 },
+    // El puesto de limonada de las villas: chiquito, dibujado entero, y es lo
+    // que hace que una plaza se vea usada.
+    LotProgram { key: "building/limonada_puesto_1", cells: (6, 6), district: District::Park, weight: 8 },
     // ── Cívico: LOS GRANDES. Ocupan varias manzanas a propósito.
-    LotProgram { key: "building/hospital", cells: (44, 34), district: District::Civic, weight: 14 },
-    LotProgram { key: "building/universidad", cells: (56, 40), district: District::Civic, weight: 10 },
+    LotProgram { key: "building/hospital", cells: (28, 22), district: District::Civic, weight: 14 },
+    LotProgram { key: "building/universidad", cells: (44, 32), district: District::Civic, weight: 10 },
     LotProgram { key: "building/escuela", cells: (38, 28), district: District::Civic, weight: 16 },
     LotProgram { key: "building/comisaria", cells: (24, 20), district: District::Civic, weight: 14 },
-    LotProgram { key: "building/bomberos", cells: (26, 20), district: District::Civic, weight: 12 },
-    LotProgram { key: "building/correo", cells: (20, 16), district: District::Civic, weight: 10 },
-    LotProgram { key: "building/estacion_tren", cells: (52, 30), district: District::Civic, weight: 6 },
+    LotProgram { key: "building/bomberos", cells: (12, 10), district: District::Civic, weight: 12 },
+    LotProgram { key: "building/correo_edificio", cells: (20, 16), district: District::Civic, weight: 10 },
+    LotProgram { key: "building/estacion_tren", cells: (22, 16), district: District::Civic, weight: 6 },
 ];
 
 /// El distrito de una manzana.
@@ -394,6 +530,48 @@ fn retiro_del_desnivel(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) 
     v
 }
 
+/// **¿Le entra agua a la CASA de esta parcela residencial?**
+///
+/// Barre la huella construida (la misma que dibujan `residential_tile` y
+/// `roofed_rect`) preguntando por el tile natural, que es el único que sabe del
+/// río. Se recorre ENTERA y no de a saltos: un cauce de dos tiles se cuela por
+/// cualquier muestreo, y es justo el que ahoga la puerta.
+///
+/// **Memoizada por parcela, igual que [`retiro_del_desnivel`] y por lo mismo.**
+/// `lot_at` corre por TILE, así que sin memo cada celda de la ciudad volvería a
+/// barrer las ~280 celdas de la casa de su parcela: 280 veces más trabajo en cada
+/// tile urbano del mundo. Con la memo, la primera celda de la parcela paga el
+/// barrido y las demás leen la respuesta.
+fn casa_mojada(body: CelestialBody, lot: &Lot) -> bool {
+    const RANURAS: usize = 64;
+    #[derive(Clone, Copy)]
+    struct Ranura {
+        clave: (u8, i64, i64, i64, i64, u32),
+        valor: bool,
+        lleno: bool,
+    }
+    thread_local! {
+        static MEMO: std::cell::RefCell<[Ranura; RANURAS]> = std::cell::RefCell::new(
+            [Ranura { clave: (0, 0, 0, 0, 0, 0), valor: false, lleno: false }; RANURAS],
+        );
+    }
+    let clave = (body as u8, lot.min.0, lot.min.1, lot.w, lot.h, crate::partida::epoca());
+    let ranura = (hash2(0xca5a_0000, lot.min.0, lot.min.1) as usize ^ body as usize) % RANURAS;
+    if let Some(v) = MEMO.with(|m| {
+        let m = m.borrow();
+        (m[ranura].lleno && m[ranura].clave == clave).then_some(m[ranura].valor)
+    }) {
+        return v;
+    }
+    let (hw, hd) = lot.program().huella_de(lot.w, lot.h);
+    let h = hash2(body_terrain_seed(body) ^ 0xfa11_0000, lot.min.0, lot.min.1);
+    let hx = lot.min.0 + 2 + ((h >> 11) as i64).rem_euclid((lot.w - hw - 3).max(1));
+    let hz = lot.min.1 + 2;
+    let v = (hz..hz + hd).any(|z| (hx..hx + hw).any(|x| crate::geography::hay_agua(body, x, z)));
+    MEMO.with(|m| m.borrow_mut()[ranura] = Ranura { clave, valor: v, lleno: true });
+    v
+}
+
 fn calcular_retiro(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> Retiro {
     const PASO: i64 = 4;
     let nivel = crate::relief::relief_level(body, ox, oz);
@@ -559,6 +737,25 @@ pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<L
                         return None;
                     }
                 }
+                // **Y la CASA no se planta dentro del río.**
+                //
+                // El retiro por desnivel mira `relief_level < 0`, que es el mar y
+                // los lagos del relieve — pero el río no está ahí: lo traza
+                // `crate::rios` y llega al tile por `geography::natural_tile`. Una
+                // parcela con el cauce cruzándola contaba como seca, y la casa
+                // salía con medio frente bajo el agua y sus dos puertas ahogadas,
+                // o sea **sellada** (lo cazó `toda_casa_generada_tiene_por_donde_entrar`
+                // en cuanto las parcelas se agrandaron al talle del pack).
+                //
+                // Se mira la HUELLA DE LA CASA y no el lote entero, y ésa es toda
+                // la diferencia: rechazando la parcela porque el río le roza una
+                // esquina, la ciudad perdía 95 de sus 215 manzanas y se volvía un
+                // descampado (`la_ciudad_no_esta_llena_de_baldios`). Un jardín
+                // puede dar al río; una casa, no.
+                if lot.program().district == District::Residential && casa_mojada(body, &lot) {
+                    reservar(&mut mayores, &mut n_mayores, bruto);
+                    continue;
+                }
                 return Some(lot);
             }
         }
@@ -588,11 +785,34 @@ pub fn lot_tile(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option
     }
 }
 
-/// Parque: losa, cancha o arboleda. Nunca paredes.
+/// Cuántos tiles de andén hay entre el borde del natatorio y el agua. Tres es lo
+/// que hace falta para que quepan las reposeras y para que se pueda caminar
+/// alrededor sin caerse a la pileta en cada paso.
+const ANDEN_NATATORIO: i64 = 3;
+
+/// Parque: losa, cancha, arboleda o natatorio. Nunca paredes.
 fn park_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, _h: u32) -> Option<Tile> {
     match p.key {
         // La arboleda es terreno natural: los árboles los siembra la decoración.
         "lot/arboleda" => None,
+        // **EL NATATORIO: agua de verdad, no una losa celeste.** El vaso es
+        // `Tile::Water` —el líquido de poco fondo que se NADA, el mismo de la
+        // pileta del patio de una casa—, así que el natatorio del barrio se USA:
+        // te metés y nadás. Alrededor
+        // queda un andén de baldosa de dos tiles —donde la decoración pone las
+        // reposeras y el trampolín— y el borde exterior marca el recinto igual
+        // que en una cancha.
+        "lot/natatorio" => {
+            let borde = lx == 0 || lz == 0 || lx == lot.w - 1 || lz == lot.h - 1;
+            if borde {
+                return Some(Tile::Pavement);
+            }
+            let dentro = lx >= ANDEN_NATATORIO
+                && lz >= ANDEN_NATATORIO
+                && lx < lot.w - ANDEN_NATATORIO
+                && lz < lot.h - ANDEN_NATATORIO;
+            Some(if dentro { Tile::Water } else { Tile::Basalt })
+        }
         // Cancha y plaza: una losa con borde. El borde es lo que la separa del
         // césped y hace que se lea como una cancha y no como un claro.
         _ => {
@@ -623,8 +843,7 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
     // El `max` del techo no es paranoia: `clamp(a, b)` con `b < a` es un panic,
     // y desde que la parcela se RETIRA de los desniveles (`lot_at`) el fondo
     // puede bajar hasta `LADO_MINIMO`. Reventaba con `min = 5, max = 2`.
-    let house_w = (w * 55 / 100).clamp(6, (w - 4).max(6));
-    let house_d = (d * 50 / 100).clamp(5, (d - 5).max(5));
+    let (house_w, house_d) = lot.program().huella_de(w, d);
     let house_x = 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1));
     let house_z = 2;
     let in_house = lx >= house_x && lx < house_x + house_w && lz >= house_z && lz < house_z + house_d;
@@ -634,15 +853,29 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
         if !perimeter {
             return Some(Tile::WoodFloor);
         }
-        // **Puerta al frente (sur), centrada y de DOS tiles de ancho.**
+        // **Puerta al frente (sur) Y AL FONDO (norte), centradas y anchas.**
         //
-        // Dos y no una porque una sola es un punto único de falla: la calzada gana
-        // sobre lo edificado (`topdown_tile`), así que bastaba que una carretera
-        // rozara la fachada por la celda de la puerta para dejar la casa
-        // **sellada** — cuatro paredes, ventanas y ninguna forma de entrar. Con el
-        // portal de dos celdas se puede comer una y sigue habiendo puerta. Lo
+        // Nunca una sola celda: la calzada gana sobre lo edificado
+        // (`topdown_tile`), así que bastaba que una carretera rozara la fachada
+        // por la celda de la puerta para dejar la casa **sellada** — cuatro
+        // paredes, ventanas y ninguna forma de entrar.
+        //
+        // Y desde que las casas son las del pack —hasta 23 tiles de frente en vez
+        // de 6— el portal de dos celdas fijas volvió a quedarse corto: una calle
+        // de CINCO tiles se lo come entero, y en un puñado de casos la calle
+        // pasaba justo por el medio de la casa.
+        //
+        // Así que el portal crece con la casa **y hay uno en las CUATRO caras**.
+        // Ése es el punto: una calle es una recta, así que puede comerse los dos
+        // portales que miran a un eje, pero nunca los cuatro. Para sellar una casa
+        // ahora hace falta un cruce entero encima, y entonces el problema no es la
+        // puerta. Medido en Ciudad Central: 4 casas selladas de 1.849 → 0. Lo
         // cuida `toda_casa_generada_tiene_por_donde_entrar`.
-        if rz == house_d - 1 && (rx == house_w / 2 || rx == house_w / 2 - 1) {
+        let portal_x = (house_w / 4).clamp(2, 6);
+        let portal_z = (house_d / 4).clamp(2, 6);
+        let en_x = rx >= (house_w - portal_x) / 2 && rx < (house_w - portal_x) / 2 + portal_x;
+        let en_z = rz >= (house_d - portal_z) / 2 && rz < (house_d - portal_z) / 2 + portal_z;
+        if (en_x && (rz == house_d - 1 || rz == 0)) || (en_z && (rx == 0 || rx == house_w - 1)) {
             return Some(Tile::Door);
         }
         // Ventanas: alternadas en las cuatro caras, sin tocar las esquinas.
@@ -818,8 +1051,7 @@ pub fn roofed_rect(
         // Mismo techo defensivo que en `residential_tile`, y por el mismo motivo:
         // las dos cuentas TIENEN que dar lo mismo o el techo del cliente se
         // dibuja donde no está la casa.
-        let house_w = (w * 55 / 100).clamp(6, (w - 4).max(6));
-        let house_d = (d * 50 / 100).clamp(5, (d - 5).max(5));
+        let (house_w, house_d) = p.huella_de(w, d);
         let house_x = 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1));
         return Some((lot.min.0 + house_x, lot.min.1 + 2, house_w, house_d, p.key));
     }
@@ -966,9 +1198,26 @@ mod tests {
         let (small, big) = (areas[0], areas[areas.len() - 1]);
         assert!(big > small * 12, "el más grande sólo mide {big} y el más chico {small}");
         // Y los edificios que sabemos grandes lo son.
+        //
+        // **Por ÁREA, no lado a lado.** Esto pedía que la universidad midiera más
+        // del triple que la casa chica en CADA lado, y eso dejó de poder cumplirse
+        // el día que las parcelas se dimensionaron al arte del pack: la casa chica
+        // pasó de 12×10 a 17×14 porque una casa de LimeZu mide catorce tiles de
+        // frente, y el edificio de escuela más grande que el pack dibujó mide
+        // diecisiete celdas. Pedir 51 de frente era pedir un dibujo que no existe.
+        // Lo que el test quiere afirmar —que los grandes son grandes de verdad y
+        // no se aplanó todo a la caja única por manzana— se afirma igual por área.
         let uni = LOT_PROGRAMS.iter().find(|p| p.key == "building/universidad").unwrap();
         let casa = LOT_PROGRAMS.iter().find(|p| p.key == "building/casa_chica").unwrap();
-        assert!(uni.cells.0 > casa.cells.0 * 3 && uni.cells.1 > casa.cells.1 * 3);
+        let (a_uni, a_casa) = (uni.cells.0 * uni.cells.1, casa.cells.0 * casa.cells.1);
+        assert!(
+            a_uni > a_casa * 4,
+            "la universidad ({}×{}) no es un edificio grande al lado de la casa chica ({}×{})",
+            uni.cells.0,
+            uni.cells.1,
+            casa.cells.0,
+            casa.cells.1
+        );
     }
 
     /// **UNA CERCA VERTICAL NO USA UNA PIEZA HORIZONTAL.**
@@ -1359,3 +1608,5 @@ mod tests {
         assert!(found, "los pueblos procedurales se quedaron sin edificios");
     }
 }
+
+
