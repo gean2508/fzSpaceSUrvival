@@ -6919,6 +6919,62 @@ marco rompió la Luna por no ver que la cámara asumía el marco estático.
 
 ## §13 Pendientes
 
+### ▶ PLAN PARA RETOMAR (escrito el 27 sep 2026, al cortar la sesión)
+
+Estado: commit `67bb624` + los cambios de abajo marcados ✅ (ver `git log`). APK
+**1.0.378** publicado (Tailscale `http://100.83.97.54:5173`) con todo hasta
+`67bb624`, sin probar en el Redmi (no estaba conectado). Referencias visuales del
+usuario en `design/referencias/` (memoria `referencias-visuales`).
+
+**Hecho en esta sesión (verificado en la compu):** congelamiento a los 4 s por la
+ecología (cola con plazo); vuelo de 80-110 → 10-15 ms (`ha_shared::grueso`);
+tirones al caminar (memorias de ríos compartidas); sombra por esquina (sin
+rectángulos grises); vereda/asfalto sin damero (`podar-variantes-de-suelo.py`);
+paneles de depuración apagados (`/depurar`); botón CAM al lado de MENU;
+✅ CASATEST pasa (la cáscara se abre entera: `Overhead::pie` + recinto en
+`layers::fade_overhead`); ✅ tope de dt del vuelo 1/20 → 1/10 (un celu lento
+volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el APK.
+
+**Pendiente, en este orden:**
+
+1. **LAS ESQUINAS DE LOS ACANTILADOS SE VEN ROTAS** (reporte del usuario, lo más
+   visible). En cada ángulo de 90° el tramo recto sale bien y la pieza de la
+   esquina sale mal: el borde superior (donde pisa el jugador) no es continuo.
+   Mirar `world2d.rs` → la elección de pose del kit de acantilado
+   (`corner_ne/nw/se/sw`, `inner_*`, `edge_*`; ~l. 3418 y 3593, y
+   `CARAS_QUE_CUELGAN`), y el importador `scripts/import-acantilado.py` (qué
+   recorte del pack es cada esquina). Hipótesis: la esquina interior/exterior
+   está invertida o recortada de otra fila del pack. Reproducir con
+   `HA_RELIEVETEST` y comparar contra `design/referencias/terrazas-y-cascadas.png`.
+2. **FACHADATEST falla**: al entrar al cuarto construido se abre la cara sur pero
+   no las caras norte/laterales (`caras [29,4=1.00 …]`). `Cuartos::en` no
+   devuelve el recinto en esa corrida, o el `pie` de las caras laterales no cae
+   en [z0, z1+1]. Ver `layers::fade_overhead` y `walls::huella_que_tapa`.
+3. **Terrazas como la referencia**: los cantos son escaleras de 1 celda (86 %).
+   Es el pendiente "EL PASO NO USA EL KIT… ENDEREZAR EL CANTO" de más abajo:
+   cantos rectos de ≥4 celdas y piezas diagonales. Mueve el mundo (tests de
+   cumbre/caminos).
+4. **Agua en la nieve**: el valle que talla el río baja de la línea de nieve y
+   sale pasto verde en cuadros sueltos junto a las cascadas nevadas.
+5. **Probar en el Redmi** (`leo-celu conectar` → `probar`; el ADB inalámbrico ya
+   quedó habilitado en 100.110.132.40:5555) y reactivar la **escala de render** en
+   Android midiendo con el cable (la palanca grande para celus débiles; §10).
+6. **ECOTEST**: invariante de forraje (`no hay forraje donde el bioma lo da`);
+   los `FoodDot` son cuadrados rojos planos — falta arte o quitar.
+7. **Planetas vistos de lejos** con el estilo de `luna-pixel-art.png`, y mapa del
+   mundo con la variedad de `distribucion-del-mapa.png`.
+8. **Luz nocturna** como `iluminacion-noche.png` (brillos neón de hongos y
+   luciérnagas, fogata cálida con gradiente).
+9. Del día: fauna de otros planetas sin arte (quad de color), crías y cultivos
+   por etapas, variantes de color de animales.
+
+**Cómo se mide** (lo que funcionó): drivers `HA_<X>TEST=1 HA_AUTOPLAY=1
+HA_FORCE_TOUCH=1 HA_SHOTDIR=… WGPU_BACKEND=gl ./target/release/ha-game`; sonda
+`HA_STAGES=1`; y gdb como perfilador (lanzar el juego DESDE gdb e interrumpirlo
+con `kill -INT` cada 1,5 s). En escritorio el tester queda encerrado en las
+paredes que construyó en corridas viejas: no es bug del juego.
+
+
 ### El canal urbano: el río que cruza el pueblo ya lleva muro (15 ago 2026)
 
 `1_Terrains_and_Fences` trae **tres familias `Wall_*`, 58 piezas**, y no las usaba

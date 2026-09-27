@@ -213,7 +213,13 @@ fn creative_fly_step(
     // Un frame largo (carga de assets, cambio de app) NO debe catapultarte: la
     // altura es exponencial, así que 0.25 s de hipo valían 7 m de golpe y el
     // encuadre daba un salto visible. Se acota el paso y ya.
-    let dt = time.delta_secs().min(1.0 / 20.0);
+    //
+    // **Pero el tope es 1/10 s, no 1/20** (27 sep 2026): con 1/20, cualquier
+    // equipo por debajo de 20 fps volaba en CÁMARA LENTA —a 6 fps el vuelo iba al
+    // 30 % de su velocidad— y salir del planeta se sentía como no poder moverse
+    // (`HA_TRIPTEST` se quedaba corto al volver de la Luna). 1/10 sigue frenando
+    // el hipo de un frame de 0,25 s y deja volar a tiempo real a un celu lento.
+    let dt = time.delta_secs().min(1.0 / 10.0);
     let t = clock.t;
     let out_of_ki = flight.ki_empty();
 

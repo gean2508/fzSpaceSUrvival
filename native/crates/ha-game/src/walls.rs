@@ -530,6 +530,8 @@ fn huella_que_tapa(tx: i64, tz: i64, cara: Cara, size: Vec2) -> crate::layers::O
     };
     // Una cara exterior se apila sobre el tumbado, así que adentro tiene que
     // borrarse más que él o la franja de la entrada queda turbia.
+    // Parte de una casa: al entrar se abre con el resto de su recinto.
+    let huella = huella.con_pie(tz);
     if cara.es_exterior() {
         huella.exterior()
     } else {

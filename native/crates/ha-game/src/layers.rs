@@ -221,22 +221,35 @@ pub struct Overhead {
     /// fila donde uno entra. Con la fachada más transparente que el tumbado el
     /// producto vuelve a rondar el 0,3 de siempre.
     pub alpha_dentro: f32,
+    /// **La línea de pared sobre la que está parado este sprite** (z de su pie),
+    /// si es parte de una casa. Con ella el frente se abre ENTERO al entrar —como
+    /// en Project Zomboid—: estando dentro de un recinto (cuarto cerrado o
+    /// edificio), se funde todo sprite parado sobre una pared de ESE recinto,
+    /// no sólo el que tenés encima. Sin esto la planta baja se abría y los pisos
+    /// de arriba seguían opacos (`CASATEST`/`FACHADATEST`, 27 sep 2026).
+    pub pie: Option<i64>,
 }
 
 impl Overhead {
     /// Huella de TECHO: se abre un paso antes de que llegues.
     pub fn techo(min: (i64, i64), size: (i64, i64)) -> Self {
-        Self { min, size, margen: 1, margen_x: 1, alpha_dentro: INSIDE_ALPHA }
+        Self { min, size, margen: 1, margen_x: 1, alpha_dentro: INSIDE_ALPHA, pie: None }
     }
 
     /// Huella de PARED: sólo se abre si de verdad estás debajo de lo que tapa.
     pub fn pared(min: (i64, i64), size: (i64, i64)) -> Self {
-        Self { min, size, margen: 0, margen_x: 0, alpha_dentro: INSIDE_ALPHA }
+        Self { min, size, margen: 0, margen_x: 0, alpha_dentro: INSIDE_ALPHA, pie: None }
     }
 
     /// Esta huella es la cara EXTERIOR de un edificio: se dibuja por encima del
     /// tumbado, así que adentro tiene que borrarse más que él **y a lo ancho**
     /// (ver [`Self::margen_x`]).
+    /// Marca el sprite como parte de una casa, parado sobre la línea `z`.
+    pub fn con_pie(mut self, z: i64) -> Self {
+        self.pie = Some(z);
+        self
+    }
+
     pub fn exterior(mut self) -> Self {
         self.alpha_dentro = FACHADA_ALPHA;
         self.margen_x = FRENTE_QUE_SE_ABRE;
@@ -269,9 +282,15 @@ impl Plugin for LayersPlugin {
 /// Fade suave de los sprites [`Overhead`] según si el jugador está bajo su
 /// huella. Corre sobre las pocas entidades marcadas (los techos vivos alrededor
 /// del jugador), así que no cuesta nada.
+#[allow(clippy::too_many_arguments)]
 fn fade_overhead(
     time: Res<Time>,
     player: Query<&Transform, With<crate::sim::Player>>,
+    cuartos: Option<Res<crate::cuartos::Cuartos>>,
+    edificios: Option<Res<crate::edificios::Edificios>>,
+    tiles: Option<Res<crate::world2d::TileWorld>>,
+    ctx: Option<Res<crate::scene::WorldContextRuntime>>,
+    planet: Option<Res<crate::world2d::ActivePlanet>>,
     mut over: Query<(&Overhead, &mut Sprite), Without<crate::sim::Player>>,
 ) {
     let Ok(pt) = player.get_single() else { return };
@@ -280,12 +299,50 @@ fn fade_overhead(
     // Render y = −z: el z de mundo del jugador se recupera invirtiendo el signo.
     let ptz = (-pt.translation.y / tile).floor() as i64;
     let rate = (time.delta_secs() * 9.0).min(1.0);
+
+    // El recinto donde está parado el jugador: caja (x0, z0, x1, z1) inclusiva.
+    let recinto = (|| {
+        let (Some(tiles), Some(ctx), Some(planet)) = (tiles.as_ref(), ctx.as_ref(), planet.as_ref()) else {
+            return None;
+        };
+        let body = crate::world2d::active_surface_body(ctx, planet);
+        let z = tiles.z;
+        if let Some(c) = cuartos.as_ref().and_then(|c| c.en(body, z, ptx, ptz)) {
+            let (mut x0, mut z0, mut x1, mut z1) = (i64::MAX, i64::MAX, i64::MIN, i64::MIN);
+            for &(x, zz) in &c.celdas {
+                x0 = x0.min(x);
+                z0 = z0.min(zz);
+                x1 = x1.max(x);
+                z1 = z1.max(zz);
+            }
+            return Some((x0, z0, x1, z1));
+        }
+        let eds = edificios.as_ref()?;
+        let i = eds.en(body as u8, z, ptx, ptz)?;
+        let (mut x0, mut z0, mut x1, mut z1) = (i64::MAX, i64::MAX, i64::MIN, i64::MIN);
+        for c in eds.list[i].ed.cuartos() {
+            x0 = x0.min(c.x0);
+            z0 = z0.min(c.z0);
+            x1 = x1.max(c.x0 + c.w - 1);
+            z1 = z1.max(c.z0 + c.h - 1);
+        }
+        Some((x0, z0, x1, z1))
+    })();
+
     for (o, mut sprite) in &mut over {
-        let inside = ptx >= o.min.0 - o.margen_x
+        let debajo = ptx >= o.min.0 - o.margen_x
             && ptx < o.min.0 + o.size.0 + o.margen_x
             && ptz >= o.min.1 - o.margen
             && ptz < o.min.1 + o.size.1 + o.margen;
-        let target = if inside { o.alpha_dentro } else { 1.0 };
+        // ¿Está parado sobre una pared del recinto donde estás? (las líneas de
+        // pared van de z0, el borde norte, a z1+1, el borde sur)
+        let de_tu_casa = match (o.pie, recinto) {
+            (Some(pie), Some((x0, z0, x1, z1))) => {
+                pie >= z0 && pie <= z1 + 1 && o.min.0 <= x1 + 1 && o.min.0 + o.size.0 >= x0
+            }
+            _ => false,
+        };
+        let target = if debajo || de_tu_casa { o.alpha_dentro } else { 1.0 };
         let a = sprite.color.alpha();
         sprite.color.set_alpha(a + (target - a) * rate);
     }

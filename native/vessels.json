@@ -4,11 +4,11 @@
       "id": "PlayerShip",
       "label": "PLAYER SHIP",
       "mode": "ActiveFlight",
-      "body": "Earth",
-      "orbit_phase": 4.1674566,
+      "body": "Moon",
+      "orbit_phase": 3.951835,
       "surface_tz": 0.0,
-      "orbit_alt_m": 50.0,
-      "fuel_pct": 100.0,
+      "orbit_alt_m": 21600.0,
+      "fuel_pct": 71.76684,
       "power": {
         "generation_w": 0.0,
         "load_w": 18.0,
@@ -17,9 +17,9 @@
         "solar_efficiency": 0.0
       },
       "connectivity": {
-        "earth_los": true,
-        "repeater_los": true,
-        "signal_strength": 0.2
+        "earth_los": false,
+        "repeater_los": false,
+        "signal_strength": 0.0
       }
     },
     {
@@ -27,7 +27,7 @@
       "label": "ORBITAL STATION",
       "mode": "ParkedOrbit",
       "body": "Earth",
-      "orbit_phase": 0.3607015,
+      "orbit_phase": 0.11635528,
       "surface_tz": 0.0,
       "orbit_alt_m": 600.0,
       "fuel_pct": 100.0,

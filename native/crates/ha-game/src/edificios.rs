@@ -427,7 +427,8 @@ fn dibujar_cascara(
                             (x0, tramo.tz - alto - celdas),
                             (MODULO, celdas),
                         )
-                        .exterior(),
+                        .exterior()
+                        .con_pie(tramo.tz),
                     ));
                     alto += celdas;
                 }
