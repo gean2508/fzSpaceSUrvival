@@ -6,15 +6,16 @@ palitos: *"arte basura"*, dijo el usuario, con razón). Acá cada animal es un
 MODELO: elipsoides con material, articulados (patas que giran en la cadera,
 cabeza en el cuello). El pixel art NO se dibuja: se renderiza desde el modelo
 con la cámara 3/4 del juego y la luz del pack, y cada tono sale de la rampa del
-material en la paleta medida (`lib/pixel.py`). Por eso el PNG y el `.glb` son la
-misma cosa: el uno es el render del otro.
+material en la paleta medida (`lib/pixel.py`). Por eso el pixel art y el modelo son la
+misma cosa: el PNG es el render del modelo (el modelo no se exporta: los
+.glb se descartaron el 27 sep 2026, ver biblia §14).
 
 Y porque es un modelo, las poses salen solas: tres direcciones (la izquierda es
 el espejo de la derecha, lo hace `fauna.rs::apply_pose`) por `idle`, `walk`,
 `run`, `eat` y, el perro, `bark`.
 
 ```sh
-python3 scripts/fauna3d.py          # hoja art/gen/fauna.png + manifest + arte3d/modelos/fauna/*.glb
+python3 scripts/fauna3d.py          # hojas art/gen/fauna/*.png + manifest
 python3 scripts/fauna3d.py --ver    # lámina ampliada en el scratchpad, sin publicar
 ```
 
@@ -27,7 +28,6 @@ from __future__ import annotations
 
 import json
 import math
-import struct
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -485,77 +485,6 @@ def cuerpo_rx_rz(a: Animal):
     return (max(xs) - min(xs)) / 2 + 0.2, max(p.r[2] for p in a.prims if p.grupo == "cuerpo") + 0.03
 
 
-# — .glb con color por vértice ————————————————————————————————————————
-
-def esfera(n=10):
-    v = []
-    for i in range(n + 1):
-        th = math.pi * i / n
-        for j in range(2 * n + 1):
-            ph = 2 * math.pi * j / (2 * n)
-            v.append((math.sin(th) * math.cos(ph), math.cos(th), math.sin(th) * math.sin(ph)))
-    idx = []
-    cols = 2 * n + 1
-    for i in range(n):
-        for j in range(2 * n):
-            a, b = i * cols + j, i * cols + j + 1
-            c, d = a + cols, b + cols
-            idx += [a, c, b, b, c, d]
-    return np.array(v), np.array(idx)
-
-
-def exportar_glb(a: Animal, prims, rampas, ruta: Path):
-    """El modelo en reposo. Cada vértice lleva el tono de la MISMA rampa y banda
-    que usa el render, con la misma luz: visto desde la cámara del juego es el
-    sprite; girado, es el animal."""
-    V, I = esfera()
-    P, C, IDX = [], [], []
-    for p in prims:
-        R, c, r = p.rot, np.array(p.c), np.array(p.r)
-        pos = (V * r) @ R.T + c
-        n = (V / r) @ R.T
-        n /= np.linalg.norm(n, axis=1, keepdims=True)
-        lam = n @ LUZ
-        for q, l in zip(pos, lam):
-            m = p.mat
-            if m == "piel" and a.manchas and any(np.linalg.norm(q - np.array(cm)) < rm for cm, rm in a.manchas):
-                m = "mancha"
-            b = 3 if l > BANDAS[0] else 2 if l > BANDAS[1] else 1 if l > BANDAS[2] else 0
-            C.append([x / 255 for x in rampas[m][b]] + [1.0])
-        IDX.append(I + len(P))
-        P.extend(pos.tolist())
-    P = np.array(P, np.float32)
-    C = np.array(C, np.float32)
-    I = np.concatenate(IDX).astype(np.uint32)
-
-    def pad4(b, r=b"\x00"):
-        return b + r * ((4 - len(b) % 4) % 4)
-
-    bin_, vistas = b"", []
-    for blob, tgt in ((P.tobytes(), 34962), (C.tobytes(), 34962), (I.tobytes(), 34963)):
-        vistas.append({"buffer": 0, "byteOffset": len(bin_), "byteLength": len(blob), "target": tgt})
-        bin_ = pad4(bin_ + blob)
-    g = {"asset": {"version": "2.0", "generator": "phaser-arena fauna3d"}, "scene": 0,
-         "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
-         "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "COLOR_0": 1}, "indices": 2,
-                                     "material": 0}]}],
-         "materials": [{"pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0,
-                                                 "roughnessFactor": 1}, "extensions": {"KHR_materials_unlit": {}}}],
-         "extensionsUsed": ["KHR_materials_unlit"],
-         "accessors": [
-             {"bufferView": 0, "componentType": 5126, "count": len(P), "type": "VEC3",
-              "min": P.min(0).tolist(), "max": P.max(0).tolist()},
-             {"bufferView": 1, "componentType": 5126, "count": len(C), "type": "VEC4"},
-             {"bufferView": 2, "componentType": 5125, "count": len(I), "type": "SCALAR"}],
-         "bufferViews": vistas, "buffers": [{"byteLength": len(bin_)}]}
-    js = pad4(json.dumps(g, separators=(",", ":")).encode(), b" ")
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    with open(ruta, "wb") as f:
-        f.write(struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(bin_)))
-        f.write(struct.pack("<II", len(js), 0x4E4F534A) + js)
-        f.write(struct.pack("<II", len(bin_), 0x004E4942) + bin_)
-
-
 # — armar la hoja ———————————————————————————————————————————————————————
 
 def main():
@@ -593,7 +522,6 @@ def main():
                                             "anim": {"fps": fps, "frames": n}, "dir": "Right"}
         filas.append((a, W, H, cuadros, poses))
         tamanos[a.clave] = (W / PX_M, H / PX_M)
-        exportar_glb(a, posar(a, "idle", 0, 2), rampas, RAIZ / "arte3d/modelos/fauna" / f"{a.clave.split('_')[-1]}.glb")
 
     # Una hoja por animal (cada una con su propia grilla = su cuadro).
     gen = RAIZ / "native/crates/ha-game/assets/art/gen/fauna"
@@ -613,9 +541,6 @@ def main():
         if not ver:
             gen.mkdir(parents=True, exist_ok=True)
             hoja.save(gen / f"{nombre}.png")
-            (RAIZ / "arte3d/fuente/objetos/npc" / a.clave.split("/")[1]).mkdir(parents=True, exist_ok=True)
-            cuadros[0].save(
-                RAIZ / "arte3d/fuente/objetos/npc" / a.clave.split("/")[1] / "base.png")
 
     scratch = Path("/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/5e52c5ed-ff80-43cb-ac48-0abbc2a63dbd/scratchpad")
     ancho = max(h.width for h in lamina)

@@ -5861,64 +5861,21 @@ dos slots que recorten el mismo atlas comparten archivo y el APK no se infla.
 
 ---
 
-### EL ARTE PASÓ POR 3D Y VOLVIÓ A 2D (27 sep 2026)
+### La fauna de la Tierra se MODELA y se renderiza a pixel art (27 sep 2026)
 
-Pedido del usuario: *"agarrá todos los assets 2D, apartalos en una carpeta y
-convertí asset por asset a 3D sin perder diseño ni color, respetando la
-iluminación o mejorándola, y sin lag"*. Se eligió **3D pre-renderizado**: el
-modelo vive FUERA del juego y lo que el juego carga es el mismo PNG, del mismo
-tamaño, con los mismos rects. El manifest no cambia y el Redmi no paga nada
-(reglas 1 y 2 intactas).
+Los animales dibujados a mano eran "arte basura" (usuario, con razón). Ahora
+`scripts/fauna3d.py` arma cada uno como un modelo de elipsoides articulado (patas
+en la cadera, cabeza en el cuello) y RENDERIZA el pixel art desde él: cámara
+inclinada 38°, luz del pack, cuatro bandas por material sacadas de `rampa()`,
+limpieza de píxeles huérfanos y `verificar()` del corsé. Salen 3 direcciones ×
+idle/walk/run/eat (+bark del perro) para vaca, gallina, oveja, cerdo, perro,
+cabra, burro, conejo y pato, en `art/gen/fauna/`. **`SpeciesDef.size` es el
+CUADRO en metros que imprime el script** — si no coincide, el sprite se estira.
 
-`scripts/arte3d.py` + `scripts/lib/volumen3d.py`, con salida en `arte3d/`:
-
-| carpeta | qué hay |
-|---|---|
-| `arte3d/fuente/paginas/` | la página ORIGINAL de cada PNG. Es la entrada del script: correrlo dos veces da lo mismo, y `--deshacer` la devuelve al juego |
-| `arte3d/fuente/objetos/<cat>/<nombre>/` | cada asset recortado, una carpeta por objeto y un PNG por variante/pose — los objetos de varias piezas (casa = cuerpo + puertas + techo) quedan juntos |
-| `arte3d/relieve/` | por página, `*_altura.png` (el modelo) y `*_normal.png` |
-| `arte3d/modelos/` | un `.glb` por asset, en VÓXELES con color por vértice. No se versiona: `--solo-modelos` lo regenera (y `--personajes` las capas del creador) |
-
-**Cómo se reconstruye** (el método de SpriteIlluminator/Laigter): distancia al
-borde del alfa, redondeada con un radio proporcional al lado corto de cada pieza
-(30 %, entre 3 y 10 px) — un tanque sale cilindro, una fachada sigue siendo
-bloque —, más el paso alto de la luminancia como relieve fino (sólo en el
-modelo). **El horneado** re-ilumina desde ese modelo con la luz medida del pack
-(arriba-izquierda): sube +5 del lado a la luz, baja medio o un escalón de rampa
-(12) del lado en sombra, EN BANDAS, y cada píxel tocado va al color más cercano
-entre los del propio sprite y la paleta del pack. Lo que no cambia queda bit a
-bit igual.
-
-**Lo que NO se bisela**: el suelo (`PLANAS` en el script: agua, piso, senda,
-calle, orla, bordes, taludes, sombras, UI…), `art/chargen` (capas que se
-componen en runtime: biselarlas por separado pintaría costuras al apilarlas), y
-**el borde del rect de una pieza de kit**: el rect se extiende con padding
-`edge`, así una cerca o una copa cortada a ras siguen empalmando sin raya.
-
-**Los modelos son VÓXELES, no inflado** (`lib/voxel3d.py`). La primera versión
-inflaba la silueta y el usuario la rechazó con razón: *"la biblioteca parece una
-almohada"*, y la fogata tenía huecos entre frente y dorso. El pack dibuja en
-proyección oblicua (subir una fila = subir un píxel de alto O alejarse uno de
-fondo), así que cada columna de un objeto CONSTRUIDO es un bloque: arriba la
-tapa que se aleja, abajo el frente vertical; la profundidad de la tapa se mide
-por el salto de luz entre tapa y canto. Las ranuras oscuras se hunden un vóxel
-(libros separados del mueble). Lo ORGÁNICO (fuego, árboles, rocas, bichos:
-`voxel3d::es_organico`) va parado y redondo. Todo sólido, sin costuras. En el
-visor (`arte3d/visor`, `scripts/arte3d-visor.py`), «Como en el juego» aplica la
-cizalla oblicua y el modelo coincide con el PNG píxel por píxel.
-
-**La fauna de la Tierra se MODELA** (`scripts/fauna3d.py`, 27 sep 2026). Los
-animales dibujados a mano eran "arte basura" (usuario, con razón). Ahora cada uno
-es un modelo de elipsoides articulado (patas en la cadera, cabeza en el cuello) y
-el pixel art se RENDERIZA desde él: cámara inclinada 38°, luz del pack, cuatro
-bandas por material sacadas de `rampa()`, limpieza de píxeles huérfanos, y
-`verificar()` del corsé. Salen 3 direcciones × idle/walk/run/eat (+bark del
-perro) para vaca, gallina, oveja, cerdo, perro, cabra, burro, conejo y pato. El
-tamaño de `SpeciesDef.size` es el CUADRO en metros que imprime el script.
-
-Si llega arte nuevo al pack: `python3 scripts/arte3d.py` después del
-importador. Si el horneado no gusta: `--deshacer`, retocar `FORMA`/`SUBE_MAX`/
-`BAJA_MAX` en `volumen3d.py`, volver a correr.
+Las páginas del pack llevan además un retoque de luz horneado ese mismo día (un
+escalón de rampa del lado en sombra, +5 del lado a la luz). El script que lo hizo
+se borró con el resto del 3D (§14); las páginas originales están en el commit
+`c531097`.
 
 ## §9 Build, publicación y comandos
 
@@ -7218,29 +7175,6 @@ vos.
   crecer, cosechar) más el arte de cada etapa.
 - **Más fauna**: variantes de color (vaca overa colorada, cerdo manchado), crías,
   gallo, y la fauna de los otros planetas, que sigue siendo quad de color.
-- **EL JUEGO PASA A 3D — plan por fases** (pedido del usuario, 27 sep 2026). El
-  motivo es de fondo, no estético: entrar a las casas como en Project Zomboid (sin
-  pantalla de carga, el techo se corta, las paredes que tapan se vuelven
-  translúcidas) con capas 2D se volvió inmanejable; en 3D es "ocultar lo que está
-  por encima de tu piso". Ojo: PZ mismo es 2.5D — lo que se copia es el CORTE, no
-  su render. La regla 1 queda en suspenso SÓLO en la rama `motor-3d` hasta que el
-  Redmi mida 60 fps; `main` sigue 2D.
-  - **3D-F0 prototipo**: cámara tercera persona sobre la MISMA sim (`ha-shared`),
-    un barrio con una casa enterable y corte de techo/paredes, la iluminación
-    portada (velo multiplicativo de noche + luz aditiva con aura y gradiente; el
-    presupuesto de 16 luces sigue), fps en el Redmi.
-  - **3D-F1 mundo**: chunk = UNA malla (vóxeles fundidos, greedy meshing), lo
-    repetido instanciado; la calle se genera como malla continua desde el trazado
-    de la ciudad (recta/curva/esquina con vereda y cordón), no por baldosas.
-  - **3D-F2 casas y luz**: pisos, corte por piso, focos y lámparas que se prenden
-    y apagan, animación sólo en lo que se mueve (fuego, focos, agua, molinos).
-  - **3D-F3 vida**: crías que crecen (edad en la sim → escala/modelo), cultivos por
-    etapas, fauna con los modelos de `fauna3d.py`.
-  - **3D-F4 director IAFZ**: un orquestador tipo "AI Director" arma escuadras,
-    lee hacia dónde vas y reparte roles (emboscar, flanquear, cortar el paso). Se
-    hereda la regla del dron: **la red nunca toca los motores** — emite
-    intenciones a baja frecuencia y el pathfinding/steering determinista las
-    ejecuta; un genoma malo juega torpe, no rompe el juego.
 
 ### Perf / render
 - **Componer también el cuerpo de los aldeanos** (hoy sólo el jugador y los
@@ -7284,6 +7218,19 @@ naves pieza por pieza tipo KSP · física orbital real.
 ---
 
 ## §14 Cementerio — lo que ya se quitó, no reintroducir
+
+### Convertir el pixel art a 3D (27 sep 2026) — NO
+
+Se intentó pasar los 14.000 assets a modelos 3D automáticamente (inflado de
+silueta y después vóxeles por columna: tapa + frente) y un prototipo de motor 3D
+en tercera persona. El usuario los vio y los descartó: *"una basura, una imagen
+puesta sobre un bloque"*. **El motivo es de fondo**: un dibujo 3/4 no contiene
+los costados ni el dorso; cualquier conversión los INVENTA, y el resultado nunca
+es "el mismo objeto, sólo que en 3D". Si algún día el juego va a 3D, el arte
+tiene que nacer 3D (un pack low-poly coherente), no convertirse. Todo se borró
+(modelos, scripts de vóxeles, visor, rama `motor-3d`); quedaron los PNG del
+juego y `scripts/fauna3d.py`, que usa un modelo sólo como paso intermedio para
+renderizar pixel art.
 
 **Render 3D esférico** (cámara FP, esferas caminables por píxel, AssetFactory de
 meshes, toon/outline, domo de cielo Ghibli, floating-origin 3D, shaders custom,
