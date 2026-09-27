@@ -1060,10 +1060,15 @@ impl LodBake {
                 // Promediado sobre la celda que rodea al vértice: a 1024 m por quad,
                 // UNA muestra es un tile de 1 m elegido al azar — volvería el ruido de
                 // sal y pimienta que este promedio existe para matar.
-                let rgb = average_tile_color(tiles, self.body, s.x, s.y, self.tile_m, 2);
-                // **La ciudad no cabe en un quad de 64 m.** Una consulta por
-                // vértice (memoizada) la pinta igual; ver `world2d::tinte_urbano`.
-                let rgb = crate::world2d::tinte_urbano(self.body, s.x, s.y, rgb);
+                // **En GRUESO** (`ha_shared::grueso`): sin trazar ríos, que a un
+                // vértice cada decenas de metros no se ven y eran el 90 % del costo
+                // de subir volando (medido con gdb el 27 sep 2026).
+                let rgb = ha_shared::grueso::con(|| {
+                    let rgb = average_tile_color(tiles, self.body, s.x, s.y, self.tile_m, 2);
+                    // **La ciudad no cabe en un quad de 64 m.** Una consulta por
+                    // vértice (memoizada) la pinta igual; ver `world2d::tinte_urbano`.
+                    crate::world2d::tinte_urbano(self.body, s.x, s.y, rgb)
+                });
                 let lin = Color::srgb(rgb[0], rgb[1], rgb[2]).to_linear();
                 self.index_of[iy * self.side + ix] = self.positions.len() as u32;
                 self.positions.push([p.x, p.y, 0.0]);
@@ -1413,7 +1418,10 @@ fn fill_disc_span(data: &mut [u8], tiles: &TileWorld, body: CelestialBody, px0: 
             // sobre tiles de 1 m con un píxel de ~6 m daba sal y pimienta (el
             // planeta parecía estática de TV, no un mundo).
             let texel_m = 2.0 * r / n as f32;
-            let rgb = average_tile_color(tiles, body, u * 2.0 * r, -v * 2.0 * r, texel_m, 2);
+            // En grueso: un texel son kilómetros, los ríos no se ven (`ha_shared::grueso`).
+            let rgb = ha_shared::grueso::con(|| {
+                average_tile_color(tiles, body, u * 2.0 * r, -v * 2.0 * r, texel_m, 2)
+            });
             // Un toque de ruido para dar volumen. Bajado de ±8 % a ±4 %: ahora el
             // color de cada texel YA trae el sombreado de relieve real
             // (`average_tile_color` → `tile_render_color`), así que este ruido

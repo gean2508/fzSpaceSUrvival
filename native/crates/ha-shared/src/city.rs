@@ -602,7 +602,9 @@ fn retiro_del_desnivel(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) 
         return v;
     }
     let v = calcular_retiro(body, ox, oz, w, hgt);
-    MEMO.with(|m| m.borrow_mut()[ranura] = Ranura { clave, valor: v, lleno: true });
+    if !crate::grueso::activo() {
+        MEMO.with(|m| m.borrow_mut()[ranura] = Ranura { clave, valor: v, lleno: true });
+    }
     v
 }
 
@@ -644,7 +646,9 @@ fn casa_mojada(body: CelestialBody, lot: &Lot) -> bool {
     let hx = lot.min.0 + 2 + ((h >> 11) as i64).rem_euclid((lot.w - hw - 3).max(1));
     let hz = lot.min.1 + 2;
     let v = (hz..hz + hd).any(|z| (hx..hx + hw).any(|x| crate::geography::hay_agua(body, x, z)));
-    MEMO.with(|m| m.borrow_mut()[ranura] = Ranura { clave, valor: v, lleno: true });
+    if !crate::grueso::activo() {
+        MEMO.with(|m| m.borrow_mut()[ranura] = Ranura { clave, valor: v, lleno: true });
+    }
     v
 }
 

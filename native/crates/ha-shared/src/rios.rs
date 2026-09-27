@@ -63,7 +63,8 @@
 //! una vez cada 128×128 tiles y no una vez por celda.
 
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 
 use crate::celestial_bodies::{body_terrain_seed, CelestialBody};
 use crate::geography::hash2;
@@ -391,26 +392,59 @@ impl BloqueRios {
 /// La clave de un memo de mundo: `(cuerpo, época de la semilla, celda)`.
 type Clave = (u8, u32, i64, i64);
 
-thread_local! {
-    /// Trazados ya calculados, por `(cuerpo, época, cx, cz)`. 128 entradas: la
-    /// malla de 7×7 que necesita una consulta ([`RADIO_CUENCAS`]) entra dos veces,
-    /// que es lo que hace que moverse al bloque de al lado no vuelva a trazar
-    /// nada — comparten 42 de las 49 cuencas.
-    static TRAZOS: RefCell<Vec<(Clave, Rc<Trazo>)>> = const { RefCell::new(Vec::new()) };
-    /// Los tramos que tocan un bloque de [`BLOQUE`] tiles, ya filtrados por caja.
-    /// Es lo que hace que la consulta de una celda mire una lista corta en vez de
-    /// los 25 trazados de la vecindad.
-    static BLOQUES: RefCell<Vec<(Clave, Rc<BloqueRios>)>> = const { RefCell::new(Vec::new()) };
-    /// **El último bloque consultado.** `compute_field` pregunta por CADA celda del
-    /// mundo y las celdas llegan en orden: un chunk son 256 consultas seguidas al
-    /// mismo bloque. Sin este atajo, cada una recorría la lista de [`BLOQUES`]
-    /// comparando claves. Medido por `cuevas::preguntar_por_la_cueva_es_barato`,
-    /// que es el guardián de coste del generador.
-    static ULTIMO: RefCell<Option<(Clave, Rc<BloqueRios>)>> = const { RefCell::new(None) };
+/// **Las memorias de ríos son COMPARTIDAS entre hilos** (27 sep 2026). Eran
+/// `thread_local!`, y Bevy corre los sistemas en varios hilos: el mismo bloque se
+/// terminaba trazando una vez POR HILO que lo pedía, y cada vez era un tirón de
+/// 50-100 ms al entrar caminando a un bloque nuevo (medido con gdb sobre
+/// `HA_TESTER`). Ahora hay una sola copia; el cálculo se hace FUERA del candado
+/// (si dos hilos piden lo mismo a la vez, a lo sumo se calcula dos veces — nunca
+/// se bloquea a nadie mientras se traza).
+struct Memo<V> {
+    mapa: HashMap<Clave, Arc<V>>,
+    orden: VecDeque<Clave>,
+    tope: usize,
 }
 
-const MEMO_TRAZOS: usize = 256;
-const MEMO_BLOQUES: usize = 16;
+fn memo_get<V>(m: &Mutex<Option<Memo<V>>>, k: &Clave) -> Option<Arc<V>> {
+    let g = m.lock().unwrap_or_else(|e| e.into_inner());
+    g.as_ref().and_then(|m| m.mapa.get(k).cloned())
+}
+
+fn memo_put<V>(m: &Mutex<Option<Memo<V>>>, tope: usize, k: Clave, v: Arc<V>) {
+    let mut g = m.lock().unwrap_or_else(|e| e.into_inner());
+    let m = g.get_or_insert_with(|| Memo { mapa: HashMap::new(), orden: VecDeque::new(), tope });
+    if m.mapa.insert(k, v).is_none() {
+        m.orden.push_back(k);
+        while m.orden.len() > m.tope {
+            if let Some(viejo) = m.orden.pop_front() {
+                m.mapa.remove(&viejo);
+            }
+        }
+    }
+}
+
+/// Trazados ya calculados, por `(cuerpo, época, cx, cz)`. Una consulta necesita
+/// la vecindad de [`RADIO_CUENCAS`] (11×11 = 121 cuencas); moverse al bloque de
+/// al lado comparte casi todas.
+static TRAZOS: Mutex<Option<Memo<Trazo>>> = Mutex::new(None);
+/// Los tramos que tocan un bloque de [`BLOQUE`] tiles, ya filtrados por caja.
+/// Es lo que hace que la consulta de una celda mire una lista corta en vez de
+/// los trazados de la vecindad.
+static BLOQUES: Mutex<Option<Memo<BloqueRios>>> = Mutex::new(None);
+
+thread_local! {
+    /// **El último bloque consultado, por hilo** (sin candado). `compute_field`
+    /// pregunta por CADA celda del mundo y las celdas llegan en orden: un chunk son
+    /// 256 consultas seguidas al mismo bloque. Medido por
+    /// `cuevas::preguntar_por_la_cueva_es_barato`, el guardián de coste.
+    static ULTIMO: RefCell<Option<(Clave, Arc<BloqueRios>)>> = const { RefCell::new(None) };
+}
+
+/// 1024 trazos: la vecindad de 121 cuencas entra ocho veces, así que caminar o
+/// volar bajo no vuelve a trazar lo que acaba de dejar atrás.
+const MEMO_TRAZOS: usize = 1024;
+/// 128 bloques de 128 m: un cuadrado de ~1,4 km de lado alrededor de donde se mira.
+const MEMO_BLOQUES: usize = 128;
 
 /// **CUÁNTAS NACIENTES SORTEA UNA CUENCA.**
 ///
@@ -646,31 +680,23 @@ fn rumbo_entre(a: (f32, f32, f32), b: (f32, f32, f32)) -> (f32, f32) {
     }
 }
 
-/// **`Rc` y no `Trazo`: esto se devolvía CLONADO en cada acierto.** Armar un
+/// **`Arc` y no `Trazo`: esto se devolvía CLONADO en cada acierto.** Armar un
 /// bloque consulta las 121 cuencas de la vecindad ([`RADIO_CUENCAS`]) y cada
 /// trazo son ~50 tramos, así que cada bloque pagaba 121 reservas y copias de
-/// vector antes siquiera de empezar a filtrar. El `Rc` deja el acierto en un
+/// vector antes siquiera de empezar a filtrar. El `Arc` deja el acierto en un
 /// contador.
-fn trazo_de(body: CelestialBody, cx: i64, cz: i64) -> Rc<Trazo> {
+fn trazo_de(body: CelestialBody, cx: i64, cz: i64) -> Arc<Trazo> {
     let clave = (body as u8, crate::partida::epoca(), cx, cz);
-    if let Some(t) = TRAZOS.with(|m| {
-        m.borrow().iter().find(|(k, _)| *k == clave).map(|(_, v)| v.clone())
-    }) {
+    if let Some(t) = memo_get(&TRAZOS, &clave) {
         return t;
     }
-    let t = Rc::new(trazar(body, cx, cz));
-    TRAZOS.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() >= MEMO_TRAZOS {
-            m.remove(0);
-        }
-        m.push((clave, t.clone()));
-    });
+    let t = Arc::new(trazar(body, cx, cz));
+    memo_put(&TRAZOS, MEMO_TRAZOS, clave, t.clone());
     t
 }
 
 /// Los tramos que pueden tocar el bloque de `(bx, bz)`.
-fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Rc<BloqueRios> {
+fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Arc<BloqueRios> {
     let clave = (body as u8, crate::partida::epoca(), bx, bz);
     // **El bloque de la consulta anterior, sin recorrer nada.** Ver [`ULTIMO`].
     if let Some(v) = ULTIMO.with(|u| {
@@ -678,9 +704,7 @@ fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Rc<BloqueRios> {
     }) {
         return v;
     }
-    if let Some(v) = BLOQUES.with(|m| {
-        m.borrow().iter().find(|(k, _)| *k == clave).map(|(_, v)| v.clone())
-    }) {
+    if let Some(v) = memo_get(&BLOQUES, &clave) {
         ULTIMO.with(|u| *u.borrow_mut() = Some((clave, v.clone())));
         return v;
     }
@@ -718,19 +742,13 @@ fn tramos_del_bloque(body: CelestialBody, bx: i64, bz: i64) -> Rc<BloqueRios> {
             }
         }
     }
-    // **`Rc` y no `Vec`: esto se devolvía CLONADO en cada celda.** Un bloque
+    // **`Arc` y no `Vec`: esto se devolvía CLONADO en cada celda.** Un bloque
     // guarda decenas de tramos, así que cada consulta de terreno pagaba una
     // reserva de memoria y una copia — por celda, en el camino caliente de
     // `relief::compute_field`. Es lo que puso el generador en 2,27 µs/celda
     // contra un presupuesto de 2,0.
-    let out = Rc::new(BloqueRios::armar(out, x0, z0));
-    BLOQUES.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() >= MEMO_BLOQUES {
-            m.remove(0);
-        }
-        m.push((clave, out.clone()));
-    });
+    let out = Arc::new(BloqueRios::armar(out, x0, z0));
+    memo_put(&BLOQUES, MEMO_BLOQUES, clave, out.clone());
     ULTIMO.with(|u| *u.borrow_mut() = Some((clave, out.clone())));
     out
 }
@@ -757,6 +775,9 @@ fn distancia(t: &Tramo, x: f32, z: f32) -> (f32, f32, f32) {
 /// **¿Corre agua por esta celda?** Es la consulta que reemplaza al entramado de
 /// ruido: `true` si la celda cae dentro del ancho de algún tramo trazado.
 pub fn cauce_en(body: CelestialBody, tx: i64, tz: i64) -> bool {
+    if crate::grueso::activo() {
+        return false;
+    }
     cerca_del_cauce(body, tx, tz).is_some_and(|(d, a)| d <= a)
 }
 
@@ -800,6 +821,9 @@ fn cerca_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f32)> 
 /// Así el fondo es monótono —seguir el agua es siempre bajar— y la orilla empalma
 /// suave con el terreno de al lado en vez de ser el filo de una zanja.
 pub fn perfil_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f32)> {
+    if crate::grueso::activo() {
+        return None;
+    }
     let bloque = tramos_del_bloque(body, tx.div_euclid(BLOQUE), tz.div_euclid(BLOQUE));
     if bloque.is_empty() {
         return None;

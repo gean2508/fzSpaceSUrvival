@@ -22,6 +22,7 @@ pub mod movement;
 pub mod palette;
 pub mod partida;
 pub mod rios;
+pub mod grueso;
 pub mod ps1_palette;
 pub mod worldgen;
 /// Tablas de siembra del pack (generadas por `scripts/import-pack-masivo.py`).

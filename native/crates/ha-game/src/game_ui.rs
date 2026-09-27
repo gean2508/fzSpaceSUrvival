@@ -142,6 +142,18 @@ pub fn menu_button_rect(layout: &TouchLayout) -> [f32; 4] {
     [left, top, left + MENU_W, top + MENU_BUTTON_HEIGHT]
 }
 
+/// Ancho del botón de cámaras (entra "CAM (99)").
+pub const CAM_BUTTON_WIDTH: f32 = 84.0;
+
+/// Rect del botón de CÁMARAS: a la derecha de MENU, a su misma altura. Estaba fijo
+/// en (8, 52) px, o sea ENCIMA de las barras de vida y energía (captura del 27 sep
+/// 2026); arriba al centro no tapa nada y ya es zona de toque protegida.
+pub fn cam_button_rect(layout: &TouchLayout) -> [f32; 4] {
+    let [_, top, menu_right, bottom] = menu_button_rect(layout);
+    let left = menu_right + 8.0;
+    [left, top, left + CAM_BUTTON_WIDTH, bottom]
+}
+
 /// Center a floating panel on the full screen (mobile + desktop).
 pub fn apply_center(node: &mut Node, layout: &TouchLayout, width: f32, height: f32) {
     node.left = Val::Px(ui_center_left(layout, width));

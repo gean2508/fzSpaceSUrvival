@@ -601,7 +601,9 @@ pub fn superficie_de(body: CelestialBody, tx: i64, tz: i64) -> Superficie {
             return e.s;
         }
         let s = superficie_sin_memo(body, tx, tz);
-        *e = SuperficieSlot { tx, tz, body: cuerpo, epoca: b, s, filled: true };
+        if !crate::grueso::activo() {
+            *e = SuperficieSlot { tx, tz, body: cuerpo, epoca: b, s, filled: true };
+        }
         s
     })
 }
@@ -1089,7 +1091,9 @@ pub fn settlement_in(body: CelestialBody, sx: i64, sz: i64) -> Option<Settlement
         return hit;
     }
     let calculado = settlement_in_sin_memo(body, sx, sz);
-    SITIOS.with(|t| t.borrow_mut()[ranura] = Some((clave, sx, sz, calculado)));
+    if !crate::grueso::activo() {
+        SITIOS.with(|t| t.borrow_mut()[ranura] = Some((clave, sx, sz, calculado)));
+    }
     calculado
 }
 

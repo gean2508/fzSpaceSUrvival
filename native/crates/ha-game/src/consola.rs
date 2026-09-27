@@ -93,6 +93,8 @@ impl Consola {
 pub enum Orden {
     /// Alternar el modo creativo.
     Creativo,
+    /// Mostrar/ocultar los paneles de depuración (fauna, sociedad).
+    Depurar,
     /// Poner `cantidad` de `item` en la bolsa.
     Dar { item: String, cantidad: u32 },
     /// Mover al jugador a esa celda de la superficie.
@@ -117,6 +119,7 @@ pub fn parsear(linea: &str) -> Orden {
     match verbo.as_str() {
         "ayuda" => Orden::Ayuda,
         "creativo" => Orden::Creativo,
+        "depurar" => Orden::Depurar,
         "dar" => {
             let Some(item) = partes.next() else {
                 return Orden::Error("dar qué. probá /dar madera 10".into());
@@ -395,7 +398,14 @@ fn ejecutar(
     jugador: &mut Query<(&mut crate::sim::SimState, &mut crate::sim::PlayerVisual), With<crate::sim::Player>>,
 ) -> String {
     match orden {
-        Orden::Ayuda => "/creativo · /dar <item> <n> · /ir <x> <z>".into(),
+        Orden::Ayuda => "/creativo · /dar <item> <n> · /ir <x> <z> · /depurar".into(),
+        Orden::Depurar => {
+            if crate::debug::alternar_paneles() {
+                "paneles de depuración a la vista".into()
+            } else {
+                "paneles de depuración ocultos".into()
+            }
+        }
         Orden::Error(por_que) => por_que,
         Orden::Creativo => {
             editor.creative = !editor.creative;
@@ -459,6 +469,7 @@ mod tests {
         assert_eq!(parsear("/creativo"), Orden::Creativo);
         // Sin barra también: en un teclado en pantalla es un toque de más.
         assert_eq!(parsear("creativo"), Orden::Creativo);
+        assert_eq!(parsear("/depurar"), Orden::Depurar);
         assert_eq!(
             parsear("/dar madera 10"),
             Orden::Dar { item: "madera".into(), cantidad: 10 }

@@ -1830,7 +1830,7 @@ fn update_society_overlay(
     let Ok((mut text, mut vis)) = overlay.get_single_mut() else {
         return;
     };
-    if !editor.creative {
+    if !editor.creative || !crate::debug::paneles_visibles() {
         if *vis != Visibility::Hidden {
             *vis = Visibility::Hidden;
         }

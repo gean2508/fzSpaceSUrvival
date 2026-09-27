@@ -4964,8 +4964,14 @@ de casas va después del de edificios en lo que toca a las poses**. El orden bue
 es
 
 ```
-import-pack-masivo.py  →  import-casas.py  →  import-edificios.py
+import-pack-masivo.py  →  import-casas.py  →  import-edificios.py  →  podar-variantes-de-suelo.py
 ```
+
+(el último desde el 27 sep 2026: el masivo agrupa por nombre y le cuelga a
+`floor/vereda` 38 "variantes" que son otras baldosas —blancas, rojas, azules, con
+bordes—, y la malla sortea una por celda: la vereda salía hecha un damero. El
+podador MIDE cada variante contra la base —color medio y borde— y muda las que no
+son la misma baldosa a `<base>_suelta#…`, fuera del sorteo.)
 
 y saltárselo deja el árbol de arte a medias, en silencio, sin que ningún test lo
 cace.
@@ -6055,6 +6061,49 @@ app en el celu actualiza sola.
 ## §10 Rendimiento
 
 Escrito para leerse en frío. Objetivo: **60 FPS sin tirones en el Redmi**.
+
+### RESUELTO (27 sep 2026) — "salgo del planeta: lag y no me puedo mover"
+
+Reporte del usuario. Medido en la compu con `HA_FLYTEST` + `HA_STAGES` y, como la
+sonda `ha-sys` no cubre todos los sistemas, con **gdb como perfilador**: se lanza
+el juego bajo gdb y se lo interrumpe cada 1,5 s (`kill -INT`), contando en qué
+función del juego está cada hilo. Con `ptrace_scope = 1` no se puede adjuntar a un
+proceso ya corriendo; hay que lanzarlo desde gdb.
+
+**Tres causas, una misma raíz: el trazado de ríos.**
+
+1. **El juego se CONGELABA a los 4 s de jugar.** El primer tick de ecología
+   (`ECO_TICK = 4 s`) recalculaba la capacidad de carga de TODAS las regiones del
+   guardado (vienen sin ella): 3.001 regiones × 9 muestras de bioma, y cada muestra
+   pasa por relieve → ríos. La pila en el cuelgue:
+   `EcologyWorld::cap → carrying_capacity → biome_calc → relief::cached_cell →
+   rios::perfil_del_cauce → trazar_brazo → world_map::platform`. Ahora la capacidad
+   se calcula en una **cola con plazo** (`fauna::PLAZO_CAPACIDAD`, 2 ms por frame);
+   lo que no está listo espera y la ventana de materialización se arma cuando sus
+   nueve regiones tienen capacidad.
+2. **Volando, 80-110 ms por frame.** 16 de 18 muestras de gdb dentro de
+   `world_map::platform` llamada por los ríos: la malla del terreno visto desde el
+   aire (`LodBake`) y el disco del planeta muestrean cada decenas de metros, cada
+   muestra caía en un bloque de ríos nuevo y cada fallo recorría 121 trazados. Un
+   río de 3-6 celdas no se ve a esa escala. Nació **`ha_shared::grueso`**: dentro de
+   `grueso::con(..)` no hay ríos y **ninguna caché por celda se escribe** (un valor
+   sin río no puede quedarle al que camina por la orilla; lo cuida
+   `grueso::tests::el_grueso_no_ensucia_las_caches`). Lo usan sólo el LOD, el disco
+   y la capacidad de la ecología. Resultado: **update de 80-110 ms → 10-15 ms**.
+3. **Los tirones al caminar** (picos de 50-98 ms) eran el mismo trazado: las
+   memorias de ríos eran `thread_local!` y Bevy corre los sistemas en 4 hilos, así
+   que el mismo bloque se trazaba una vez por hilo. Ahora `rios::TRAZOS` y
+   `rios::BLOQUES` son compartidas (`Mutex`, se calcula fuera del candado) y más
+   grandes (1024 trazos, 128 bloques); `ULTIMO` sigue por hilo, sin candado.
+
+**Y los paneles de depuración** ("VIVARIO…", "ECO…") salían encima de los
+corazones para cualquiera que jugara en creativo: ahora arrancan apagados y se
+prenden con `/depurar` o `HA_DEBUG_HUD=1` (`debug::paneles_visibles`).
+
+**Pendiente con el teléfono en la mano**: la escala de render (`render/scale.rs`)
+es LA palanca para celulares más débiles —el costo del Redmi es por píxel— y
+sigue apagada en Android desde el "mundo negro" del 31 jul. Hay que reactivarla
+midiendo con el cable, no a ojo.
 
 ### RESUELTO (24 ago 2026) — el disco de la Tierra se horneaba MIENTRAS CAMINABAS
 

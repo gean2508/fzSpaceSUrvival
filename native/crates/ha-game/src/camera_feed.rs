@@ -29,6 +29,7 @@ impl Plugin for CameraFeedPlugin {
             .init_resource::<PlacedCameras>()
             .add_event::<PlaceCameraEvent>()
             .add_systems(Startup, spawn_camera_ui)
+            .add_systems(Update, ubicar_boton_cam)
             .add_systems(
                 Update,
                 (
@@ -167,20 +168,45 @@ fn place_cameras(mut cams: ResMut<PlacedCameras>, mut ev: EventReader<PlaceCamer
     }
 }
 
-fn spawn_camera_ui(mut commands: Commands) {
-    // Botón "CAM" — arriba-izquierda (zona segura de toque).
+/// El layout real (tamaño de pantalla, notch) llega después del `Startup`, y en el
+/// escritorio cambia con cada resize: el botón se reubica cada vez que cambia.
+fn ubicar_boton_cam(
+    layout: Res<crate::input::TouchLayout>,
+    mut boton: Query<&mut Node, With<CameraToggleButton>>,
+    mut listo: Local<bool>,
+) {
+    if *listo && !layout.is_changed() {
+        return;
+    }
+    let [left, top, right, bottom] = crate::game_ui::cam_button_rect(&layout);
+    for mut n in &mut boton {
+        n.left = Val::Px(left);
+        n.top = Val::Px(top);
+        n.width = Val::Px(right - left);
+        n.height = Val::Px(bottom - top);
+        *listo = true;
+    }
+}
+
+fn spawn_camera_ui(mut commands: Commands, layout: Res<crate::input::TouchLayout>) {
+    // Botón "CAM" — al lado de MENU (ver `game_ui::cam_button_rect`).
+    let [left, top, right, bottom] = crate::game_ui::cam_button_rect(&layout);
     commands
         .spawn((
             Button,
             CameraToggleButton,
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(52.0),
-                left: Val::Px(8.0),
-                padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                top: Val::Px(top),
+                left: Val::Px(left),
+                width: Val::Px(right - left),
+                height: Val::Px(bottom - top),
                 border: UiRect::all(Val::Px(2.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
                 ..default()
             },
+            BorderRadius::all(Val::Px(8.0)),
             BorderColor(Color::srgba(0.5, 0.8, 1.0, 0.8)),
             BackgroundColor(Color::srgba(0.05, 0.10, 0.16, 0.85)),
             crate::game_ui::GameplayUi,

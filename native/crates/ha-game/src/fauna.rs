@@ -489,7 +489,21 @@ struct EcologyWorld {
     live: HashSet<(u8, i32, i32)>,
     loaded: bool,
     save_acc: f32,
+    /// Regiones cuya capacidad todavía no se calculó. **La capacidad es cara** (9
+    /// muestras de bioma, y cada una pasa por relieve y ríos) y el guardado trae hasta
+    /// `MAX_KNOWN_REGIONS` regiones SIN ella: calcularlas todas en el primer tick
+    /// congelaba el juego a los 4 s de empezar a jugar (medido el 27 sep 2026 con gdb:
+    /// `EcologyWorld::cap → carrying_capacity → biome_calc → rios::trazar_brazo`, 3.001
+    /// regiones de golpe). Ahora se calculan en esta cola, con plazo por frame
+    /// ([`PLAZO_CAPACIDAD`]); lo que no está listo espera, no traba.
+    pendientes: std::collections::VecDeque<(u8, i32, i32)>,
+    en_cola: HashSet<(u8, i32, i32)>,
 }
+
+/// Tiempo por frame para calcular capacidades pendientes. La unidad de trabajo es UNA
+/// región (9 muestras), así que el frame paga a lo sumo esto más una región — la
+/// lección de §10: un plazo sólo acota si la unidad entre miradas al reloj es chica.
+const PLAZO_CAPACIDAD: std::time::Duration = std::time::Duration::from_millis(2);
 
 impl EcologyWorld {
     fn cap(&mut self, body: CelestialBody, rx: i32, rz: i32) -> Capacity {
@@ -497,13 +511,54 @@ impl EcologyWorld {
         if let Some(c) = self.cells.get(&key).and_then(|c| c.cap) {
             return c;
         }
-        let cap = ecology::carrying_capacity(body, rx, rz);
+        // En grueso: 9 muestras de bioma por región no necesitan el trazado fino de
+        // los ríos (ver `ha_shared::grueso`), y con él una región costaba varios ms.
+        let cap = ha_shared::grueso::con(|| ecology::carrying_capacity(body, rx, rz));
         let e = self.cells.entry(key).or_insert(EcoCell {
             pop: ecology::equilibrium(cap),
             cap: Some(cap),
         });
         e.cap = Some(cap);
         cap
+    }
+
+    /// La capacidad YA calculada, sin calcular nada.
+    fn cap_hecha(&self, body: CelestialBody, rx: i32, rz: i32) -> Option<Capacity> {
+        self.cells.get(&(body as u8, rx, rz)).and_then(|c| c.cap)
+    }
+
+    /// Encola el cálculo de una región (adelante si es urgente: la ventana del jugador).
+    fn pedir(&mut self, key: (u8, i32, i32), urgente: bool) {
+        if self.cells.get(&key).is_some_and(|c| c.cap.is_some()) {
+            return;
+        }
+        if self.en_cola.insert(key) {
+            if urgente {
+                self.pendientes.push_front(key);
+            } else {
+                self.pendientes.push_back(key);
+            }
+        } else if urgente {
+            // ya estaba al fondo: se adelanta
+            if let Some(i) = self.pendientes.iter().position(|k| *k == key) {
+                self.pendientes.remove(i);
+                self.pendientes.push_front(key);
+            }
+        }
+    }
+
+    /// Calcula capacidades pendientes hasta agotar el plazo.
+    fn trabajar_cola(&mut self, plazo: std::time::Duration) {
+        let reloj = std::time::Instant::now();
+        while let Some(key) = self.pendientes.pop_front() {
+            self.en_cola.remove(&key);
+            if let Some(body) = crate::world2d::body_from_u8(key.0) {
+                self.cap(body, key.1, key.2);
+            }
+            if reloj.elapsed() >= plazo {
+                break;
+            }
+        }
     }
 
     /// Población de la región, creándola perezosamente en su equilibrio.
@@ -682,6 +737,7 @@ fn tick_ecology(
     if !eco.loaded {
         load_ecology(&mut eco);
     }
+    eco.trabajar_cola(PLAZO_CAPACIDAD);
     *acc += time.delta_secs();
     if *acc < ECO_TICK {
         return;
@@ -698,7 +754,7 @@ fn tick_ecology(
             let (rx, rz) = ecology::region_of(pt.translation.x, -pt.translation.y);
             for dz in -AWARE_RINGS..=AWARE_RINGS {
                 for dx in -AWARE_RINGS..=AWARE_RINGS {
-                    eco.cap(body, rx + dx, rz + dz);
+                    eco.pedir((body as u8, rx + dx, rz + dz), dx.abs().max(dz.abs()) <= SIM_RINGS);
                 }
             }
             here = Some((body as u8, rx, rz));
@@ -709,7 +765,12 @@ fn tick_ecology(
     let keys: Vec<(u8, i32, i32)> = eco.cells.keys().copied().collect();
     for key in &keys {
         let Some(body) = crate::world2d::body_from_u8(key.0) else { continue };
-        let cap = eco.cap(body, key.1, key.2);
+        // sin capacidad calculada (recién cargada del guardado): a la cola, y este
+        // paso se la saltea — lejos del jugador, esperar un tick no se nota
+        let Some(cap) = eco.cap_hecha(body, key.1, key.2) else {
+            eco.pedir(*key, false);
+            continue;
+        };
         let live = eco.live.contains(key);
         if let Some(c) = eco.cells.get_mut(key) {
             c.pop = if live {
@@ -737,7 +798,10 @@ fn tick_ecology(
             if eco.live.contains(key) && eco.live.contains(&other) {
                 continue;
             }
-            let (ca, cb) = (eco.cap(body, key.1, key.2), eco.cap(body, other.1, other.2));
+            let (Some(ca), Some(cb)) = (eco.cap_hecha(body, key.1, key.2), eco.cap_hecha(body, other.1, other.2))
+            else {
+                continue;
+            };
             let (pa, pb) = (eco.cells[key].pop, eco.cells[&other].pop);
             let (na, nb) = ecology::migrate(pa, ca, pb, cb, dt);
             eco.cells.get_mut(key).unwrap().pop = na;
@@ -760,7 +824,7 @@ fn tick_ecology(
                 }
             }
             let Some(body) = crate::world2d::body_from_u8(key.0) else { continue };
-            let cap = eco.cap(body, key.1, key.2);
+            let Some(cap) = eco.cap_hecha(body, key.1, key.2) else { continue };
             if ecology::is_settled(eco.cells[key].pop, cap) {
                 drop_keys.push(*key);
             }
@@ -827,6 +891,20 @@ fn stream_regions(
         }
     }
     want.sort_by_key(|&(x, z)| (x - prx).abs() + (z - prz).abs());
+    // La ventana se materializa cuando TODAS sus regiones tienen capacidad: si alguna
+    // falta, se pide al frente de la cola y se espera (los animales que ya están
+    // siguen; nada se congela calculando nueve regiones de golpe).
+    let mut falta = false;
+    for &(x, z) in &want {
+        if eco.cap_hecha(body, x, z).is_none() {
+            eco.pedir((body as u8, x, z), true);
+            falta = true;
+        }
+    }
+    if falta {
+        eco.trabajar_cola(PLAZO_CAPACIDAD);
+        return;
+    }
     let want_set: HashSet<(i32, i32)> = want.iter().copied().collect();
 
     // --- Desmaterializar lo que quedó fuera (o de otro cuerpo): vuelve a ser número. ---
@@ -1877,7 +1955,7 @@ fn update_vivarium_overlay(
     let Ok((mut text, mut vis)) = overlay.get_single_mut() else {
         return;
     };
-    if !editor.creative {
+    if !editor.creative || !crate::debug::paneles_visibles() {
         if *vis != Visibility::Hidden {
             *vis = Visibility::Hidden;
         }

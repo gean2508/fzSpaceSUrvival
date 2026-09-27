@@ -1467,6 +1467,7 @@ fn update_hud_layout(
         hud_blocks.0 = vec![
             [left, top, left + total, top + slot],
             game_ui::menu_button_rect(&layout),
+            game_ui::cam_button_rect(&layout),
         ];
     }
     for mut slot_node in &mut slots {

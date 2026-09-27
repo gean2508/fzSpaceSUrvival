@@ -2301,7 +2301,9 @@ fn build_chunk_mesh(
 
     // `uv` es el recorte de la hoja del suelo que le toca a este quad; la celda
     // blanca deja el color de vértice como estaba (ver `art2d::suelo_uv_blanca`).
-    let mut quad = |x0: f32, y0: f32, w: f32, h: f32, rgba: [f32; 4], uv: [f32; 4]| {
+    // `esquinas` = color de cada vértice en el orden abajo-izq, abajo-der,
+    // arriba-der, arriba-izq (ver `sombra_de_la_esquina`).
+    let mut quad_esquinas = |x0: f32, y0: f32, w: f32, h: f32, esquinas: [[f32; 4]; 4], uv: [f32; 4]| {
         let base = positions.len() as u32;
         positions.push([x0, y0, 0.0]);
         positions.push([x0 + w, y0, 0.0]);
@@ -2313,27 +2315,51 @@ fn build_chunk_mesh(
         uvs.push([uv[2], uv[3]]);
         uvs.push([uv[2], uv[1]]);
         uvs.push([uv[0], uv[1]]);
-        let lin = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]).to_linear();
-        for _ in 0..4 {
+        for rgba in esquinas {
+            let lin = Color::srgba(rgba[0], rgba[1], rgba[2], rgba[3]).to_linear();
             colors.push([lin.red, lin.green, lin.blue, lin.alpha]);
         }
         indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     };
 
+    // **LA SOMBRA SE INTERPOLA ENTRE ESQUINAS, no se pinta por baldosa.**
+    //
+    // Cada celda tenía UN tono, así que la franja al pie de un muro y el aclarado
+    // por escalón salían en escalones de 1 m: sobre nieve se veían rectángulos
+    // grises pixelados en vez de una sombra (captura del driver de relieve, 27 sep
+    // 2026). Ahora se calcula la sombra de cada celda del chunk MÁS un anillo de una
+    // celda alrededor —así dos chunks vecinos dan el mismo valor en el borde y no
+    // hay costura— y cada vértice promedia las cuatro celdas que lo tocan; la GPU
+    // interpola y el degradé sale liso.
+    const LADO: usize = CHUNK as usize + 2;
+    let mut sombras = [[1.0f32; LADO]; LADO];
+    for (ix, fila) in sombras.iter_mut().enumerate() {
+        let tx = cx * CHUNK + ix as i64 - 1;
+        // la columna de sombra de muro, de z0−1 a z0+CHUNK (dos llamadas: la
+        // función devuelve CHUNK filas desde donde se le pida)
+        let arriba = sombra_de_muro_en_la_columna(body, tx, cz * CHUNK - 1);
+        let abajo = sombra_de_muro_en_la_columna(body, tx, cz * CHUNK + 1);
+        for (iz, v) in fila.iter_mut().enumerate() {
+            let tz = cz * CHUNK + iz as i64 - 1;
+            let k = if iz < CHUNK as usize { arriba[iz] } else { abajo[iz - 2] };
+            let (_, sombra) = tile_render_color_y_sombra(tiles, body, tx, tz, TileShade::Full);
+            *v = sombra * k;
+        }
+    }
+    // (lx, lz) = línea de esquina local 0..=CHUNK
+    let esquina = |lx: usize, lz: usize| -> f32 {
+        (sombras[lx][lz] + sombras[lx + 1][lz] + sombras[lx][lz + 1] + sombras[lx + 1][lz + 1]) * 0.25
+    };
+
     for lx in 0..CHUNK {
         let tx = cx * CHUNK + lx;
-        // **La franja oscura al pie de los muros de esta columna**, de una pasada.
-        // Es lo que hace que en cenital se lea cuál terraza está más alta; ver
-        // [`sombra_de_muro_en_la_columna`].
-        let sombra_muro = sombra_de_muro_en_la_columna(body, tx, cz * CHUNK);
         for lz in 0..CHUNK {
             let tz = cz * CHUNK + lz;
             // El color sale de `tile_render_color`, la MISMA función que usan el
             // mapa satelital y el disco del planeta: es lo que hace que al subir
             // el terreno no cambie de color ni pierda el relieve.
-            let (base, sombra) = tile_render_color_y_sombra(tiles, body, tx, tz, TileShade::Full);
-            let k = sombra_muro[lz as usize];
-            let sombra = sombra * k;
+            let (base, _) = tile_render_color_y_sombra(tiles, body, tx, tz, TileShade::Full);
+            let sombra = sombras[lx as usize + 1][lz as usize + 1];
             let rgb = [base[0] * sombra, base[1] * sombra, base[2] * sombra];
             // Render pos: cell (tx,tz) spans [tx,tx+1]×[tz,tz+1] in world; screen
             // y = -z so the quad bottom-left is (tx*TILE, -(tz+1)*TILE).
@@ -2357,7 +2383,7 @@ fn build_chunk_mesh(
                 let bordes = [borde(0, 1), borde(0, -1), borde(-1, 0), borde(1, 0)];
                 // El pozo se dibuja con colores planos: va a la celda blanca.
                 let mut plano = |x: f32, y: f32, w: f32, h: f32, c: [f32; 4]| {
-                    quad(x, y, w, h, c, blanca)
+                    quad_esquinas(x, y, w, h, [c; 4], blanca)
                 };
                 pit_quads(&mut plano, tiles, body, tx, tz, x0, y0, rgb, bordes, orilla_de_pozo);
                 continue;
@@ -2384,8 +2410,18 @@ fn build_chunk_mesh(
             // Era el motivo de fondo de que la cumbre se viera como una plancha
             // blanca vacía: la nieve tiene losa, así que su celda salía a
             // 1,0×losa, sin un matiz que dijera dónde sube el terreno.
-            let tinte = if uv == blanca { rgb } else { [sombra, sombra, sombra] };
-            quad(x0, y0, TILE_M, TILE_M, [tinte[0], tinte[1], tinte[2], 1.0], uv);
+            // esquinas: abajo-izq (tx, tz+1), abajo-der (tx+1, tz+1), arriba-der
+            // (tx+1, tz), arriba-izq (tx, tz) — en líneas de esquina locales
+            let (ex, ez) = (lx as usize, lz as usize);
+            let ks = [esquina(ex, ez + 1), esquina(ex + 1, ez + 1), esquina(ex + 1, ez), esquina(ex, ez)];
+            let color = |k: f32| -> [f32; 4] {
+                if uv == blanca {
+                    [base[0] * k, base[1] * k, base[2] * k, 1.0]
+                } else {
+                    [k, k, k, 1.0]
+                }
+            };
+            quad_esquinas(x0, y0, TILE_M, TILE_M, [color(ks[0]), color(ks[1]), color(ks[2]), color(ks[3])], uv);
         }
     }
 

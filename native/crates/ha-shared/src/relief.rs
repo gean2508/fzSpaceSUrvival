@@ -500,6 +500,9 @@ pub fn alto_de_pared(body: CelestialBody, tx: i64, tz: i64) -> i64 {
         return v;
     }
     let alto = alto_de_pared_sin_memo(body, tx, tz);
+    if crate::grueso::activo() {
+        return alto;
+    }
     PARED_CACHE.with(|c| {
         c.borrow_mut()[slot] =
             ParedSlot { tx, tz, body: b, alto: alto as i16, filled: true, epoca };
@@ -1075,6 +1078,9 @@ pub fn relief_cell(body: CelestialBody, tx: i64, tz: i64) -> ReliefCell {
         return v;
     }
     let cell = relief_cell_sin_memo(body, tx, tz, h, l);
+    if crate::grueso::activo() {
+        return cell;
+    }
     CELL_CACHE.with(|c| {
         c.borrow_mut()[slot] = CellSlot { tx, tz, body: b, cell, filled: true, epoca };
     });
@@ -1445,7 +1451,10 @@ fn cached_cell(body: CelestialBody, tx: i64, tz: i64) -> (f32, i8) {
         }
         let field = compute_field(body, tx, tz);
         let level = level_from_field(body, field);
-        *e = LevelSlot { tx, tz, body: b, field, level, filled: true, epoca };
+        // en modo grueso (sin ríos) se calcula pero NO se guarda — ver `crate::grueso`
+        if !crate::grueso::activo() {
+            *e = LevelSlot { tx, tz, body: b, field, level, filled: true, epoca };
+        }
         (field, level)
     })
 }
