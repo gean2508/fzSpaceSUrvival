@@ -320,25 +320,25 @@ fn borde_mas_cercano(ed: &Edificio, wx: f32, wz: f32) -> Option<Borde> {
 
 /// Qué variante de planta baja / piso le toca a un módulo. Determinista: la misma
 /// esquina da siempre la misma fachada, así que la ciudad no titila al streamear.
-fn variante(base: &[&'static str], x: i64, z: i64, modulo: usize) -> &'static str {
+pub(crate) fn variante(base: &[&'static str], x: i64, z: i64, modulo: usize) -> &'static str {
     let h = (x.wrapping_mul(73_856_093) ^ z.wrapping_mul(19_349_663) ^ (modulo as i64).wrapping_mul(83_492_791))
         .unsigned_abs() as usize;
     base[h % base.len()]
 }
 
-const PLANTAS_BAJAS: &[&str] = &[
+pub(crate) const PLANTAS_BAJAS: &[&str] = &[
     "edificio/pb_vidrio",
     "edificio/pb_cajero",
     "edificio/pb_arco",
     "edificio/pb_madera",
 ];
-const PISOS: &[&str] = &[
+pub(crate) const PISOS: &[&str] = &[
     "edificio/piso_ventanal",
     "edificio/piso_rejilla",
     "edificio/piso_balcon",
     "edificio/piso_doble",
 ];
-const AZOTEAS: &[&str] = &["edificio/azotea", "edificio/azotea_clara"];
+pub(crate) const AZOTEAS: &[&str] = &["edificio/azotea", "edificio/azotea_clara"];
 
 /// Cuánto lejos del jugador se dibuja la cáscara, en tiles.
 const RADIO: i64 = 48;
@@ -439,7 +439,7 @@ fn dibujar_cascara(
 /// Color con el que se dibuja una banda sin arte asignado. No es un cuadrado
 /// plano por accidente: es el paño del edificio, que es lo que el fallback
 /// procedural ya hace en el resto del juego.
-fn color_de_respaldo(piso: usize) -> Color {
+pub(crate) fn color_de_respaldo(piso: usize) -> Color {
     if piso == 0 {
         Color::srgb(0.42, 0.28, 0.24) // planta baja: ladrillo oscuro
     } else {

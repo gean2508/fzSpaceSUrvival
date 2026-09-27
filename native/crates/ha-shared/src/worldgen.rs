@@ -38,6 +38,14 @@ pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKi
     if !tile.buildable_ground() {
         return None;
     }
+    // **NADA SE SIEMBRA PEGADO AL FILO.** El canto ya es `Tile::Cliff` y no
+    // recibe nada, pero la celda de ADENTRO era terreno llano y edificable, así
+    // que el sorteo le plantaba el árbol ahí y medio tronco quedaba colgando
+    // sobre la pared. El retiro es de la meseta hacia adentro
+    // (`relief::retiro_del_canto`), no del canto hacia afuera.
+    if crate::relief::retiro_del_canto(body, tx, tz) {
+        return None;
+    }
     if building_cell(body, tx, tz).is_some() {
         return None;
     }
@@ -247,6 +255,14 @@ pub fn nature_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static
     if matches!(biome_at(body, tx, tz), Biome::Snow | Biome::Ice) {
         return None;
     }
+    // **NADA SE SIEMBRA PEGADO AL FILO.** El canto ya es `Tile::Cliff` y no
+    // recibe nada, pero la celda de ADENTRO era terreno llano y edificable, así
+    // que el sorteo le plantaba el árbol ahí y medio tronco quedaba colgando
+    // sobre la pared. El retiro es de la meseta hacia adentro
+    // (`relief::retiro_del_canto`), no del canto hacia afuera.
+    if crate::relief::retiro_del_canto(body, tx, tz) {
+        return None;
+    }
     let h = hash_cell(0xf10a_0001, tx, tz);
     if h % 1000 >= 40 {
         return None;
@@ -287,6 +303,14 @@ pub fn prop_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static E
     // parrilla y la escalera de pileta se sorteaban en medio de la calle, que es
     // exactamente cómo se veía.
     if crate::geography::civil_at(body, tx, tz).is_some() {
+        return None;
+    }
+    // **NADA SE SIEMBRA PEGADO AL FILO.** El canto ya es `Tile::Cliff` y no
+    // recibe nada, pero la celda de ADENTRO era terreno llano y edificable, así
+    // que el sorteo le plantaba el árbol ahí y medio tronco quedaba colgando
+    // sobre la pared. El retiro es de la meseta hacia adentro
+    // (`relief::retiro_del_canto`), no del canto hacia afuera.
+    if crate::relief::retiro_del_canto(body, tx, tz) {
         return None;
     }
     let h = hash_cell(0x9209_0002, tx, tz);
@@ -381,6 +405,146 @@ pub fn esquina_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'stati
     let rumbo = crate::roads::semaforo_at(body, tx, tz)?;
     SEMAFOROS.get((rumbo / 2) as usize)
 }
+
+/// **El alumbrado público: el farol va en el CORDÓN y con ritmo, no por sorteo.**
+///
+/// El farol estaba en [`PROP_SPECIES`] con peso 10 sobre un 3 % de celdas de
+/// vereda, o sea que salía uno cada varias cuadras y en cualquier parte de la
+/// acera. De noche eso no es alumbrado: es un charco de luz suelto en el medio
+/// de la nada, con el resto de la calle a oscuras. Y una calle a oscuras con un
+/// solo farol se lee peor que una calle sin faroles, porque el ojo compara.
+///
+/// Un alumbrado de verdad tiene dos propiedades, y las dos son GEOMETRÍA, no
+/// azar — el mismo criterio que el semáforo de [`esquina_decor_at`]:
+///
+/// 1. **Va contra el cordón**, o sea en la celda de vereda que toca la calzada.
+///    Un farol en el fondo de la acera alumbra la pared, no la calle.
+/// 2. **Va con ritmo**, cada [`PASO_ALUMBRADO`] tiles, y el ritmo corre A LO
+///    LARGO de la vereda: si la calzada está al este o al oeste, la acera va
+///    norte-sur y el compás lo lleva `tz`; si está al norte o al sur, lo lleva
+///    `tx`. Sin eso el paso se mide en diagonal y la hilera sale despareja.
+///
+/// El resultado es una hilera de charcos parejos a lo largo de cada cuadra, que
+/// es lo que hace que una ciudad de noche se lea como una ciudad. Cuesta una
+/// entidad cada ocho tiles de cordón — menos que el 3 % de siembra al azar que
+/// ya había, porque el cordón es una fracción chica de la vereda.
+///
+/// Va ANTES que [`vereda_decor_at`] en la cadena (`world2d`) por lo mismo que el
+/// semáforo: tiene sitio fijo y no puede perderlo contra un tacho sorteado.
+pub fn alumbrado_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    use crate::geography::Civil;
+    if crate::geography::civil_at(body, tx, tz) != Some(Civil::Pavement) {
+        return None;
+    }
+    if building_cell(body, tx, tz).is_some() {
+        return None;
+    }
+    let calzada = |dx: i64, dz: i64| {
+        crate::geography::civil_at(body, tx + dx, tz + dz) == Some(Civil::Road)
+    };
+    // Cordón vertical (calzada al este u oeste) → la hilera corre en z.
+    // Cordón horizontal (calzada al norte o al sur) → corre en x.
+    let paso = if calzada(1, 0) || calzada(-1, 0) {
+        tz
+    } else if calzada(0, 1) || calzada(0, -1) {
+        tx
+    } else {
+        return None; // vereda de fondo: no es cordón
+    };
+    if paso.rem_euclid(PASO_ALUMBRADO) != 0 {
+        return None;
+    }
+    Some(&FAROL_DE_CALLE)
+}
+
+/// **Las GUIRNALDAS de la plaza.**
+///
+/// Es el elemento que más se repite en las capturas de referencia y el que le da
+/// escala a la noche: las hileras de puntos cálidos cruzando por encima son la
+/// única luz que está EN EL AIRE. Un pueblo alumbrado sólo desde el piso se ve
+/// plano por más faroles que tenga.
+///
+/// Van sobre la acera y **dentro del casco** —la regla de "cerca de gente" del
+/// proyecto— en una retícula de [`PASO_GUIRNALDA_X`] × [`PASO_GUIRNALDA_Z`]. La
+/// retícula existe por dos motivos, y ninguno es estético: el paso en x es más
+/// ancho que la guirnalda más larga (6 celdas), así que **dos nunca se pisan**; y
+/// al ser determinista, la guirnalda no parpadea al re-streamear el chunk.
+///
+/// No compite con el alumbrado: el farol vive en el CORDÓN (la acera que toca la
+/// calzada) y esto se planta en la acera de adentro, que es donde de verdad se
+/// cuelga algo entre dos postes.
+pub fn guirnalda_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    use crate::geography::Civil;
+    if crate::geography::civil_at(body, tx, tz) != Some(Civil::Pavement) {
+        return None;
+    }
+    if building_cell(body, tx, tz).is_some() {
+        return None;
+    }
+    // El cordón es del farol. Una guirnalda ahí quedaría colgada sobre la calle.
+    let cordon = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .into_iter()
+        .any(|(dx, dz)| crate::geography::civil_at(body, tx + dx, tz + dz) == Some(Civil::Road));
+    if cordon {
+        return None;
+    }
+    if crate::geography::settlement_covering(body, tx, tz).is_none() {
+        return None;
+    }
+    if tx.rem_euclid(PASO_GUIRNALDA_X) != 0 || tz.rem_euclid(PASO_GUIRNALDA_Z) != 0 {
+        return None;
+    }
+    // Cuál de las cuatro sale de la celda, no de un contador: así el mismo sitio
+    // tiene siempre la misma guirnalda y la plaza no se ve como una copia.
+    let h = hash_cell(0x6c11_0004, tx, tz);
+    GUIRNALDAS.get((h >> 9) as usize % GUIRNALDAS.len())
+}
+
+/// Paso de la retícula de guirnaldas, en tiles. **El de x tiene que ser mayor
+/// que la guirnalda más larga** (6 celdas) o dos vecinas se solaparían.
+const PASO_GUIRNALDA_X: i64 = 9;
+/// …y el de z decide cuántas hileras cruzan la plaza. Siete deja una cada dos
+/// pasos y medio de caminata: se ven varias a la vez sin que tapen el cielo.
+const PASO_GUIRNALDA_Z: i64 = 7;
+
+/// Las cuatro guirnaldas dibujadas (`scripts/dibujar-guirnaldas.py`). El `size`
+/// es el vano real de cada una — 4, 5, 3 y 6 celdas de ancho por 2 de alto — en
+/// la misma escala de 0,95 m por celda que usa el resto de las tablas.
+const GUIRNALDAS: &[ExtraDecor] = &[
+    ExtraDecor { key: "prop/luces_guirnalda_ambar", size: [3.80, 1.90], weight: 1 },
+    ExtraDecor { key: "prop/luces_guirnalda_papel", size: [4.75, 1.90], weight: 1 },
+    ExtraDecor { key: "prop/luces_guirnalda_rojo", size: [2.85, 1.90], weight: 1 },
+    ExtraDecor { key: "prop/luces_guirnalda_verde", size: [5.70, 1.90], weight: 1 },
+];
+
+/// Cada cuántos tiles hay un farol a lo largo del cordón.
+///
+/// **Catorce, y el número salió de una captura.** Con ocho, la primera versión
+/// dejaba diez pozos superpuestos sobre cada celda de vereda y la calle de
+/// medianoche se veía como un mediodía nublado (`HA_NIGHTTEST` night-1-block):
+/// el charco de un farol sólo se lee como charco si a los costados hay
+/// oscuridad. Con el alcance medido del farol (4,5 × `LIGHT_REACH` 1,5 ≈ 6,8 m
+/// de pozo) y el paso en catorce, dos pozos vecinos se rozan por el borde
+/// —donde la caída ya vale casi cero— y entre medio queda calle a oscuras. Eso
+/// es una hilera de faroles; lo otro era subir el brillo.
+const PASO_ALUMBRADO: i64 = 14;
+
+/// El farol del alumbrado, y la elección tiene dos descartes detrás:
+///
+/// - **No `anim/street_lamp`**, aunque esté animado y sea el más vistoso:
+///   LimeZu le dibujó el charco de luz ADENTRO del sprite, y un charco pintado
+///   se ve igual a las tres de la tarde. El pozo lo pone el motor
+///   (`ha-game::light2d`), que es el que sabe qué hora es.
+/// - **No `prop/farol`**, que era el candidato obvio por nombre: medido, está
+///   dibujado APAGADO (0,50 de luminancia máxima — el poste gris con el vidrio
+///   sin encender), así que `scripts/import-emisiones.py` no le declara emisión.
+///   Un farol que no ilumina no puede ser el alumbrado público.
+///
+/// `prop/farol_de_calle_5` sí lo dibujó el pack ENCENDIDO: 36 píxeles de vidrio
+/// blanco medidos, un alcance de 4,5 m y la silueta de farol clásico de una
+/// celda de ancho por cuatro de alto, que es la proporción de un poste de calle.
+const FAROL_DE_CALLE: ExtraDecor =
+    ExtraDecor { key: "prop/farol_de_calle_5", size: [0.95, 3.80], weight: 1 };
 
 /// **La tabla de muebles que le toca a un edificio, por su programa de lote.**
 ///
@@ -684,12 +848,41 @@ mod tests {
             "medio_izquierda",
             "medio_derecha",
             "semaforo",
+            // **El cerco de piedra del pack.** `Grass_Fenced_1` son 22 piezas de
+            // un muro con pasto, y las seis que llegaron al juego como
+            // `pasto_cercado*` son tramos y esquinas de ese muro. Tres estaban
+            // sembradas en el BOSQUE: un pedazo de cerca tirado en mitad del
+            // monte. Los props de esa familia son otros (`Props_Grass_Fenced`,
+            // que entran como `terreno_y_cercas_*`) y no llevan esta marca.
+            "pasto_cercado",
         ];
+        // **Y las que el nombre en castellano NO delata.**
+        //
+        // Una marca sólo sirve si el nombre dice algo. `pasto_13` y `monticulo_4`
+        // no dicen nada: suenan a prop y son `Grass_2_13` (una pieza del blob de
+        // pasto sobre transparente) y `Mound_2_4` (un quinto de montículo, con el
+        // corte vertical a la vista). Entraron las dieciocho al BOSQUE y no había
+        // red que las cazara.
+        //
+        // Lo que sí es medible acá es la FORMA de la clave: en este pack, **toda**
+        // `nature/pasto_<n>` sale de `Grass_2_<n>` y **toda** `nature/monticulo_<n>`
+        // de `Mound_1`/`Mound_2` — comprobado clave por clave contra el pixel del
+        // pack. Los props de esas mismas cosas tienen otro nombre y no terminan en
+        // número pelado: `pasto_matas`, `monticulo_de_tierra`, `tierra_10`.
+        const FAMILIAS_DE_BLOB: &[&str] = &["nature/pasto_", "nature/monticulo_"];
+        let es_pieza_de_blob = |k: &str| {
+            FAMILIAS_DE_BLOB.iter().any(|f| {
+                k.strip_prefix(*f)
+                    .is_some_and(|resto| !resto.is_empty() && resto.bytes().all(|b| b.is_ascii_digit()))
+            })
+        };
         let mut malas = Vec::new();
         for (nombre, tabla) in TABLAS_SEMBRADAS {
             for d in *tabla {
                 if let Some(m) = MARCAS.iter().find(|m| d.key.contains(**m)) {
                     malas.push(format!("{nombre}: {} (marca «{m}»)", d.key));
+                } else if es_pieza_de_blob(d.key) {
+                    malas.push(format!("{nombre}: {} (pieza de blob de terreno)", d.key));
                 }
             }
         }

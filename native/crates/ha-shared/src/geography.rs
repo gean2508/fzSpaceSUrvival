@@ -1618,11 +1618,16 @@ pub fn settlement_covering(body: CelestialBody, tx: i64, tz: i64) -> Option<Sett
 /// el cliente necesita para poner el techo y hacerlo transparente al entrar.
 pub fn building_at(body: CelestialBody, tx: i64, tz: i64) -> Option<BuildingSite> {
     let s = settlement_covering(body, tx, tz)?;
-    let (x, z, w, h, _) = crate::city::roofed_rect(body, &s, tx, tz)?;
+    let (x, z, w, h, clave) = crate::city::roofed_rect(body, &s, tx, tz)?;
     if tx < x || tz < z || tx >= x + w || tz >= z + h {
         return None;
     }
-    Some(BuildingSite { min: (x, z), w, h, door: (x + w / 2, z + h - 1) })
+    Some(BuildingSite {
+        min: (x, z),
+        w,
+        h,
+        door: (crate::city::puerta_del_frente(clave, x, w), z + h - 1),
+    })
 }
 
 /// El tile de un edificio generado en esta celda.

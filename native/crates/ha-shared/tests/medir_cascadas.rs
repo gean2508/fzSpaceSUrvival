@@ -337,11 +337,22 @@ fn pared_junto_a_la_garganta() {
 ///
 /// Si alguien mueve el ancla del salto, el ancho del recorte o la ventana al
 /// ras, esto se cae antes de que se vea en pantalla.
+/// **Y SE MIDE EN LA CORDILLERA, NO ALREDEDOR DEL ORIGEN** (21 ago 2026). El
+/// recorte del spawn es llano, y los saltos que salían ahí eran el defecto: el
+/// cauce cruzaba una frontera de cuantización cada treinta tiles porque la talla
+/// del río pegaba un campo liso contra uno rugoso (`rios::VALLE_MINIMO`). Con el
+/// río tallado de verdad el llano ya no tiene saltos —un salto es de montaña— y
+/// estas tres ventanas salen de `medir_rios::donde_estan_las_cascadas`.
+const SIERRAS: &[(i64, i64)] = &[(-6_100, -6_100), (-7_000, -6_100), (-4_300, -6_100)];
+
 #[test]
 fn toda_garganta_tiene_sus_dos_hombros() {
     let b = CelestialBody::Earth;
-    let sitios = anclas(b, -900, 900, -900, 900);
-    assert!(!sitios.is_empty(), "el recorte no tiene una sola cascada que medir");
+    let mut sitios = Vec::new();
+    for &(cx, cz) in SIERRAS {
+        sitios.extend(anclas(b, cx - 300, cx + 300, cz - 300, cz + 300));
+    }
+    assert!(!sitios.is_empty(), "las tres ventanas de cordillera no tienen una sola cascada que medir");
     for &(tx, tz, pisos) in &sitios {
         for x in [tx - 1, tx + ANCHO_CASCADA] {
             let hombro = hombro_de_garganta(b, x, tz);

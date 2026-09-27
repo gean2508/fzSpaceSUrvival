@@ -113,6 +113,11 @@ PREF = "21_Beach_32x32_"
 ASSETS = ROOT / "native/crates/ha-game/assets"
 MANIFEST = ASSETS / "art/manifest.json"
 PAGINA_REL = "art/pack/acantilado.png"
+#: **El paso va en su propia hoja.** Sus kits son de 4×4 celdas entre piezas de
+#: 1×N, y metidos en la del acantilado inflaban el atlas de 6,75 a 13,5 MB de
+#: VRAM por el aire que dejan al empaquetar. En página aparte cada una mide lo
+#: suyo — y el Redmi manda (regla 2).
+PAGINA_PASO_REL = "art/pack/paso.png"
 INDEX = ROOT / "scripts/acantilado-import-index.json"
 
 CELL = 32
@@ -185,6 +190,54 @@ RAMPA_NORTE = "Four_Sand_Mountains_1_Top"
 #: vez de embaldosarse.
 RAMPA_OESTE = "Four_Sand_Mountains_1_Left"
 RAMPA_ESTE = "Four_Sand_Mountains_1_Right"
+
+#: **LA FAMILIA MODULAR DEL PASO** — la que hace que un paso mida lo que tiene
+#: que bajar, y la que el juego no usaba **ni una pieza**.
+#:
+#: El pedido del usuario, mirando la lámina de ejemplo del pack: *"usar las
+#: rampas completas de forma modular; no sé por qué recortás sólo un pedazo y
+#: usás eso de rampa"*, y *"en morado los assets que unen acantilados y rampas"*.
+#:
+#: La disposición **está medida sobre `Example_Four_Sand_Mountains`**, buscando
+#: cada recorte dentro del plato (no leída de un `.tsx` ni supuesta). En celdas
+#: del plato de 10×10, el paso es una columna de CUATRO celdas de ancho:
+#:
+#: ```text
+#:            cols 0-3          cols 3-6 (el paso)      cols 6-9
+#:   filas 0-2  meseta          Four_..._1_Top          meseta
+#:   fila  2    Top_Left        Middle_Modular_Top_2    Top_Right
+#:   filas 3-6  Bottom_Left     (la bajada)             Bottom_Right
+#:   filas 6-9  meseta          Four_..._1_Bottom       meseta
+#: ```
+#:
+#: `Top_Left`/`Top_Right` y `Bottom_Left`/`Bottom_Right` son los **enlaces**: la
+#: pared bajando en diagonal hasta morir contra el paso. Son las piezas que el
+#: usuario marcó en morado y las que faltaban para que un paso no se abriera como
+#: un agujero cuadrado.
+PASO_MODULAR = {
+    # nombre de pose -> (recorte del pack, celdas)
+    "tramo_n": ("Four_Sand_Mountains_2_Middle_Modular_Top_1", (4, 1)),
+    "tramo_n_2": ("Four_Sand_Mountains_2_Middle_Modular_Top_2", (4, 1)),
+    "tramo_s": ("Four_Sand_Mountains_2_Middle_Modular_Bottom_1", (4, 1)),
+    "tramo_s_2": ("Four_Sand_Mountains_2_Middle_Modular_Bottom_2", (4, 1)),
+    "boca_n": ("Four_Sand_Mountains_2_Top_Part", (4, 2)),
+    "pie_s": ("Four_Sand_Mountains_2_Central_Bottom_Part", (4, 3)),
+    "enlace_no": ("Four_Sand_Mountains_2_Top_Left", (4, 2)),
+    "enlace_ne": ("Four_Sand_Mountains_2_Top_Right", (4, 2)),
+    "enlace_so": ("Four_Sand_Mountains_2_Bottom_Left", (4, 3)),
+    "enlace_se": ("Four_Sand_Mountains_2_Bottom_Right", (4, 3)),
+    # `Middle_Modular_Left`/`_Right` NO entran: son tramo de pared lisa y eso ya
+    # lo dibuja `cliff/*`. Cada celda de más son 4 KB de VRAM por material.
+}
+
+#: **DÓNDE EMPIEZAN Y TERMINAN LOS PELDAÑOS DENTRO DEL KIT**, en píxeles.
+#:
+#: Medido sobre la hoja: la roca de los espolones ocupa 0-37 y 90-127, así que
+#: 38..89 es escalón puro. Hace falta porque **el peldaño no se tiñe de pasto**
+#: (ver `r_escalon`): sus tonos son EXACTAMENTE los catorce de la meseta —cero
+#: exclusivos, medido— así que no hay forma de separarlos por color, sólo por
+#: geometría. Teñidos, el paso quedaba verde sobre verde y no se leía como nada.
+PELDANOS_PX = (38, 90)
 
 #: Filas de [`BASE`], medidas: qué es cada una. Ver el docstring del módulo.
 FILA_CRESTA = 0
@@ -262,9 +315,26 @@ PASTOS_DE_CLIMA = [
     ("pasto_sierra", "de sierra"),
 ]
 
+#: **LA PIEDRA DE UN ACANTILADO DE PASTO.**
+#:
+#: El kit del pack es una montaña de ARENA, y a la familia "pasto" nunca se le dio
+#: rampa de roca —a nieve, regolito y basalto sí—, así que su pared se quedaba con
+#: el marrón rosado del médano. Sobre verde eso no se lee como piedra: se lee como
+#: una mancha **mostaza**, y es literalmente el "relleno con otra textura" que el
+#: usuario venía marcando desde las capturas del 16 ago 2026. Comparadas al lado,
+#: `cliff/nieve` sale roca limpia y `cliff/pasto` sale mostaza.
+#:
+#: Los cuatro tonos **no son un gris inventado**: son colores del núcleo de 501
+#: del pack (`scripts/lib/paleta_limezu.json`) elegidos en las **mismas cuatro
+#: luminancias que la piedra del kit** —63, 93, 129 y 163, medidas sobre
+#: [`TRAMO`]— así que el canto rodado conserva exactamente su volumen y sólo
+#: cambia de tono. Y el más oscuro va **tintado**, nunca gris neutro: es la regla
+#: medida del pack (246 de 250 sprites, skill `pixel-art`).
+ROCA_DE_PASTO = [(73, 70, 67), (89, 85, 82), (138, 132, 129), (163, 158, 150)]
+
 MATERIALES = [
     ("arena", None, None, False),
-    ("pasto", [(55, 133, 78), (71, 151, 87), (83, 166, 93), (121, 161, 92)], None, True),
+    ("pasto", [(55, 133, 78), (71, 151, 87), (83, 166, 93), (121, 161, 92)], ROCA_DE_PASTO, True),
     (
         "nieve",
         [(150, 170, 196), (196, 212, 230), (228, 238, 248), (250, 252, 255)],
@@ -412,6 +482,54 @@ def mapa_de_tinte(origen, destino):
         f = j - int(j)
         mapa[c] = tuple(int(a[k] + (b[k] - a[k]) * f) for k in range(3))
     return mapa
+
+
+#: **LA ONDA DE DUNA: el patrón que el kit dibuja SOBRE la meseta.**
+#:
+#: El kit es una montaña de ARENA y LimeZu le dibujó al plano de arriba las
+#: ondas del viento: bandas horizontales onduladas, más claras que el resto,
+#: medidas en 15.152 píxeles repartidos por las doce hojas. En un médano eso es
+#: la duna; teñido de verde es un rayado raro sobre el pasto, y —lo que el
+#: usuario marcó— **muere de golpe donde empieza el relleno de la meseta**, que
+#: es una losa de color plano (`tiles/grass` son 1.024 píxeles de un solo color).
+#: Ahí no falla el recorte ni el tinte: falla que la pieza tenga textura y el
+#: relleno no.
+#:
+#: Son los ÚNICOS tres tonos de suelo por encima del dominante —1,037, 1,057 y
+#: 1,081 de luminancia contra [`ARENA_ESPERADA`]—, así que aplanarlos es
+#: mandarlos al dominante y nada más: el filo, la sombra y el contorno viven por
+#: DEBAJO y no se enteran. La meseta queda del color exacto de la losa y el
+#: borde del acantilado sigue entero (regla: el suelo base es color plano; lo
+#: que se lee son las orlas y la sombra).
+#:
+#: `verificar_onda()` lo vuelve a medir en cada corrida: si el pack cambia y
+#: aparece un cuarto tono claro, el importador se planta en vez de dejar media
+#: onda puesta.
+ONDA_DE_DUNA = {(233, 192, 98), (232, 187, 91), (232, 182, 91)}
+
+
+def verificar_onda(suelo):
+    """Los tonos de suelo más claros que la meseta son [`ONDA_DE_DUNA`], y no otros."""
+    base = luminancia(ARENA_ESPERADA)
+    claros = {c for c in suelo if luminancia(c) > base * 1.005}
+    if claros != ONDA_DE_DUNA:
+        raise SystemExit(
+            f"la onda de duna mide {sorted(claros)} y se esperaba {sorted(ONDA_DE_DUNA)}: "
+            "el kit cambió y aplanar a ciegas dejaría el rayado a medias"
+        )
+
+
+def aplanar_meseta(mapa_suelo):
+    """Manda [`ONDA_DE_DUNA`] al mismo color que el dominante: meseta de un color.
+
+    Se hace sobre el MAPA y no sobre el píxel para que valga por igual para los
+    dos caminos de tinte —el anclado en la losa y la rampa escrita a mano— y
+    para que el resto de la pieza no se entere.
+    """
+    plano = mapa_suelo.get(ARENA_ESPERADA)
+    if plano is None:
+        return mapa_suelo
+    return {c: (plano if c in ONDA_DE_DUNA else v) for c, v in mapa_suelo.items()}
 
 
 def mapa_por_losa(origen, referencia, destino):
@@ -779,7 +897,13 @@ def piezas_de_rampa(base, rampa, rampa_norte, rampa_oeste, rampa_este, alto):
 
 
 class Hoja:
-    """Empaquetador por columnas de una celda de ancho."""
+    """Empaquetador por columnas.
+
+    Acepta piezas de **varias celdas de ancho**: un paso es un kit de 4×4 que se
+    coloca de una pieza (regla 8), no cuatro recortes sueltos. Antes avanzaba
+    siempre una columna, así que la pieza siguiente se dibujaba encima de la
+    anterior — con todo lo de acá midiendo 1×N nunca se notó.
+    """
 
     def __init__(self):
         self.im = Image.new("RGBA", (PAGINA_COLS * CELL, CELL), (0, 0, 0, 0))
@@ -789,7 +913,10 @@ class Hoja:
 
     def poner(self, tile):
         h = tile.height // CELL
-        if self.col >= PAGINA_COLS:
+        w = tile.width // CELL
+        if w > PAGINA_COLS:
+            raise SystemExit(f"una pieza de {w} celdas no entra en una hoja de {PAGINA_COLS}")
+        if self.col + w > PAGINA_COLS:
             self.fila += self.alto_fila
             self.col = 0
             self.alto_fila = 0
@@ -801,7 +928,7 @@ class Hoja:
             self.im = nueva
         c, r = self.col, self.fila
         self.im.paste(tile, (c * CELL, r * CELL))
-        self.col += 1
+        self.col += w
         return c, r
 
 
@@ -855,6 +982,27 @@ URBANO = [
         ],
     ),
 ]
+
+
+def kit_con_peldanos_crudos(hoja, mapa, mapa_suelo):
+    """El kit del paso teñido, **menos la banda de peldaños**.
+
+    La pieza se tiñe entera —meseta y roca— para que empalme con el terreno que
+    la rodea, y después se le devuelve su tierra a la franja de escalones
+    ([`PELDANOS_PX`]), que es la regla que ya valía para la escalinata suelta:
+    *"los peldaños del pack están dibujados en los tonos de la MESETA, así que
+    teñirlos los pasaba a verde sobre verde y el paso quedaba en una franja lisa
+    que no se lee como nada"*.
+
+    Sólo para los kits que bajan al norte y al sur, donde la banda es vertical y
+    su ventana está medida. En los que bajan de lado la roca cruza en diagonal y
+    no hay ventana que valga: ésos se tiñen enteros, como ya se hacía.
+    """
+    entero = tenir(hoja, mapa, mapa_suelo)
+    crudo = tenir(hoja, mapa)
+    x0, x1 = PELDANOS_PX
+    entero.paste(crudo.crop((x0, 0, x1, hoja.height)), (x0, 0))
+    return entero
 
 
 def recorte_de_abajo(im, filas):
@@ -933,14 +1081,22 @@ def main():
         | paleta(base_v2)
     ) - piedra
     print(f"kit: {len(suelo)} tonos de suelo, {len(piedra)} de roca")
+    # El rayado de duna se mide ANTES de teñir nada: es el pack quien lo trae.
+    verificar_onda(suelo)
 
     pagina = Hoja()
+    pagina_paso = Hoja()
+    #: `(material, pose, tile)` de todos los kits de paso, para empaquetarlos
+    #: juntos y por altura cuando ya estén los diez materiales.
+    pendientes_paso = []
     sprites = {}
     objetos = {}
     # Los cinco materiales de siempre más una variante por clima de pasto: el
     # clima sólo cambia el COLOR del suelo de la pieza, así que se cuela en la
     # misma tabla con la base con musgo (ver [`PASTOS_DE_CLIMA`]).
-    todos = list(MATERIALES) + [(n, None, None, True) for n, _ in PASTOS_DE_CLIMA]
+    # Los climas heredan la piedra del pasto: lo que cambia con el clima es el
+    # VERDE de la meseta, no de qué está hecha la roca que la sostiene.
+    todos = list(MATERIALES) + [(n, None, ROCA_DE_PASTO, True) for n, _ in PASTOS_DE_CLIMA]
     for material, rampa_suelo, rampa_roca, musgo in todos:
         # **El color del suelo se MIDE de la losa, no se elige a ojo**, y se ancla
         # en el tono dominante de la meseta para que la parte plana de la pieza
@@ -956,6 +1112,16 @@ def main():
             mapa_suelo = mapa_de_tinte(suelo, rampa_suelo)
         else:
             mapa_suelo = {}
+        # **La meseta va PLANA.** El relleno de la meseta es una losa de un color
+        # y la pieza traía el rayado del médano encima ([`ONDA_DE_DUNA`]): el
+        # corte entre una y otra era el salto que se veía desde el aire.
+        #
+        # **Menos la arena**, por decisión del usuario (22 ago 2026): ahí el
+        # rayado no está fuera de lugar, es la duna que el kit vino a dibujar, y
+        # vale más el asset como LimeZu lo hizo que la costura contra la losa.
+        # Mismo criterio que ya valía para su falda.
+        if material != "arena":
+            mapa_suelo = aplanar_meseta(mapa_suelo)
         mapa.update(mapa_suelo)
         # **La arena se queda con su falda.** Es el kit ORIGINAL: ahí la orilla
         # clara no es una línea fuera de lugar, es el médano derramándose sobre
@@ -1057,6 +1223,66 @@ def main():
         objetos[slot] = f"{ETIQUETAS['slope']} {NOMBRE[material]}"
         print(f"{slot}: {len(poses)} poses")
 
+        # **EL PASO ENTERO: una pieza de kit, no cuatro recortes.**
+        #
+        # `slope/*` de arriba son los pedazos con los que el juego venía
+        # embaldosando la rampa celda a celda, y es lo que el usuario tachó. Acá
+        # va el kit COMPLETO —los cuatro pasos del pack, sus tramos repetibles y
+        # los cuatro enlaces contra la pared— cada uno como un solo sprite de
+        # 4×N celdas, del mismo modo que el semáforo (regla 8). Quien lo coloque
+        # pone una pieza por paso y no una por celda.
+        # **`_1_Top` y `_1_Bottom` NO se publican: son la familia modular ya
+        # compuesta.** Medido buscando cada recorte dentro del plato de ejemplo:
+        # `1_Bottom` y `Central_Bottom_Part` arrancan en el MISMO píxel (96,192),
+        # o sea que el compuesto es el pie más una fila de tramo; y `1_Top` es
+        # `Top_Part` más `Middle_Modular_Top_2`. Publicar los dos habría costado
+        # 28 celdas por material —9 MB de VRAM en total— para dibujar dos veces
+        # lo mismo, y el Redmi manda (regla 2).
+        piezas_paso = [
+            # Las de costado se tiñen enteras: su banda de roca cruza en diagonal
+            # y la ventana de peldaños no aplica (ver [`kit_con_peldanos_crudos`]).
+            ("oeste", tenir(rampa_oeste, mapa, mapa_suelo)),
+            ("este", tenir(rampa_este, mapa, mapa_suelo)),
+        ]
+        for nombre, (recorte, celdas) in sorted(PASO_MODULAR.items()):
+            hoja = abrir(recorte, celdas)
+            piezas_paso.append((
+                nombre,
+                kit_con_peldanos_crudos(hoja, mapa, mapa_suelo)
+                if nombre.startswith("tramo") or nombre in ("boca_n", "pie_s")
+                else tenir(hoja, mapa, mapa_suelo),
+            ))
+        # **Por ALTURA, y de ahí sale la mitad de la hoja.** El empaquetador
+        # estira la fila hasta la pieza más alta que le entre, así que mezclar
+        # tramos de 4×1 con kits de 4×4 deja tres celdas de aire debajo de cada
+        # tramo: medido, 1.760 celdas de hoja para 1.080 de dibujo. Agrupadas,
+        # cada fila mide lo que miden sus piezas.
+        # Se empaquetan **todas juntas al final** (ver `pendientes_paso`): mezclar
+        # tramos de 4×1 con kits de 4×4 deja tres celdas de aire debajo de cada
+        # tramo, y agrupando por altura la hoja baja de 1.760 celdas a las 1.080
+        # que de verdad se dibujan.
+        for nombre, tile in piezas_paso:
+            pendientes_paso.append((material, nombre, tile))
+        print(f"paso/{material}: {len(piezas_paso)} piezas de kit")
+
+    # **LOS KITS DE PASO, empaquetados juntos y por altura.**
+    pendientes_paso.sort(key=lambda t: t[2].height)
+    poses_por_material = {}
+    for material, nombre, tile in pendientes_paso:
+        col, row = pagina_paso.poner(tile)
+        poses_por_material.setdefault(material, {})[nombre] = {
+            "rect": {
+                "col": col,
+                "row": row,
+                "w": tile.width // CELL,
+                "h": tile.height // CELL,
+            }
+        }
+    for material, poses_paso in poses_por_material.items():
+        slot = f"paso/{material}"
+        sprites[slot] = {"png": PAGINA_PASO_REL, "grid": [CELL, CELL], "poses": poses_paso}
+        objetos[slot] = f"Paso {NOMBRE[material]}"
+
     # Lo que le cuelga la ciudad a la pared. No se tiñe: una escalera de madera
     # es de madera en el prado y en el médano, igual que la roca.
     for slot, etiqueta, piezas in URBANO:
@@ -1078,12 +1304,17 @@ def main():
         print(f"{slot}: {len(piezas)} variantes")
 
     if seco:
-        print(f"\n[dry-run] hoja {pagina.im.size[0]}x{pagina.im.size[1]} px, {len(sprites)} claves")
+        print(
+            f"\n[dry-run] acantilado {pagina.im.size[0]}x{pagina.im.size[1]} px · "
+            f"paso {pagina_paso.im.size[0]}x{pagina_paso.im.size[1]} px, {len(sprites)} claves"
+        )
         return
 
     (ASSETS / "art/pack").mkdir(parents=True, exist_ok=True)
     pagina.im.save(ASSETS / PAGINA_REL, optimize=True)
     print(f"\n{PAGINA_REL}: {pagina.im.size[0]}x{pagina.im.size[1]} px")
+    pagina_paso.im.save(ASSETS / PAGINA_PASO_REL, optimize=True)
+    print(f"{PAGINA_PASO_REL}: {pagina_paso.im.size[0]}x{pagina_paso.im.size[1]} px")
 
     man = json.loads(MANIFEST.read_text())
     hoja = man.setdefault("sprites", {})

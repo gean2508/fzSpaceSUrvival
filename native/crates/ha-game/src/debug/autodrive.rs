@@ -140,6 +140,16 @@ impl Plugin for AutoDrivePlugin {
             );
             return;
         }
+        if crate::flags::var("HA_BARRIOTEST").is_ok() {
+            app.init_resource::<FlyTestState>().init_resource::<BarrioTestState>();
+            app.add_systems(
+                Update,
+                barrio_test_drive
+                    .before(aplicar_actuacion_del_driver)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            return;
+        }
         if crate::flags::var("HA_CITYTEST").is_ok() {
             app.init_resource::<FlyTestState>();
             app.add_systems(
@@ -964,6 +974,71 @@ fn player_ready(world: &mut World) -> bool {
     q.get_single(world).is_ok()
 }
 
+/// **¿Está el MUNDO armado alrededor de la cámara?**
+///
+/// Los drivers que se TELETRANSPORTAN (barrio, ciudad) esperaban dos segundos
+/// fijos y disparaban la captura pasara lo que pasara. Dos segundos alcanzan en
+/// release y no alcanzan ni de lejos en depuración: el anillo de chunks se
+/// reconstruye entero al saltar tres kilómetros, y el driver salía con `DONE` y
+/// código 0 dejando **ocho PNG en negro**. O sea: la única herramienta que
+/// existe para MIRAR lo que se genera llevaba tiempo diciendo que sí a todo.
+///
+/// El mundo está listo cuando la cola de chunks se vació ([`ChunkBacklog`], el
+/// mismo semáforo que espera la pantalla de carga) y hay al menos un chunk de
+/// suelo vivo. Es el mismo criterio que usa `loading.rs`, no uno nuevo.
+/// **Planta al jugador en una celda de la SUPERFICIE, sin interpolar.**
+///
+/// El sim y el visual se escriben de una para que la cámara no cruce media
+/// región (mismo criterio que [`teleport_surface`]). Existe para que los tres
+/// drivers de ciudad —barrio, ciudad, noche— no repitan el mismo bloque.
+///
+/// **Y devuelve la planta a la superficie**, que es lo que hacía inútil a este
+/// arnés. La partida de trabajo tiene un pozo cavado en el punto de aparición;
+/// al arrancar, el jugador se cae dentro (`world2d`, "bajar hasta pisar algo") y
+/// `tiles.z` queda en −1. El teletransporte no lo tocaba, así que los drivers de
+/// ciudad fotografiaban el SUBSUELO: ocho PNG de tierra negra, `encierro = 1`, y
+/// `DONE` con código 0. Un mes de capturas "revisadas" que no mostraban el juego.
+fn teleport_a_celda(world: &mut World, tx: f32, tz: f32) {
+    {
+        let mut tiles = world.resource_mut::<TileWorld>();
+        if tiles.z != 0 {
+            tiles.z = 0;
+            tiles.version = tiles.version.wrapping_add(1);
+        }
+    }
+    let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+    if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
+        sim.body.x = tx;
+        sim.body.z = tz;
+        vis.from_x = tx;
+        vis.to_x = tx;
+        vis.from_z = tz;
+        vis.to_z = tz;
+    }
+}
+
+fn mundo_listo(world: &mut World) -> bool {
+    if world.resource::<crate::world2d::ChunkBacklog>().0 > 0 {
+        return false;
+    }
+    // Y el chunk que PISA el jugador tiene que existir con su decoración
+    // completa: la cola vacía sola no basta —el anillo se recorta con el zoom, y
+    // un frame después de teletransportarse todavía no hay nada anotado—.
+    let Some((px, pz)) = posicion_del_jugador(world) else { return false };
+    let lado = crate::world2d::CHUNK as f32 * ha_shared::topdown::TILE_M;
+    let (pcx, pcz) = ((px / lado).floor() as i64, (pz / lado).floor() as i64);
+    let mut q = world.query::<&crate::world2d::TileChunk>();
+    q.iter(world).any(|c| {
+        c.cx == pcx && c.cz == pcz && c.decor == crate::world2d::DecorDetail::Full
+    })
+}
+
+/// `(x, z)` del jugador en metros de mundo, si existe.
+fn posicion_del_jugador(world: &mut World) -> Option<(f32, f32)> {
+    let mut q = world.query_filtered::<&SimState, With<Player>>();
+    q.get_single(world).ok().map(|s| (s.body.x, s.body.z))
+}
+
 fn dig_loot(world: &mut World) -> u32 {
     let inv = world.resource::<PlayerInventory>();
     inv.qty("dirt") + inv.qty("stone") + inv.qty("sand")
@@ -1076,15 +1151,7 @@ fn night_test_drive(world: &mut World) {
             eprintln!("ha-nighttest: NO HAY NINGUNA CIUDAD");
             std::process::exit(1);
         };
-        let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
-        if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
-            sim.body.x = cx as f32;
-            sim.body.z = cz as f32;
-            vis.from_x = cx as f32;
-            vis.to_x = cx as f32;
-            vis.from_z = cz as f32;
-            vis.to_z = cz as f32;
-        }
+        teleport_a_celda(world, cx as f32, cz as f32);
         eprintln!("ha-nighttest: ciudad en ({cx}, {cz}) — fase {phase}");
         advance_stage(world, now);
         return;
@@ -1450,7 +1517,7 @@ fn agua_test_drive(world: &mut World) {
 ///
 /// El casco es lo caro de los tres (`settlement_covering` barre nueve celdas de
 /// sitio), así que sólo se pregunta por celdas que YA son cara sur.
-fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
+fn relieve_pick_sites() -> [(f32, f32, &'static str); 6] {
     use ha_shared::relief::{alto_de_pared, relief_cell, ReliefCell};
     let body = ha_shared::CelestialBody::Earth;
     // **La pared que se captura es la MÁS ALTA que se encuentre**, no la primera.
@@ -1458,6 +1525,13 @@ fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
     // bordillo que aparece, la captura sigue enseñando el mundo plano de antes y
     // nadie se entera de si el farallón de diez pisos se dibuja bien.
     let mut pared: Option<(i64, i64, i64)> = None;
+    // **LA PARED DE PASTO, aparte de la más alta.** La más alta del mundo cae
+    // siempre en la sierra nevada, así que el driver retrataba cinco veces la
+    // nieve y `cliff/pasto` —el acantilado más común del mapa— no se miraba
+    // nunca. Se guarda la más alta cuyo bioma sea verde, que es donde se juzga
+    // la costura entre la meseta y el relleno (ver `ONDA_DE_DUNA` en
+    // `import-acantilado.py`).
+    let mut pared_verde: Option<(i64, i64, i64)> = None;
     let mut rampa = None;
     let mut urbano = None;
     // Ventanas repartidas, **con cordillera**: un cuadrado alrededor del origen
@@ -1511,6 +1585,17 @@ fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
                         if pared.is_none_or(|(a, _, _)| alto > a) {
                             pared = Some((alto, tx, tz));
                         }
+                        if matches!(
+                            ha_shared::geography::biome_at(body, tx, tz),
+                            ha_shared::geography::Biome::Grassland
+                                | ha_shared::geography::Biome::Forest
+                                | ha_shared::geography::Biome::Savanna
+                                | ha_shared::geography::Biome::Swamp
+                                | ha_shared::geography::Biome::Highland
+                        ) && pared_verde.is_none_or(|(a, _, _)| alto > a)
+                        {
+                            pared_verde = Some((alto, tx, tz));
+                        }
                         if urbano.is_none()
                             && ha_shared::geography::settlement_covering(body, tx, tz).is_some()
                         {
@@ -1531,6 +1616,12 @@ fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
     let pared_xy = pared
         .map(|(alto, tx, tz)| (tx as f32, tz as f32 + alto as f32 + 4.0))
         .unwrap_or(d);
+    if let Some((alto, _, _)) = pared_verde {
+        eprintln!("ha-relievetest: la pared de PASTO más alta mide {alto} escalones");
+    }
+    let pared_verde_xy = pared_verde
+        .map(|(alto, tx, tz)| (tx as f32, tz as f32 + alto as f32 + 4.0))
+        .unwrap_or(pared_xy);
     // **LA CUMBRE**, que no se busca por ruido: la declara la plantilla del
     // mundo (`world_map::cumbres`). Se captura el monte más alto de los tres, y
     // ahí es donde hay que mirar la nieve y el sendero que sube.
@@ -1563,6 +1654,7 @@ fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
         .unwrap_or(cumbre_xy);
     [
         (pared_xy.0, pared_xy.1, "pared"),
+        (pared_verde_xy.0, pared_verde_xy.1, "pared-de-pasto"),
         (rampa.unwrap_or(d).0, rampa.unwrap_or(d).1, "rampa"),
         (urbano.unwrap_or(d).0, urbano.unwrap_or(d).1, "urbano"),
         (cumbre_xy.0, cumbre_xy.1, "cumbre"),
@@ -1571,7 +1663,7 @@ fn relieve_pick_sites() -> [(f32, f32, &'static str); 5] {
 }
 
 #[derive(Resource, Clone, Copy)]
-struct RelieveSites([(f32, f32, &'static str); 5]);
+struct RelieveSites([(f32, f32, &'static str); 6]);
 
 /// Planta al jugador en los tres sitios de relieve y captura cada uno.
 ///
@@ -1871,12 +1963,207 @@ fn player_xz(world: &mut World) -> (f32, f32) {
 }
 
 // ---------------------------------------------------------------------------
+// HA_BARRIOTEST — la casa que GENERA el mundo, mirada desde la vereda
+// ---------------------------------------------------------------------------
+
+/// El retrato de una casa de ciudad **generada** (no la que construye el
+/// jugador: ésa la prueban `HA_FACHADATEST` y `HA_CASATEST`).
+///
+/// Es el ojo del sistema de fachadas: `city::roofed_rect` dice qué rectángulo
+/// ocupa la casa de cada parcela y con qué clave de arte, y `building::stream_roofs`
+/// dibuja ese sprite encima de las paredes. Lo que hay que MIRAR en las capturas:
+///
+/// 1. `barrio-0-frente.png` — la casa desde la vereda. La fachada tiene que
+///    TAPAR la huella entera: si asoma un borde de pared o de piso por los
+///    costados o por el fondo, el sprite es más chico que la casa.
+/// 2. `barrio-1-manzana.png` — la manzana. Sirve para ver si el barrio repite
+///    la misma casa y si las fachadas se pisan entre parcelas.
+/// 3. `barrio-2-puerta.png` — parado en la puerta: se ve si la puerta dibujada
+///    coincide con la celda `Tile::Door` por la que se entra de verdad.
+/// 4. `barrio-3-adentro.png` — adentro: la fachada se funde y se ve el interior.
+///
+/// Escribe además, por stderr, la geometría medida de cada casa que encuentra,
+/// que es lo que permite decidir sin adivinar (`ha-barrio:` en el log).
+#[derive(Resource, Default)]
+struct BarrioTestState {
+    /// Una casa por PROGRAMA de lote: (x, z, w, d, clave). Se retrata cada una
+    /// desde su vereda, porque el defecto no es el mismo en todas — la fachada
+    /// que le sobra a la casa chica es la que le falta a la villa.
+    casas: Vec<(i64, i64, i64, i64, String)>,
+}
+
+fn barrio_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 {
+        return;
+    }
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+    let stage = world.resource::<FlyTestState>().stage;
+    let body = ha_shared::CelestialBody::Earth;
+
+    if stage == 0 {
+        // 1) La ciudad más cercana al origen.
+        let mut best: Option<(i64, ha_shared::geography::Settlement)> = None;
+        for sx in -25..25 {
+            for sz in -25..25 {
+                let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                if s.tier != ha_shared::geography::SettlementTier::City {
+                    continue;
+                }
+                let d = s.center.0.abs() + s.center.1.abs();
+                if best.as_ref().map_or(true, |(bd, _)| d < *bd) {
+                    best = Some((d, s));
+                }
+            }
+        }
+        let Some((_, s)) = best else {
+            eprintln!("ha-barrio: NO HAY NINGUNA CIUDAD");
+            std::process::exit(1);
+        };
+
+        // 2) UNA casa de cada programa de vivienda. El radio de una ciudad ronda
+        //    los 600 tiles y lo residencial vive en las AFUERAS (`district_at`):
+        //    barrer sólo el centro devuelve tiendas y torres.
+        let (cx, cz) = s.center;
+        let mut casas: Vec<(i64, i64, i64, i64, String)> = Vec::new();
+        'busca: for r in 1..90i64 {
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs() != r && dz.abs() != r {
+                        continue;
+                    }
+                    let (tx, tz) = (cx + dx * 8, cz + dz * 8);
+                    let Some(rect) = ha_shared::city::roofed_rect(body, &s, tx, tz) else {
+                        continue;
+                    };
+                    // Todo lo que en `city::LOT_PROGRAMS` es vivienda.
+                    let es_casa = rect.4.starts_with("building/casa_")
+                        || rect.4 == "building/villa"
+                        || rect.4 == "building/duplex";
+                    if !es_casa || casas.iter().any(|c| c.4 == rect.4) {
+                        continue;
+                    }
+                    eprintln!(
+                        "ha-barrio: {} en ({},{}) huella {}×{}",
+                        rect.4, rect.0, rect.1, rect.2, rect.3
+                    );
+                    casas.push((rect.0, rect.1, rect.2, rect.3, rect.4.to_string()));
+                    if casas.len() >= 6 {
+                        break 'busca;
+                    }
+                }
+            }
+        }
+        if casas.is_empty() {
+            eprintln!("ha-barrio: la ciudad ({cx},{cz}) no tiene NINGUNA casa");
+            std::process::exit(1);
+        }
+        world.resource_mut::<BarrioTestState>().casas = casas;
+        advance_stage(world, now);
+        return;
+    }
+
+    // Un retrato por casa desde la vereda + el último por dentro. Lo que hay que
+    // MIRAR en cada uno: que la fachada TAPE la huella (si asoma un borde de piso
+    // o de pared por los costados o por el fondo, el sprite es más chico que la
+    // casa), que la puerta dibujada caiga sobre la celda por la que se entra, y
+    // que dos parcelas vecinas no sean la misma casa.
+    let casas = world.resource::<BarrioTestState>().casas.clone();
+    let n = casas.len();
+    let shots = world.resource::<FlyTestState>().shots as usize;
+    if shots > n + 1 {
+        // Un respiro antes de salir: `save_to_disk` escribe la última captura un
+        // par de frames después de pedirla, y sin esta espera el driver se iba
+        // dejando el archivo a medio escribir (o sin escribir).
+        if now - world.resource::<FlyTestState>().stage_entered > 1.5 {
+            eprintln!("ha-barrio: DONE");
+            std::process::exit(0);
+        }
+        return;
+    }
+    // Los dos últimos beats son sobre la ÚLTIMA casa: uno pegado a su puerta
+    // —para ver el batiente abierto y si calza con el pixel de la fachada— y otro
+    // adentro, para ver que la fachada se funde y aparece el interior.
+    let en_puerta = shots == n;
+    let adentro = shots == n + 1;
+    // Los dos últimos van sobre la casa EN HILERA si la ciudad tiene una: es la
+    // que compone su fachada de a módulos y la que trae la puerta animada, o sea
+    // la que hay que mirar de cerca.
+    let idx = if shots >= n {
+        casas.iter().position(|c| c.4 == "building/casa_hilera").unwrap_or(n - 1)
+    } else {
+        shots
+    };
+    let (hx, hz, hw, hd, clave) = casas[idx].clone();
+    let (px, pz, vista, name) = if en_puerta {
+        (
+            hx as f32 + hw as f32 / 2.0,
+            (hz + hd) as f32 + 1.6,
+            18.0,
+            format!("barrio-{shots}-puerta"),
+        )
+    } else if adentro {
+        (
+            hx as f32 + hw as f32 / 2.0,
+            hz as f32 + hd as f32 / 2.0,
+            34.0,
+            format!("barrio-{shots}-adentro"),
+        )
+    } else {
+        // En la vereda, cuatro tiles por delante de la cara sur. El encuadre
+        // acompaña al frente de la casa para que entre entera y con su vereda.
+        (
+            hx as f32 + hw as f32 / 2.0,
+            (hz + hd) as f32 + 5.0,
+            (hw as f32 * 2.6).clamp(30.0, 70.0),
+            format!("barrio-{shots}-{}", clave.rsplit('/').next().unwrap_or("casa")),
+        )
+    };
+    teleport_a_celda(world, px, pz);
+    world.resource_mut::<crate::camera::CameraZoom>().pedir_encuadre(vista);
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    // **La captura espera al MUNDO, no al reloj.** Ver `mundo_listo`: con un
+    // plazo fijo este driver dejaba ocho PNG en negro y salía con código 0.
+    // El medio segundo de más es el fundido del techo al volver de adentro.
+    if now - entered > 0.5 && mundo_listo(world) {
+        shot(world, &format!("{}/{name}.png", flytest_dir()));
+        world.resource_mut::<FlyTestState>().shots += 1;
+        advance_stage(world, now);
+        return;
+    }
+    if now - entered > 30.0 {
+        eprintln!("ha-barrio: AVISO — 30 s sin que el chunk termine de armarse; disparo igual ({name})");
+        shot(world, &format!("{}/{name}.png", flytest_dir()));
+        world.resource_mut::<FlyTestState>().shots += 1;
+        advance_stage(world, now);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // HA_CITYTEST — retrato de una ciudad generada
 // ---------------------------------------------------------------------------
 
 fn city_test_drive(world: &mut World) {
     let now = world.resource::<Time>().elapsed_secs();
-    if now < 3.0 {
+    // **Esperar a que el mundo EXISTA, no a que pasen tres segundos.**
+    //
+    // El reloj fijo alcanzaba en el escritorio, donde a los 3 s ya se está
+    // jugando. En el Redmi no: la generación de terreno todavía va por la mitad,
+    // así que el driver disparaba sus tres capturas contra la pantalla de carga
+    // y salía con `DONE` y código 0 — o sea, PASABA sin haber visto una ciudad.
+    // Es el mismo error que ya avisa `trip_test_drive`: un plazo justo no detecta
+    // un bug, detecta una máquina lenta.
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get()
+        != crate::game_phase::GamePhase::Playing
+    {
+        // Los tiempos de los beats se cuentan desde que se entra a JUGAR, no desde
+        // que arrancó el proceso.
+        world.resource_mut::<FlyTestState>().stage_entered = now;
+        return;
+    }
+    // Y un respiro para que el anillo de chunks alrededor del jugador se arme
+    // antes del teletransporte: si no, la primera captura sale a medio poblar.
+    if now - world.resource::<FlyTestState>().stage_entered < 2.0 {
         return;
     }
     world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
@@ -1902,15 +2189,7 @@ fn city_test_drive(world: &mut World) {
             eprintln!("ha-citytest: NO HAY NINGUNA CIUDAD");
             std::process::exit(1);
         };
-        let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
-        if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
-            sim.body.x = cx as f32;
-            sim.body.z = cz as f32;
-            vis.from_x = cx as f32;
-            vis.to_x = cx as f32;
-            vis.from_z = cz as f32;
-            vis.to_z = cz as f32;
-        }
+        teleport_a_celda(world, cx as f32, cz as f32);
         eprintln!("ha-citytest: ciudad en ({cx}, {cz})");
         advance_stage(world, now);
         return;
@@ -1918,9 +2197,9 @@ fn city_test_drive(world: &mut World) {
 
     // Tres alturas: a pie en la calle, sobre el barrio y sobre la región.
     let beats: [(f32, f32, &str); 3] = [
-        (2.0, 0.0, "city-0-street"),
-        (5.0, 900.0, "city-1-district"),
-        (9.0, 9_000.0, "city-2-region"),
+        (1.0, 0.0, "city-0-street"),
+        (2.0, 220.0, "city-1-district"),
+        (3.0, 600.0, "city-2-region"),
     ];
     let shots = world.resource::<FlyTestState>().shots as usize;
     if shots >= beats.len() {
@@ -1938,7 +2217,16 @@ fn city_test_drive(world: &mut World) {
             fly.vy = 0.0;
         }
     }
-    if now - entered > at {
+    // Igual que el driver de barrio: la captura espera a que el anillo de chunks
+    // esté armado (`mundo_listo`), no a que pase un plazo. Con el plazo, las tres
+    // capturas de la ciudad salían en negro y el driver decía `DONE`.
+    if now - entered > at && mundo_listo(world) {
+        shot(world, &format!("{}/{name}.png", flytest_dir()));
+        world.resource_mut::<FlyTestState>().shots += 1;
+        return;
+    }
+    if now - entered > at + 30.0 {
+        eprintln!("ha-citytest: AVISO — 30 s sin que el chunk termine de armarse; disparo igual ({name})");
         shot(world, &format!("{}/{name}.png", flytest_dir()));
         world.resource_mut::<FlyTestState>().shots += 1;
     }

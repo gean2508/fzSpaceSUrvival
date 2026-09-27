@@ -59,7 +59,20 @@ const NIGHT_VEIL_SHADER_HANDLE: Handle<Shader> =
 /// conjunto (las N más cercanas a la cámara). Si el halo se dibujara para más
 /// luces que el velo, la luz nº 17 sería un aura flotando sobre suelo negro —
 /// un hueco marcado que aparece y desaparece al hacer zoom.
-pub const VEIL_LIGHTS: usize = 24;
+///
+/// **Subido de 24 a 40 (ago 2026), y sin pagarlo.** El disparador fue medir el
+/// manifest: de 14.440 sprites sólo CUATRO declaraban emisión, así que el pueblo
+/// de noche estaba negro por falta de emisores, no por falta de presupuesto. Con
+/// los 76 emisores que mide `scripts/import-emisiones.py` —faroles, velas,
+/// fogatas, linternas de camping, letreros, reflectores— una plaza satura 24
+/// enseguida, y lo que se veía era el charco del farol 25 apareciendo y
+/// desapareciendo al caminar.
+///
+/// Lo que hace que 40 cuesten lo que costaban 24 es el bucle del shader: ahora
+/// rechaza por distancia AL CUADRADO contra `1/alcance²` precalculado acá abajo
+/// (ver `uniform_lights`), o sea sin raíz ni división. El rechazo pasó de ~11
+/// operaciones a ~6, y el rechazo es lo que se paga 40 veces por píxel.
+pub const VEIL_LIGHTS: usize = 40;
 
 /// Alcance del pozo de luz respecto al radio declarado del emisor. **Lo usan el
 /// velo y el tinte de sprites por igual**: si no coinciden, un sprite se aclara
@@ -74,6 +87,12 @@ pub const VEIL_LIGHTS: usize = 24;
 /// Se ve dónde termina, se ve el mundo oscuro más allá, y llevar luz vuelve a
 /// ser una decisión.
 const LIGHT_REACH: f32 = 1.5;
+
+/// Tamaño del bulbo como fracción del radio declarado — **gemela de `BULB_R` en
+/// `night_veil.wgsl`**. Vive de los dos lados porque el shader recibe
+/// `1/(radio·BULB_R)` ya calculado (para no dividir por píxel): si los dos
+/// números se separan, el punto caliente deja de caer donde cae el pozo.
+const BULB_R: f32 = 0.16;
 
 /// Caída radial compartida por velo, textura de halo y tinte de sprites —
 /// **gemela de `falloff()` en `night_veil.wgsl`**: si se separan, el sprite se
@@ -216,6 +235,10 @@ pub struct NightVeilMat(pub Handle<NightVeilMaterial>);
 #[derive(Clone, Copy, ShaderType)]
 pub struct NightVeilUniform {
     pub color: Vec4,
+    /// `xy` = viewport en PÍXELES del target de la cámara de mundo. Lo necesita
+    /// la viñeta, que trabaja en coordenadas de pantalla y no de mundo (una
+    /// viñeta en metros se estiraría con el zoom). `zw` libres.
+    pub view: Vec4,
     pub count: u32,
     pub _p0: u32,
     pub _p1: u32,
@@ -231,6 +254,7 @@ impl Default for NightVeilUniform {
         Self {
             // Lineal (target sRGB) — lo pisa `sky2d::sync_sky` cada frame.
             color: Vec4::new(0.0012, 0.0016, 0.0045, 0.0),
+            view: Vec4::ZERO,
             count: 0,
             _p0: 0,
             _p1: 0,
@@ -535,7 +559,12 @@ pub struct Ambiente<'w> {
 impl Ambiente<'_> {
     /// Cuánta oscuridad hay AHORA (0 = día pleno, 1 = negro): decide si las luces
     /// nocturnas se encienden y con qué fuerza. Se calcula una vez por tick.
-    fn darkness(&self) -> f32 {
+    ///
+    /// Público porque los fuegos artificiales (`render::fireworks`) preguntan lo
+    /// mismo —¿ya es de noche?— y duplicar los siete `Res` de [`Ambiente`] para
+    /// responderlo era exactamente el problema que este parámetro vino a
+    /// resolver.
+    pub fn darkness(&self) -> f32 {
         darkness(
             &self.clock,
             &self.weather,
@@ -590,7 +619,7 @@ fn darkness(
 fn tick_lights(
     time: Res<Time>,
     ambiente: Ambiente,
-    camera: Query<(&Transform, &OrthographicProjection), With<GameCamera>>,
+    camera: Query<(&Transform, &OrthographicProjection, &Camera), With<GameCamera>>,
     lights: Query<(Entity, &Light2d, &GlobalTransform)>,
     children: Query<&Children>,
     mut overlays: Query<(&mut Sprite, &mut Visibility), With<LitOverlay>>,
@@ -618,9 +647,17 @@ fn tick_lights(
         }
         return;
     }
-    let Ok((cam_tf, proj)) = camera.get_single() else {
+    let Ok((cam_tf, proj, cam)) = camera.get_single() else {
         return;
     };
+    // El viewport del TARGET, no el de la ventana: con escala de render la
+    // cámara de mundo dibuja contra una imagen más chica y la viñeta tiene que
+    // cerrarse sobre ESA (ver `render::scale`). `physical_target_size` ya
+    // devuelve la del target activo, sea imagen o ventana.
+    let view_px = cam
+        .physical_target_size()
+        .map(|s| Vec2::new(s.x as f32, s.y as f32))
+        .unwrap_or(Vec2::ZERO);
     let view_h = match proj.scaling_mode {
         ScalingMode::FixedVertical { viewport_height } => viewport_height,
         _ => 30.0,
@@ -690,15 +727,28 @@ fn tick_lights(
         // desaturado: el charco salía color crema. La misma llama en lineal es
         // (1.0, 0.48, 0.09) — el naranja hondo que uno espera de un fuego.
         let c = light.color.to_linear();
+        // **`z` = 1/alcance², no el alcance.** El shader rechaza por distancia al
+        // cuadrado y así se ahorra una raíz Y una división por luz y por píxel —
+        // que es exactamente lo que financia el presupuesto de [`VEIL_LIGHTS`].
+        // Precalcularlo acá cuesta una división por luz y por tick (20 Hz), o sea
+        // nada, contra millones por frame allá.
+        let reach = (light.radius * LIGHT_REACH).max(0.05);
         uniform_lights[count as usize] =
-            Vec4::new(p.x, p.y, light.radius * LIGHT_REACH, strength);
+            Vec4::new(p.x, p.y, 1.0 / (reach * reach), strength);
         // `w` = radio DECLARADO del emisor: es el tamaño del bulbo (el punto
         // caliente) en la pasada aditiva. Una vela tiene uno chiquito y una
         // hoguera uno gordo, sin ninguna constante mágica en el shader. En 0 no
         // hay bulbo: es el viejo `draw_glow == false` de las luciérnagas, que ya
         // traen su propio sprite de aura y con otro encima se queman a blanco.
-        let bulb_r = if light.draw_glow { light.radius } else { 0.0 };
-        uniform_tints[count as usize] = Vec4::new(c.red, c.green, c.blue, bulb_r);
+        // …y `w` = **1/(radio·BULB_R)**, por el mismo motivo: el bulbo y el halo
+        // se evalúan con una multiplicación en vez de una división. En 0 no hay
+        // bulbo NI halo: es el viejo `draw_glow == false`.
+        let bulb_w = if light.draw_glow && light.radius > 0.01 {
+            1.0 / (light.radius * BULB_R)
+        } else {
+            0.0
+        };
+        uniform_tints[count as usize] = Vec4::new(c.red, c.green, c.blue, bulb_w);
         count += 1;
     }
     if let Some(vh) = veil_mat.as_ref() {
@@ -706,6 +756,7 @@ fn tick_lights(
             mat.uniform.lights = uniform_lights;
             mat.uniform.tints = uniform_tints;
             mat.uniform.count = count;
+            mat.uniform.view = view_px.extend(0.0).extend(0.0);
         }
     }
 
@@ -722,6 +773,7 @@ fn tick_lights(
             mat.uniform.lights = uniform_lights;
             mat.uniform.tints = uniform_tints;
             mat.uniform.count = count;
+            mat.uniform.view = view_px.extend(0.0).extend(0.0);
         }
     }
     // 5) Las ventanas encendidas de las poses `Light`.
@@ -867,7 +919,17 @@ fn attach_ground_shadows(
         let width = size.x * 0.92;
         // El largo en reposo es cortito: sin luz direccional lo que corresponde es
         // oclusión de contacto, la sombrita pegada bajo los pies. La estira la luz.
-        let length = size.x * 0.62;
+        //
+        // **Y SALE DEL LADO MÁS GRANDE, no siempre del ancho.** Para un decorado
+        // más o menos cuadrado (un roble, una roca) `size.x` y `size.y` son
+        // parecidos y da lo mismo. Para un acantilado no: es una columna de UNA
+        // celda de ancho que puede medir DIEZ de alto (`pared_apilada`), y con
+        // `size.x` la sombra salía del porte de una piedra suelta sin importar si
+        // el muro medía uno o nueve pisos — que es por lo que un farallón entero
+        // no se leía distinto de un guijarro. `size.x.max(size.y)` no le cambia
+        // nada a la mayoría del decorado (el máximo sigue siendo el ancho) y le
+        // da su tamaño real a lo que es angosto y alto.
+        let length = size.x.max(size.y) * 0.62;
         // `UnlitSprite` para que `light_sprites` no la aclare: una sombra que se
         // ilumina deja de ser sombra. El tono no es negro puro sino el verde
         // azulado de la sombra ambiental (`sky2d`), para que de día y de noche
@@ -998,10 +1060,19 @@ fn cast_shadows(
         let mut v = sky_v;
         let mut w = sky_w;
         for (_, le, lp, reach, k) in &active {
+            // Mismo rechazo barato que en `light_sprites`: este también es un
+            // bucle objeto × luz, y con el presupuesto de [`VEIL_LIGHTS`] en 40
+            // la raíz cuadrada se pagaría 40 veces por cada sombra en cuadro.
+            // Al cuadrado y sin raíz descarta lo que no llega; la distancia real
+            // se calcula sólo para las luces que de verdad proyectan.
+            let d2 = p.distance_squared(*lp);
+            if d2 > *reach * *reach {
+                continue;
+            }
             // La luz que ESTE objeto lleva puesta no lo proyecta (ni la de un foco
             // prácticamente encima): estaríamos dibujando la sombra de la lámpara
             // debajo de la lámpara.
-            let d = p.distance(*lp);
+            let d = d2.sqrt();
             if *le == owner || d < SELF_LIGHT_M {
                 continue;
             }
@@ -1211,10 +1282,44 @@ fn light_sprites(
         if p.z > WORLD_Z_MAX || p.truncate().distance(cam) > cull_r + sprite_reach {
             continue;
         }
+        // **El arte PLANO no se tiñe acá.** Todo lo que está por debajo de
+        // `layers::YSORT_MIN` —la baldosa de vereda, el asfalto, la pintura de la
+        // calzada, un charco, una alfombra— ya lo ilumina el shader POR PÍXEL, y
+        // con un degradado continuo. Teñirlo además por sprite le suma un valor
+        // ÚNICO a toda la baldosa, así que dentro de un pozo de luz cada tile de
+        // 32 px salta de golpe al nivel de su centro: en la captura de
+        // `HA_NIGHTTEST` la vereda alrededor de cada farol se veía como un
+        // damero de cuadrados más claros y más oscuros pisando el charco redondo
+        // que el shader acababa de dibujar bien.
+        //
+        // El tinte por sprite existe para lo que SE LEVANTA del suelo, que es
+        // donde aporta algo que el shader no puede: la cara que mira a la lámpara
+        // recibe más que la de atrás. Una baldosa no tiene caras.
+        //
+        // Y de paso es la mitad del costo de este bucle: en la captura del barrio
+        // hay 3.915 sprites de tile contra ~560 objetos.
+        if p.z < crate::layers::YSORT_MIN {
+            continue;
+        }
         let sp = p.truncate();
         let half = sprite.custom_size.unwrap_or(Vec2::splat(1.0)) * 0.5;
         let mut acc = Vec3::ZERO;
         for (_, lp, r, rgb, k) in &active {
+            // **Rechazo barato ANTES de la cuenta cara.** Esto es un bucle
+            // sprite × luz: con cientos de sprites en cuadro y el presupuesto de
+            // [`VEIL_LIGHTS`] es lo más caro que hace el sistema de luz en la CPU.
+            // El 90 % de los pares están fuera de alcance, y descartarlos con una
+            // resta y un producto escalar —sin `clamp`, sin dos raíces, sin dos
+            // `falloff`— es lo que financia haber subido el presupuesto de 24 a
+            // 40 sin que esto cueste más que antes.
+            //
+            // El margen es conservador (media diagonal de la caja del sprite):
+            // rechaza sólo lo que con seguridad no toca, así el resultado es
+            // idéntico al de calcularlos todos.
+            let margen = *r + half.length();
+            if sp.distance_squared(*lp) > margen * margen {
+                continue;
+            }
             // Punto del sprite MÁS CERCANO al foco (clamp del foco a la caja) y su
             // opuesto: entre los dos sale el gradiente cerca/lejos del objeto.
             let near = lp.clamp(sp - half, sp + half);

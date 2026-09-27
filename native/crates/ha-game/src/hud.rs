@@ -2109,8 +2109,6 @@ const fn u(x: f32) -> f32 {
 const INV_SLOT: f32 = 40.0;
 const INV_GAP: f32 = 4.0;
 const INV_PITCH: f32 = INV_SLOT + INV_GAP;
-const INV_COLS: usize = 11;
-const INV_ROWS: usize = 4;
 const INV_BORDE: f32 = 11.0;
 const INV_PAD: f32 = 8.0;
 const INV_COL_PERS: f32 = 152.0;
@@ -2135,8 +2133,8 @@ struct PulgarInventario {
 /// **La mochila / el inventario creativo, tal cual las imágenes de referencia.**
 ///
 /// El panel del pack centrado arriba, la columna del personaje a la izquierda
-/// con su equipo y su estado, el encabezado con el buscador y la grilla de 11 × 4
-/// con su canaleta. La hotbar queda AFUERA, siempre a la vista: es la decisión
+/// con su equipo y su estado, el encabezado con el buscador y la grilla de
+/// `GRID_COLS` × `GRID_ROWS` con su canaleta. La hotbar queda AFUERA, siempre a la vista: es la decisión
 /// del 15 ago 2026 y es lo que dibujan las dos maquetas.
 ///
 /// En creativo la fila de pestañas son las dieciséis categorías del catálogo
@@ -2167,10 +2165,10 @@ fn spawn_bag_panel(
     let tab = if creativo { BagTab::Build } else { tab };
 
     // Geometría, en unidades de la maqueta.
-    let grid_w = INV_COLS as f32 * INV_PITCH - INV_GAP;
+    let grid_w = GRID_COLS as f32 * INV_PITCH - INV_GAP;
     let inner_w = INV_COL_PERS + 14.0 + grid_w + 4.0 + INV_SCROLL_W;
     let panel_w = inner_w + 2.0 * INV_PAD + 2.0 * INV_BORDE;
-    let inner_h = INV_TABS_H + 6.0 + INV_HEAD_H + 6.0 + (INV_ROWS as f32 * INV_PITCH - INV_GAP);
+    let inner_h = INV_TABS_H + 6.0 + INV_HEAD_H + 6.0 + (GRID_ROWS as f32 * INV_PITCH - INV_GAP);
     let panel_h = inner_h + 2.0 * INV_PAD + 2.0 * INV_BORDE;
     let pxu = (800.0 - panel_w) / 2.0;
     let pyu = 6.0;
@@ -2288,7 +2286,7 @@ fn spawn_bag_panel(
                     // ── la columna del personaje ──────────────────────────
                     let cy0 = iy + INV_TABS_H + 6.0;
                     let alto_col =
-                        INV_HEAD_H + 6.0 + (INV_ROWS as f32 * INV_PITCH - INV_GAP);
+                        INV_HEAD_H + 6.0 + (GRID_ROWS as f32 * INV_PITCH - INV_GAP);
                     let alto_pers = alto_col - 66.0;
                     up::marco(l, art, up::marco::LISO, u(ix), u(cy0), u(INV_COL_PERS),
                               u(alto_pers), k);
@@ -2438,7 +2436,7 @@ fn spawn_bag_panel(
 
                     // ── la grilla ─────────────────────────────────────────
                     let gy = hy + INV_HEAD_H + 6.0;
-                    let alto_grilla = INV_ROWS as f32 * INV_PITCH - INV_GAP;
+                    let alto_grilla = GRID_ROWS as f32 * INV_PITCH - INV_GAP;
                     let mut vista = up::caja(u(gx), u(gy), u(grid_w), u(alto_grilla), k);
                     vista.overflow = Overflow::scroll_y();
                     // `BagScrollView` es lo que hace que el arrastre del dedo
@@ -2465,7 +2463,7 @@ fn spawn_bag_panel(
                                 display: Display::Grid,
                                 width: Val::Percent(100.0),
                                 grid_template_columns: vec![RepeatedGridTrack::px(
-                                    INV_COLS as u16,
+                                    GRID_COLS as u16,
                                     u(INV_SLOT) * k,
                                 )],
                                 column_gap: Val::Px(u(INV_GAP) * k),
@@ -2481,7 +2479,7 @@ fn spawn_bag_panel(
                                         Name::new("BagGrid"),
                                     ))
                                     .with_children(|grid| {
-                                        for i in 0..(INV_COLS * INV_ROWS) {
+                                        for i in 0..(GRID_COLS * GRID_ROWS) {
                                             spawn_inventory_grid_cell(grid, i, u(INV_SLOT) * k, heart);
                                         }
                                     });

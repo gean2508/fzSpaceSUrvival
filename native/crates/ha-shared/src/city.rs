@@ -62,6 +62,63 @@ pub struct LotProgram {
     pub weight: u8,
 }
 
+/// **Los lotes que se COMPONEN del kit modular, y cuántas plantas tienen.**
+///
+/// `clave del lote -> (mínimo de pisos, máximo)`, sin contar la planta baja ni la
+/// azotea. Cuál le toca a cada parcela sale de su esquina, así que una manzana del
+/// centro tiene torres de alturas distintas sin guardar un byte por edificio.
+///
+/// ## Por qué existe
+///
+/// `5_Floor_Modular_Building` son 343 dibujos y hasta hoy no llegaba **ninguno**
+/// al mundo generado: son columnas y bandas de 9 celdas —planta baja, piso,
+/// azotea— hechas para apilarse, así que `import-edificios.py`, que le busca a
+/// cada lote UNA fachada entera, no encontraba ni un candidato en esa carpeta y
+/// caía a los condominios de `4_Generic_Building`. Resultado medido: la oficina y
+/// la torre del centro recibían **el mismo dibujo** (`edificios_condominio_38`),
+/// y la tienda, el mercado y el shopping **otro mismo dibujo** entre los tres. Un
+/// centro donde todas las torres son la misma torre no se lee como un centro.
+///
+/// El kit ya estaba importado y medido (`scripts/import-modulares.py` →
+/// `edificio/pb_*`, `edificio/piso_*`, `edificio/azotea*`) y el juego ya sabía
+/// apilarlo: es lo que dibuja `ha-game::edificios` para lo que construye el
+/// jugador. Lo único que faltaba era que la ciudad lo usara.
+///
+/// ## Por qué es una tabla aparte y no un campo de [`LotProgram`]
+///
+/// Porque son ocho lotes de cincuenta. Un campo obliga a escribir `pisos: (0, 0)`
+/// en las otras cuarenta y dos líneas, que es ruido en el único lugar del archivo
+/// que se lee de un vistazo.
+///
+/// **El ancho no está acá**: sale de la huella del lote, redondeada a módulos de
+/// [`crate::edificio::MODULO`] tiles. Ésa es la gracia de componer — el edificio
+/// mide lo que mide la parcela, no lo que midió un dibujo suelto.
+pub const LOTES_MODULARES: &[(&str, u8, u8)] = &[
+    // Centro: lo más alto de la ciudad y lo que más se ve de lejos.
+    ("building/torre", 4, 8),
+    ("building/oficina", 2, 5),
+    ("building/hotel", 3, 6),
+    // Comercio: local abajo y una o dos plantas de vivienda encima, que es
+    // exactamente como el pack dibujó la hoja.
+    ("building/tienda", 1, 3),
+    ("building/shopping", 0, 2),
+    // Residencial de altura. El chalet NO va acá: el pack lo dibujó entero.
+    ("building/duplex", 1, 2),
+];
+
+/// Los pisos que le tocan a ESTA parcela, si es de las que se componen.
+///
+/// Determinista por esquina: la misma manzana se dibuja igual siempre, y el
+/// streaming no hace titilar la altura de una torre al entrar y salir.
+pub fn pisos_modulares(key: &str, x: i64, z: i64) -> Option<u8> {
+    let &(_, min, max) = LOTES_MODULARES.iter().find(|(k, _, _)| *k == key)?;
+    if max <= min {
+        return Some(min);
+    }
+    let h = (x.wrapping_mul(0x27d4_eb2d) ^ z.wrapping_mul(0x1656_67b1)).unsigned_abs();
+    Some(min + (h % (max - min + 1) as u64) as u8)
+}
+
 /// Qué fracción del lote residencial ocupa la CASA, en porcentaje de cada lado.
 /// El resto es jardín, entrada de auto y pileta. Lo usan `residential_tile`,
 /// [`roofed_rect`] y [`LotProgram::huella`], que **tienen que dar lo mismo** o el
@@ -125,13 +182,19 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "building/casa_mediana", cells: (26, 18), district: District::Residential, weight: 26 },
     LotProgram { key: "building/casa_grande", cells: (31, 22), district: District::Residential, weight: 16 },
     LotProgram { key: "building/casa_country", cells: (42, 24), district: District::Residential, weight: 10 },
+    // **La casa EN HILERA**: la que el pack dibujó modular (un tramo de 10 celdas
+    // que se repite y un remate de 12 que cierra la fila). La parcela es ancha y
+    // poco profunda porque eso ES una hilera, y el cliente compone la fachada del
+    // ancho exacto de la huella módulo por módulo (`building::spawn_fachada_modular`),
+    // así que acá el tamaño no está limitado por lo que mida un dibujo suelto.
+    LotProgram { key: "building/casa_hilera", cells: (46, 22), district: District::Residential, weight: 18 },
     // **`building/villa`, no `building/villa_6`.** `villa_6` es el nombre que el
     // importador masivo le puso a un recorte de UNA CELDA de la hoja de villas
     // (un felpudo, una maceta): la parcela más grande del barrio apuntaba a un
     // sprite de 32×32 px estirado a 30×22 tiles. `building/villa` es el slot
     // curado que recibe las villas de verdad.
     LotProgram { key: "building/villa", cells: (35, 34), district: District::Residential, weight: 6 },
-    LotProgram { key: "building/duplex", cells: (26, 24), district: District::Residential, weight: 12 },
+    LotProgram { key: "building/duplex", cells: (33, 24), district: District::Residential, weight: 12 },
     // ── Comercio. **Los rubros son de verdad**, no un `building/tienda`
     // genérico repetido: el pack dibujó dieciocho locales distintos con su
     // vidriera y su cartel (`edificio/tienda_*`, `cartel/*`) y la ciudad los
@@ -165,12 +228,23 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "edificio/tienda_pesca", cells: (14, 12), district: District::Commercial, weight: 4 },
     LotProgram { key: "edificio/tienda_galletas", cells: (14, 12), district: District::Commercial, weight: 4 },
     LotProgram { key: "edificio/tienda_vidriera", cells: (14, 12), district: District::Commercial, weight: 5 },
-    LotProgram { key: "building/heladeria_1", cells: (7, 6), district: District::Commercial, weight: 5 },
-    LotProgram { key: "building/tienda", cells: (19, 13), district: District::Commercial, weight: 5 },
+    // **Acá vivía `building/heladeria_1`, y era un mueble de INTERIORES.** El
+    // pack de Modern Interiors trae un tema `Ice_Cream_Shop` con el mostrador, la
+    // heladera y el cartel del local *visto por dentro*; el importador masivo los
+    // metía en `building/` porque el nombre de archivo dice "shop", y la ciudad
+    // terminaba plantando un mostrador de 2×3 celdas en una parcela de la avenida
+    // — con el agravante de que la heladería EXTERIOR ya estaba dos líneas más
+    // arriba (`edificio/tienda_heladeria`, el local de 9 celdas del kit modular),
+    // así que era además un lote duplicado.
+    //
+    // Ahora los interiores no pueden caer en `building/`
+    // (`import-pack-masivo.py::CARPETAS_DE_AFUERA`) y ningún lote puede apuntar a
+    // un dibujo de adentro (`art2d::la_ciudad_no_se_construye_con_interiores`).
+    LotProgram { key: "building/tienda", cells: (20, 13), district: District::Commercial, weight: 5 },
     LotProgram { key: "building/mercado_chico_1", cells: (14, 12), district: District::Commercial, weight: 8 },
     LotProgram { key: "building/mercado_mediano_1", cells: (18, 14), district: District::Commercial, weight: 8 },
-    LotProgram { key: "building/gasolinera", cells: (18, 14), district: District::Commercial, weight: 7 },
-    LotProgram { key: "building/shopping", cells: (19, 13), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/gasolinera", cells: (15, 14), district: District::Commercial, weight: 7 },
+    LotProgram { key: "building/shopping", cells: (29, 13), district: District::Commercial, weight: 5 },
     LotProgram { key: "lot/estacionamiento", cells: (20, 16), district: District::Commercial, weight: 10 },
     // **LOS FOOD TRUCKS Y LOS PUESTOS DE FERIA.** Otro de los que figuraba como
     // "no está en el manifest": el pack trae el tuk-tuk de pizza entero
@@ -182,15 +256,15 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "vehicle/pizza_tuk_tuk_tuk_tuk_1", cells: (9, 9), district: District::Commercial, weight: 6 },
     LotProgram { key: "building/puestos_1", cells: (7, 6), district: District::Commercial, weight: 7 },
     // ── Centro.
-    LotProgram { key: "building/oficina", cells: (17, 19), district: District::Downtown, weight: 22 },
-    LotProgram { key: "building/torre", cells: (30, 28), district: District::Downtown, weight: 18 },
-    LotProgram { key: "building/hotel", cells: (28, 22), district: District::Downtown, weight: 8 },
+    LotProgram { key: "building/oficina", cells: (20, 19), district: District::Downtown, weight: 22 },
+    LotProgram { key: "building/torre", cells: (20, 23), district: District::Downtown, weight: 18 },
+    LotProgram { key: "building/hotel", cells: (29, 22), district: District::Downtown, weight: 8 },
     // La torre del reloj de la estación: el pack la dibujó entera y es el hito
     // que se ve de lejos en las referencias.
     LotProgram { key: "building/reloj_torre", cells: (14, 20), district: District::Downtown, weight: 5 },
     // ── Industria. La central eléctrica con sus molinos es de las referencias:
     // va en el borde, que es donde el pack la dibujó (contra la arboleda).
-    LotProgram { key: "building/nave_industrial", cells: (18, 16), district: District::Industrial, weight: 20 },
+    LotProgram { key: "building/nave_industrial", cells: (15, 16), district: District::Industrial, weight: 20 },
     LotProgram { key: "building/deposito", cells: (13, 14), district: District::Industrial, weight: 14 },
     LotProgram { key: "building/granero", cells: (10, 10), district: District::Industrial, weight: 8 },
     LotProgram { key: "building/hangar", cells: (30, 24), district: District::Industrial, weight: 5 },
@@ -234,7 +308,7 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "building/comisaria", cells: (24, 20), district: District::Civic, weight: 14 },
     LotProgram { key: "building/bomberos", cells: (12, 10), district: District::Civic, weight: 12 },
     LotProgram { key: "building/correo_edificio", cells: (20, 16), district: District::Civic, weight: 10 },
-    LotProgram { key: "building/estacion_tren", cells: (22, 16), district: District::Civic, weight: 6 },
+    LotProgram { key: "building/estacion_tren", cells: (11, 7), district: District::Civic, weight: 6 },
 ];
 
 /// El distrito de una manzana.
@@ -374,6 +448,7 @@ fn program_at_anchor(
         SettlementTier::Hamlet => 34,
     };
     if h % 100 >= filled {
+        if (nx, nz) == (1, 1) { diag("1a-densidad"); }
         return None;
     }
     // **Sorteo ponderado entre los programas del distrito QUE OCUPAN EXACTAMENTE
@@ -403,6 +478,7 @@ fn program_at_anchor(
         if (nx, nz) != (1, 1) {
             return None;
         }
+        diag("1b-nada-del-distrito-cabe-en-1x1");
         return LOT_PROGRAMS
             .iter()
             .enumerate()
@@ -572,26 +648,35 @@ fn casa_mojada(body: CelestialBody, lot: &Lot) -> bool {
     v
 }
 
-fn calcular_retiro(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> Retiro {
-    const PASO: i64 = 4;
-    let nivel = crate::relief::relief_level(body, ox, oz);
-    // La PRIMERA y la ÚLTIMA muestra de otro escalón, por eje: entre las dos
-    // queda dicho por dónde entra el desnivel y cuánto llano sobra a cada lado.
-    let (mut prim_x, mut prim_z) = (w, hgt);
-    let (mut ult_x, mut ult_z) = (-1i64, -1i64);
+/// **La franja verde que toda carretera deja a los lados**, en tiles.
+///
+/// No es estética: la calzada se dibuja DESPUÉS que lo edificado, así que una
+/// pared a un tile del asfalto sale con el asfalto encima.
+const RETIRO_DE_CARRETERA: f32 = 2.0;
+
+/// **¿Pisa este rectángulo un enlace interurbano?**
+///
+/// Se barre la parcela en rejilla de tres tiles. Tres y no más: la más angosta
+/// de las carreteras entre núcleos es la ruta, que mide 7 tiles de calzada
+/// (`RoadClass::Route::half_width` = 3,5), así que ninguna se puede colar entre
+/// dos muestras. Y se barre el BORDE además del interior, que es por donde una
+/// carretera roza una parcela sin pasarle por el medio.
+///
+/// Sale caro (unas cien consultas) y por eso no se llama nunca a la ligera:
+/// quien pregunta comprueba antes, con UNA consulta al centro, que haya alguna
+/// carretera lo bastante cerca como para que la respuesta pueda ser `true`.
+fn enlace_cruza(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> bool {
+    const PASO: i64 = 3;
+    let toca = |x: f32, z: f32| {
+        crate::geography::link_clearance(body, x, z)
+            .is_some_and(|m| m + RETIRO_DE_CARRETERA >= 0.0)
+    };
     let mut dz = 0;
     loop {
         let mut dx = 0;
         loop {
-            let n = crate::relief::relief_level(body, ox + dx, oz + dz);
-            if n < 0 {
-                return Retiro::Mojado;
-            }
-            if n != nivel {
-                prim_x = prim_x.min(dx);
-                prim_z = prim_z.min(dz);
-                ult_x = ult_x.max(dx);
-                ult_z = ult_z.max(dz);
+            if toca((ox + dx) as f32, (oz + dz) as f32) {
+                return true;
             }
             if dx == w - 1 {
                 break;
@@ -603,25 +688,125 @@ fn calcular_retiro(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> R
         }
         dz = (dz + PASO).min(hgt - 1);
     }
-    if ult_x < 0 {
-        return Retiro::Sitio((ox, oz, w, hgt));
+    false
+}
+
+fn calcular_retiro(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> Retiro {
+    const PASO: i64 = 4;
+    // Rejilla de muestras del rectángulo: qué escalón hay en cada una, o `None`
+    // si es líquido. Las coordenadas de la muestra `i` se recuperan con
+    // `muestra()`, que es la misma cuenta que llena la rejilla.
+    let muestra = |i: i64, largo: i64| (i * PASO).min(largo - 1);
+    let nx = (w + PASO - 1) / PASO;
+    let nz = (hgt + PASO - 1) / PASO;
+    let mut nivel = Vec::with_capacity((nx * nz) as usize);
+    for j in 0..nz {
+        for i in 0..nx {
+            let n = crate::relief::relief_level(body, ox + muestra(i, w), oz + muestra(j, hgt));
+            nivel.push(if n < 0 { None } else { Some(n) });
+        }
     }
-    // (corrimiento en x, corrimiento en z, ancho, alto)
-    let opciones = [
-        (0, 0, prim_x - 1, hgt),
-        (0, 0, w, prim_z - 1),
-        (ult_x + 2, 0, w - ult_x - 2, hgt),
-        (0, ult_z + 2, w, hgt - ult_z - 2),
-    ];
-    match opciones
-        .iter()
-        .filter(|(_, _, a, b)| *a >= LADO_MINIMO && *b >= LADO_MINIMO)
-        .max_by_key(|(_, _, a, b)| a * b)
-    {
-        Some(&(sx, sz, nw, nh)) => Retiro::Sitio((ox + sx, oz + sz, nw, nh)),
-        None => Retiro::SinSitio,
+    let en = |i: i64, j: i64| nivel[(j * nx + i) as usize];
+    // Todo el rectángulo en el mismo escalón seco: el caso normal, y se contesta
+    // sin buscar nada.
+    if let Some(n0) = en(0, 0) {
+        if nivel.iter().all(|&n| n == Some(n0)) {
+            return Retiro::Sitio((ox, oz, w, hgt));
+        }
+    }
+
+    // **EL RECTÁNGULO LLANO MÁS GRANDE QUE HAY DENTRO**, no el mejor de cuatro
+    // cortes.
+    //
+    // Lo que había probaba cuatro recortes del rectángulo entero —quedarse con
+    // lo de antes o lo de después del desnivel, en cada eje— y si ninguno de los
+    // cuatro llegaba al lado mínimo, la parcela se descartaba. Con un borde de
+    // terraza entrando EN DIAGONAL (que es como entran casi todos) los cuatro
+    // cortes salen chicos a la vez aunque quede media manzana llana en una
+    // esquina, y la manzana se quedaba sin nada. Medido sobre las cuatro
+    // ciudades de la Tierra, era **la primera causa de baldío**: 31 de las 72
+    // manzanas vacías de Ciudad Central y 30 de las 57 de Villa Sur — más que la
+    // densidad, más que el agua y más que la carretera juntas. Es exactamente lo
+    // que el jugador ve como "parcelas que rechazan casas por falta de espacio".
+    //
+    // Ahora se busca el rectángulo máximo de un solo escalón dentro de la
+    // rejilla de muestras (histograma por filas, el algoritmo de siempre): sobre
+    // 14×14 muestras cuesta microsegundos y lo paga una sola vez por parcela
+    // gracias a la memo de `retiro_del_desnivel`.
+    let mut mejor: Option<(i64, i64, i64, i64)> = None; // (i0, j0, i1, j1) inclusive
+    let mut mejor_area = 0i64;
+    let mut niveles: Vec<i8> = nivel.iter().flatten().copied().collect();
+    niveles.sort_unstable();
+    niveles.dedup();
+    for objetivo in niveles {
+        // Altura de la columna de celdas buenas que termina en esta fila.
+        let mut alto = vec![0i64; nx as usize];
+        for j in 0..nz {
+            for i in 0..nx {
+                alto[i as usize] =
+                    if en(i, j) == Some(objetivo) { alto[i as usize] + 1 } else { 0 };
+            }
+            // Rectángulo máximo en el histograma de esta fila, a lo bruto: `nx`
+            // es 14 como mucho, así que el cuadrático es más barato que la pila.
+            for i in 0..nx {
+                let mut h = alto[i as usize];
+                for k in i..nx {
+                    h = h.min(alto[k as usize]);
+                    if h == 0 {
+                        break;
+                    }
+                    let area = (k - i + 1) * h;
+                    if area > mejor_area {
+                        mejor_area = area;
+                        mejor = Some((i, j - h + 1, k, j));
+                    }
+                }
+            }
+        }
+    }
+    let Some((i0, j0, i1, j1)) = mejor else {
+        // Ni una muestra seca: esto es agua, no una parcela con un charco.
+        return Retiro::Mojado;
+    };
+
+    // De muestras a tiles. **Los bordes que se CORTARON se retiran un tile más**:
+    // entre dos muestras hay cuatro celdas sin mirar, y el borde de la terraza
+    // está justo ahí. Los bordes que coinciden con el filo del rectángulo no se
+    // tocan — ahí no hay nada que esquivar.
+    let borde = |i: i64, largo: i64, n: i64, hacia_arriba: bool| {
+        let t = muestra(i, largo);
+        if hacia_arriba {
+            if i == n - 1 { largo - 1 } else { t - 1 }
+        } else if i == 0 {
+            0
+        } else {
+            t + 1
+        }
+    };
+    let x0 = borde(i0, w, nx, false);
+    let x1 = borde(i1, w, nx, true);
+    let z0 = borde(j0, hgt, nz, false);
+    let z1 = borde(j1, hgt, nz, true);
+    let (nw, nh) = (x1 - x0 + 1, z1 - z0 + 1);
+    if nw < LADO_MINIMO || nh < LADO_MINIMO {
+        return Retiro::SinSitio;
+    }
+    Retiro::Sitio((ox + x0, oz + z0, nw, nh))
+}
+
+thread_local! {
+    pub static DIAG: std::cell::RefCell<std::collections::BTreeMap<&'static str, u32>> =
+        std::cell::RefCell::new(std::collections::BTreeMap::new());
+}
+fn diag(k: &'static str) {
+    if std::env::var("HA_DIAG").is_ok() {
+        DIAG.with(|d| *d.borrow_mut().entry(k).or_insert(0) += 1);
     }
 }
+pub fn diag_dump() -> String {
+    DIAG.with(|d| format!("{:?}", d.borrow()))
+}
+pub fn diag_clear() { DIAG.with(|d| d.borrow_mut().clear()); }
 
 pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<Lot> {
     let block = block_size(s.style, s.tier);
@@ -649,15 +834,53 @@ pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<L
                 // ventanas y paredes cruzadas en mitad de la calzada.
                 let margin = bounding_margin(s.style, ax, az, nx, nz);
                 let Some(prog) = program_at_anchor(body, s, ax, az, nx, nz, block, margin) else {
+                    if (nx, nz) == (1, 1) { diag("1-sorteo-vacio-1x1"); }
                     continue;
                 };
                 let p = &LOT_PROGRAMS[prog];
-                // Rectángulo del lote: desde la acera del bloque ancla, del tamaño
-                // del programa (acotado a lo que dan las manzanas reservadas).
-                let ox = cx + ax * block + margin;
-                let oz = cz + az * block + margin;
-                let w = p.cells.0.min(nx * block - margin * 2).max(4);
-                let hgt = p.cells.1.min(nz * block - margin * 2).max(4);
+                // **EL SITIO LLANO ES EL DE LA MANZANA, NO EL DEL PROGRAMA.**
+                //
+                // El rectángulo del lote salía clavado en la esquina noroeste de
+                // la manzana y el retiro por desnivel sólo podía ENCOGERLO desde
+                // ahí. O sea: si el borde de terraza pasaba justo por esa esquina,
+                // la parcela moría aunque el resto de la manzana fuera una
+                // explanada — que es la mitad de "hay parcelas rechazando casas
+                // por falta de espacio". Ahora se le pregunta al hueco edificable
+                // ENTERO dónde está su parte llana (`retiro_del_desnivel`, que
+                // devuelve el rectángulo llano más grande) y el programa se planta
+                // DENTRO de ella.
+                //
+                // De regalo, la memo de `retiro_del_desnivel` pasa a acertar
+                // siempre: los doce candidatos de una celda comparten manzana, así
+                // que preguntan por el mismo rectángulo en vez de por doce.
+                let ox0 = cx + ax * block + margin;
+                let oz0 = cz + az * block + margin;
+                let uw = (nx * block - margin * 2).max(4);
+                let uh = (nz * block - margin * 2).max(4);
+                let (ox, oz, sw, sh) = match retiro_del_desnivel(body, ox0, oz0, uw, uh) {
+                    Retiro::Mojado => {
+                        diag("4-mojado");
+                        continue;
+                    }
+                    Retiro::SinSitio => {
+                        diag("5-sin-sitio-desnivel");
+                        continue;
+                    }
+                    Retiro::Sitio(r) => r,
+                };
+                let w = p.cells.0.min(sw).max(4);
+                let hgt = p.cells.1.min(sh).max(4);
+                // **Y la parcela se apoya en SU CALLE.** El rectángulo salía
+                // clavado en la esquina noroeste del sitio, así que entre el
+                // frente del lote y la vereda de enfrente quedaba una franja de
+                // pasto de hasta veinte tiles: la casa se veía al fondo de un
+                // prado, sin acera, sin cerca contra la calle y sin nada que
+                // llegara hasta ella —no hay camino que dibujar cuando la parcela
+                // no toca la calle—. Un terreno urbano da a la calle por
+                // definición: se apoya contra el borde sur, que es la cara que
+                // `residential_tile` trata como frente, y se centra a lo ancho.
+                let ox = ox + (sw - w) / 2;
+                let oz = oz + (sh - hgt);
                 // Fuera del casco no hay ciudad — y el lote ENTERO tiene que
                 // caber, con su retiro de la circunvalación. Comprobando sólo la
                 // esquina, la última fila de manzanas se plantaba encima del
@@ -668,10 +891,12 @@ pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<L
                     || (ox + w - cx).abs() > libre
                     || (oz + hgt - cz).abs() > libre
                 {
+                    diag("2-fuera-del-casco");
                     continue;
                 }
                 let bruto = Lot { min: (ox, oz), w, h: hgt, program: prog };
                 if mayores.iter().flatten().any(|m| bruto.overlaps(m)) {
+                    diag("3-pisa-mayor");
                     continue;
                 }
                 // **LO QUE RESERVA ES EL RECTÁNGULO QUE DE VERDAD EXISTE.**
@@ -697,44 +922,53 @@ pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<L
                         *n += 1;
                     }
                 };
-                let lot = match retiro_del_desnivel(body, ox, oz, w, hgt) {
-                    // El candidato NO EXISTE: le entra agua, o el desnivel no le
-                    // deja parte llana que sirva. No se reserva —el hueco queda
-                    // libre para un programa más chico, que se barre a
-                    // continuación— y, como la cuenta no mira la celda que
-                    // pregunta, todas las celdas de la manzana coinciden en eso.
-                    //
-                    // Reservarlo "por si acaso" era lo que dejaba **casas con la
-                    // fachada partida y sin puerta**: para unas celdas el
-                    // rectángulo grande estaba tapado y para otras no, así que la
-                    // parcela chica salía dibujada a trozos. Lo caza
-                    // `toda_casa_generada_tiene_por_donde_entrar`.
-                    Retiro::Mojado | Retiro::SinSitio => continue,
-                    Retiro::Sitio((x, z, a, b)) => Lot { min: (x, z), w: a, h: b, program: prog },
-                };
+                // El lote YA está retirado (el rectángulo salió del sitio llano de
+                // la manzana), así que acá sólo se le pone nombre.
+                //
+                // Que el terreno se mire SIEMPRE —contenga o no a la celda que
+                // pregunta— es lo que hace que las doce celdas de una manzana
+                // cuenten la misma historia. Decidir la reserva mirando a quien
+                // pregunta era lo que dejaba **casas con la fachada partida y sin
+                // puerta**: para unas celdas el candidato grande existía y para
+                // otras no. Lo caza `toda_casa_generada_tiene_por_donde_entrar`.
+                let lot = bruto;
                 // Esta celda puede caer fuera de la parcela: porque el candidato
                 // no la contenía, o porque el retiro por desnivel la dejó en el
                 // jardín. En los dos casos el rectángulo BRUTO queda reservado —el
                 // retiro es franja verde de esta manzana, no sitio libre para
                 // otro programa— y la celda sigue buscando uno más chico fuera.
                 if !lot.contains(tx, tz) {
+                    diag("6-no-contiene-la-celda");
                     reservar(&mut mayores, &mut n_mayores, bruto);
                     continue;
                 }
                 // **La carretera pasa antes que la parcela.** El enlace
                 // interurbano entra al casco (si no, moría contra un jardín) y se
                 // dibuja DESPUÉS de lo edificado, así que partiría la casa al
-                // medio. El lote se aparta entero: se compara la distancia al eje
-                // con el radio del círculo que lo envuelve, que es conservador —
-                // deja una franja verde a los lados de la autopista, que es
-                // exactamente lo que hay al lado de una autopista.
+                // medio. El lote se aparta.
+                //
+                // El círculo que envuelve al lote sirve de PRIMER filtro y nada
+                // más: es una llamada y descarta de un plumazo a las parcelas que
+                // no tienen ninguna carretera cerca. Decidir con él era el error —
+                // un lote de 44×24 tiene 25 tiles de radio, así que la autopista
+                // barría una franja de 60 tiles a cada lado y se llevaba puestas
+                // manzanas enteras que no tocaba ni de lejos (medido: 8 de las 72
+                // vacías de Ciudad Central y 14 de las de Puerto Oeste). Cuando el
+                // círculo avisa, se mira el RECTÁNGULO de verdad
+                // ([`enlace_cruza`]).
                 let (w, hgt) = (lot.w, lot.h);
                 let (ox, oz) = lot.min;
                 let radio = (((w * w + hgt * hgt) as f32).sqrt()) * 0.5;
                 let (mx, mz) = (ox as f32 + w as f32 * 0.5, oz as f32 + hgt as f32 * 0.5);
                 if let Some(margen) = crate::geography::link_clearance(body, mx, mz) {
-                    if margen + radio >= 0.0 {
-                        return None;
+                    if margen + radio >= 0.0 && enlace_cruza(body, ox, oz, w, hgt) {
+                        diag("7-carretera-interurbana");
+                        // `continue` y no `return None`: que la autopista pase por
+                        // esta manzana no es motivo para dejarla estéril, sólo para
+                        // que no sea ESTA parcela. La siguiente candidata, más
+                        // chica, puede caber al lado del asfalto.
+                        reservar(&mut mayores, &mut n_mayores, bruto);
+                        continue;
                     }
                 }
                 // **Y la CASA no se planta dentro del río.**
@@ -753,6 +987,7 @@ pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<L
                 // descampado (`la_ciudad_no_esta_llena_de_baldios`). Un jardín
                 // puede dar al río; una casa, no.
                 if lot.program().district == District::Residential && casa_mojada(body, &lot) {
+                    diag("8-casa-mojada");
                     reservar(&mut mayores, &mut n_mayores, bruto);
                     continue;
                 }
@@ -822,35 +1057,472 @@ fn park_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, _h: u32) -> Option<Tile
     }
 }
 
+/// **Cuánto mide UNA vivienda de la hilera, en tiles.**
+///
+/// Una hilera no es una casa ancha: son varias casas pegadas, cada una con su
+/// puerta y su interior. Pintar tres módulos encima de una sola vivienda —que es
+/// lo que se hacía— deja el exterior contando tres casas y el interior una: el
+/// usuario lo vio de una mirada.
+///
+/// El número es el módulo del pack (10 celdas × 0,95 m/celda ≈ 9,5 m) redondeado
+/// a la grilla del mundo. Que exista acá y no en el cliente es lo que hace que
+/// las dos mitades cuenten las mismas casas: el sim divide la hilera en tramos de
+/// este ancho y el cliente dibuja UN módulo por tramo.
+pub const ANCHO_DE_HILERA: i64 = 10;
+
+/// **Por dónde se entra a este edificio desde el frente**, en x absoluto.
+///
+/// Existía como "el medio de la fachada" escrito a mano en `geography::building_at`
+/// —`x + w / 2`— y con la hilera dejó de ser cierto: ahí cae la MEDIANERA entre la
+/// primera y la segunda vivienda, o sea una pared. Lo cazó
+/// `settlements_are_deterministic_and_earth_only`. La respuesta la tiene que dar
+/// quien coloca las puertas, no quien las busca.
+pub fn puerta_del_frente(clave: &str, x: i64, w: i64) -> i64 {
+    if es_hilera(clave) {
+        // La primera vivienda de la fila: su puerta está en el medio de SU tramo.
+        x + ANCHO_DE_HILERA / 2 - 1
+    } else {
+        x + w / 2
+    }
+}
+
+/// ¿Este programa de lote es una hilera de viviendas pegadas?
+pub fn es_hilera(key: &str) -> bool {
+    key == "building/casa_hilera"
+}
+
+/// **El JARDÍN de una parcela: el lote menos su retiro**, en coordenadas del lote.
+///
+/// El lote reservado llega hasta la vereda, y hasta hoy la cerca se plantaba
+/// justo en ese filo: `lx == 0 || lz == 0 || …`. Dos problemas, y el usuario vio
+/// los dos.
+///
+/// 1. **La cerca terminaba sobre la calle.** El margen del lote sale de la calle
+///    más ancha que lo rodea (`bounding_margin`), así que del lado de la calle
+///    angosta el filo del lote queda pegado al asfalto — y ahí aparecía el
+///    cerramiento, cruzado en la calzada.
+/// 2. **Todas las parcelas medían lo mismo.** El rectángulo es `p.cells` acotado
+///    a la manzana, o sea el mismo número para las mil casas del barrio: una
+///    grilla de cuadrados idénticos.
+///
+/// El retiro resuelve los dos de una: es **distinto en cada lado y en cada lote**
+/// (0 a 3 tiles, sorteados de bits distintos del hash), así que la cerca nunca
+/// nace en el filo y dos parcelas vecinas no miden lo mismo aunque el programa
+/// sea el mismo. Lo que queda afuera del jardín es terreno natural, que es lo que
+/// hace que el barrio se lea irregular sin tocar el trazado de calles.
+///
+/// Se achica hasta donde la casa siga entrando: una parcela sin casa no es una
+/// parcela.
+fn jardin_de_la_parcela(lot: Lot, h: u32) -> Parte {
+    let (w, d) = (lot.w, lot.h);
+    // Mínimo en el que todavía entra la casa más chica con su patio.
+    const MIN_W: i64 = 12;
+    const MIN_D: i64 = 10;
+    let mut oeste = ((h >> 19) % 4) as i64;
+    let mut este = ((h >> 21) % 4) as i64;
+    let mut norte = ((h >> 23) % 4) as i64;
+    // El frente se retira menos: es la cara que mira a la calle y la que da la
+    // línea del barrio. Retirarlo mucho deja la casa flotando en el medio.
+    let mut sur = ((h >> 25) % 2) as i64;
+    while w - oeste - este < MIN_W && (oeste > 0 || este > 0) {
+        if oeste >= este {
+            oeste -= 1;
+        } else {
+            este -= 1;
+        }
+    }
+    while d - norte - sur < MIN_D && (norte > 0 || sur > 0) {
+        if norte >= sur {
+            norte -= 1;
+        } else {
+            sur -= 1;
+        }
+    }
+    (oeste, norte, (w - oeste - este).max(4), (d - norte - sur).max(4))
+}
+
+/// **Dónde cae esta celda en el borde de un rectángulo**, contando en sentido
+/// horario desde la esquina noroeste. `None` = no está en el borde.
+///
+/// Es lo que permite que una cerca cubra **un tramo** del perímetro y no siempre
+/// el perímetro entero: con el borde convertido en una recta de largo
+/// `2·(w-1) + 2·(d-1)`, "media cerca" o "un cuarto" es un intervalo, y las
+/// esquinas salen solas.
+fn indice_de_borde(w: i64, d: i64, lx: i64, lz: i64) -> Option<i64> {
+    let (a, b) = (w - 1, d - 1);
+    if lz == 0 {
+        Some(lx)
+    } else if lx == w - 1 {
+        Some(a + lz)
+    } else if lz == d - 1 {
+        Some(a + b + (a - lx))
+    } else if lx == 0 {
+        Some(a + b + a + (b - lz))
+    } else {
+        None
+    }
+}
+
+/// **Un rectángulo edificado dentro de una parcela**, en coordenadas del lote:
+/// `(x, z, ancho, fondo)`.
+pub type Parte = (i64, i64, i64, i64);
+
+/// **Dónde cae la casa de una parcela residencial, y por dónde entra el auto.**
+///
+/// Existe porque la cuenta estaba ESCRITA DOS VECES —en `residential_tile`, que
+/// pinta los tiles, y en `roofed_rect`, que le pone la tapa— con un comentario al
+/// lado avisando que tenían que dar lo mismo. Un comentario no es un mecanismo:
+/// ahora dan lo mismo porque son la misma cuenta.
+///
+/// **El garaje ya no es una caja aparte.** Era un rectángulo de 6×5 con paredes
+/// de ladrillo, piso de madera y un portón, plantado en el jardín — y como
+/// `roofed_rect` sólo tapa el edificio principal, se dibujaba SIN TAPA: desde la
+/// vereda se veía el piso de adentro. Ése es el "sobresalía un borde" del
+/// reporte, y era literal.
+///
+/// Se podría haberle puesto una tapa, pero no hay con qué: Modern Exteriors no
+/// dibuja un galpón de 6×5 en ningún lado — dibuja **casas con el portón en la
+/// fachada** (`Terraced_House_3`, `casa_chica#3`, media docena más). Así que el
+/// juego se adapta al arte, que es la regla: el garaje pasa a ser el portón que
+/// la casa ya tiene dibujado, y de él sale la ENTRADA DE AUTO hasta la calle.
+/// Lo que se pierde es un cuarto de 4×3 al que casi nadie entraba; lo que se gana
+/// es que el barrio deja de tener una caja destapada por parcela.
+///
+/// El segundo valor es el tramo `[x0, x1)` del frente de la casa por donde entra
+/// el auto, en coordenadas del lote.
+pub fn partes_de_la_parcela(lot: Lot, h: u32) -> (Parte, Option<(i64, i64)>) {
+    // Todo se mide contra el JARDÍN (el lote menos su retiro), no contra el lote:
+    // si la casa se colocara respecto del lote, con un retiro grande quedaría
+    // pisando su propia cerca. Ver `jardin_de_la_parcela`.
+    let (jx, jz, w, d) = jardin_de_la_parcela(lot, h);
+    let (mut house_w, house_d) = lot.program().huella_de(w, d);
+    // Una hilera mide un número ENTERO de viviendas: si sobra media, el cliente
+    // dibujaría un módulo cortado sobre un interior que no existe.
+    if es_hilera(lot.program().key) {
+        // Se REDONDEA HACIA ABAJO, nunca hacia arriba: forzar un mínimo de dos
+        // viviendas hacía crecer la casa más allá del jardín, así que su fila del
+        // frente —con las puertas— caía fuera del lote y la casa quedaba sellada
+        // (lo cazó `toda_casa_generada_tiene_por_donde_entrar`). Si no entra ni un
+        // módulo entero, se deja como está: una hilera de una vivienda es una casa
+        // adosada, que es exactamente lo que dibuja el remate.
+        let n = house_w / ANCHO_DE_HILERA;
+        if n >= 1 {
+            house_w = n * ANCHO_DE_HILERA;
+        }
+    }
+    let (house_w, house_d) = (house_w, house_d);
+    // El `max` del techo no es paranoia: `clamp(a, b)` con `b < a` es un panic,
+    // y desde que la parcela se RETIRA de los desniveles (`lot_at`) el fondo
+    // puede bajar hasta `LADO_MINIMO`.
+    let house_x = jx + 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1));
+    let casa = (house_x, jz + 2, house_w, house_d);
+    let _ = d;
+    // Cada extra se sortea aparte: así hay casas con entrada de auto y sin
+    // pileta, con pileta y sin entrada, y ninguna manzana repite la de al lado.
+    let hay_garaje = w >= 16 && (h >> 2) % 100 < 62;
+    // El portón va contra una punta del frente —nunca en el medio, que es donde
+    // está la puerta de la gente— y mide dos tiles, como el portal.
+    let cochera = hay_garaje.then(|| {
+        if (h >> 3) & 1 == 0 {
+            (house_x + 1, house_x + 3)
+        } else {
+            (house_x + house_w - 3, house_x + house_w - 1)
+        }
+    });
+    (casa, cochera)
+}
+
 /// **La parcela residencial**: casa + garaje + entrada + patio + pileta + cerca.
 /// El corazón de que un barrio se vea habitado.
+/// Lado mínimo de un cuarto, en tiles. Menos que esto no es una habitación: no
+/// entra una cama y una persona al lado, que es la prueba de fuego del pack
+/// (`interior_siembra` coloca muebles de hasta 3 tiles).
+const LADO_MINIMO_DE_CUARTO: i64 = 4;
+
+/// Cuántas veces como mucho se parte una planta. Un chalet no tiene catorce
+/// cuartos, y el corte cuesta una vuelta de bucle por celda consultada.
+const CORTES_MAXIMOS: u32 = 4;
+
+/// **Los TABIQUES de una planta: dónde la casa se parte en cuartos.**
+///
+/// Devuelve qué hay en la celda `(rx, rz)` del interior de una planta de
+/// `w × d` tiles — `None` si ahí no hay tabique y la celda es piso.
+///
+/// ## Por qué existe
+///
+/// Hasta ahora el interior de toda casa generada era **un galpón**: el
+/// perímetro de pared y, adentro, `WoodFloor` de punta a punta
+/// (`if !perimeter { return Some(Tile::WoodFloor) }`). Una casa de campo de
+/// 23×12 era un salón de 21×10 sin una sola división. Eso es lo que dejaba a las
+/// 54 paredes de interior del pack sin ningún lugar donde dibujarse: no es que
+/// faltara el pixel, es que **no había una sola pared de interior en el mundo**.
+///
+/// ## Cómo parte
+///
+/// Partición binaria: se corta el rect por su lado largo, se deja un vano en el
+/// tabique, y se sigue dentro de la mitad donde cae la celda que preguntó. Es
+/// iterativo y sin memoria — la misma celda contesta lo mismo siempre, que es lo
+/// que se necesita cuando quien pregunta es un `topdown_tile` por celda.
+///
+/// Se corta por el lado LARGO para que no salgan pasillos: partir siempre por el
+/// mismo eje deja tiras de 2 tiles de ancho, que no son cuartos.
+///
+/// El vano es un `Tile::Door` y no un hueco pelado a propósito: el pack dibuja la
+/// pared CON el hueco (`doorway/int_*`, la hoja de arcos), y una abertura sin
+/// marco se lee como una pared rota.
+/// El primer corte libre a partir de `base`, girando dentro de `[lo, hi]`.
+/// `None` = todo el rango está vedado y este rect no se parte.
+fn corte_libre(lo: i64, hi: i64, base: u32, veda: &[i64]) -> Option<i64> {
+    if hi < lo {
+        return None;
+    }
+    let n = (hi - lo + 1) as u32;
+    (0..n)
+        .map(|k| lo + ((base % n + k) % n) as i64)
+        .find(|c| !veda.contains(c))
+}
+
+/// La fila (o columna) donde se abre el vano de un tabique: sorteada entre las
+/// que no están vedadas, y nunca pegada a la esquina.
+fn vano_libre(lo: i64, hi: i64, base: u32, veda: &[i64]) -> i64 {
+    let libres: Vec<i64> = (lo..hi).filter(|c| !veda.contains(c)).collect();
+    if libres.is_empty() {
+        return lo;
+    }
+    libres[base as usize % libres.len()]
+}
+
+/// **Los TABIQUES de una planta: dónde la casa se parte en cuartos.**
+///
+/// Devuelve qué hay en la celda `(rx, rz)` del interior de una planta de
+/// `w × d` tiles — `None` si ahí no hay tabique y la celda es piso.
+///
+/// ## Por qué existe
+///
+/// Hasta ahora el interior de toda casa generada era **un galpón**: el
+/// perímetro de pared y, adentro, `WoodFloor` de punta a punta. Una casa de
+/// campo de 23×12 era un salón de 21×10 sin una sola división. Eso es lo que
+/// dejaba a las 54 paredes de interior del pack sin ningún lugar donde
+/// dibujarse: no faltaba el pixel, es que **no había una sola pared de interior
+/// en el mundo**.
+///
+/// ## Cómo parte
+///
+/// Partición binaria: se corta el rect por su lado largo, se deja un vano en el
+/// tabique, y se sigue dentro de la mitad donde cae la celda que preguntó. Es
+/// iterativo y sin memoria — la misma celda contesta lo mismo siempre, que es lo
+/// que hace falta cuando quien pregunta es un `topdown_tile` por celda.
+///
+/// Se corta por el lado LARGO para que no salgan pasillos: partir siempre por el
+/// mismo eje deja tiras de 2 tiles de ancho, que no son cuartos.
+///
+/// ## La VEDA, que es lo único delicado
+///
+/// Un vano abre contra la fila que tiene enfrente. Si un corte posterior planta
+/// su tabique **justo en esa fila**, el vano queda abriendo a una pared y el
+/// cuarto se sella — medido: 2.613 de 16.000 plantas quedaban con habitaciones
+/// inalcanzables antes de esto. Así que cada vano veda su coordenada para todos
+/// los cortes que vengan después, y un corte que sólo pueda caer en una
+/// coordenada vedada **no se hace**. Con la veda: 0 de 16.000.
+///
+/// El vano es un `Tile::Door` y no un hueco pelado a propósito: el pack dibuja
+/// la pared CON el hueco (`doorway/int_*`, la hoja de arcos), y una abertura sin
+/// marco se lee como una pared rota.
+fn tabique_de_planta(rx: i64, rz: i64, w: i64, d: i64, semilla: u32) -> Option<Tile> {
+    // Rect interior, en coordenadas de la planta (sin contar el perímetro).
+    let (mut x0, mut z0, mut x1, mut z1) = (1i64, 1i64, w - 1, d - 1);
+    let mut veda_x: Vec<i64> = Vec::new();
+    let mut veda_z: Vec<i64> = Vec::new();
+    let mut h = semilla;
+    for _ in 0..CORTES_MAXIMOS {
+        let (aw, ad) = (x1 - x0, z1 - z0);
+        // Dos cuartos de lado mínimo MÁS la celda del tabique.
+        let corta_x = aw >= 2 * LADO_MINIMO_DE_CUARTO + 1;
+        let corta_z = ad >= 2 * LADO_MINIMO_DE_CUARTO + 1;
+        if !corta_x && !corta_z {
+            return None;
+        }
+        // El lado largo manda; con empate, el que se pueda.
+        let por_x = if corta_x && corta_z { aw >= ad } else { corta_x };
+        h = h.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        if por_x {
+            let Some(corte) =
+                // El corte se lleva su propia celda, así que el cuarto de la
+                // derecha va de `corte + 1` a `x1`: el tope es `x1 - LADO - 1`,
+                // no `x1 - LADO`. Con el tope de más quedaban cuartos de tres
+                // tiles de fondo, que es un pasillo.
+                corte_libre(
+                    x0 + LADO_MINIMO_DE_CUARTO,
+                    x1 - LADO_MINIMO_DE_CUARTO - 1,
+                    h >> 8,
+                    &veda_x,
+                )
+            else {
+                return None;
+            };
+            let vano = vano_libre(z0 + 1, z1 - 1, h >> 20, &veda_z);
+            if rx == corte {
+                return Some(if rz == vano { Tile::Door } else { Tile::WoodWall });
+            }
+            veda_z.push(vano);
+            if rx < corte {
+                x1 = corte;
+            } else {
+                x0 = corte + 1;
+            }
+        } else {
+            let Some(corte) =
+                corte_libre(
+                    z0 + LADO_MINIMO_DE_CUARTO,
+                    z1 - LADO_MINIMO_DE_CUARTO - 1,
+                    h >> 8,
+                    &veda_z,
+                )
+            else {
+                return None;
+            };
+            let vano = vano_libre(x0 + 1, x1 - 1, h >> 20, &veda_x);
+            if rz == corte {
+                return Some(if rx == vano { Tile::Door } else { Tile::WoodWall });
+            }
+            veda_x.push(vano);
+            if rz < corte {
+                z1 = corte;
+            } else {
+                z0 = corte + 1;
+            }
+        }
+    }
+    None
+}
+
+/// **Las columnas que ocupa el PORTAL DEL FRENTE de una casa**, en coordenadas
+/// del lote: `[desde, hasta)`.
+///
+/// Existe para que la puerta, el camino que llega a ella y el portón de la cerca
+/// salgan de la MISMA cuenta. Estaban en tres sitios distintos y no coincidían:
+/// la puerta se centraba en la casa, el portón en el jardín y el camino no
+/// existía. Como la casa se sortea corrida dentro de su terreno
+/// (`partes_de_la_parcela`), el portón caía cinco tiles al costado de la puerta y
+/// entre los dos había pasto — es "los caminos de la casa están mal puestos".
+fn portal_del_frente(house_x: i64, house_w: i64) -> (i64, i64) {
+    let ancho = (house_w / 4).clamp(2, 6);
+    let desde = house_x + (house_w - ancho) / 2;
+    (desde, desde + ancho)
+}
+
 fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
-    let (w, d) = (lot.w, lot.h);
-    // Cada extra se sortea aparte: así hay casas con garaje y sin pileta, con
-    // pileta y sin garaje, y ninguna manzana repite la de al lado.
-    let has_garage = w >= 16 && (h >> 2) % 100 < 62;
+    // **El jardín, no el lote.** Lo que queda afuera es terreno natural: ahí nace
+    // la variedad de tamaño de parcela y ahí está el colchón que impide que la
+    // cerca termine en la calzada. Ver `jardin_de_la_parcela`.
+    let (jx, jz, jw, jd) = jardin_de_la_parcela(lot, h);
+    if lx < jx || lz < jz || lx >= jx + jw || lz >= jz + jd {
+        return None;
+    }
+    // Todo lo de adentro se sigue midiendo en coordenadas del LOTE —es lo que
+    // devuelve `partes_de_la_parcela` y lo que espera `roofed_rect`—; el jardín
+    // sólo aporta su rectángulo.
+    let (w, d) = (jw, jd);
+    let (casa, cochera) = partes_de_la_parcela(lot, h);
     let has_pool = w >= 18 && d >= 12 && (h >> 5) % 100 < 34;
     let has_patio = (h >> 8) % 100 < 70;
 
-    // 1) CERCA perimetral, con portón al frente (borde sur, mirando a la calle).
-    let gate = w / 2;
-    if lx == 0 || lz == 0 || lx == w - 1 || lz == d - 1 {
-        let is_gate = lz == d - 1 && (lx == gate || lx == gate + 1);
-        return if is_gate { None } else { Some(Tile::Fence) };
+    // 1) CERCA, con portón al frente (borde sur, mirando a la calle).
+    //
+    // **No siempre da la vuelta entera.** Una cuadra donde las mil parcelas están
+    // cercadas igual se lee como una grilla, no como un barrio: hay quien cerca
+    // todo, quien cerca el frente y medio costado, y quien puso cuatro tramos y
+    // se quedó sin ganas. El borde se recorre como una recta (`indice_de_borde`)
+    // y la cerca es un INTERVALO de esa recta: el largo sale de una fracción
+    // sorteada y el arranque, de otro bit del hash.
+    // El portón de la gente va donde va el camino, y el del auto donde va la
+    // entrada: una cerca con la puerta en otro sitio que el sendero es
+    // exactamente lo que se veía en el barrio.
+    let (casa_x, _, casa_w, _) = casa;
+    let (cam0, cam1) = portal_del_frente(casa_x, casa_w);
+    let (cam0, cam1) = (cam0.clamp(jx + 1, jx + jw - 2), cam1.clamp(jx + 2, jx + jw - 1));
+    if let Some(idx) = indice_de_borde(jw, jd, lx - jx, lz - jz) {
+        let perimetro = 2 * (w - 1) + 2 * (d - 1);
+        // Cuánto del perímetro se cerca. La entera pesa más que el resto: un
+        // barrio sin ninguna cerca completa tampoco se lee como un barrio.
+        let largo = match (h >> 13) % 8 {
+            0 | 1 | 2 | 3 => perimetro,
+            4 | 5 => perimetro / 2,
+            6 => perimetro / 3,
+            _ => perimetro / 4,
+        };
+        // El arranque se cuenta desde el frente: lo primero que cerca cualquiera
+        // es la cara que da a la calle, no el fondo del terreno.
+        let frente = 2 * (w - 1) + (d - 1) - w / 2;
+        let inicio = frente + ((h >> 27) % 5) as i64 - 2;
+        let dentro = (idx - inicio).rem_euclid(perimetro) < largo;
+        // Dos aberturas en el frente: la del sendero y la del auto. La segunda
+        // faltaba, así que la entrada de asfalto moría contra su propia cerca.
+        let en_frente = lz == jz + jd - 1;
+        let porton_de_pie = en_frente && lx >= cam0 && lx < cam1;
+        let porton_de_auto =
+            en_frente && cochera.is_some_and(|(c0, c1)| lx >= c0 && lx < c1);
+        if porton_de_auto {
+            return Some(Tile::Basalt);
+        }
+        if porton_de_pie {
+            return Some(Tile::Pavement);
+        }
+        if dentro {
+            return Some(Tile::Fence);
+        }
+        return None;
     }
 
-    // 2) CASA: pegada al fondo (norte), centrada-ish, tamaño variable.
-    // El `max` del techo no es paranoia: `clamp(a, b)` con `b < a` es un panic,
-    // y desde que la parcela se RETIRA de los desniveles (`lot_at`) el fondo
-    // puede bajar hasta `LADO_MINIMO`. Reventaba con `min = 5, max = 2`.
-    let (house_w, house_d) = lot.program().huella_de(w, d);
-    let house_x = 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1));
-    let house_z = 2;
+    // 2) CASA: pegada al fondo (norte), centrada-ish, tamaño variable. La
+    // geometría la reparte `partes_de_la_parcela`, que es también la que mira el
+    // cliente para saber dónde va la fachada.
+    let (house_x, house_z, house_w, house_d) = casa;
     let in_house = lx >= house_x && lx < house_x + house_w && lz >= house_z && lz < house_z + house_d;
     if in_house {
         let (rx, rz) = (lx - house_x, lz - house_z);
+        // **La hilera se parte en viviendas.** Cada tramo es una casa entera —su
+        // medianera, su puerta al frente y otra al fondo— y el cliente le dibuja
+        // encima UN módulo del pack (ver `ANCHO_DE_HILERA`). Sin esto, tres
+        // fachadas se apoyaban sobre un único caserón de veinticinco tiles.
+        if es_hilera(lot.program().key) {
+            let ux = rx.rem_euclid(ANCHO_DE_HILERA);
+            let medianera = ux == 0 || ux == ANCHO_DE_HILERA - 1;
+            let borde = rz == 0 || rz == house_d - 1;
+            // Portal de dos celdas al frente y al fondo de CADA vivienda: una
+            // casa sin puerta no existe, y la calzada puede comerse una cara.
+            let centro = ANCHO_DE_HILERA / 2;
+            if borde && (ux == centro - 1 || ux == centro) {
+                return Some(Tile::Door);
+            }
+            // **Y una puerta en las dos PUNTAS de la hilera.** Con puertas sólo al
+            // frente y al fondo, una calle que cruce la fila de este a oeste se
+            // come las dos y la casa queda sellada — que es la razón por la que la
+            // casa suelta ya tenía portal en las cuatro caras. Medido: 1 sellada
+            // de 1.743 antes de esto, 0 después.
+            let punta = rx == 0 || rx == house_w - 1;
+            let cz = house_d / 2;
+            if punta && (rz == cz - 1 || rz == cz) {
+                return Some(Tile::Door);
+            }
+            if medianera || borde {
+                let esquina = medianera && borde;
+                if !esquina && (rx + rz) % 3 == 1 {
+                    return Some(Tile::Window);
+                }
+                return Some(Tile::WoodWall);
+            }
+            return Some(Tile::WoodFloor);
+        }
         let perimeter = rx == 0 || rz == 0 || rx == house_w - 1 || rz == house_d - 1;
         if !perimeter {
+            // **Adentro hay CUARTOS, no un galpón.** Ver `tabique_de_planta`.
+            // La semilla es del LOTE, así que la planta se reparte igual en cada
+            // consulta y entre partidas, sin guardar nada.
+            let semilla = h ^ 0x7ab1_0000;
+            if let Some(t) = tabique_de_planta(rx, rz, house_w, house_d, semilla) {
+                return Some(t);
+            }
             return Some(Tile::WoodFloor);
         }
         // **Puerta al frente (sur) Y AL FONDO (norte), centradas y anchas.**
@@ -871,12 +1543,24 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
         // ahora hace falta un cruce entero encima, y entonces el problema no es la
         // puerta. Medido en Ciudad Central: 4 casas selladas de 1.849 → 0. Lo
         // cuida `toda_casa_generada_tiene_por_donde_entrar`.
-        let portal_x = (house_w / 4).clamp(2, 6);
         let portal_z = (house_d / 4).clamp(2, 6);
-        let en_x = rx >= (house_w - portal_x) / 2 && rx < (house_w - portal_x) / 2 + portal_x;
+        // A lo ancho, la MISMA cuenta que usan el camino y el portón
+        // ([`portal_del_frente`]): que las tres coincidan es el arreglo.
+        let (p0, p1) = portal_del_frente(0, house_w);
+        let en_x = rx >= p0 && rx < p1;
         let en_z = rz >= (house_d - portal_z) / 2 && rz < (house_d - portal_z) / 2 + portal_z;
         if (en_x && (rz == house_d - 1 || rz == 0)) || (en_z && (rx == 0 || rx == house_w - 1)) {
             return Some(Tile::Door);
+        }
+        // **El PORTÓN**: la otra abertura del frente, la del auto. Es una puerta
+        // como cualquier otra —se cruza— y la fachada del pack ya la trae
+        // dibujada donde va.
+        if rz == house_d - 1 {
+            if let Some((c0, c1)) = cochera {
+                if lx >= c0 && lx < c1 {
+                    return Some(Tile::Door);
+                }
+            }
         }
         // Ventanas: alternadas en las cuatro caras, sin tocar las esquinas.
         let corner = (rx == 0 || rx == house_w - 1) && (rz == 0 || rz == house_d - 1);
@@ -886,30 +1570,25 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
         return Some(Tile::WoodWall);
     }
 
-    // 3) GARAJE: al lado de la casa, contra el frente, con su entrada de auto.
-    if has_garage {
-        let gw = 6;
-        let gd = 5;
-        let gx = if house_x >= gw + 2 { house_x - gw - 1 } else { house_x + house_w + 1 };
-        let gz = d - gd - 2;
-        if gx >= 1 && gx + gw < w - 1 && lx >= gx && lx < gx + gw && lz >= gz && lz < gz + gd {
-            let (rx, rz) = (lx - gx, lz - gz);
-            let perimeter = rx == 0 || rz == 0 || rx == gw - 1 || rz == gd - 1;
-            if rz == gd - 1 && rx > 0 && rx < gw - 1 {
-                return Some(Tile::Door); // portón
-            }
-            return Some(if perimeter { Tile::StoneBrick } else { Tile::WoodFloor });
-        }
-        // ENTRADA DE AUTO: del portón del garaje hasta la calle.
-        if gx >= 1 && gx + gw < w - 1 && lx > gx && lx < gx + gw - 1 && lz >= gz + gd {
+    // 3) EL CAMINO: de la puerta de la casa al portón de la cerca, en línea
+    //    recta. Es lo que faltaba — la parcela tenía puerta y tenía portón, y
+    //    entre los dos, veinte tiles de pasto sin una losa.
+    if lx >= cam0 && lx < cam1 && lz >= house_z + house_d {
+        return Some(Tile::Pavement);
+    }
+
+    // 4) ENTRADA DE AUTO: del portón de la cochera hasta la calle, sin cortarse
+    //    en la cerca (ahí tiene su propia abertura, arriba).
+    if let Some((c0, c1)) = cochera {
+        if lx >= c0 && lx < c1 && lz >= house_z + house_d {
             return Some(Tile::Basalt);
         }
     }
 
-    // 4) PILETA con su borde de piedra, en el patio de atrás.
+    // 5) PILETA con su borde de piedra, en el patio de atrás.
     if has_pool {
-        let px = w - 7;
-        let pz = 2;
+        let px = jx + jw - 7;
+        let pz = jz + 2;
         if lx >= px && lx < px + 5 && lz >= pz && lz < pz + 4 {
             let (rx, rz) = (lx - px, lz - pz);
             let rim = rx == 0 || rz == 0 || rx == 4 || rz == 3;
@@ -931,6 +1610,38 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
     None
 }
 
+/// **El rectángulo que EDIFICA un lote macizo**, en coordenadas del lote.
+///
+/// No es "el lote menos la vereda", que es lo que era. Un lote CRECE para llenar
+/// manzanas enteras (`blocks_needed`: una universidad ocupa cuatro), así que el
+/// lote colocado suele ser bastante más grande que el `cells` que declara su
+/// programa — el dúplex declara 26×18 y en una manzana ancha se planta en 26×24.
+/// Construir todo el lote hacía dos cosas mal a la vez:
+///
+/// 1. **La fachada no llegaba.** `import-edificios.py` le busca a cada programa
+///    el arte que mejor calza con su `cells` declarado, y el cliente no estira un
+///    dibujo más de 1,4× (`building::AGRANDE_MAX`, y con razón: pasado eso lo que
+///    se ve es el pixel ampliado). Con el edificio dos veces más grande que su
+///    dibujo, la fachada tapaba la mitad sur y **por el resto se veía el piso de
+///    madera y los muebles de adentro desde la vereda**.
+/// 2. Un dúplex de 24×22 no es un dúplex.
+///
+/// Ahora el edificio mide lo que declara su programa (acotado a lo que entra), se
+/// apoya contra el FRENTE —que es la cara que se dibuja— y lo que sobra del lote
+/// queda de patio. Es la misma regla que ya seguía la parcela residencial, donde
+/// la casa nunca fue el lote entero.
+fn edificado_de_lote(p: &LotProgram, lot: Lot) -> (i64, i64, i64, i64) {
+    // Vereda de un tile alrededor: separa la fachada de la calzada.
+    let (max_w, max_d) = ((lot.w - 2).max(1), (lot.h - 2).max(1));
+    let bw = p.cells.0.clamp(1, max_w);
+    let bd = p.cells.1.clamp(1, max_d);
+    // Centrado a lo ancho y apoyado contra el frente (sur), que es la cara que
+    // mira a la calle y la que el pack dibuja.
+    let bx = 1 + (max_w - bw) / 2;
+    let bz = 1 + (max_d - bd);
+    (bx, bz, bw, bd)
+}
+
 /// Edificio "macizo" (comercio, centro, industria, cívico): un rectángulo con
 /// paredes, ventanas y su vereda. Los grandes llevan patio interior para que no
 /// sean un bloque sólido de 56×40.
@@ -945,8 +1656,12 @@ fn plain_building_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, h: u32) -> Op
     if lx == 0 || lz == 0 || lx == w - 1 || lz == d - 1 {
         return Some(Tile::Pavement);
     }
-    let (rx, rz) = (lx - 1, lz - 1);
-    let (bw, bd) = (w - 2, d - 2);
+    let (bx, bz, bw, bd) = edificado_de_lote(p, lot);
+    // Lo que sobra del lote es explanada: vereda alrededor del edificio.
+    if lx < bx || lz < bz || lx >= bx + bw || lz >= bz + bd {
+        return Some(Tile::Pavement);
+    }
+    let (rx, rz) = (lx - bx, lz - bz);
     let perimeter = rx == 0 || rz == 0 || rx == bw - 1 || rz == bd - 1;
 
     // PATIO INTERIOR en los edificios grandes: un hospital o una universidad
@@ -1015,16 +1730,24 @@ pub fn afuera_de_cerca(
     if lot.program().district != District::Residential {
         return None;
     }
-    let (lx, lz) = (tx - lot.min.0, tz - lot.min.1);
+    // **Contra el JARDÍN, no contra el lote.** La cerca dejó de plantarse en el
+    // filo del lote —ahí terminaba sobre la calzada— y ahora corre por el borde
+    // del jardín, que se retira una cantidad distinta en cada lado
+    // (`jardin_de_la_parcela`). Preguntando por el lote, ninguna celda de cerca
+    // caía en su borde y la orientación volvía `None`: los postes salían del lado
+    // del jardín. Lo cazó `una_cerca_vertical_no_usa_pieza_horizontal`.
+    let h = hash2(body_terrain_seed(body) ^ 0xfa11_0000, lot.min.0, lot.min.1);
+    let (jx, jz, jw, jd) = jardin_de_la_parcela(lot, h);
+    let (lx, lz) = (tx - lot.min.0 - jx, tz - lot.min.1 - jz);
     // El orden importa sólo en las esquinas, y en una esquina el sufijo no se usa
     // (`cercas::cadena` sólo lo pide para los tramos rectos).
     if lx == 0 {
         Some(Afuera::W)
-    } else if lx == lot.w - 1 {
+    } else if lx == jw - 1 {
         Some(Afuera::E)
     } else if lz == 0 {
         Some(Afuera::N)
-    } else if lz == lot.h - 1 {
+    } else if lz == jd - 1 {
         Some(Afuera::S)
     } else {
         None
@@ -1046,20 +1769,138 @@ pub fn roofed_rect(
         return None;
     }
     if p.district == District::Residential {
-        let (w, d) = (lot.w, lot.h);
         let h = hash2(body_terrain_seed(body) ^ 0xfa11_0000, lot.min.0, lot.min.1);
-        // Mismo techo defensivo que en `residential_tile`, y por el mismo motivo:
-        // las dos cuentas TIENEN que dar lo mismo o el techo del cliente se
-        // dibuja donde no está la casa.
-        let (house_w, house_d) = p.huella_de(w, d);
-        let house_x = 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1));
-        return Some((lot.min.0 + house_x, lot.min.1 + 2, house_w, house_d, p.key));
+        let ((hx, hz, hw, hd), _) = partes_de_la_parcela(lot, h);
+        return Some((lot.min.0 + hx, lot.min.1 + hz, hw, hd, p.key));
     }
     // **La clave del PROGRAMA viaja con el rect.** Antes se tiraba y quien
     // dibujaba el techo adivinaba el arte por el tamaño (5×4 → casa chica), lo
     // que además de frágil apuntaba a tres slots sin pixel. El lote ya sabe qué
     // edificio es; lo único que faltaba era no perder el dato.
-    Some((lot.min.0 + 1, lot.min.1 + 1, lot.w - 2, lot.h - 2, p.key))
+    let (bx, bz, bw, bd) = edificado_de_lote(p, lot);
+    Some((lot.min.0 + bx, lot.min.1 + bz, bw, bd, p.key))
+}
+
+#[cfg(test)]
+mod tests_tabiques {
+    use super::*;
+    use std::collections::{HashSet, VecDeque};
+
+    /// La planta partida en cuartos, como la ve el jugador: `true` = se pisa.
+    fn planta(w: i64, d: i64, semilla: u32) -> Vec<(i64, i64)> {
+        let mut libres = Vec::new();
+        for rz in 1..d - 1 {
+            for rx in 1..w - 1 {
+                if tabique_de_planta(rx, rz, w, d, semilla) != Some(Tile::WoodWall) {
+                    libres.push((rx, rz));
+                }
+            }
+        }
+        libres
+    }
+
+    /// **Ningún cuarto queda sellado.**
+    ///
+    /// Es LA invariante de `tabique_de_planta`, y no es teórica: la primera
+    /// versión —sin la veda de los vanos— dejaba habitaciones inalcanzables en
+    /// 2.613 de estas 16.000 plantas, porque un vano abría contra el tabique que
+    /// plantaba el corte siguiente. Un cuarto al que no se entra es peor que no
+    /// tener cuartos: el mobiliario se siembra ahí adentro y no lo ve nadie.
+    #[test]
+    fn ningun_cuarto_queda_sellado() {
+        let mut partidas = 0;
+        for w in 6..26 {
+            for d in 5..25 {
+                for sem in 0..40u32 {
+                    let semilla = sem.wrapping_mul(2_654_435_761);
+                    let libres: HashSet<(i64, i64)> = planta(w, d, semilla).into_iter().collect();
+                    if libres.is_empty() {
+                        continue;
+                    }
+                    if libres.len() < ((w - 2) * (d - 2)) as usize {
+                        partidas += 1;
+                    }
+                    let inicio = *libres.iter().next().unwrap();
+                    let mut vistas = HashSet::from([inicio]);
+                    let mut cola = VecDeque::from([inicio]);
+                    while let Some((x, z)) = cola.pop_front() {
+                        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                            let n = (x + dx, z + dz);
+                            if libres.contains(&n) && vistas.insert(n) {
+                                cola.push_back(n);
+                            }
+                        }
+                    }
+                    assert_eq!(
+                        vistas.len(),
+                        libres.len(),
+                        "planta {w}x{d} semilla {sem}: {} celdas sin salida",
+                        libres.len() - vistas.len()
+                    );
+                }
+            }
+        }
+        // Y que de verdad esté partiendo: una casa de un solo ambiente no
+        // ejercita nada, así que si esto baja es que dejó de haber cuartos.
+        assert!(partidas > 12_000, "sólo {partidas} plantas con tabiques");
+    }
+
+    /// **Todo cuarto da para amueblarse.**
+    ///
+    /// Se miden los cuartos DE VERDAD: se tratan los vanos como pared, así cada
+    /// componente conexa es una habitación y no la planta entera. Cada lado
+    /// tiene que llegar a `LADO_MINIMO_DE_CUARTO` — o ser el interior completo
+    /// en ese eje, que es el caso de la casa que no se partió por ahí. Un cuarto
+    /// de dos tiles de ancho es un pasillo, y ahí no entra un mueble del pack.
+    #[test]
+    fn todo_cuarto_da_para_amueblarse() {
+        for w in 6..26 {
+            for d in 5..25 {
+                for sem in 0..20u32 {
+                    let semilla = sem.wrapping_mul(2_654_435_761);
+                    let piso = |rx, rz| tabique_de_planta(rx, rz, w, d, semilla).is_none();
+                    let mut vistas: HashSet<(i64, i64)> = HashSet::new();
+                    for rz0 in 1..d - 1 {
+                        for rx0 in 1..w - 1 {
+                            if !piso(rx0, rz0) || vistas.contains(&(rx0, rz0)) {
+                                continue;
+                            }
+                            // Relleno de UN cuarto (los vanos no se cruzan).
+                            let mut cola = VecDeque::from([(rx0, rz0)]);
+                            let mut cuarto = vec![(rx0, rz0)];
+                            vistas.insert((rx0, rz0));
+                            while let Some((x, z)) = cola.pop_front() {
+                                for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                                    let (nx, nz) = (x + dx, z + dz);
+                                    if nx < 1 || nz < 1 || nx >= w - 1 || nz >= d - 1 {
+                                        continue;
+                                    }
+                                    if piso(nx, nz) && vistas.insert((nx, nz)) {
+                                        cola.push_back((nx, nz));
+                                        cuarto.push((nx, nz));
+                                    }
+                                }
+                            }
+                            let ancho = cuarto.iter().map(|c| c.0).max().unwrap()
+                                - cuarto.iter().map(|c| c.0).min().unwrap()
+                                + 1;
+                            let fondo = cuarto.iter().map(|c| c.1).max().unwrap()
+                                - cuarto.iter().map(|c| c.1).min().unwrap()
+                                + 1;
+                            assert!(
+                                ancho >= LADO_MINIMO_DE_CUARTO || ancho == w - 2,
+                                "planta {w}x{d} sem {sem}: cuarto de {ancho} de ancho"
+                            );
+                            assert!(
+                                fondo >= LADO_MINIMO_DE_CUARTO || fondo == d - 2,
+                                "planta {w}x{d} sem {sem}: cuarto de {fondo} de fondo"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1435,6 +2276,82 @@ mod tests {
         );
     }
 
+    /// **NINGUNA PARED SE PLANTA EN LA CALZADA.**
+    ///
+    /// La calzada gana sobre lo edificado (`topdown::topdown_tile`), así que una
+    /// casa a caballo de una calle no se ve como una casa partida: se ve como
+    /// una casa a la que le falta un trozo, con el asfalto pasándole por dentro
+    /// y el sprite de la fachada dibujado igual encima. Es lo que el usuario
+    /// reportó como "casas sobre carreteras".
+    ///
+    /// Se mide sobre lo EDIFICADO (pared, ventana, puerta, piso), no sobre el
+    /// jardín: que a un terreno le pase una calle por la punta del césped no
+    /// molesta a nadie, y el retiro de la parcela ya deja esa franja verde a
+    /// propósito.
+    ///
+    /// **HOY FALLA A PROPÓSITO y por eso está marcado `#[ignore]`.** Medido el
+    /// 25 ago 2026: 7.611 celdas de casa con calzada encima de 53.333 edificadas
+    /// en Metrópolis Norte (el 14 %). La causa está localizada: un programa más
+    /// ancho que el hueco de una manzana reserva DOS (`blocks_needed`) y se
+    /// planta a caballo de la calle interior, que nunca desaparece —el comentario
+    /// de `blocks_needed` que dice que sí es falso, `urban_civil` la pinta igual
+    /// y no puede consultar a `lot_at` sin recursión (relieve ↔ obra civil)—. Con
+    /// manzanas de 40 tiles y margen 7 el hueco es de 26, así que **casi toda la
+    /// tabla residencial** (casa_grande 31, duplex 33, villa 35, country 42,
+    /// hilera 46) pide dos manzanas: por eso son miles de celdas y no un caso
+    /// raro.
+    ///
+    /// El arreglo es partir la manzana en VARIAS parcelas en vez de una sola
+    /// —ninguna cruza una calle porque ninguna sale del hueco— y está pendiente.
+    /// Corrélo con `cargo test -p ha-shared -- --ignored` para ver el número.
+    #[test]
+    #[ignore = "bug conocido y medido: falta partir la manzana en parcelas"]
+    fn ninguna_pared_de_ciudad_se_planta_en_la_calzada() {
+        let body = CelestialBody::Earth;
+        for t in crate::world_map::template(body).towns {
+            let s = Settlement {
+                tier: SettlementTier::City,
+                center: crate::world_map::town_center(body, t),
+                style: t.style,
+                name: Some(t.name),
+                radius: t.radius,
+            };
+            let (mut sobre_asfalto, mut edificado) = (0u32, 0u32);
+            let mut ejemplo = None;
+            let r = 420;
+            for dz in -r..r {
+                for dx in -r..r {
+                    let (tx, tz) = (s.center.0 + dx, s.center.1 + dz);
+                    let Some(tile) = lot_tile(body, &s, tx, tz) else { continue };
+                    if !matches!(
+                        tile,
+                        Tile::WoodWall
+                            | Tile::StoneBrick
+                            | Tile::Window
+                            | Tile::Door
+                            | Tile::WoodFloor
+                    ) {
+                        continue;
+                    }
+                    edificado += 1;
+                    if crate::geography::civil_at(body, tx, tz)
+                        == Some(crate::geography::Civil::Road)
+                    {
+                        sobre_asfalto += 1;
+                        ejemplo.get_or_insert((tx, tz, tile));
+                    }
+                }
+            }
+            let nombre = s.name.unwrap_or("(sin nombre)");
+            assert!(edificado > 5_000, "{nombre}: apenas {edificado} celdas edificadas para medir");
+            assert_eq!(
+                sobre_asfalto, 0,
+                "{nombre}: {sobre_asfalto} celdas de casa con calzada encima \
+                 (de {edificado} edificadas), la primera en {ejemplo:?}"
+            );
+        }
+    }
+
     /// Las parcelas nunca se solapan: una celda pertenece a un lote y sólo a uno.
     #[test]
     fn lots_never_overlap() {
@@ -1607,6 +2524,60 @@ mod tests {
         }
         assert!(found, "los pueblos procedurales se quedaron sin edificios");
     }
+
+    /// **Lo que se compone tiene que existir y tiene que dar exacto.**
+    ///
+    /// `LOTES_MODULARES` nombra parcelas por clave, y una clave escrita a mano se
+    /// desincroniza sin hacer ruido: si el lote no existe, el kit no se dibuja
+    /// nunca y nadie se entera (el edificio cae al sprite de respaldo). Se
+    /// comprueban las dos mitades:
+    ///
+    /// 1. **Que el lote exista** en `LOT_PROGRAMS`.
+    /// 2. **Que su huella sea un múltiplo exacto de un módulo.** El composer
+    ///    redondea para abajo, así que una huella de 15 tiles con módulos de 9
+    ///    dibuja UN módulo de 9 y deja 6 tiles de solar pelado — que es
+    ///    exactamente el "queda una mota en un solar vacío" que ya cazamos del
+    ///    otro lado. Las parcelas de esta tabla se declaran para dar justo.
+    #[test]
+    fn las_parcelas_modulares_dan_modulos_enteros() {
+        let mut mal = Vec::new();
+        for &(clave, min, max) in LOTES_MODULARES {
+            let Some(p) = LOT_PROGRAMS.iter().find(|p| p.key == clave) else {
+                mal.push(format!("{clave}: no es un lote de LOT_PROGRAMS"));
+                continue;
+            };
+            assert!(min <= max, "{clave}: pisos ({min}, {max}) al reves");
+            let (w, _) = p.huella();
+            if w % crate::edificio::MODULO != 0 {
+                mal.push(format!(
+                    "{clave}: huella de {w} tiles de frente, que no es multiplo de {}: \
+                     se dibujarian {} modulos y quedarian {} tiles de solar pelado",
+                    crate::edificio::MODULO,
+                    w / crate::edificio::MODULO,
+                    w % crate::edificio::MODULO,
+                ));
+            }
+        }
+        assert!(mal.is_empty(), "{}", mal.join("\n  "));
+    }
+
+    /// Dos parcelas distintas del centro no salen siempre de la misma altura, y
+    /// la misma parcela sale siempre igual. Lo primero es la variedad que se
+    /// buscaba; lo segundo es que el streaming no la haga titilar.
+    #[test]
+    fn la_altura_de_una_torre_es_estable_y_variada() {
+        let alturas: std::collections::BTreeSet<u8> = (0..40)
+            .flat_map(|x| (0..40).map(move |z| (x * 13, z * 17)))
+            .filter_map(|(x, z)| pisos_modulares("building/torre", x, z))
+            .collect();
+        assert!(
+            alturas.len() > 3,
+            "todas las torres salen de la misma altura: {alturas:?}"
+        );
+        assert_eq!(
+            pisos_modulares("building/torre", 1234, -567),
+            pisos_modulares("building/torre", 1234, -567),
+        );
+        assert_eq!(pisos_modulares("building/casa_chica", 0, 0), None);
+    }
 }
-
-

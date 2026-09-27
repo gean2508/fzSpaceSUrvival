@@ -824,6 +824,46 @@ pub fn perfil_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f
     Some((h - hondura(body), peso))
 }
 
+/// **HACIA DÓNDE VA EL AGUA EN ESTA CELDA**, como vector unitario `(dx, dz)`, o
+/// `None` si por acá no pasa ningún cauce.
+///
+/// Sale del tramo más cercano, y el sentido es el del TRAZADO: los tramos se
+/// generan aguas abajo (`p0 → p1`, ver [`trazar_brazo`]), así que el vector
+/// apunta a donde corre el agua y no hace falta guardarlo aparte.
+///
+/// # Para qué hace falta
+///
+/// **El pack sólo dibujó la cascada DE FRENTE**, o sea el chorro cayendo hacia la
+/// cámara: un río que baja de norte a sur. `agua::salto_desde` pedía agua arriba,
+/// pared que baja al sur y agua al pie — tres condiciones que también cumple un
+/// río que pasa de LADO con su ribera sur cayendo, y ahí plantaba un salto de
+/// frente sobre un cauce que por ahí no baja. Es el bug que reportó el usuario el
+/// 21 ago 2026: *"las cascadas sólo tenemos assets de frente, cuando el río viene
+/// de arriba hacia abajo, no de izquierda a derecha horizontal"*.
+pub fn rumbo_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f32)> {
+    let bloque = tramos_del_bloque(body, tx.div_euclid(BLOQUE), tz.div_euclid(BLOQUE));
+    if bloque.is_empty() {
+        return None;
+    }
+    let (x, z) = (tx as f32 + 0.5, tz as f32 + 0.5);
+    let mut mejor: Option<(f32, (f32, f32), f32)> = None;
+    for t in bloque.candidatos(x, z) {
+        let (d, a, _) = distancia(t, x, z);
+        if mejor.is_none_or(|(md, _, _)| d < md) {
+            mejor = Some((d, (t.x1 - t.x0, t.z1 - t.z0), a));
+        }
+    }
+    let (d, (dx, dz), a) = mejor?;
+    if d >= valle_de(a) {
+        return None;
+    }
+    let n = (dx * dx + dz * dz).sqrt();
+    if n < 1e-4 {
+        return None;
+    }
+    Some((dx / n, dz / n))
+}
+
 /// **DÓNDE TERMINAN LOS RÍOS DE UNA CUENCA.** Es la medición del módulo: la
 /// diferencia entre un sistema hidrográfico y una decoración es qué fracción de
 /// los cauces llega al agua. La usa `medir_rios::donde_termina_cada_rio`.

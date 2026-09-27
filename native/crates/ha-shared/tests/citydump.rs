@@ -134,3 +134,67 @@ fn volcar_cercas() {
         println!("volcado en {ruta}");
     }
 }
+
+/// **Diagnóstico temporal**: por qué queda vacía cada manzana.
+#[test]
+#[ignore = "herramienta"]
+fn diagnostico_de_baldios() {
+    use ha_shared::geography::{Settlement, SettlementTier};
+    let body = CelestialBody::Earth;
+    for t in ha_shared::world_map::template(body).towns {
+        let s = Settlement {
+            tier: SettlementTier::City,
+            center: ha_shared::world_map::town_center(body, t),
+            style: t.style,
+            name: Some(t.name),
+            radius: t.radius,
+        };
+        let block = ha_shared::roads::block_size(s.style, s.tier);
+        let (mut con, mut tot) = (0, 0);
+        let mut vacias: Vec<(i64, i64, ha_shared::city::District)> = Vec::new();
+        for bz in -7..=7i64 {
+            for bx in -7..=7i64 {
+                let (mut hay, mut tierra) = (false, 0);
+                for j in 0..6 {
+                    for i in 0..6 {
+                        let tx = s.center.0 + bx * block + block * i / 6 + block / 12;
+                        let tz = s.center.1 + bz * block + block * j / 6 + block / 12;
+                        if !ha_shared::geography::natural_tile(body, tx, tz).buildable_ground() {
+                            continue;
+                        }
+                        tierra += 1;
+                        if ha_shared::city::lot_at(body, &s, tx, tz).is_some() {
+                            hay = true;
+                        }
+                    }
+                }
+                if tierra < 24 {
+                    continue;
+                }
+                tot += 1;
+                con += hay as i64;
+                if !hay {
+                    vacias.push((bx, bz, ha_shared::city::district_at(body, &s, bx, bz)));
+                }
+            }
+        }
+        let mut por_distrito: std::collections::BTreeMap<String, u32> = Default::default();
+        for (_, _, d) in &vacias {
+            *por_distrito.entry(format!("{d:?}")).or_default() += 1;
+        }
+        println!("\n=== {} {:?} block={block}: {con}/{tot}", t.name, t.style);
+        println!("    vacías por distrito: {por_distrito:?}");
+        // Motivos: se mide UNA celda del centro de cada manzana vacía.
+        let mut motivos: std::collections::BTreeMap<String, u32> = Default::default();
+        for (bx, bz, _) in &vacias {
+            let tx = s.center.0 + bx * block + block / 2;
+            let tz = s.center.1 + bz * block + block / 2;
+            ha_shared::city::diag_clear();
+            let _ = ha_shared::city::lot_at(body, &s, tx, tz);
+            *motivos.entry(ha_shared::city::diag_dump()).or_default() += 1;
+        }
+        for (k, v) in &motivos {
+            println!("    {v:4}  {k}");
+        }
+    }
+}

@@ -38,6 +38,7 @@ bautiza automático y erra seguido.
 
 import argparse
 import json
+from collections import Counter
 import os
 from glob import glob
 
@@ -334,6 +335,100 @@ DELTA_VARIANTE = 60.0
 #: que separaba las dos poblaciones sin tocar ninguna.
 BORDE_MAX = 12.0
 
+#: **Cuántos píxeles de OTRO material tolera un relleno.** Ver [`contamina`].
+#: Seis sobre 1.024 es 0,6 % de la celda: alcanza para el pixel suelto que un
+#: dibujo comparte con otra paleta y no para una costura, que aporta docenas.
+CONTAMINA_MAX = 6
+#: A partir de esta distancia **de croma** dos colores son materiales distintos.
+#: Sale de medir, no de la intuición — `python3 scripts/atlas-suelo.py --calibrar`
+#: imprime las dos poblaciones sobre las 371 losas del pack:
+#:
+#: - el tono más oscuro de la mata de `Grass_Fenced_1_9` (el único pasto con
+#:   dibujo que hay) se separa **0,23** de su propio relleno;
+#: - la lengüeta de tierra de una esquina interna de `Grass_1` se separa **0,91**;
+#: - y de 0,45 para arriba **no queda ni una losa de un solo material**: son
+#:   costuras de autotile (`Grass_Water_*`, `Grass_Fenced_*`), muros de seto
+#:   (`Grass_Wall_*`), la cumbre de arena de la playa y `Mound_2_6`.
+AJENO_MIN = 0.45
+
+
+def croma(c):
+    """El color **sin su brillo**: (r,g,b) dividido por su luminancia.
+
+    Es lo que identifica un MATERIAL. En RGB pelado la sombra de una roca
+    (93,87,86) queda a 68 del verde del pasto y a 87 de su propio gris claro
+    (148,142,125), así que `contamina` daba a la roca por contaminada de pasto y
+    `tiles/roca` volvía al color plano. La sombra de una roca no es otro
+    material: es la misma roca con menos luz. Dividiendo por la luminancia el
+    brillo se va y queda el tono, que es lo que se quiere comparar.
+
+    Es el mismo criterio con el que [`derivar`] traslada una losa a otro clima.
+    """
+    y = max(0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], 1.0)
+    return (c[0] / y, c[1] / y, c[2] / y)
+
+
+def rellenos_del_pack(losas):
+    """**Los materiales que el pack declara**, medidos: las celdas de UN color.
+
+    LimeZu pinta el interior de cada terreno con un color plano y sólo dibuja en
+    la COSTURA. Así que las celdas monocromas del pack son, literalmente, su
+    lista de materiales: el verde del pasto (71,151,87), el khaki de la tierra
+    (170,143,90), el naranja de la otra tierra (199,140,89), el celeste del agua
+    (60,163,178). Es contra esa lista que [`contamina`] decide si una losa es
+    relleno o costura — no contra un umbral escrito a ojo.
+    """
+    return [l["rgb"] for l in losas if len(set(l["im"].getdata())) == 1]
+
+
+def contamina(im, rellenos):
+    """**¿Esta losa trae píxeles de OTRO material?** Entonces es COSTURA.
+
+    Es la regla 8 del proyecto (¿pieza o objeto?) aplicada al suelo, y hace falta
+    porque ninguno de los filtros de arriba la caza. `medir` echa las piezas de
+    BORDE —donde media celda es del otro material— por cuadrantes y por sombra,
+    pero **una esquina interna del autotile es 98 % pasto**: su color medio, su
+    desviación, sus cuatro cuadrantes y sus cuatro bordes dan lo mismo que el
+    relleno. Pasa limpia por los tres.
+
+    Eso fue exactamente lo que pasó: las siete "variantes" de `tiles/grass` eran
+    las siete esquinas internas de `Grass_1` (`_9`…`_13`, `_17`, `_20`), cada una
+    con su lengüeta de tierra naranja en un rincón, y de ahí se propagaron por
+    `derivar` a la tierra, la arena, la nieve, el regolito, el basalto y los
+    cuatro pastos de bioma — diez materiales sembrando confeti naranja por celda.
+
+    La pregunta correcta no es "¿cuánto varía?" sino **"¿de qué está hecha?"**: se
+    mira píxel por píxel contra la lista de rellenos que el pack declara
+    ([`rellenos_del_pack`]) y si hay más de `CONTAMINA_MAX` que se parecen más a
+    OTRO material que al propio, la losa es una costura y no entra.
+
+    Lo que SÍ sigue pasando: `Grass_Fenced_1_9`, el único pasto con matas del
+    pack. Sus dos verdes oscuros (55,133,78) y (45,114,86) están a 22 y 45 de su
+    propio relleno y a más de 100 de cualquier otro — son el mismo material.
+
+    **La referencia es el color DOMINANTE, no el medio**, y se compara por
+    [`croma`], no por RGB. Las dos cosas hicieron falta y las dos se vieron
+    fallar: con el medio, los brillos de la roca (`Others_4`) quedaban más cerca
+    del relleno crema del pack que del gris PROMEDIO de la losa; con RGB pelado,
+    su sombra quedaba más cerca del VERDE DEL PASTO que de su propio gris. Las
+    dos veces el resultado era el mismo, `tiles/roca` sin losa y de vuelta al
+    color plano. El dominante es el color del que la losa está hecha, y el croma
+    dice de qué material es cada píxel sin que el sombreado se meta en el medio.
+    """
+    dominante = croma(Counter(im.getdata()).most_common(1)[0][0][:3])
+    ajenos = [croma(r) for r in rellenos if dist(croma(r), dominante) > AJENO_MIN]
+    if not ajenos:
+        return False
+    n = 0
+    for p in im.getdata():
+        c = croma(p[:3])
+        d = dist(c, dominante)
+        if d > AJENO_MIN and any(dist(c, a) < d for a in ajenos):
+            n += 1
+            if n > CONTAMINA_MAX:
+                return True
+    return False
+
 
 def medir(im):
     px = im.load()
@@ -520,7 +615,7 @@ def derivar(im, destino, peso):
     return out
 
 
-def elegir(losas, objetivo255, fuente, familia=None):
+def elegir(losas, objetivo255, fuente, familia=None, rellenos=()):
     """Las `MAX_VARIANTES` losas de esa FUENTE (y familia) más parecidas al color.
 
     **Y todas del MISMO material que la primera.** Las variantes están para que
@@ -532,6 +627,10 @@ def elegir(losas, objetivo255, fuente, familia=None):
     cand = [l for l in losas if l["fuente"] == fuente]
     if familia:
         cand = [l for l in cand if any(familia in f for f in l["files"])]
+    # **Y ninguna que esté hecha de otro material.** Ver [`contamina`]: es lo que
+    # separa el relleno de la costura, y sin esto entraban las esquinas internas
+    # del autotile como si fueran variantes.
+    cand = [l for l in cand if not contamina(l["im"], rellenos)]
     # A igualdad de color gana la MÁS PAREJA: un piso a rayas gruesas tiene el
     # color justo y se lee como una alfombra de circo cuando lo repetís cien
     # veces. La desviación entra con medio peso — desempata, no manda.
@@ -540,16 +639,62 @@ def elegir(losas, objetivo255, fuente, familia=None):
     return cand[:MAX_VARIANTES]
 
 
+def calibrar(losas, rellenos):
+    """**De dónde sale [`AJENO_MIN`]** — las dos poblaciones, medidas.
+
+    Mide lo mismo que decide [`contamina`]: para cada losa, cuánto se aparta del
+    croma de su color dominante el peor de los píxeles **que además se parecen
+    más a OTRO relleno del pack**. Un relleno de verdad no tiene ninguno (su
+    sombreado es de su propio material); una costura del autotile los tiene y
+    saltan lejos. El corte va en el hueco entre las dos poblaciones.
+
+        python3 scripts/atlas-suelo.py --calibrar
+    """
+    filas = []
+    for l in losas:
+        dom = croma(Counter(l["im"].getdata()).most_common(1)[0][0][:3])
+        ajenos = [croma(r) for r in rellenos if dist(croma(r), dom) > 0.05]
+        peor, cuantos = 0.0, 0
+        for p in l["im"].getdata():
+            c = croma(p[:3])
+            d = dist(c, dom)
+            if ajenos and any(dist(c, a) < d for a in ajenos):
+                peor = max(peor, d)
+                cuantos += 1
+        filas.append((peor, cuantos, min(l["files"], key=len)))
+    filas.sort()
+    print(f"\n{'croma ajeno':>12s} {'píxeles':>8s}  losa")
+    anterior = 0.0
+    for peor, cuantos, nombre in filas:
+        if peor == 0.0:
+            continue
+        marca = "  <-- HUECO" if peor - anterior > 0.15 else ""
+        print(f"{peor:12.3f} {cuantos:8d}  {nombre[:58]}{marca}")
+        anterior = peor
+    limpias = sum(1 for f in filas if f[0] == 0.0)
+    print(f"\n{limpias} losas sin un solo píxel ajeno.  AJENO_MIN = {AJENO_MIN}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--preview", metavar="PNG", help="guarda la hoja ampliada")
+    ap.add_argument(
+        "--calibrar",
+        action="store_true",
+        help="imprime la separación de croma de cada losa (de dónde sale AJENO_MIN)",
+    )
     args = ap.parse_args()
 
     losas = losas_del_pack()
     print(f"losas repetibles en los temas de terreno: {len(losas)}")
     if not losas:
         raise SystemExit("no encontré ni una losa: ¿cambió la ruta del pack?")
+    rellenos = rellenos_del_pack(losas)
+    print(f"materiales que el pack declara (celdas de un solo color): {len(rellenos)}")
+    if args.calibrar:
+        calibrar(losas, rellenos)
+        return
 
     # 1. Elegir por color.
     elegidas = {}
@@ -558,7 +703,7 @@ def main():
         familia = spec[2] if len(spec) > 2 else None
         derivacion = spec[3] if len(spec) > 3 else None
         objetivo = tuple(c * 255 for c in rgb01)
-        cand = elegir(losas, objetivo, fuente, familia)
+        cand = elegir(losas, objetivo, fuente, familia, rellenos)
         # La familia ya dice DE QUÉ es la losa; el color sólo ordena dentro. Pedirle
         # además que se parezca al color declarado dejaría a la vereda sin ninguna
         # (el pack la dibuja crema y el color viejo era gris) y la ciudad volvería
@@ -623,12 +768,35 @@ def main():
     # acá), cada una apuntando a otra página. La malla del chunk sólo puede usar
     # las que estén EN esta hoja, así que las de afuera no son variantes: son
     # claves muertas que sólo confunden. Se van todas y quedan las de la hoja.
+    #
+    # ⚠ **Pero SÓLO de los materiales a los que esta hoja les da losa.** El barrido
+    # borraba las claves de las 23 de `COLOR_DEL_TILE` mirara o no si iba a
+    # reponerlas, y `tiles/subsuelo` no encuentra losa en el pack (el pack es
+    # urbano, no trae tierra oscura repetible). Tenía su fallback DIBUJADO en
+    # `art/gen/mundo.png`, este barrido se lo comía y no ponía nada en su lugar:
+    # el slot quedaba sin un solo pixel y el test `ningun_slot_se_queda_sin_pixel`
+    # se plantaba. Un material que esta hoja no puede servir no es suyo para
+    # borrar.
     borradas = 0
     for clave in COLOR_DEL_TILE:
-        for k in [x for x in sprites if x.split("#")[0] == clave]:
-            sprites.pop(k, None)
-            borradas += 1
-        if clave in objects:
+        # Las VARIANTES viejas se van siempre: apuntaban a celdas de la hoja
+        # anterior, que este mismo script acaba de reescribir.
+        muertas = [x for x in sprites if x.startswith(f"{clave}#")]
+        if clave in elegidas:
+            muertas.append(clave)
+        for k in muertas:
+            if sprites.pop(k, None) is not None:
+                borradas += 1
+        # **Y si se queda sin ninguna, el objeto se va entero** — pero sólo si el
+        # objeto lo escribió este script. Un `objects` con `variants: []` es una
+        # entrada muerta que igual aparece en el editor y con el nombre feo
+        # (`"tiles/grass"`), porque el humano vive en `slots.rs`. El de
+        # `tiles/subsuelo` en cambio dice "Subsuelo": ése lo puso otro importador
+        # y no es de acá. Desde que `contamina` echa las esquinas de autotile,
+        # ocho materiales quedan con una sola losa y caían justo en este agujero.
+        if objects.get(clave, {}).get("label") == clave:
+            objects.pop(clave, None)
+        elif clave in objects:
             objects[clave]["variants"] = []
     if borradas:
         print(f"suelo: -{borradas} claves viejas (variantes fuera de la hoja)")

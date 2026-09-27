@@ -642,10 +642,25 @@ def main():
         # cuya pose no exista cae al sprite plano, que ya es el mismo dibujo pero
         # sin pasar por la cadena. Se declara para que la cadena nunca falle.
         p = {n: {"rect": rect(k)} for n, k in poses.items()}
-        p["center"] = {"rect": rect(poses["front"])}
+        # **`center` es la cara de AFUERA, no la de adentro.**
+        #
+        # Apuntaba a `front`, y `front` es el paño que mira al cuarto —con su
+        # zócalo y su friso—. Como un tile de pared suelto (`Tile::WoodWall`, el
+        # que estampa la ciudad generada) pide siempre su forma de autotile y
+        # ninguna pared tiene `edge_n`, `tile_sprite` caía a `center` SIEMPRE: o
+        # sea que las casas de todas las ciudades del mundo se dibujaban con el
+        # empapelado del interior puesto para la calle. Desde afuera, una pared
+        # es su paño liso.
+        p["center"] = {"rect": rect(poses["back"])}
+        # **La ESPALDA existe.** `walls::Cara::Fondo` pide la pose `espalda` y no
+        # la tenía ningún asset del juego, así que la cadena caía a `front` y la
+        # espalda de toda casa construida se dibujaba con el paño de interior. Es
+        # el mismo paño liso que `back`: por fuera, el fondo y el frente de un
+        # muro son la misma pared.
+        p["espalda"] = {"rect": rect(poses["back"])}
         escribir(
             clave,
-            {"png": PAGINA_REL, "grid": [CELL, CELL], "rect": rect(poses["front"]), "poses": p},
+            {"png": PAGINA_REL, "grid": [CELL, CELL], "rect": rect(poses["back"]), "poses": p},
         )
     # La ventana, el vano, la puerta de piedra y la baranda tienen UNA cara: se
     # ven igual de los dos lados y en los dos ejes. Se declaran las cuatro poses
@@ -663,7 +678,7 @@ def main():
     # así que las dos poses son el mismo dibujo — la puerta de piedra no se abre
     # sola, se cruza. (La de madera sigue con su tira animada, intacta.)
     for clave, recorte in [("door/stone", "door/stone:front")] + una_cara:
-        caras = ["front", "back", "left", "right", "center"]
+        caras = ["front", "back", "espalda", "left", "right", "center"]
         if clave == "door/stone":
             caras += ["closed", "open"]
         escribir(

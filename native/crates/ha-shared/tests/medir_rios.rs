@@ -520,3 +520,93 @@ fn donde_estan_las_cascadas() {
     }
     println!("total de ventanas con cascada: {}", sitios.len());
 }
+
+/// **¿HAY PASTO SECO EN LA NIEVE?** — el parche khaki de las capturas.
+///
+/// El material de una pared sale de `superficie_de` de SU celda. Si el río talla
+/// el cauce por debajo de la grada de sierra (5), la celda de al lado deja de ser
+/// montaña y vuelve a ser sabana: un acantilado teñido de pasto seco plantado en
+/// mitad de un nevado. Esto lo cuenta.
+#[test]
+#[ignore]
+fn pasto_seco_dentro_de_la_nieve() {
+    use ha_shared::geography::{superficie_de, Pasto};
+    use ha_shared::relief::relief_level;
+    use ha_shared::topdown::Tile;
+    let b = CelestialBody::Earth;
+    for (nombre, cx, cz) in [("sierra cascadas", -6_100i64, -6_100i64), ("sierra", 1_400, -5_200)] {
+        let (mut seco, mut seco_en_nieve, mut celdas) = (0u32, 0u32, 0u32);
+        for tz in cz - 250..cz + 250 {
+            for tx in cx - 250..cx + 250 {
+                celdas += 1;
+                let s = superficie_de(b, tx, tz);
+                if s.pasto != Pasto::Seco {
+                    continue;
+                }
+                seco += 1;
+                // ¿tiene nieve a la vista, en un radio de 6 tiles?
+                let nieve = (-6..=6i64).step_by(3).any(|dx| {
+                    (-6..=6i64).step_by(3).any(|dz| {
+                        superficie_de(b, tx + dx, tz + dz).tile == Tile::Ice
+                    })
+                });
+                if nieve {
+                    seco_en_nieve += 1;
+                }
+            }
+        }
+        println!(
+            "{nombre:<18} celdas {celdas} | pasto seco {seco} | DE ÉSAS con nieve a 6 tiles: \
+             {seco_en_nieve} ({:.2} % del cuadro)",
+            100.0 * seco_en_nieve as f32 / celdas as f32
+        );
+        let alto = relief_level(b, cx, cz);
+        println!("                   (nivel del centro: {alto})");
+    }
+}
+
+/// **¿HACIA DÓNDE VA EL CAUCE DONDE PODRÍA HABER SALTO?** El histograma que
+/// decide si la regla "sólo cascadas de frente" deja algo en pie.
+#[test]
+#[ignore]
+fn rumbo_del_cauce_en_los_saltos() {
+    use ha_shared::relief::{alto_de_pared, relief_cell, ReliefCell};
+    let b = CelestialBody::Earth;
+    for (cx, cz) in [(-6_100i64, -6_100i64), (-7_000, -6_100), (-4_300, -6_100)] {
+        let (mut cand, mut sin_rumbo, mut sur, mut sur_cono, mut norte, mut lado) =
+            (0u32, 0u32, 0u32, 0u32, 0u32, 0u32);
+        for tz in cz - 300..cz + 300 {
+            for tx in cx - 300..cx + 300 {
+                if !hay_rio(b, tx, tz - 1) {
+                    continue;
+                }
+                if !matches!(relief_cell(b, tx, tz), ReliefCell::Cliff | ReliefCell::Pared) {
+                    continue;
+                }
+                if alto_de_pared(b, tx, tz) == 0 {
+                    continue;
+                }
+                cand += 1;
+                match ha_shared::rios::rumbo_del_cauce(b, tx, tz - 1) {
+                    None => sin_rumbo += 1,
+                    Some((dx, dz)) => {
+                        if dz > 0.0 {
+                            sur += 1;
+                            if dz >= dx.abs() {
+                                sur_cono += 1;
+                            }
+                        } else if dz < 0.0 {
+                            norte += 1;
+                        } else {
+                            lado += 1;
+                        }
+                    }
+                }
+            }
+        }
+        println!(
+            "({cx},{cz}) candidatos {cand} | sin rumbo {sin_rumbo} | al sur {sur} \
+             (dentro del cono de 45°: {sur_cono}) | al norte {norte} | de lado {lado}"
+        );
+    }
+}

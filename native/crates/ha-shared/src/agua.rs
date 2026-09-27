@@ -273,6 +273,35 @@ fn salto_desde(body: CelestialBody, tx: i64, tz: i64) -> Option<i64> {
     if pisos == 0 {
         return None;
     }
+    // **Y EL CAUCE TIENE QUE IR HACIA EL SUR, NO PASAR DE LADO.**
+    //
+    // El pack dibujó UNA cascada y es de frente: el chorro cayendo hacia la
+    // cámara. Las tres condiciones de arriba —agua encima, pared que baja al sur,
+    // agua al pie— también las cumple un río que corre de ESTE a OESTE con su
+    // ribera sur cayendo, y ahí el salto quedaba plantado de frente sobre un
+    // cauce que por ahí no baja. Reporte del usuario, 21 ago 2026: *"las cascadas
+    // sólo tenemos assets de frente, tipo cuando el río viene de arriba hacia
+    // abajo, no de izquierda a derecha horizontal"*.
+    //
+    // Se le pregunta el rumbo al TRAZADO (`rios::rumbo_del_cauce`), que es quien
+    // sabe hacia dónde corre el agua, y se mide en la celda de arriba, que es
+    // donde está el cauce — el labio ya es roca. Dentro de 45° del sur: más
+    // abierto que eso y el chorro de frente cae cruzado respecto del río.
+    // Sólo cuando hay TRAZADO que preguntar: si lo de arriba es una laguna o el
+    // mar (`cauce` también los cuenta) no hay rumbo, y un vertedero de laguna
+    // cayendo de frente está bien dibujado igual.
+    //
+    // **La condición es que el agua BAJE hacia el sur**, no que lo haga de frente
+    // perfecto. Medido en las tres ventanas de cordillera
+    // (`medir_rios::rumbo_del_cauce_en_los_saltos`): de 2.408 candidatos, **1.998
+    // tenían el cauce corriendo hacia el NORTE** —el chorro caía contra la
+    // corriente— y sólo 2 quedaban dentro de un cono de 45°. Exigir el cono deja
+    // el mundo sin cascadas; exigir el sentido saca las que estaban al revés.
+    if let Some((_, dz)) = crate::rios::rumbo_del_cauce(body, tx, tz - 1) {
+        if dz <= 0.0 {
+            return None;
+        }
+    }
     // **La poza va AL PIE DE LA PARED, no debajo del canto.** El muro tapa
     // `pisos + 1` filas, así que el agua de abajo empieza recién después; con
     // paredes de un escalón las dos cuentas daban casi lo mismo y por eso nunca

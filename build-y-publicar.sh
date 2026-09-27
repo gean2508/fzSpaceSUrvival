@@ -13,8 +13,14 @@
 #                                      #   APK → descargás/jugás FUERA de la LAN (celu en el tailnet)
 #   ./build-y-publicar.sh remoto sin-tests   # remoto, saltando los tests
 #   ./build-y-publicar.sh rapido       # NO recompila: sirve el APK ya publicado
+#
 #   ./build-y-publicar.sh editor       # abre SOLO el editor de assets (no compila el juego)
 #   ./build-y-publicar.sh sonido       # abre SOLO el editor de sonido / mini-DAW
+#
+# Además del APK: si el juego YA está instalado en esta PC (`npm run instalar:pc`),
+# cualquier modo que compile lo deja al día también — así lo que abrís desde la
+# bandeja de aplicaciones es lo mismo que acaba de salir para el celu. Agregá
+# `sin-pc` en cualquier posición para saltearlo.
 #
 # Requisitos (una vez): ver biblia.md §9 — Node + Rust + Android NDK/SDK + `cargo ndk`.
 #
@@ -23,7 +29,13 @@ set -euo pipefail
 # Ir a la raíz del repo (donde vive este script), sin importar desde dónde lo llames.
 cd "$(dirname "$0")"
 
-MODO="${1:-completo}"
+# `sin-pc` puede venir en cualquier posición: es un modificador, no un modo.
+PC_FLAG=""
+ARGS=()
+for a in "$@"; do
+  if [ "$a" = "sin-pc" ]; then PC_FLAG="--sin-pc"; else ARGS+=("$a"); fi
+done
+MODO="${ARGS[0]:-completo}"
 
 case "$MODO" in
   editor)
@@ -48,11 +60,11 @@ case "$MODO" in
     ;;
   rapido)
     echo "▶ Modo RÁPIDO — sin recompilar, sirviendo el APK ya publicado."
-    exec npm run play -- --no-ship
+    exec npm run play -- --no-ship --sin-pc
     ;;
   sin-tests)
     echo "▶ Build del APK SIN gates de test (más liviano en RAM) + publica + sirve."
-    exec npm run play -- --skip-tests
+    exec npm run play -- --skip-tests $PC_FLAG
     ;;
   remoto|tailscale)
     TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"
@@ -61,20 +73,20 @@ case "$MODO" in
       exit 1
     fi
     EXTRA=""
-    if [ "${2:-}" = "sin-tests" ]; then EXTRA="--skip-tests"; fi
+    if [ "${ARGS[1]:-}" = "sin-tests" ]; then EXTRA="--skip-tests"; fi
     echo "▶ Build del APK apuntando a Tailscale ($TS_IP) + publica + sirve."
     echo "  Descargás/jugás desde el celu estando en el tailnet, DENTRO o FUERA de casa."
     echo "  (el celu tiene que estar ONLINE en Tailscale — verificá con: tailscale status)"
-    exec npm run play -- --host "$TS_IP" $EXTRA
+    exec npm run play -- --host "$TS_IP" $EXTRA $PC_FLAG
     ;;
   completo)
     echo "▶ Build completo del APK + tests + publica + sirve."
     echo "  (si tu PC tiene poca RAM y se cuelga en los tests, usá:  ./build-y-publicar.sh sin-tests)"
-    exec npm run play
+    exec npm run play -- $PC_FLAG
     ;;
   *)
     echo "Modo desconocido: '$MODO'"
-    echo "Usá: ./build-y-publicar.sh [completo|sin-tests|remoto|herramientas|rapido|editor|sonido|mundo]"
+    echo "Usá: ./build-y-publicar.sh [completo|sin-tests|remoto|herramientas|rapido|editor|sonido|mundo] [sin-pc]"
     exit 1
     ;;
 esac

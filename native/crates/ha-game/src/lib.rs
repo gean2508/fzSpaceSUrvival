@@ -306,6 +306,10 @@ fn run_app_inner() {
             UiEditorPlugin,
             AutoDrivePlugin,
         ))
+        // Los fuegos artificiales, en su propia llamada: el tuple de arriba ya
+        // está en el tope de 16 que admite `Plugins` (el mismo motivo por el que
+        // el parallax de los menús está aparte).
+        .add_plugins(render::fireworks::FireworksPlugin)
         .add_plugins(AblatePlugin)
         .add_plugins(debug::StageProbePlugin)
         .add_plugins(chargen::ChargenPlugin)

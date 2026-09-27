@@ -328,4 +328,126 @@ mod tests {
             );
         }
     }
+
+    /// **UNA FACHADA DE CASA ES UN DIBUJO, NO DOS.**
+    ///
+    /// El importador masivo compone las piezas de un edificio que están pegadas
+    /// en la hoja del pack, y la vecindad que usaba era la de la GRILLA: dos
+    /// celdas ocupadas que se tocan iban al mismo objeto. En
+    /// `24_Additional_Houses` eso pegó `Terraced_House_1` con `Terraced_House_2`
+    /// —dos casas enteras de 12×15, separadas por 22 píxeles de aire— en un
+    /// recorte de 24×15, y ese recorte terminó siendo el arte de
+    /// `building/casa_country`. En el mapa se veían **dos casas plantadas en la
+    /// parcela de una**, con la mitad del dibujo colgando fuera del terreno. El
+    /// usuario lo reportó tal cual: "seguís usando dos casas como si fuera solo
+    /// una".
+    ///
+    /// El arreglo es que la vecindad mire el PIXEL (`import-pack-masivo.py`,
+    /// `pegadas`), y lo que este test comprueba es el resultado: los píxeles
+    /// dibujados de una fachada forman **una sola mancha conexa**. Medido sobre
+    /// el pack, la diferencia no admite discusión: las fachadas sanas dan de
+    /// 0,996 a 1,000 y el recorte de dos casas daba 0,499.
+    #[test]
+    fn ninguna_fachada_de_casa_son_dos_casas() {
+        const MINIMO: f32 = 0.90;
+
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ha-game/assets");
+        let raw = std::fs::read_to_string(assets.join("art/manifest.json"))
+            .expect("no pude leer el manifest");
+        let json: serde_json::Value = serde_json::from_str(&raw).expect("manifest.json ilegible");
+        let sprites = json.get("sprites").and_then(|s| s.as_object()).expect("sin `sprites`");
+
+        let mut vistas = 0;
+        for (clave, entrada) in sprites {
+            let base = clave.split('#').next().unwrap_or(clave);
+            // Los lotes de VIVIENDA de `city::LOT_PROGRAMS`, que son los que se
+            // plantan solos en una parcela. Las piezas de kit no entran: una
+            // banda de edificio modular ES un trozo, y con razón.
+            let es_casa = matches!(
+                base,
+                "building/casa_chica"
+                    | "building/casa_mediana"
+                    | "building/casa_grande"
+                    | "building/casa_country"
+                    | "building/casa_hilera"
+                    | "building/villa"
+                    | "building/duplex"
+            );
+            if !es_casa {
+                continue;
+            }
+            let d = entrada
+                .get("poses")
+                .and_then(|p| p.get("base"))
+                .unwrap_or(entrada);
+            let (Some(png), Some(rect)) = (d.get("png").and_then(|v| v.as_str()), d.get("rect"))
+            else {
+                continue;
+            };
+            let campo = |n: &str| rect.get(n).and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+            let grid = d.get("grid").and_then(|g| g.as_array()).map_or((32, 32), |g| {
+                (g[0].as_u64().unwrap_or(32) as u32, g[1].as_u64().unwrap_or(32) as u32)
+            });
+            let img = image::open(assets.join(png))
+                .unwrap_or_else(|e| panic!("no pude abrir {png} para `{clave}`: {e}"))
+                .to_rgba8();
+            let (x, y) = (campo("col") * grid.0, campo("row") * grid.1);
+            let (w, h) = (campo("w") * grid.0, campo("h") * grid.1);
+            let recorte = image::imageops::crop_imm(&img, x, y, w, h).to_image();
+            let (mayor, total) = mancha_mayor(&recorte);
+            assert!(
+                total == 0 || mayor as f32 >= total as f32 * MINIMO,
+                "`{clave}` ({png} {w}×{h} px): la mancha dibujada más grande es el \
+                 {:.0} % del dibujo — o sea que la fachada son VARIOS dibujos sueltos, \
+                 casi siempre dos casas del pack recortadas juntas. Volvé a correr \
+                 `python3 scripts/import-pack-masivo.py` y `scripts/import-edificios.py`",
+                mayor as f32 / total as f32 * 100.0
+            );
+            vistas += 1;
+        }
+        assert!(vistas >= 40, "sólo {vistas} fachadas de vivienda en el manifest");
+    }
+
+    /// `(píxeles de la mancha conexa más grande, píxeles dibujados en total)`.
+    ///
+    /// Conexión de 8 vecinos: el pixel art une en diagonal, y con 4 vecinos una
+    /// escalera de tejado cuenta como dos manchas.
+    fn mancha_mayor(im: &image::RgbaImage) -> (usize, usize) {
+        let (w, h) = (im.width() as i64, im.height() as i64);
+        let lleno = |x: i64, y: i64| {
+            x >= 0 && y >= 0 && x < w && y < h && im.get_pixel(x as u32, y as u32).0[3] > 0
+        };
+        let mut visto = vec![false; (w * h) as usize];
+        let (mut mayor, mut total) = (0usize, 0usize);
+        for y0 in 0..h {
+            for x0 in 0..w {
+                if !lleno(x0, y0) {
+                    continue;
+                }
+                total += 1;
+                if visto[(y0 * w + x0) as usize] {
+                    continue;
+                }
+                let mut pila = vec![(x0, y0)];
+                visto[(y0 * w + x0) as usize] = true;
+                let mut n = 0usize;
+                while let Some((x, y)) = pila.pop() {
+                    n += 1;
+                    for dy in -1..=1 {
+                        for dx in -1..=1 {
+                            let (vx, vy) = (x + dx, y + dy);
+                            if lleno(vx, vy) && !visto[(vy * w + vx) as usize] {
+                                visto[(vy * w + vx) as usize] = true;
+                                pila.push((vx, vy));
+                            }
+                        }
+                    }
+                }
+                mayor = mayor.max(n);
+            }
+        }
+        // El bucle de arriba cuenta `total` sólo una vez por celda llena porque
+        // el `continue` va DESPUÉS de sumar. La cuenta de manchas usa `visto`.
+        (mayor, total)
+    }
 }

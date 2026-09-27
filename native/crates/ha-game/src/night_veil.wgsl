@@ -63,9 +63,36 @@
 //
 // La regla que queda: **el color del pozo lo pone el multiplicador (pasada 1), no
 // la suma (pasada 2).** La suma es sólo el remate del centro.
+//
+// ## AMPLIADO (ago 2026) — "que se vea como la referencia"
+//
+// Tres cosas nuevas, ninguna de las cuales cuesta un pase extra ni un byte más de
+// ancho de banda: las tres viven DENTRO de las dos pasadas que ya existían.
+//
+//  1. **Halo (el "bloom" de cada luz).** Un lóbulo ancho y suave —`(1-x²)²`, más
+//     gordo que el poly6 del pozo— sumado con poca ganancia. Es lo que hace que un
+//     farol se lea como un farol y no como una mancha en el piso: el ojo espera un
+//     resplandor alrededor del vidrio, no un corte. Bloom de verdad (leer la
+//     pantalla, downsample, blur, upsample) es un mip-chain por frame — en una GPU
+//     de tiles eso es el recurso escaso, y para un charco radial da lo mismo.
+//  2. **Viñeta.** La pasada de SOMBRA es un multiplicador a pantalla completa: un
+//     término que sólo depende de la posición en pantalla sale GRATIS ahí. Cierra
+//     el cuadro por los bordes como en las capturas de referencia, y de paso tapa
+//     el borde de la nada donde el mundo deja de estar sembrado.
+//  3. **Bitono frío/cálido.** La sombra se enfría un pelo más de lo que ya
+//     estaba y la luz queda tal cual: es el contraste de temperatura que hace
+//     que un pueblo de noche se vea ámbar contra azul y no gris contra gris.
+//
+// Y el bucle se abarató para poder subir el presupuesto de luces sin pagarlo:
+// **`lights[i].z` ya no es el alcance sino `1/alcance²`, y `tints[i].w` es
+// `1/(radio·BULB_R)`.** Así el rechazo de una luz fuera de alcance —que es el
+// caso del 90 % de las luces en el 90 % de los píxeles— cuesta una resta, un
+// `dot`, una multiplicación y una comparación: ni raíz cuadrada ni división. La
+// raíz sólo se paga por las luces que SÍ tocan el píxel. Medido en operaciones:
+// el rechazo pasó de ~11 a ~6, y por eso 40 luces cuestan hoy lo que costaban 24.
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
-const MAX_VEIL_LIGHTS: u32 = 24u;
+const MAX_VEIL_LIGHTS: u32 = 40u;
 
 /// Nivel al que la noche cerrada multiplica el albedo del mundo (1 = mediodía).
 /// Es EL número de la noche: `contraste = pozo / esto`. A 0.02 no ves nada, a
@@ -107,6 +134,40 @@ const BULB_R: f32 = 0.16;
 /// total se adivinen las siluetas. En 0 la noche sin luna es negro absoluto.
 const AMBIENT_GAIN: f32 = 0.30;
 
+/// Ganancia del HALO: el resplandor ancho alrededor de cada luz, o sea el
+/// "bloom" sin pase de bloom. Va bajo a propósito — su gracia es cubrir mucha
+/// superficie con muy poco, que es exactamente lo que hace un blur gaussiano.
+/// Subirlo lava la escena igual que subir `ADD_GAIN` (ver el recalibrado de
+/// julio): el halo tiene que ADIVINARSE, no verse. **0,15 y no 0,085**: con
+/// 0,085 no se distinguía del pozo en la captura de `HA_NIGHTTEST` y el farol
+/// seguía leyéndose como una mancha en el piso en vez de como algo encendido.
+const HALO_GAIN: f32 = 0.15;
+
+/// Tamaño del halo como múltiplo del bulbo. El resplandor de un farol es varias
+/// veces su vidrio; con 1.0 no se distinguiría del bulbo y no habría halo.
+const HALO_R: f32 = 5.0;
+
+/// Cuánto cierra la viñeta las esquinas del cuadro (0 = ninguna). Es un
+/// multiplicador, así que 0.34 = las esquinas quedan al 66 % de su brillo.
+/// Medido contra las capturas de referencia: por encima de 0.45 se lee como un
+/// agujero negro en las esquinas, por debajo de 0.20 no se nota.
+const VIGNETTE: f32 = 0.34;
+
+/// Cuánto de la viñeta hay a pleno DÍA. **Cero, y no por gusto:** `toggle_light_passes`
+/// APAGA estas dos pasadas cuando la noche llega a 0 y no hay ninguna luz
+/// encendida (a mediodía multiplicar por 1 y sumar 0 son cuatro millones de
+/// píxeles leídos y escritos para dejar la pantalla igual, ver `LightPass`). Si
+/// la viñeta valiera algo justo en ese punto, al apagarse la pasada las esquinas
+/// pegarían un salto de brillo. Atada a `night`, entra y sale con la noche y no
+/// hay nada que saltar. La viñeta es, además, un recurso de encuadre nocturno:
+/// a pleno sol se lee como suciedad en el lente.
+const VIGNETTE_DAY: f32 = 0.0;
+
+/// Enfriamiento extra de la sombra: cuánto se le baja el rojo (y se le sube el
+/// azul) al multiplicador fuera de los pozos. Es el bitono — ámbar contra azul —
+/// y es la mitad de por qué una noche con faroles se ve "de película".
+const COOL_SHADE: f32 = 0.10;
+
 /// Caída radial — **gemela de `falloff()` en `light2d.rs`**. Kernel poly6
 /// `(1 - x²)³`: derivada 0 en los dos extremos. La gaussiana renormalizada que
 /// había antes moría en x = 1 con pendiente −0.27 y ese escalón, contra una noche
@@ -116,18 +177,42 @@ fn falloff(x: f32) -> f32 {
     return t * t * t;
 }
 
+/// El mismo poly6 pero tomando **x² ya calculado**: el bucle trabaja con
+/// distancias al cuadrado para no pagar una raíz por luz y por píxel.
+fn falloff2(x2: f32) -> f32 {
+    let t = 1.0 - x2;
+    return t * t * t;
+}
+
+/// Viñeta: 1 en el centro del cuadro, `1 - fuerza` en las esquinas.
+/// `frag` son píxeles de pantalla y `size` el viewport, así que la elipse sigue
+/// al encuadre real y no se deforma al girar el teléfono.
+fn vignette(frag: vec2<f32>, size: vec2<f32>, fuerza: f32) -> f32 {
+    if size.x < 1.0 || size.y < 1.0 || fuerza <= 0.0 {
+        return 1.0;
+    }
+    // −1..1 con el centro en 0. `r` vale ~1.41 en la esquina.
+    let ndc = frag / size * 2.0 - vec2<f32>(1.0);
+    let r = length(ndc);
+    // Arranca pasada la mitad del cuadro: lo que el ojo mira no se toca.
+    let k = smoothstep(0.62, 1.42, r);
+    return 1.0 - fuerza * k * k;
+}
+
 struct NightVeilMaterial {
     // rgb = tinte de la sombra (lineal), a = cuánta noche hay (0..1)
     color: vec4<f32>,
+    // xy = viewport en PÍXELES (para la viñeta), z/w = libres.
+    view: vec4<f32>,
     // count + padding (16-byte align antes de los arrays)
     count: u32,
     _p0: u32,
     _p1: u32,
     _p2: u32,
-    // xy = world pos (m), z = alcance (m), w = fuerza 0..1
-    lights: array<vec4<f32>, 24>,
-    // rgb = color de esa luz (lineal), w = radio del emisor (m) para el bulbo
-    tints: array<vec4<f32>, 24>,
+    // xy = world pos (m), z = **1/alcance²** (no el alcance), w = fuerza 0..1
+    lights: array<vec4<f32>, 40>,
+    // rgb = color de esa luz (lineal), w = **1/(radio·BULB_R)** para el bulbo
+    tints: array<vec4<f32>, 40>,
 }
 
 @group(2) @binding(0)
@@ -166,12 +251,16 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
     for (var i = 0u; i < n; i = i + 1u) {
         let l = material.lights[i];
-        let r = max(l.z, 0.05);
-        let x = distance(p, l.xy) / r;
-        if x >= 1.0 {
+        // **Sin raíz y sin división.** `l.z` viene como 1/alcance², así que
+        // rechazar una luz que no llega a este píxel cuesta una resta, un `dot`,
+        // una multiplicación y una comparación. Es el 90 % de los casos y es lo
+        // que paga subir el presupuesto de 24 a 40 luces sin costar más.
+        let dp = p - l.xy;
+        let x2 = dot(dp, dp) * l.z;
+        if x2 >= 1.0 {
             continue;
         }
-        let s = falloff(x) * clamp(l.w, 0.0, 1.0);
+        let s = falloff2(x2) * clamp(l.w, 0.0, 1.0);
         // Unión suave: N luces débiles se funden sin producir un escalón donde
         // una "gana" sobre otra (que es lo que hacía `min`).
         cover *= 1.0 - s;
@@ -196,6 +285,19 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     } else {
         shade = mix(shade, vec3<f32>(1.0), lit);
     }
+
+    // **Bitono.** La sombra se enfría; el pozo NO (ya está teñido de la lámpara).
+    // Un pueblo de noche se ve ámbar contra azul, no gris contra gris, y ese
+    // contraste de temperatura es gratis acá: son dos multiplicaciones sobre un
+    // valor que ya se estaba escribiendo.
+    let frio = vec3<f32>(1.0 - COOL_SHADE, 1.0 - COOL_SHADE * 0.35, 1.0 + COOL_SHADE * 0.5);
+    shade *= mix(vec3<f32>(1.0), frio, night * (1.0 - lit));
+
+    // **Viñeta.** Sale gratis: esta pasada YA es un multiplicador a pantalla
+    // completa, así que cerrar el cuadro es una multiplicación más por píxel.
+    // De día pesa un tercio (ver `VIGNETTE_DAY`).
+    let v_fuerza = VIGNETTE * mix(VIGNETTE_DAY, 1.0, night);
+    shade *= vignette(mesh.position.xy, material.view.xy, v_fuerza);
 
     let dither = (hash12(mesh.position.xy) - 0.5) * (1.2 / 255.0);
     // α = 1: el blend multiplicativo ignora α para el color, pero dejarlo en 1
@@ -222,26 +324,38 @@ fn fragment_add(mesh: VertexOutput) -> @location(0) vec4<f32> {
     for (var i = 0u; i < n; i = i + 1u) {
         let l = material.lights[i];
         let t = material.tints[i];
-        let r = max(l.z, 0.05);
-        let d = distance(p, l.xy);
-        let x = d / r;
-        if x >= 1.0 {
+        // Mismo rechazo barato que la pasada de sombra: `l.z` = 1/alcance².
+        let dp = p - l.xy;
+        let d2 = dot(dp, dp);
+        let x2 = d2 * l.z;
+        if x2 >= 1.0 {
             continue;
         }
         let k = clamp(l.w, 0.0, 1.0);
         // Difusa: poly6 (borde sin final) × inverso-cuadrático (gradiente).
-        let near = 1.0 / (1.0 + 8.0 * x * x);
-        let diffuse = falloff(x) * (0.26 + 0.74 * near) * k;
-        // Bulbo: el punto caliente del emisor. Cae en el radio DECLARADO del
-        // asset (`tints.w`), no en el alcance del pozo, así una vela tiene un
-        // punto chiquito y una hoguera uno gordo. `w <= 0` = el emisor ya se
-        // dibuja su propio brillo (luciérnagas, `Light2d::draw_glow == false`) y
-        // sumarle otro lo quemaría a blanco.
-        var bulb = 0.0;
+        let near = 1.0 / (1.0 + 8.0 * x2);
+        let diffuse = falloff2(x2) * (0.26 + 0.74 * near) * k;
+        // Bulbo y HALO: los dos salen del radio DECLARADO del emisor
+        // (`t.w` = 1/(radio·BULB_R)), no del alcance del pozo — así una vela
+        // tiene punto chiquito y halo chiquito, y una hoguera los tiene gordos.
+        // `w <= 0` = el emisor ya dibuja su propio brillo (luciérnagas,
+        // `Light2d::draw_glow == false`) y sumarle otro lo quemaría a blanco.
+        var nucleo = 0.0;
         if t.w > 0.001 {
-            bulb = pow(clamp(1.0 - d / (t.w * BULB_R), 0.0, 1.0), 3.5) * k;
+            // La raíz SÓLO acá: para las luces que de verdad tocan este píxel.
+            let d = sqrt(d2);
+            let ub = clamp(1.0 - d * t.w, 0.0, 1.0);
+            // Bulbo: el punto caliente, exponente alto = chiquito y quemado.
+            nucleo = pow(ub, 3.5) * BULB_GAIN;
+            // **Halo — el "bloom" de esta luz.** Mismo centro, `HALO_R` veces
+            // más ancho y con poca ganancia: es lo que hace que un farol se lea
+            // como un resplandor y no como una mancha recortada en el piso.
+            // `(1-u)²` tiene derivada 0 en el borde igual que el poly6, así que
+            // tampoco tiene dónde hacer escalón.
+            let uh = clamp(1.0 - d * t.w / HALO_R, 0.0, 1.0);
+            nucleo += uh * uh * HALO_GAIN;
         }
-        acc += t.rgb * (diffuse * ADD_GAIN + bulb * BULB_GAIN);
+        acc += t.rgb * (diffuse * ADD_GAIN + nucleo * k);
     }
 
     let dither = (hash12(mesh.position.xy + vec2<f32>(37.0, 11.0)) - 0.5) * (1.4 / 255.0);

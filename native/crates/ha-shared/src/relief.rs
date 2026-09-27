@@ -215,7 +215,13 @@ pub fn escalon_de_cordillera(body: CelestialBody, tx: i64, tz: i64) -> (i8, f32)
 
 /// El campo SIN caché. Sólo lo llama la caché; el resto del mundo usa
 /// [`relief_field`].
+
 fn compute_field(body: CelestialBody, tx: i64, tz: i64) -> f32 {
+    campo_crudo(body, tx, tz).clamp(0.0, 1.0)
+}
+
+/// El cuerpo del campo: la plataforma, el ruido y el valle del río.
+fn campo_crudo(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     // LA PLATAFORMA MANDA, EL RUIDO ONDULA. La plantilla del cuerpo
     // (`world_map`) decide qué es mar, qué es continente, dónde cruza la
     // cordillera y dónde se hunde un lago; el ruido decide cómo es cada metro
@@ -817,7 +823,45 @@ fn pass_noise(body: CelestialBody, tx: i64, tz: i64) -> bool {
 /// deja la MISMA cantidad de pasos, en los mismos sitios, con tres celdas de
 /// luz. Es la diferencia entre "hay más caminos" y "los caminos que hay se
 /// cruzan".
+///
+/// # No alcanzó, y ahora está medido de nuevo (21 ago 2026)
+///
+/// La dilatación en cruz abre la celda de al lado, pero **no ensancha la corrida
+/// A LO LARGO DEL CANTO**, que es lo que se ve: medido con
+/// `medir_acantilados::ancho_de_los_pasos` sobre cuatro ventanas, **el 88,9 % de
+/// los pasos seguía midiendo UNA celda** y sólo el 3,4 % llegaba a cuatro. Y
+/// cuatro es lo que mide el kit del pack —espolón, dos columnas de peldaños,
+/// espolón—, así que a un paso de una celda le tocaba **una columna suelta de un
+/// dibujo de cuatro**: es el *"no sé por qué recortás sólo un pedazo y usás eso
+/// de rampa"* del usuario.
+///
+/// Se probó ensanchar a lo largo del canto y **no sirvió** — ver [`PASO_ANCHO`],
+/// donde está la medición que explica por qué: el borde de terraza es una
+/// escalera, no una línea.
 const PASS_DILATE: i64 = 1;
+
+/// **CUÁNTO MIDE UN PASO A LO LARGO DEL CANTO**, en celdas.
+///
+/// Cuatro, y no es un número elegido: es **lo que mide el kit del paso** del pack
+/// (`Four_Sand_Mountains_*`, ver `scripts/import-acantilado.py`) — espolón de
+/// roca, dos columnas de peldaños y el otro espolón. El usuario lo decidió
+/// mirando la lámina de ejemplo: *"el paso mide lo que el kit"*.
+///
+/// # Y NO ALCANZA CON ENSANCHAR EL PASO
+///
+/// Se probó ensanchar la franja a lo largo del canto y **no movió la aguja**: de
+/// 88,9 % de pasos de una celda a 89,4 %, con un 22 % más de celdas de paso a
+/// cambio de nada. La medición que lo explica es
+/// `medir_acantilados::corridas_rectas_de_canto`: **el 86,2 % de TODOS los
+/// cantos del mundo —sean paso o no— mide una sola celda en línea recta**. Los
+/// bordes de terraza no son líneas, son escaleras diagonales, y un kit de cuatro
+/// celdas no se apoya en el 95,6 % de ellos.
+///
+/// O sea que para colocar el kit entero primero hay que **enderezar el canto**:
+/// que el paso talle una muesca recta de cuatro celdas al mismo nivel, que es
+/// exactamente lo que el kit dibuja (`Four_Sand_Mountains_1_Top` ES una muesca).
+/// Eso es trabajo de generación, no de dibujo, y está anotado en §13.
+pub const PASO_ANCHO: i64 = 4;
 
 /// **¿ES ESTA CELDA EL CANTO DE UNA TERRAZA?** — o sea, la fila de arriba de una
 /// pared. `l` es su nivel, que quien pregunta ya tiene.
@@ -960,6 +1004,51 @@ fn es_paso(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
     // las tres familias de franjas. Va la última porque es la más cara de todas
     // las preguntas y sólo la pagan las celdas que ya iban a ser pared.
     paso_de_meseta_chica(body, tx, tz, l)
+}
+
+/// **CUÁNTO SE RETIRA DEL BORDE LO QUE SE SIEMBRA.** Dos celdas, y es lo que
+/// pidió el usuario textual: *"lo coherente es que se detecte el borde dos
+/// cuadros antes, o sea hacia el centro de la meseta"*.
+///
+/// El número no es de gusto, es el tamaño de lo que se planta. Un árbol del pack
+/// mide más de una celda y se dibuja hacia ARRIBA desde su pie, así que un roble
+/// sembrado en la celda pegada al canto queda con medio tronco colgando sobre la
+/// pared que cae — flotando, que es como se veía. Con dos celdas de retiro el
+/// prop más grande de las tablas entra entero dentro de la meseta.
+pub const RETIRO_DEL_CANTO: i64 = 2;
+
+/// **¿ESTA CELDA ESTÁ DEMASIADO AL BORDE PARA PLANTARLE ALGO?**
+///
+/// Verdadero si el terreno CAE dentro de [`RETIRO_DEL_CANTO`] celdas: o sea, si
+/// hay una vecina de nivel menor a distancia de Chebyshev ≤ 2. Es la franja
+/// interior de la meseta, la que se lee como "el filo" aunque la celda en sí sea
+/// terreno llano y edificable.
+///
+/// No reemplaza a [`canto_de_terraza`]: el canto en sí ya es `Tile::Cliff` y
+/// ninguna tabla siembra sobre él. Lo que faltaba era el retiro HACIA ADENTRO.
+///
+/// **El llano no paga nada.** La pregunta sale por nivel antes de mirar una sola
+/// vecina, así que las celdas de nivel 0 —la enorme mayoría del mundo— cuestan
+/// una consulta a la caché y se van. Sólo las 24 vecinas de una celda ya
+/// elevada se recorren, y con salida temprana en cuanto una cae.
+pub fn retiro_del_canto(body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let l = relief_level(body, tx, tz);
+    // En el llano y bajo el agua no hay meseta de la que caerse.
+    if l <= 0 {
+        return false;
+    }
+    let r = RETIRO_DEL_CANTO;
+    for dz in -r..=r {
+        for dx in -r..=r {
+            if dx == 0 && dz == 0 {
+                continue;
+            }
+            if relief_level(body, tx + dx, tz + dz) < l {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Clasifica una celda: terraza, canto, cuerpo de pared o paso.

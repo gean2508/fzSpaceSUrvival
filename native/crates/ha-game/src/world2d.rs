@@ -109,6 +109,18 @@ const DECOR_FULL_RANGE: i64 = CHUNK_RANGE;
 /// chunk cueste 6-12 ms— sigue abierto: ahí está la próxima gran ganancia.
 
 const CHUNK_BUILD_BUDGET_PER_FRAME: usize = 2;
+/// **Y LOS CHUNKS SON UN PRESUPUESTO FALSO, mismo defecto que
+/// `universe::DiscBakeRows` antes del 16 ago 2026**: contar chunks sólo acota el
+/// frame si todos cuestan lo mismo, y "6-12 ms" (picos medidos en 24 ms con el
+/// tope en 2) es la medida en el Redmi en release — en un build de depuración o
+/// una máquina más lenta el mismo trabajo cuesta un orden de magnitud más y el
+/// tope de 2 dejaría de proteger nada. Se mira el reloj igual que el disco: se
+/// construye al menos un chunk por frame (el anillo siempre avanza) y se sigue
+/// mientras quede plazo, con `CHUNK_BUILD_BUDGET_PER_FRAME` como techo por
+/// tanda. **30 ms** deja margen sobre el pico ya medido (24 ms): en el Redmi de
+/// referencia el conteo sigue siendo el que corta primero, tal cual hoy: esto
+/// es una red para el caso lento, no un recorte del caso normal.
+const CHUNK_BUILD_MS_PER_FRAME: f32 = 30.0;
 /// **Techo del anillo al volar.** El presupuesto de arriba reparte el COSTE de
 /// construir en el tiempo, pero no acota el TOTAL vivo: sólo demora llegar al
 /// pico. Con el tope viejo (12) el anillo llegaba a 25×25 = 625 chunks, cada uno
@@ -151,17 +163,22 @@ pub struct FineDetailOff(bool);
 /// está mirando el mundo, así que un frame de 200 ms no es un tirón, es tiempo
 /// bien gastado. `crate::loading` lo levanta al entrar y lo baja al salir.
 #[derive(Resource)]
-pub struct ChunkBudget(pub usize);
+pub struct ChunkBudget {
+    /// Techo de chunks por tanda.
+    pub count: usize,
+    /// Plazo de la tanda, en milisegundos. **Es el que manda.**
+    pub ms: f32,
+}
 
 impl Default for ChunkBudget {
     fn default() -> Self {
-        Self(CHUNK_BUILD_BUDGET_PER_FRAME)
+        Self::normal()
     }
 }
 
 impl ChunkBudget {
-    pub fn normal() -> usize {
-        CHUNK_BUILD_BUDGET_PER_FRAME
+    pub const fn normal() -> Self {
+        Self { count: CHUNK_BUILD_BUDGET_PER_FRAME, ms: CHUNK_BUILD_MS_PER_FRAME }
     }
 }
 
@@ -1584,7 +1601,13 @@ fn stream_tile_chunks(
         }
     };
 
-    let mut budget = ctl.budget.0;
+    let mut budget = ctl.budget.count;
+    // Mismo criterio que `universe::bake_body_textures`: el CONTEO es sólo el
+    // techo por tanda, lo que manda es el RELOJ — un chunk cuesta 6-12 ms en el
+    // Redmi en release y un orden de magnitud más en depuración o en una máquina
+    // lenta, así que un número fijo de chunks no acota el frame en todos lados.
+    let plazo = std::time::Duration::from_secs_f32(ctl.budget.ms.max(0.5) / 1000.0);
+    let reloj = std::time::Instant::now();
     // Presupuesto de MEMORIA, aparte del de trabajo por frame: mientras esté
     // agotado se sigue construyendo el suelo (que es lo que no puede faltar) pero
     // no se puebla decoración nueva. Ver `MAX_LIVE_DECOR`.
@@ -1629,7 +1652,7 @@ fn stream_tile_chunks(
     }
     let mut deferred: Vec<(i64, i64)> = Vec::new();
     for (cx, cz, e, had, want) in pending_decor {
-        if budget == 0 || !decor_room {
+        if budget == 0 || !decor_room || reloj.elapsed() >= plazo {
             // No entró en el presupuesto: hay que DESHACER la marca, o el chunk
             // se queda diciendo que está decorado y nunca se puebla.
             deferred.push((cx, cz));
@@ -1689,14 +1712,16 @@ fn stream_tile_chunks(
         }
     }
     missing.sort_by_key(|&(cx, cz)| (cx - pcx).pow(2) + (cz - pcz).pow(2));
-    // Lo que no entre en el presupuesto queda anotado: la pantalla de carga no
-    // levanta la cortina hasta que esto llega a 0 (y `pending_decor` también,
-    // porque un anillo con el suelo puesto pero sin árboles se ve a medio hacer).
-    ctl.backlog.0 = missing.len().saturating_sub(budget) + deferred_count;
-    for (cx, cz) in missing {
-        if budget == 0 {
+    // Cuántos de `missing` entraron de verdad. Con presupuesto puro de CONTEO
+    // alcanzaba con restar `budget` de antemano; con el reloj de por medio no se
+    // sabe cuántos van a entrar hasta después de recorrerlos (el plazo puede
+    // cortar antes de agotar el conteo), así que el backlog se cuenta AL SALIR.
+    let mut missing_done = 0usize;
+    for &(cx, cz) in &missing {
+        if budget == 0 || reloj.elapsed() >= plazo {
             break;
         }
+        missing_done += 1;
         budget -= 1;
         // Sin sitio para decoración el chunk nace pelado, pero NACE: el suelo es
         // lo que no puede faltar. `decor` se queda en `None`, así que en cuanto
@@ -1740,6 +1765,10 @@ fn stream_tile_chunks(
             spawn_chunk_tile_art(&mut commands, &art, &tiles, body, z, cx, cz);
         }
     }
+    // La pantalla de carga no levanta la cortina hasta que esto llega a 0 (y
+    // `pending_decor` también, porque un anillo con el suelo puesto pero sin
+    // árboles se ve a medio hacer).
+    ctl.backlog.0 = (missing.len() - missing_done) + deferred_count;
 }
 
 fn body_art_suffix(body: CelestialBody) -> &'static str {
@@ -2018,8 +2047,21 @@ pub fn tile_render_color_y_sombra(
         _ => t.color(),
     };
     // Ruido por celda para que un relleno grande no se vea plano.
+    //
+    // **La mitad de lo que era, y por eso.** Iba de 0,93 a 1,02 (±4,5 % sobre
+    // 0,975) y con eso encima de una losa de COLOR PLANO —que es lo que el pack
+    // dibuja: `Grass_1_22` es un único (71,151,87) en sus 1.024 píxeles— el ruido
+    // no se leía como grano sino como **damero**: cada celda entera un tono, la
+    // frontera exactamente en la grilla de 32 px, y un llano de nieve o de arena
+    // se veía a cuadros desde el aire. Con ±2,25 % sigue rompiendo el liso y deja
+    // de dibujar la cuadrícula.
+    //
+    // El sitio correcto para la variedad no es esto: es que la celda tenga
+    // DIBUJO. Lo pone la siembra de props (`pack_siembra`) y, donde el pack la
+    // dibujó, la variante de losa (`suelo_uv_seeded`). Este número sólo evita que
+    // un relleno grande quede muerto.
     let n = (hash_cell(0x51ce, tx, tz) % 100) as f32 / 100.0;
-    let grano = 0.93 + n * 0.09;
+    let grano = 0.9525 + n * 0.045;
     let mut shade = grano * void_dim;
     // SOMBREADO POR ALTURA: cada escalón por encima del mar aclara un poco el
     // suelo y cada uno por debajo lo oscurece. Sin esto, una meseta y la llanura
@@ -2755,6 +2797,14 @@ fn spawn_chunk_small_decor(
                     // La ESQUINA manda sobre la vereda: el semáforo tiene sitio
                     // fijo y no puede perderlo contra un banco sorteado.
                     .or_else(|| ha_shared::worldgen::esquina_decor_at(body, tx, tz))
+                    // El ALUMBRADO también tiene sitio fijo (el cordón, con
+                    // ritmo) y por el mismo motivo va antes del sorteo: una
+                    // hilera de faroles con un hueco donde ganó un tacho deja de
+                    // ser una hilera.
+                    .or_else(|| ha_shared::worldgen::alumbrado_at(body, tx, tz))
+                    // Y las guirnaldas, que también tienen sitio fijo (la
+                    // retícula de la plaza) — ver `guirnalda_at`.
+                    .or_else(|| ha_shared::worldgen::guirnalda_at(body, tx, tz))
                     .or_else(|| ha_shared::worldgen::vereda_decor_at(body, tx, tz))
                     // La calzada tiene su propia tabla —lo tirado en el suelo— y
                     // va acá, antes que la flora: sobre asfalto no crece nada.
@@ -2872,6 +2922,13 @@ fn atenuar_sprite(s: Sprite, k: f32) -> Sprite {
 /// mismo número y el recorte final a blanco lo hace el shader, igual para los
 /// dos. El alpha no se toca (ver [`atenuar_sprite`]).
 fn tenir_sprite(mut s: Sprite, k: f32) -> Sprite {
+    // Sin tinte, ni se toca: el `spawn_chunk_tile_art` pasa por acá con todos los
+    // sprites del mundo (agua, puertas, cercas) y sólo el relieve pide gris. Un
+    // ida y vuelta por sRGB para multiplicar por uno es trabajo y es una pizca de
+    // deriva de coma flotante en cada celda.
+    if k == 1.0 {
+        return s;
+    }
     let c = s.color.to_srgba();
     s.color = Color::srgba(c.red * k, c.green * k, c.blue * k, c.alpha);
     s
@@ -3167,6 +3224,202 @@ fn suelo_de_la_celda(
     art.suelo_uv_seeded(tile_art_key(tile)?, semilla)
 }
 
+/// ¿Esta puerta ya la dibuja la fachada del pack?
+///
+/// Cierto sólo en la fila del FRENTE (la cara sur) de un lote con fachada: es la
+/// única que el pack dibuja de elevación, y por lo tanto la única donde se
+/// encimaban dos puertas. Ver el porqué en el llamador.
+fn puerta_la_dibuja_la_fachada(body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
+    // Las fachadas de ciudad sólo se generan en la planta baja
+    // (`building::stream_roofs`); en cualquier otra, callar la puerta del tile
+    // la dejaría sin nadie que la dibuje.
+    if z != 0 {
+        return false;
+    }
+    let Some(s) = ha_shared::geography::settlement_covering(body, tx, tz) else {
+        return false;
+    };
+    let Some((_, z0, _, h, _)) = ha_shared::city::roofed_rect(body, &s, tx, tz) else {
+        return false;
+    };
+    tz == z0 + h - 1
+}
+
+/// **La pared de INTERIOR de esta casa, y la cara que se le ve.**
+///
+/// Devuelve `(clave, pose)`. Es la razón por la que existen las 54 paredes de
+/// `scripts/import-paredes-interiores.py`: sin esto, toda casa generada del
+/// mundo se dibuja con `wall/wood` —el mismo marrón— y las otras 53 se quedan en
+/// el manifest sin que nadie las pida. Era el bug de fondo detrás de "los
+/// assets de paredes interiores no se usan": no faltaba pixel, **faltaba quien
+/// lo pidiera**.
+///
+/// ## El estilo es de la CASA, no de la celda
+///
+/// Se sortea con el origen del rect edificado, así que las cuatro paredes de un
+/// cuarto son del mismo empapelado y la casa lo conserva entre partidas sin
+/// guardar nada. Sortearlo por celda —que es lo que hace el suelo urbano— acá
+/// sería una pared distinta cada 95 cm: un cuarto se lee por su pared, y una
+/// pared que cambia de material a cada paso no se lee como cuarto.
+///
+/// ## La cara sale de la GEOMETRÍA, no de un número escrito
+///
+/// El pack dibuja el paño de los dos lados y los dos cantos, y cuál se ve lo
+/// decide qué borde del rect es esta celda. En cenital 3/4 la pared del NORTE
+/// enseña su lado de adentro (mira al sur, hacia la cámara) y la del SUR su lado
+/// de afuera. Es la misma regla que `walls::Cara` ya aplicaba a lo que construye
+/// el jugador; lo que faltaba era aplicarla a lo que genera la ciudad.
+/// La última casa resuelta por [`arte_de_interior`], para no volver a barrer el
+/// lote en la celda de al lado.
+///
+/// `roofed_rect` cuelga de `city::lot_at`, que **corre por tile** y prueba hasta
+/// doce anclas. Un chunk de ciudad tiene cientos de celdas de casa y casi todas
+/// son de la misma que la anterior, así que con recordar UN rect se saltea el
+/// barrido en la enorme mayoría. Es la misma idea que el memo por hilo de
+/// `settlement_in` (§10), a la escala de un chunk.
+#[derive(Default)]
+struct CasaResuelta {
+    rect: Option<(i64, i64, i64, i64)>,
+    estilo: Option<ha_assets::EstiloInterior>,
+}
+
+/// **El arte de interior de ESTA casa para ESTA celda**: `(clave, pose)`.
+///
+/// Es la razón por la que existen los 54 estilos de
+/// `scripts/import-paredes-interiores.py`. Sin esto, toda casa generada del
+/// mundo se dibuja con `wall/wood` y `floor/wood` —el mismo marrón— y los otros
+/// 53 se quedan en el manifest sin que nadie los pida. Era el bug de fondo
+/// detrás de "los assets de paredes interiores no se usan": no faltaba pixel,
+/// **faltaba quien lo pidiera**.
+///
+/// ## El estilo es de la CASA, no de la celda
+///
+/// Se sortea con el origen del rect edificado, así que la pared, el piso y los
+/// arcos de una casa combinan entre sí, y la casa lo conserva entre partidas sin
+/// guardar nada. Sortearlo por celda —que es lo que hace el suelo urbano— sería
+/// acá un empapelado distinto cada 95 cm.
+///
+/// ## La cara sale de la GEOMETRÍA, no de un número escrito
+///
+/// El pack dibuja el paño de adentro y el de afuera, y cuál se ve lo decide qué
+/// borde del rect es esta celda. Es la misma regla que `walls::Cara` ya aplicaba
+/// a lo que construye el jugador; lo que faltaba era aplicarla a lo que genera
+/// la ciudad.
+fn arte_de_interior(
+    art: &ArtLibrary,
+    tiles: &TileWorld,
+    body: CelestialBody,
+    tile: Tile,
+    tx: i64,
+    tz: i64,
+    memo: &mut CasaResuelta,
+) -> Option<(&'static str, &'static str)> {
+    if !matches!(tile, Tile::WoodWall | Tile::StoneBrick | Tile::WoodFloor | Tile::Door) {
+        return None;
+    }
+    let estilos = ha_assets::interior_styles();
+    if estilos.is_empty() {
+        return None; // sin importar todavía: se sigue viendo como antes
+    }
+    // ¿Sigue siendo la casa de la celda anterior? El borde CUENTA: las paredes
+    // son justamente el perímetro del rect.
+    let (x, z0, w, h, estilo) = match (memo.rect, memo.estilo) {
+        (Some((mx, mz, mw, mh)), Some(e))
+            if tx >= mx && tx < mx + mw && tz >= mz && tz < mz + mh =>
+        {
+            (mx, mz, mw, mh, e)
+        }
+        _ => {
+            let s = ha_shared::geography::settlement_covering(body, tx, tz)?;
+            let (x, z0, w, h, _) = ha_shared::city::roofed_rect(body, &s, tx, tz)?;
+            let idx = ha_shared::worldgen::hash_cell(0x1_7ee2, x, z0) as usize % estilos.len();
+            memo.rect = Some((x, z0, w, h));
+            memo.estilo = Some(estilos[idx]);
+            (x, z0, w, h, estilos[idx])
+        }
+    };
+    let perimetro = tz == z0 || tz == z0 + h - 1 || tx == x || tx == x + w - 1;
+    let clave = match tile {
+        Tile::WoodFloor => estilo.piso,
+        // **Un vano de este kit es un HUECO, no un arco.** `Room_Builder_3d_walls`
+        // no dibuja "la pared con el agujero": deja pasar el piso y remata el muro
+        // a cada lado con su jamba (`end_e`/`end_w`, medidas en `Generic_Home_1`).
+        // Así que acá se devuelve la LOSA y el hueco lo dibujan los dos muros que
+        // lo flanquean. En el perímetro no, que ahí va la hoja de la fachada.
+        Tile::Door if !perimetro => estilo.piso,
+        Tile::Door => return None,
+        _ => estilo.pared,
+    };
+    if !art.tile_has_art(clave) {
+        return None;
+    }
+    if !matches!(tile, Tile::WoodWall | Tile::StoneBrick) {
+        return Some((clave, "center"));
+    }
+    Some((clave, cara_de_muro(tiles, body, tx, tz)?))
+}
+
+/// **Qué pieza del kit de cuarto le toca a este muro**, o `None` si no le toca
+/// ninguna.
+///
+/// El kit es `Room_Builder_3d_walls`, que es LA hoja con la que LimeZu arma un
+/// cuarto y estaba sin importar: trae el muro horizontal con su tapa, los
+/// verticales vistos de canto y las esquinas en ángulo. Antes se usaba
+/// `Room_Builder_Walls`, que dibuja el paño de frente y nada más — con eso un muro
+/// norte-sur salía como una hilera de carteles de frente puestos de costado, y la
+/// columna que el importador publicaba como "cara de afuera" era el MISMO
+/// empapelado (medido: (204,208,211) contra (208,212,215)), así que toda casa
+/// generada enseñaba el empapelado del dormitorio mirando a la vereda.
+///
+/// ## La pieza sale de DÓNDE ESTÁ EL CUARTO, no de qué borde del rect es
+///
+/// Un tabique y una pared de borde son la misma pared mirada desde el mismo lado;
+/// lo que decide qué se ve de ella es para dónde le queda el piso. Con la regla
+/// vieja —"si es perímetro, `back`"— un tabique norte-sur y el muro oeste de la
+/// casa pedían piezas distintas siendo la misma pared.
+///
+/// ## Y la pared que da a la calle no tiene arte de interior
+///
+/// Si el cuarto le queda al NORTE, de esa pared se ve la tapa y nada más: lo que
+/// mira al frente es la FACHADA (Modern Exteriors). Dibujarle el paño de interior
+/// era plantar el empapelado contra la vereda **y** taparle al cuarto su última
+/// fila de piso, porque el muro horizontal mide dos celdas de alto.
+fn cara_de_muro(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> Option<&'static str> {
+    let en = |dx: i64, dz: i64| tiles.render_tile(body, tx + dx, tz + dz);
+    let piso = |dx: i64, dz: i64| matches!(en(dx, dz), Tile::WoodFloor | Tile::Door);
+    let (sur, este, oeste, norte) = (piso(0, 1), piso(1, 0), piso(-1, 0), piso(0, -1));
+    // **La JAMBA de un vano.** El muro que termina contra una puerta remata con su
+    // pieza de canto; es lo que dibuja el hueco, porque el hueco en sí es piso.
+    if sur || norte {
+        if en(1, 0) == Tile::Door {
+            return Some("end_e");
+        }
+        if en(-1, 0) == Tile::Door {
+            return Some("end_w");
+        }
+    }
+    if sur {
+        return Some("edge_n");
+    }
+    if este {
+        return Some("edge_w");
+    }
+    if oeste {
+        return Some("edge_e");
+    }
+    // Las esquinas: el cuarto queda en diagonal.
+    if piso(1, 1) {
+        return Some("corner_nw");
+    }
+    if piso(-1, 1) {
+        return Some("corner_ne");
+    }
+    if norte {
+        return Some("edge_s");
+    }
+    Some("edge_n")
+}
+
 /// La clave de arte de un tile de RELIEVE con su variante de bioma, si esa
 /// variante está curada. `None` = usá la genérica de `tile_art_key`.
 fn terrain_art_key(
@@ -3388,6 +3641,8 @@ fn spawn_chunk_tile_art(
     cx: i64,
     cz: i64,
 ) {
+    // Casi todas las paredes de un chunk son de la misma casa (ver `CasaResuelta`).
+    let mut casa_memo = CasaResuelta::default();
     for lx in 0..CHUNK {
         let tx = cx * CHUNK + lx;
         // **La franja oscura al pie de los muros de esta columna**, la misma que
@@ -3408,11 +3663,35 @@ fn spawn_chunk_tile_art(
             // variante no está curada todavía, cae a la genérica y se ve igual que
             // antes — nunca queda una celda sin dibujar por falta de arte.
             let key = terrain_art_key(art, body, tile, tx, tz).unwrap_or(generic);
+            // **Una casa se dibuja con SU estilo**: su paño, su losa y sus arcos.
+            // Se resuelve acá, con la clave, porque de esto depende también qué
+            // cara se pide más abajo (`cara_de_pared`).
+            let interior = arte_de_interior(art, tiles, body, tile, tx, tz, &mut casa_memo);
+            let key = interior.map(|(k, _)| k).unwrap_or(key);
+            let cara_de_pared = interior.map(|(_, c)| c);
             let wx = tx as f32 * TILE_M + 0.5;
             let wz = tz as f32 * TILE_M + 0.5;
             let r = render_xy(wx, wz);
             // Puertas: pose open/closed animada por proximidad (building.rs las
             // conmuta). Con arte de poses, spawn especial; si no, sigue al autotile.
+            // **UNA ABERTURA, UNA PUERTA.**
+            //
+            // La fachada del pack ya trae su puerta DIBUJADA y animada
+            // (`building::spawn_puerta_de_fachada`), y el sim además estampa su
+            // `Tile::Door` en la misma cara. O sea que la cara a la calle de
+            // toda casa generada tenía dos puertas encimadas: la del pixel del
+            // artista y la del tile, con pose y posición distintas. Es el mismo
+            // bug que `edificio.rs` documenta como razón de existir ("las
+            // aberturas son UNA sola lista, las dos caras leen el mismo dato"),
+            // sólo que en la ciudad generada nadie lo estaba evitando.
+            //
+            // Manda la fachada, porque es la que tiene el dibujo bueno: sólo se
+            // calla el SPRITE del tile, no el tile. Se sigue cruzando por acá, y
+            // las otras tres caras —que no tienen fachada dibujada— conservan la
+            // suya, que es por donde se entra cuando la calle se comió el frente.
+            if tile == Tile::Door && puerta_la_dibuja_la_fachada(body, z, tx, tz) {
+                continue;
+            }
             if tile == Tile::Door && art.has_poses(key) {
                 if let Some((_, _)) = art.pose(key, "closed").or_else(|| art.pose(key, "open")) {
                     // ALTA Y APOYADA EN SU PIE, igual que las paredes de borde.
@@ -3648,6 +3927,12 @@ fn spawn_chunk_tile_art(
             {
                 continue;
             }
+            // **La CARA manda sobre la forma de autotile.** Una pared de
+            // interior no tiene `edge_n` ni `corner_ne` —el pack la dibuja por
+            // cara, no por vecindad—, así que sin esto `tile_sprite` caía
+            // siempre a `center` y las cuatro paredes de la casa salían con el
+            // mismo paño. Ver `arte_de_interior`.
+            let shape = cara_de_pared.unwrap_or(shape);
             let Some((sprite, anim)) = art.tile_sprite(&vk, shape, medida) else { continue };
             // La pieza compuesta de 1×3 (el bordillo y la pared de un escalón)
             // lleva UN color, y va el del CANTO: el anillo se ve arriba, donde la
@@ -4050,6 +4335,29 @@ fn pared_apilada(
     // una por fila.
     let gris_pie = gris_de_celda(tiles, body, tx, tz + filas + 1, 1.0);
     let gris = |fila: i64| gris_de_la_fila(gris_canto, gris_pie, fila - tz, filas);
+    // **UNA SOMBRA PARA TODA LA PARED, NO UNA POR FILA.**
+    //
+    // Cada fila (`poner`) es su PROPIO sprite de una celda —`medida = TILE_M ×
+    // TILE_M`—, así que `light2d::attach_ground_shadows` (que no sabe nada de
+    // paredes, sólo mide el `custom_size` de cada sprite) le calculaba a un
+    // farallón de nueve pisos la sombra de una piedra suelta de un metro: nueve
+    // sombritas idénticas apiladas, cada una tan corta como la de un guijarro,
+    // en vez de UNA sombra que se note del porte real del muro. Es la otra mitad
+    // del mismo bug que `attach_ground_shadows::length` (ahí se arregló para el
+    // farallón de UNA sola pieza; acá el farallón son VARIAS).
+    //
+    // La salida es un ancla invisible (`Color::NONE`, misma medida que ya usa
+    // `spawn_chunk_tile_art` para las vetas sin arte) del tamaño de la pared
+    // ENTERA —`TILE_M` de ancho por `(filas+1) × TILE_M` de alto—, y las filas
+    // visibles se marcan `sin_sombra` para que no dupliquen la mancha.
+    let centro_fila = tz as f32 + filas as f32 * 0.5;
+    let ancla_r = render_xy(tx as f32 * TILE_M + 0.5, centro_fila * TILE_M + 0.5);
+    commands.spawn((
+        SurfaceDecor { cx, cz, z, small: true },
+        TileArt,
+        Sprite::from_color(Color::NONE, Vec2::new(TILE_M, (filas + 1) as f32 * TILE_M)),
+        Transform::from_xyz(ancla_r.x, ancla_r.y, orden),
+    ));
     let mut poner = |pose: &'static str, fila: i64| {
         let r = render_xy(tx as f32 * TILE_M + 0.5, fila as f32 * TILE_M + 0.5);
         if let Some((sprite, anim)) = art.tile_sprite(vk, pose, medida) {
@@ -4059,6 +4367,7 @@ fn pared_apilada(
                 tenir_sprite(sprite, gris(fila)),
                 Transform::from_xyz(r.x, r.y, orden),
             ));
+            crate::light2d::sin_sombra(&mut ent);
             if let Some(a) = anim {
                 ent.insert(a);
             }
@@ -4362,10 +4671,17 @@ fn spawn_chunk_cliff_urbano(
             let pie_wz = (tz + 1 + celdas) as f32 * TILE_M;
             let centro_wz = pie_wz - alto.y * 0.5;
             let r = render_xy(tx as f32 * TILE_M + 0.5, centro_wz);
+            // **Y con el gris de la pared en la que se apoya.** Desde que el muro
+            // lleva el suyo (ver [`gris_de_celda`]), una escalera sin teñir
+            // quedaba a pleno sol contra una roca en penumbra — o al revés en la
+            // cumbre, que aclara un 40 %. Va el del CANTO, que es la celda a la
+            // que la pieza está colgada. Sin la sombra de columna: esa franja la
+            // tira esta misma pared.
+            let gris = gris_de_celda(tiles, body, tx, tz, 1.0);
             let mut ent = commands.spawn((
                 SurfaceDecor { cx, cz, z, small: true },
                 TileArt,
-                sprite,
+                tenir_sprite(sprite, gris),
                 // Y-sort por el pie, como cualquier cosa apoyada: el que camina
                 // por la terraza de abajo pasa por delante de la escalera.
                 Transform::from_xyz(r.x, r.y, crate::layers::ysort(pie_wz)),
@@ -5874,6 +6190,69 @@ mod vereda_tests {
                 Some(s.center),
                 "({px},{pz}) tendría que seguir siendo la misma ciudad"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod diagnostico_islas_de_borde {
+    use super::*;
+    use ha_shared::relief::{alto_de_pared, relief_cell, relief_level, ReliefCell};
+
+    /// **DIAGNÓSTICO, no guardián.** Recorre una ventana real del mundo y para
+    /// cada celda de canto (`Cliff` o `Ramp`) imprime la forma que le da
+    /// `autotile_shape` —la misma función y los mismos ocho vecinos que usa
+    /// `spawn_chunk_tile_art`— junto con si esa forma CUELGA pared
+    /// (`CARAS_QUE_CUELGAN`) y cuántos escalones mide (`alto_de_pared`).
+    ///
+    /// Es la forma de contestar "¿por qué se ven islas en el borde diagonal?"
+    /// con datos del mundo de verdad en vez de mirar píxeles: cada fila muestra
+    /// la costura entre la celda y la siguiente.
+    ///
+    /// ```sh
+    /// cargo test -p ha-game --lib diagnostico_islas -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore]
+    fn perfil_de_un_canto_diagonal() {
+        let body = CelestialBody::Earth;
+        // Las mismas ventanas que usa el driver HA_RELIEVETEST: una pared y una
+        // rampa reales, no coordenadas inventadas.
+        for (nombre, cx, cz) in [("pared", 1763i64, -5087i64), ("rampa", 1796, -5097)] {
+            println!("\n=== {nombre} @ ({cx},{cz}) ===");
+            for tz in cz - 12..cz + 12 {
+                let mut fila = String::new();
+                for tx in cx - 12..cx + 12 {
+                    let c = relief_cell(body, tx, tz);
+                    fila.push(match c {
+                        ReliefCell::Flat => '.',
+                        ReliefCell::Cliff => 'C',
+                        ReliefCell::Pared => '#',
+                        ReliefCell::Ramp => 'R',
+                    });
+                }
+                println!("{fila}");
+            }
+            println!("--- perfil de cada canto (Cliff/Ramp) con su forma ---");
+            for tz in cz - 12..cz + 12 {
+                for tx in cx - 12..cx + 12 {
+                    let c = relief_cell(body, tx, tz);
+                    if !matches!(c, ReliefCell::Cliff | ReliefCell::Ramp) {
+                        continue;
+                    }
+                    let l = relief_level(body, tx, tz);
+                    let same = |dx: i64, dz: i64| relief_level(body, tx + dx, tz + dz) >= l;
+                    let shape = autotile_shape(
+                        same(0, -1), same(1, 0), same(0, 1), same(-1, 0),
+                        same(1, -1), same(-1, -1), same(1, 1), same(-1, 1),
+                    );
+                    let cuelga = CARAS_QUE_CUELGAN.contains(&shape);
+                    let alto = alto_de_pared(body, tx, tz);
+                    println!(
+                        "  ({tx},{tz}) nivel={l} {c:?} shape={shape:<10} cuelga={cuelga:5} alto_de_pared={alto}"
+                    );
+                }
+            }
         }
     }
 }

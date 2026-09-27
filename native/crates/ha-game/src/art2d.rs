@@ -198,6 +198,12 @@ struct FuenteArte {
     solo_gpu: bool,
 }
 
+/// **Cuántas losas LISAS de pasto por cada losa con matas.** Siete lisas y una con
+/// matas: el campo se lee como pasto sólido y la mata aparece de a una, salteada,
+/// que es para lo que está — marcar que el suelo tiene textura, no empedrarlo de
+/// puntitos. Ver el armado de `suelo_variantes`.
+const PESO_PASTO_LISO: usize = 7;
+
 /// Loaded drop-in sprites by logical key. Empty until the player ships art.
 #[derive(Resource, Default)]
 pub struct ArtLibrary {
@@ -1521,6 +1527,26 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
     for base in bases {
         let mut uvs = Vec::new();
         if let Some(vs) = art.variant_art.get(&base) {
+            // **En el PASTO, la losa lisa entra al sorteo y MANDA.**
+            //
+            // Un material con variantes sorteaba sólo entre las variantes: la losa
+            // lisa quedaba afuera. Para el asfalto o la vereda da igual —sus
+            // variantes son la misma baldosa con otro dibujo— pero en el pasto se
+            // ve de lejos y es un desastre: la única variante de `pasto_bosque` es
+            // `#s1`, la losa CON MATAS, así que el 100 % del campo salía con matas
+            // repetidas en grilla. El reporte fue literal: *"le pones un pasto con
+            // tanta mierda que parecen puntos… forman figuritas como charquitos"*
+            // (24 ago 2026).
+            //
+            // El suelo se pinta LISO. Las matas son una marca ocasional de textura,
+            // así que la lisa va repetida `PESO_PASTO_LISO` veces contra una sola de
+            // cada variante — con la única variante de hoy, una mata cada ocho
+            // celdas. No se toca ningún otro material.
+            if crate::world2d::PASTOS_DE_BIOMA.contains(&base.as_str()) {
+                if let Some(uv) = art.suelo_uv.get(&base) {
+                    uvs.extend(std::iter::repeat(*uv).take(PESO_PASTO_LISO * vs.len()));
+                }
+            }
             uvs.extend(vs.iter().filter_map(|v| art.suelo_uv.get(v).copied()));
         }
         // Sin variantes con arte, la única losa es la del propio material.
@@ -1962,6 +1988,109 @@ mod inventario_de_arte {
              achica `cells` hasta el talle del dibujo (ver `ha_shared::city::LOT_PROGRAMS`).",
             mal.len(),
             mal.join("\n  ")
+        );
+    }
+
+    /// **El kit modular tiene todas sus piezas, en los tres temas.**
+    ///
+    /// La ciudad compone las torres del centro y los locales del comercio banda
+    /// por banda (`building::spawn_fachada_apilada`), pidiendo cada pieza por
+    /// `objeto#tema`. Una pieza sin arte no se nota como un hueco: se dibuja con
+    /// el color de respaldo (`edificios::color_de_respaldo`), o sea un paño de
+    /// color plano en medio de la torre, que es justo lo que se estaba tratando
+    /// de sacar del mapa. Y como el tema se elige por hash, faltar UNO significa
+    /// que un tercio de los edificios sale así.
+    #[test]
+    fn el_kit_modular_no_tiene_piezas_sin_pixel() {
+        let m = ArtManifest::from_json(MANIFEST).expect("manifest legible");
+        let mut mal = Vec::new();
+        let tablas = [
+            crate::edificios::PLANTAS_BAJAS,
+            crate::edificios::PISOS,
+            crate::edificios::AZOTEAS,
+            crate::building::LOCALES,
+        ];
+        for tabla in tablas {
+            for clave in tabla {
+                for tema in ["ladrillo", "azul", "hormigon"] {
+                    let k = format!("{clave}#{tema}");
+                    if !m.sprites.contains_key(&k) {
+                        mal.push(k);
+                    }
+                }
+            }
+        }
+        assert!(
+            mal.is_empty(),
+            "{} piezas del kit modular sin arte (salen como un pano de color \
+             plano en medio del edificio):\n  {}\n\
+             Corre `python3 scripts/import-modulares.py`.",
+            mal.len(),
+            mal.join("\n  ")
+        );
+    }
+
+    /// **Lo de adentro se queda adentro.**
+    ///
+    /// El juego mezcla dos packs de LimeZu que dibujan cosas parecidas con los
+    /// mismos nombres: `Modern Exteriors` (la calle, las casas, los edificios) y
+    /// `Modern Interiors` (los muebles, las góndolas, los mostradores). El
+    /// importador masivo clasificaba por PALABRA del nombre de archivo antes que
+    /// por pack, y las palabras se repiten entre los dos:
+    ///
+    /// ```text
+    ///   Clothing_Store  → "store" → building/tienda_de_ropa_11  (una PERCHA)
+    ///   Grocery_Store   → "store" → building/almacen_1          (una GÓNDOLA)
+    ///   Ice_Cream_Shop  → "shop"  → building/heladeria_1        (un MOSTRADOR)
+    /// ```
+    ///
+    /// 661 muebles de interior quedaron en `building/*` —o sea, en la categoría
+    /// "Edificio" del menú de construir— y uno de ellos, `building/heladeria_1`,
+    /// llegó a ser una PARCELA de la ciudad: el generador plantaba un mostrador de
+    /// 2×3 celdas en un solar de la avenida.
+    ///
+    /// Ahora el importador declara de qué pack salió cada página
+    /// (`scripts/lib/origen.py` → `manifest.origen`) y esto se planta si algo que
+    /// se dibuja A LA INTEMPERIE apunta a un dibujo de adentro. Se miran las tres
+    /// bocas por las que el arte sale al mundo:
+    ///
+    /// 1. los lotes de la ciudad (`city::LOT_PROGRAMS`),
+    /// 2. las tablas de siembra (`pack_siembra`, vía `worldgen`),
+    /// 3. la carpeta `building/` entera, que es lo que el menú de construir
+    ///    ofrece bajo "Edificio".
+    #[test]
+    fn la_ciudad_no_se_construye_con_interiores() {
+        let m = ArtManifest::from_json(MANIFEST).expect("manifest legible");
+        assert!(
+            !m.origen.is_empty(),
+            "el manifest no declara el origen de ninguna página: corré \
+             `python3 scripts/import-pack-masivo.py`"
+        );
+        let mut mal = Vec::new();
+        let mut revisar = |que: &str, clave: &str| {
+            if !m.se_planta_afuera(clave) {
+                let png = m.sprites.get(clave).map(|e| e.png()).unwrap_or("?").to_string();
+                mal.push(format!("{que} {clave} sale de {png} (Modern Interiors)"));
+            }
+        };
+        for p in ha_shared::city::LOT_PROGRAMS {
+            revisar("lote de ciudad", p.key);
+        }
+        for (nombre, tabla) in ha_shared::worldgen::TABLAS_SEMBRADAS {
+            for d in *tabla {
+                revisar(nombre, d.key);
+            }
+        }
+        for clave in m.sprites.keys().filter(|k| k.starts_with("building/")) {
+            revisar("slot", clave);
+        }
+        assert!(
+            mal.is_empty(),
+            "{} cosas de Modern Interiors plantadas a la intemperie:\n  {}\n\
+             Los interiores no pueden caer en las carpetas de afuera: ver \
+             `import-pack-masivo.py::CARPETAS_DE_AFUERA` y volvé a correr el importador.",
+            mal.len(),
+            mal.iter().take(20).cloned().collect::<Vec<_>>().join("\n  ")
         );
     }
 

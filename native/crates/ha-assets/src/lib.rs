@@ -26,4 +26,4 @@ pub use art_manifest::{
 };
 pub use chargen_index::{ChargenIndex, LayerOption, LookDef};
 pub use pngs::list_pngs;
-pub use slots::{category_label, game_slots, SlotDef};
+pub use slots::{category_label, game_slots, interior_styles, EstiloInterior, SlotDef};

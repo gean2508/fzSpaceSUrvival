@@ -616,6 +616,32 @@ pub struct ObjectDef {
     pub variants: Vec<VariantDef>,
 }
 
+/// **De qué pack de LimeZu salió una página de atlas.**
+///
+/// El juego mezcla `Modern Exteriors` (la calle, las casas, los edificios) y
+/// `Modern Interiors` (los muebles, las góndolas, los mostradores), y los dos
+/// dibujan temas que se llaman igual —`Office`, `Hospital`, `Ice_Cream_Shop`— con
+/// las mismas palabras en el nombre de archivo (`store`, `shop`, `house`,
+/// `wall`, `plant`). Cualquier filtro por nombre se equivoca, y se equivocó: el
+/// mostrador de una heladería de interiores llegó a ser una parcela de la ciudad.
+///
+/// Así que el origen no se adivina: lo declara el importador, que es el único que
+/// sabe qué carpeta del pack leyó (`scripts/lib/origen.py`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Origen {
+    /// Modern Exteriors: lo que se ve caminando por la calle.
+    Exterior,
+    /// Modern Interiors: lo que se ve de puertas adentro.
+    Interior,
+    /// Interfaz: iconos, cursores, tipografía. Ni afuera ni adentro.
+    Ui,
+    /// **Un error de empaquetado, no un dato.** Una página con dibujos de los dos
+    /// packs no se puede filtrar; se marca así para que el test la cace en vez de
+    /// resolverla por mayoría.
+    Mixto,
+}
+
 /// El art-manifest del juego.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ArtManifest {
@@ -625,11 +651,64 @@ pub struct ArtManifest {
     /// manifests viejos → se omite al serializar si está vacío (diff cero).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub objects: BTreeMap<String, ObjectDef>,
+    /// Origen de cada página de atlas, por ruta (`"art/pack/villas_1.png"`).
+    /// Ver [`Origen`]. Una página sin entrada es desconocida, no exterior.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub origen: BTreeMap<String, Origen>,
 }
 
 impl ArtManifest {
     pub fn from_json(s: &str) -> serde_json::Result<Self> {
         serde_json::from_str(s)
+    }
+
+    /// **De qué pack salió el dibujo de este slot.**
+    ///
+    /// Mira TODAS las páginas que toca la entrada —la del slot y la de cada pose,
+    /// que pueden ser distintas— y devuelve [`Origen::Mixto`] si no coinciden.
+    /// `None` = ninguna de sus páginas está declarada (arte dibujado a mano en
+    /// `art/gen/`, iconos sueltos): no se puede afirmar nada, y quien filtre tiene
+    /// que decidir qué hacer con eso.
+    ///
+    /// Acepta la clave con variante (`"building/casa_chica#3"`) y cae a la clave
+    /// pelada si esa variante no tiene entrada propia.
+    pub fn origen_de(&self, key: &str) -> Option<Origen> {
+        let entrada = self
+            .sprites
+            .get(key)
+            .or_else(|| self.sprites.get(split_variant(key).0))?;
+        let ArtValue::Full(e) = entrada else {
+            return self.origen.get(entrada.png()).copied();
+        };
+        let mut visto: Option<Origen> = None;
+        let paginas = std::iter::once(e.png.as_str()).chain(
+            e.poses
+                .iter()
+                .flat_map(|p| p.values())
+                .filter_map(|p| p.png.as_deref()),
+        );
+        for png in paginas {
+            let Some(&o) = self.origen.get(png) else { continue };
+            match visto {
+                None => visto = Some(o),
+                Some(previo) if previo != o => return Some(Origen::Mixto),
+                Some(_) => {}
+            }
+        }
+        visto
+    }
+
+    /// ¿Este slot se puede plantar a la intemperie? Ver [`Origen`].
+    ///
+    /// Un slot sin origen declarado cuenta como de afuera: lo dibujado a mano
+    /// (`art/gen/`) y lo curado a mano no viene de ningún pack, y tratarlo de
+    /// interior dejaría media ciudad sin arte. Lo que se prohíbe es lo que está
+    /// declarado ADENTRO, que es lo único que se sabe mal puesto.
+    pub fn se_planta_afuera(&self, key: &str) -> bool {
+        !matches!(
+            self.origen_de(key),
+            Some(Origen::Interior) | Some(Origen::Mixto)
+        )
     }
 
     /// JSON legible y ordenado (BTreeMap) → diffs mínimos.

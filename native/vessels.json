@@ -8,7 +8,7 @@
       "orbit_phase": 2.1052256,
       "surface_tz": 0.0,
       "orbit_alt_m": 19600.234,
-      "fuel_pct": 72.865105,
+      "fuel_pct": 100.0,
       "power": {
         "generation_w": 0.0,
         "load_w": 18.0,
@@ -27,7 +27,7 @@
       "label": "ORBITAL STATION",
       "mode": "ParkedOrbit",
       "body": "Earth",
-      "orbit_phase": 0.40724367,
+      "orbit_phase": 0.12799081,
       "surface_tz": 0.0,
       "orbit_alt_m": 600.0,
       "fuel_pct": 100.0,

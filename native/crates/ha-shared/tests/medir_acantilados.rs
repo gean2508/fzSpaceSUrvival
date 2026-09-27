@@ -963,3 +963,191 @@ fn los_niveles_4_a_7_donde_estan() {
         );
     }
 }
+
+/// **¿CUÁNTO MIDE UN PASO, DE ANCHO?** El kit del pack son 4 celdas fijas
+/// —espolón, dos columnas de peldaños, espolón— y el paso del mundo sale de una
+/// franja de ruido dilatada. Antes de colocar el kit hay que saber en cuántos
+/// pasos entra tal cual.
+#[test]
+#[ignore]
+fn ancho_de_los_pasos() {
+    use ha_shared::relief::{canto_de_terraza, relief_cell, relief_level, ReliefCell};
+    let b = CelestialBody::Earth;
+    let mut hist = std::collections::BTreeMap::<i64, u32>::new();
+    for (cx, cz) in [(0i64, 0i64), (1_400, -5_200), (2_400, -1_800), (-6_100, -6_100)] {
+        for tz in cz - 200..cz + 200 {
+            let mut x = cx - 200;
+            while x < cx + 200 {
+                let es = |tx: i64| {
+                    relief_cell(b, tx, tz) == ReliefCell::Ramp && canto_de_terraza(b, tx, tz)
+                };
+                if !es(x) {
+                    x += 1;
+                    continue;
+                }
+                let l = relief_level(b, x, tz);
+                let mut ancho = 0;
+                while es(x + ancho) && relief_level(b, x + ancho, tz) == l {
+                    ancho += 1;
+                }
+                *hist.entry(ancho.min(12)).or_default() += 1;
+                x += ancho;
+            }
+        }
+    }
+    let total: u32 = hist.values().sum();
+    let entran: u32 = hist.iter().filter(|(a, _)| **a >= 4).map(|(_, n)| *n).sum();
+    println!("--- ANCHO DE LOS PASOS (corridas de canto de rampa, 4 ventanas) ---");
+    for (a, n) in &hist {
+        println!("  {a:>2} celdas: {n:5}  ({:.1} %)", 100.0 * *n as f32 / total.max(1) as f32);
+    }
+    println!("total {total} · con 4 celdas o más (donde el kit entra tal cual): {entran} ({:.1} %)",
+        100.0 * entran as f32 / total.max(1) as f32);
+}
+
+/// **¿QUÉ TAN RECTO ES UN CANTO?** Si los bordes de terraza son escaleras, un
+/// kit de 4 celdas de ancho no se puede apoyar en ninguno, sea paso o no.
+#[test]
+#[ignore]
+fn corridas_rectas_de_canto() {
+    use ha_shared::relief::{canto_de_terraza, relief_cell, relief_level, ReliefCell};
+    let b = CelestialBody::Earth;
+    let mut hist = std::collections::BTreeMap::<i64, u32>::new();
+    for (cx, cz) in [(0i64, 0i64), (1_400, -5_200), (2_400, -1_800), (-6_100, -6_100)] {
+        for tz in cz - 200..cz + 200 {
+            let mut x = cx - 200;
+            while x < cx + 200 {
+                let canto = |tx: i64| {
+                    matches!(relief_cell(b, tx, tz), ReliefCell::Cliff | ReliefCell::Ramp)
+                        && canto_de_terraza(b, tx, tz)
+                };
+                if !canto(x) {
+                    x += 1;
+                    continue;
+                }
+                let l = relief_level(b, x, tz);
+                let mut n = 0;
+                while canto(x + n) && relief_level(b, x + n, tz) == l {
+                    n += 1;
+                }
+                *hist.entry(n.min(12)).or_default() += 1;
+                x += n;
+            }
+        }
+    }
+    let total: u32 = hist.values().sum();
+    let rectas: u32 = hist.iter().filter(|(a, _)| **a >= 4).map(|(_, n)| *n).sum();
+    println!("--- CORRIDAS RECTAS DE CANTO (todas, no sólo pasos) ---");
+    for (a, n) in &hist {
+        println!("  {a:>2} celdas: {n:5}  ({:.1} %)", 100.0 * *n as f32 / total.max(1) as f32);
+    }
+    println!("total {total} · de 4 celdas o más: {rectas} ({:.1} %)",
+        100.0 * rectas as f32 / total.max(1) as f32);
+}
+
+/// **¿CUÁNTO SALTA `alto_de_pared` ENTRE DOS CELDAS DE CANTO VECINAS?**
+///
+/// Dos caras sur (o corner_se/corner_sw) que están pegadas —comparten una
+/// arista, la misma corrida de muro— deberían colgar una altura parecida: si
+/// una cuelga 6 pisos y la de al lado cuelga 1, en pantalla eso es un bloque
+/// grande con un mordisco al lado, no una silueta continua. Es la pregunta que
+/// hace falta para saber si "islas en el borde diagonal" es un caso raro (junto
+/// a un paso, donde `meseta_detras` se acorta a propósito) o un problema
+/// sistemático de toda ladera.
+#[test]
+#[ignore]
+fn salto_de_altura_entre_canto_vecino() {
+    use ha_shared::relief::{alto_de_pared, relief_cell, ReliefCell};
+    let b = CelestialBody::Earth;
+    let mut hist = std::collections::BTreeMap::<i64, u32>::new();
+    let mut peores: Vec<(i64, i64, i64, i64, i64)> = Vec::new();
+    for (cx, cz) in [
+        (0i64, 0i64),
+        (1_400, -5_200),
+        (1_763, -5_087),
+        (1_796, -5_097),
+        (2_400, -1_800),
+        (-6_100, -6_100),
+    ] {
+        for tz in cz - 150..cz + 150 {
+            for tx in cx - 150..cx + 150 {
+                if !matches!(relief_cell(b, tx, tz), ReliefCell::Cliff | ReliefCell::Ramp) {
+                    continue;
+                }
+                let alto = alto_de_pared(b, tx, tz);
+                if alto == 0 {
+                    continue;
+                }
+                // Los ocho vecinos de canto que también cuelgan.
+                for (dx, dz) in [(1i64, 0i64), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)] {
+                    let (vx, vz) = (tx + dx, tz + dz);
+                    if !matches!(relief_cell(b, vx, vz), ReliefCell::Cliff | ReliefCell::Ramp) {
+                        continue;
+                    }
+                    let valto = alto_de_pared(b, vx, vz);
+                    if valto == 0 {
+                        continue;
+                    }
+                    let salto = (alto - valto).abs();
+                    *hist.entry(salto.min(10)).or_default() += 1;
+                    if salto >= 3 {
+                        peores.push((tx, tz, alto, vx.wrapping_sub(tx) + vz.wrapping_sub(tz) * 0, valto));
+                    }
+                }
+            }
+        }
+    }
+    let total: u32 = hist.values().sum();
+    println!("--- SALTO DE ALTURA entre canto vecino (|alto_a - alto_b|) ---");
+    for (s, n) in &hist {
+        println!("  salto {s:>2}: {n:6}  ({:.1} %)", 100.0 * *n as f32 / total.max(1) as f32);
+    }
+    println!("pares medidos: {total}");
+    println!("ejemplos con salto >= 3 (hasta 15): ");
+    for (tx, tz, a, _, b2) in peores.iter().take(15) {
+        println!("  ({tx},{tz}) alto={a} vs vecino alto={b2}");
+    }
+}
+
+/// **PROPS PEGADOS AL FILO.** Lo que el usuario marcó: *"estamos colocando
+/// árboles sobre el borde... queda la mitad afuera flotando"*.
+///
+/// Mide dos cosas sobre un barrido de la Tierra:
+///
+/// - cuántas celdas de meseta caen dentro del retiro (`relief::retiro_del_canto`),
+///   que es la superficie plantable que se pierde;
+/// - cuántas de ésas siguen recibiendo decor. Tiene que ser **cero**: el retiro
+///   es una puerta, no una preferencia.
+#[test]
+#[ignore = "herramienta de medición, no un guardián"]
+fn props_pegados_al_filo() {
+    use ha_shared::relief::retiro_del_canto;
+    use ha_shared::worldgen::{nature_decor_at, prop_decor_at, surface_decor_at};
+    let b = CelestialBody::Earth;
+    let (mut alta, mut en_retiro, mut con_decor, mut decor_total) = (0u64, 0u64, 0u64, 0u64);
+    for tz in -600..600 {
+        for tx in -600..600 {
+            let hay = surface_decor_at(b, tx, tz).is_some()
+                || nature_decor_at(b, tx, tz).is_some()
+                || prop_decor_at(b, tx, tz).is_some();
+            if hay {
+                decor_total += 1;
+            }
+            if relief_level(b, tx, tz) <= 0 {
+                continue;
+            }
+            alta += 1;
+            if retiro_del_canto(b, tx, tz) {
+                en_retiro += 1;
+                if hay {
+                    con_decor += 1;
+                }
+            }
+        }
+    }
+    let pct = 100.0 * en_retiro as f64 / alta.max(1) as f64;
+    println!("tierra alta: {alta} celdas · en retiro del filo: {en_retiro} ({pct:.1} %)");
+    println!("decor sembrado en todo el barrido: {decor_total}");
+    println!("decor DENTRO del retiro: {con_decor}");
+    assert_eq!(con_decor, 0, "sigue habiendo props pegados al filo de la meseta");
+}

@@ -47,6 +47,12 @@ use crate::world2d::{ChunkBacklog, ChunkBudget};
 /// Chunks por frame mientras la cortina está abajo. Con el anillo de arranque
 /// (7×7 = 49 chunks) esto lo arma en ~2 segundos en vez de en ~25.
 const LOADING_CHUNK_BUDGET: usize = 12;
+/// El plazo **detrás de la cortina de carga**, mismo criterio que
+/// `universe::DISC_BAKE_MS_LOADING`: acá un fotograma largo no es un tirón sino
+/// trabajo adelantado. Con margen sobre el peor caso de `LOADING_CHUNK_BUDGET`
+/// (12 chunks × ~24 ms medidos) para que, igual que en juego, sea el conteo el
+/// que corte primero en el caso normal.
+const LOADING_CHUNK_MS: f32 = 400.0;
 
 /// Filas del disco del planeta por frame mientras la cortina está abajo. Con las
 /// 32 de siempre, las 512 filas son 16 frames que caen DENTRO del gameplay
@@ -120,7 +126,8 @@ mod tests {
             SMOOTH_GIVEUP_SECS < MAX_SECS,
             "si nunca hay un frame rapido, se entra por el giveup, no por el tope"
         );
-        assert!(LOADING_CHUNK_BUDGET > ChunkBudget::normal());
+        assert!(LOADING_CHUNK_BUDGET > ChunkBudget::normal().count);
+        assert!(LOADING_CHUNK_MS > ChunkBudget::normal().ms);
     }
 
     /// El horneado del disco del planeta cuesta el frame entero mientras dura
@@ -170,13 +177,14 @@ struct ProgressBar;
 struct ProgressText;
 
 fn boost_budget(mut budget: ResMut<ChunkBudget>, mut rows: ResMut<DiscBakeRows>) {
-    budget.0 = LOADING_CHUNK_BUDGET;
+    budget.count = LOADING_CHUNK_BUDGET;
+    budget.ms = LOADING_CHUNK_MS;
     rows.filas = LOADING_DISC_ROWS;
     rows.ms = crate::universe::DISC_BAKE_MS_LOADING;
 }
 
 fn restore_budget(mut budget: ResMut<ChunkBudget>, mut rows: ResMut<DiscBakeRows>) {
-    budget.0 = ChunkBudget::normal();
+    *budget = ChunkBudget::normal();
     *rows = DiscBakeRows::normal();
 }
 

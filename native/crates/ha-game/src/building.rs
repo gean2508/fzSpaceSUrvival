@@ -39,6 +39,14 @@ const ROOF_STREAM_RADIUS: i64 = 56;
 /// Distancia (tiles) a la que una puerta animada se abre.
 const DOOR_OPEN_DIST: f32 = 1.7;
 
+/// **Y a la que se abre la puerta DIBUJADA EN UNA FACHADA.** Más lejos, y no por
+/// gusto: el techo empieza a desvanecerse en cuanto pisás la huella más un tile
+/// (`fade_roofs`), así que con el alcance de una puerta de obra la única franja
+/// donde la puerta estaba abierta Y la fachada todavía opaca medía una décima de
+/// tile — o sea que el batiente no se veía abrir nunca desde la vereda. Con tres
+/// tiles se abre cuando la ves, que es de lo que se trata.
+const PUERTA_FACHADA_DIST: f32 = 3.0;
+
 /// Un techo construido por el jugador (prefab F5) — persiste en `roofs.json`.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct RoofRect {
@@ -173,7 +181,13 @@ impl Plugin for BuildingPlugin {
             .add_systems(Startup, load_roofs_on_startup)
             .add_systems(
                 Update,
-                (stream_roofs, fade_roofs, animate_doors, debounced_roofs_save),
+                (
+                    stream_roofs,
+                    fade_roofs,
+                    animate_doors,
+                    animar_puertas_de_fachada,
+                    debounced_roofs_save,
+                ),
             );
     }
 }
@@ -259,6 +273,253 @@ fn roof_sprite(
     }
     // Fallback: techo plano oscuro (dos tonos para que se lea como techo).
     (Sprite::from_color(Color::srgb(0.36, 0.26, 0.20), size), None)
+}
+
+/// **Los locales que el pack dibujó para la planta baja de un edificio.**
+///
+/// Es lo que hace que una cuadra comercial se lea como una cuadra: cada local es
+/// un rubro distinto, con su vidriera y su cartel, y salen del mismo kit modular
+/// que el resto del edificio, así que encastran sin un pixel de corrimiento.
+pub(crate) const LOCALES: &[&str] = &[
+    "edificio/local",
+    "edificio/tienda_panaderia",
+    "edificio/tienda_carniceria",
+    "edificio/tienda_discos",
+    "edificio/tienda_galletas",
+    "edificio/tienda_juguetes",
+    "edificio/tienda_mascotas",
+    "edificio/tienda_pesca",
+    "edificio/tienda_heladeria",
+    "edificio/tienda_vidriera",
+    "edificio/tienda_cerrada",
+    "edificio/tienda_persiana",
+];
+
+/// Los tres temas de pared del kit, en el orden de la hoja del pack.
+const TEMAS_DE_EDIFICIO: &[&str] = &["ladrillo", "azul", "hormigon"];
+
+/// **La ciudad levanta un edificio del kit modular, del ancho de la parcela.**
+///
+/// El pack dibujó `5_Floor_Modular_Building` para apilarse: bandas de
+/// [`MODULO`](ha_shared::edificio::MODULO) celdas de frente —planta baja, piso,
+/// azotea— que se encadenan a lo ancho y se apilan a lo alto. Hasta hoy ninguna
+/// de esas 343 piezas llegaba al mundo generado, porque `import-edificios.py` le
+/// busca a cada lote UNA fachada entera y en esa carpeta no hay ninguna: lo que
+/// hay son las piezas para hacerlas. La oficina y la torre del centro terminaban
+/// con **el mismo** condominio de `4_Generic_Building`, y la tienda y el shopping
+/// con **el mismo** dibujo de mercado.
+///
+/// Componiendo, el edificio mide lo que mide la parcela y tiene los pisos que le
+/// tocan (`city::pisos_modulares`, sembrado en la esquina del lote), así que una
+/// manzana del centro sale con torres de alturas distintas sin guardar un byte
+/// por edificio. Es el mismo dibujo que ya hace `crate::edificios` para lo que
+/// construye el jugador — se comparten las tablas de piezas y el sorteo.
+///
+/// Devuelve `false` si la parcela no es de las que se componen, para que el
+/// llamador siga por el camino de siempre (una fachada, un sprite).
+#[allow(clippy::too_many_arguments)]
+fn spawn_fachada_apilada(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    art_key: &str,
+    r: &RoofRect,
+    body: CelestialBody,
+    z: i32,
+) -> bool {
+    use ha_shared::edificio::{ALTO_AZOTEA, ALTO_PISO, ALTO_PLANTA_BAJA, MODULO};
+    let Some(pisos) = ha_shared::city::pisos_modulares(art_key, r.min.0, r.min.1) else {
+        return false;
+    };
+    // **Cuántos módulos entran, redondeando para ABAJO.** Las parcelas modulares
+    // están declaradas para que la huella dé un múltiplo exacto (ver
+    // `city::LOTES_MODULARES`), pero `lot_at` recorta el lote a lo que da la
+    // manzana: si la parcela quedó corta, el edificio pierde un módulo antes que
+    // salirse a la vereda.
+    let modulos = (r.w / MODULO).max(1);
+    // Centrado en la huella: lo que sobra queda de vereda a los dos lados.
+    let x0 = r.min.0 + (r.w - modulos * MODULO) / 2;
+    // El tema de pared es del EDIFICIO entero, no de cada banda: un edificio
+    // mitad ladrillo y mitad hormigón no es variedad, es un error de armado.
+    let tema = crate::edificios::variante(TEMAS_DE_EDIFICIO, r.min.0, r.min.1, 0);
+    // La planta baja de un comercio es un LOCAL; la de una torre, una entrada.
+    let plantas_bajas =
+        if art_key.contains("tienda") || art_key.contains("shopping") || art_key.contains("mercado")
+        {
+            LOCALES
+        } else {
+            crate::edificios::PLANTAS_BAJAS
+        };
+    let pie = (r.min.1 + r.h) as f32 * TILE_M;
+    let base = render_xy(0.0, pie);
+    let z_base = crate::layers::fachada(pie);
+    for m in 0..modulos {
+        let mx = x0 + m * MODULO;
+        let mut alto = 0i64;
+        let pila = std::iter::once((plantas_bajas, ALTO_PLANTA_BAJA))
+            .chain((0..pisos as i64).map(|_| (crate::edificios::PISOS, ALTO_PISO)))
+            .chain(std::iter::once((crate::edificios::AZOTEAS, ALTO_AZOTEA)));
+        for (piso, (tabla, celdas)) in pila.enumerate() {
+            let clave = art.resolved_key(
+                crate::edificios::variante(tabla, mx, r.min.1, m as usize + piso),
+                Some(tema),
+            );
+            // **Una celda del pack por TILE.** Es una banda que embaldosa a lo
+            // largo del frente, igual que una pared: con la escala de objeto
+            // (0,95 m/celda) un módulo de 9 mediría 8,55 m sobre 9 tiles y cada
+            // edificio se montaría medio metro sobre su vecino.
+            let size = art.medida_de_obra(
+                &clave,
+                None,
+                Vec2::new(MODULO as f32 * TILE_M, celdas as f32 * TILE_M),
+            );
+            commands.spawn((
+                BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+                art.sprite_or_color(&clave, crate::edificios::color_de_respaldo(piso), size),
+                Transform::from_xyz(
+                    base.x + (mx as f32 + MODULO as f32 * 0.5) * TILE_M,
+                    base.y + alto as f32 * TILE_M + size.y * 0.5,
+                    // **El de arriba, un pelo por detrás.** Las bandas se dibujan
+                    // apiladas sobre el mismo pie, así que su orden entre hermanas
+                    // no lo puede decidir el Y-sort: lo decide este épsilon, mucho
+                    // más chico que lo que separa a dos edificios vecinos.
+                    z_base + (piso as f32) * 1.0e-6,
+                ),
+            ));
+            alto += celdas;
+        }
+    }
+    true
+}
+
+/// **La casa que crece de a módulos.**
+///
+/// El pack dibuja las casas en hilera como un KIT: un `tramo` de 10 celdas que se
+/// repite y un `remate` de 12 que cierra la fila por la derecha con su pared de
+/// costado (`scripts/import-casas.py` los mide y los publica como poses del
+/// slot). Componer con eso es lo que hace que una fachada mida **exactamente** lo
+/// que mide la casa que generó la ciudad, en vez de estirarse hasta 1,4× o
+/// quedarse corta y dejar el piso de adentro asomando por los costados.
+///
+/// Devuelve `(tramo, remate)` en CELDAS del pack, o `None` si este slot no es un
+/// kit y se dibuja como siempre (una fachada entera, un sprite).
+fn kit_de_hilera(art: &ArtLibrary, key: &str) -> Option<Kit> {
+    // **Se pregunta si la pose EXISTE, no cuánto mide.** `celdas_de` cae al
+    // tamaño del slot cuando la pose falta —es lo correcto para quien sólo quiere
+    // una medida—, así que preguntando por la medida TODA fachada contestaba que
+    // era un kit, entraba por este camino, no encontraba `remate` que dibujar y
+    // el barrio entero se quedaba sin techos: se veía el piso y los muebles de
+    // cada casa desde la vereda.
+    if !art.has_pose(key, "tramo") || !art.has_pose(key, "remate") {
+        return None;
+    }
+    let tramo = art.celdas_de(key, Some("tramo"))?;
+    let remate = art.celdas_de(key, Some("remate"))?;
+    if tramo.x <= 0.0 || remate.x <= 0.0 {
+        return None;
+    }
+    // **El PASO no es el ancho.** Los módulos del pack traen medio sangrado por
+    // lado: pegados al ras dejan una ranura de una celda por la que se ve el
+    // pasto. Cuánto se pisan lo mide `import-casas.py` y lo publica como una pose
+    // en píxeles; sin ella se avanza el ancho entero, que es el comportamiento
+    // viejo y se nota.
+    let paso = |n| art.has_pose(key, n).then(|| art.celdas_de(key, Some(n))).flatten().map(|v| v.x);
+    Some(Kit {
+        tramo,
+        remate,
+        paso_tramo: paso("paso_tramo").unwrap_or(tramo.x),
+        paso_remate: paso("paso_remate").unwrap_or(remate.x),
+    })
+}
+
+/// El kit ya resuelto: medidas del módulo y del remate, y cuánto avanza cada uno.
+#[derive(Clone, Copy)]
+struct Kit {
+    /// Celdas del pack que mide el módulo repetible.
+    tramo: Vec2,
+    /// Celdas que mide el que cierra la fila.
+    remate: Vec2,
+    /// Celdas que hay que avanzar tras poner un módulo (ancho menos la solapa).
+    paso_tramo: f32,
+    paso_remate: f32,
+}
+
+/// Una pieza ya ubicada de una fachada compuesta.
+struct Pieza {
+    /// Pose del slot que se dibuja (`tramo` / `remate`).
+    pose: &'static str,
+    /// Borde izquierdo y derecho en el mundo, en metros.
+    x0: f32,
+    x1: f32,
+    /// Alto dibujado, en metros.
+    alto: f32,
+    /// Franja horizontal del recorte que entra (`[u0, u1]`).
+    u0: f32,
+    u1: f32,
+    /// Cuánto se estiró el dibujo para que su paso mida una vivienda. Lo necesita
+    /// la puerta: su sitio está medido en píxeles del recorte, así que hay que
+    /// llevarlo a la misma escala o cae donde estaría sin estirar.
+    escala: f32,
+}
+
+/// **Un módulo por VIVIENDA**, de derecha a izquierda.
+///
+/// La hilera no se reparte libre a lo ancho de la casa: el sim ya la partió en
+/// viviendas de `city::ANCHO_DE_HILERA` tiles, cada una con su puerta y su
+/// interior, y acá se le dibuja **una fachada a cada una**. Antes se repartía por
+/// el ancho del dibujo y salían tres fachadas apoyadas sobre un único caserón —
+/// "estás colocando dos casas como si fuera una", y era literal.
+///
+/// De derecha a izquierda porque el remate es el que trae la pared de costado: la
+/// hilera termina donde termina la casa.
+///
+/// Cada módulo se dibuja de modo que su **paso** (el ancho útil, sin el sangrado
+/// que se pisa con el vecino) mida exactamente una vivienda; lo que sobra se
+/// monta sobre el módulo de al lado, que es como el pack los encadena.
+fn repartir_hilera(kit: Kit, x0: f32, x1: f32, unidad: f32) -> Vec<Pieza> {
+    let mut out = Vec::new();
+    let n = ((x1 - x0) / unidad).round().max(1.0) as usize;
+    for k in 0..n.min(24) {
+        let (pose, celdas, paso) = if k == 0 {
+            ("remate", kit.remate, kit.paso_remate)
+        } else {
+            ("tramo", kit.tramo, kit.paso_tramo)
+        };
+        if paso <= 0.01 || celdas.x <= 0.01 {
+            break;
+        }
+        // La vivienda k-ésima contando desde la derecha.
+        let der = x1 - k as f32 * unidad;
+        let izq = der - unidad;
+        // El dibujo se estira de `paso` a una vivienda; el resto de la pieza
+        // (el sangrado) sale por la derecha y se monta sobre su vecina.
+        let escala = unidad / (paso * crate::art2d::ESCALA_ARTE * TILE_M);
+        let ancho = celdas.x * crate::art2d::ESCALA_ARTE * TILE_M * escala;
+        let alto = celdas.y * crate::art2d::ESCALA_ARTE * TILE_M * escala;
+        out.push(Pieza { pose, x0: izq, x1: izq + ancho, alto, u0: 0.0, u1: 1.0, escala });
+    }
+    out
+}
+
+/// **La puerta ANIMADA de una fachada**, dibujada encima del paño en el pixel
+/// exacto donde el pack la dibujó cerrada.
+///
+/// No reusa `DoorArt` por una razón concreta: aquélla es la puerta de una CELDA
+/// del mundo y se dibuja alta y apoyada (`door_render_size`), que es lo correcto
+/// para un vano de obra y lo que arruinaría el calce acá — el batiente tiene que
+/// medir lo que mide en la fachada o se ve montado. Y la clave es dinámica
+/// (`building/casa_hilera#3`), no un `&'static str`.
+#[derive(Component)]
+pub struct PuertaDeFachada {
+    /// Slot de la fachada: de ahí salen `closed`/`opening`/`open`/`closing`.
+    pub art: String,
+    /// Celda del mundo bajo la puerta, para medirle la cercanía al jugador.
+    pub tx: i64,
+    pub tz: i64,
+    pub open: bool,
+    /// Segundos que le quedan a la transición en curso.
+    pub t: f32,
+    /// Tamaño con el que se dibuja, en metros.
+    pub size: Vec2,
 }
 
 /// Spawn/despawn de techos cerca del jugador: sitios generados (deterministas,
@@ -360,7 +621,25 @@ fn stream_roofs(
         // entero —el 60 % de la ciudad— era la misma casa fotocopiada.
         let clave = art_key.map(|k| art.variant_key_seeded(k, crate::world2d::celda_semilla(r.min.0, r.min.1)));
         let huella = Vec2::new(r.w as f32 * TILE_M, r.h as f32 * TILE_M);
+        // **La casa MODULAR se compone; la entera se dibuja de una.** Ver
+        // `kit_de_hilera`: cuando el slot trae `tramo` y `remate`, la fachada se
+        // arma del ancho exacto de la huella y no se estira ni un pixel.
+        if let Some(kit) = clave.as_deref().and_then(|k| kit_de_hilera(&art, k)) {
+            spawn_fachada_modular(&mut commands, &art, clave.as_deref().unwrap(), &r, body, z, kit);
+            continue;
+        }
+        // **Y el edificio que se APILA.** El centro y el comercio no tienen una
+        // fachada dibujada entera: tienen el kit de bandas de 9 celdas con el que
+        // se arma una torre del ancho y la altura que pida la parcela. Se prueba
+        // con la clave del LOTE (no con la variante ya resuelta) porque la tabla
+        // que decide esto es la de `city`, que habla de lotes.
+        if let Some(k) = art_key {
+            if spawn_fachada_apilada(&mut commands, &art, k, &r, body, z) {
+                continue;
+            }
+        }
         let (size, sube) = roof_layout(&art, clave.as_deref(), huella);
+        let z_frente_mundo = (r.min.1 + r.h) as f32 * TILE_M;
         let cx = r.min.0 as f32 * TILE_M + huella.x * 0.5;
         let cz = r.min.1 as f32 * TILE_M + huella.y * 0.5;
         let pos = render_xy(cx, cz);
@@ -371,13 +650,213 @@ fn stream_roofs(
         let mut ent = commands.spawn((
             BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
             sprite,
-            // Banda de techos: encima de todo el mundo Y-sorted y del ghost de
-            // build (5.7). Ver `crate::layers` para la escalera completa.
-            Transform::from_xyz(pos.x, pos.y, crate::layers::OVERHEAD),
+            // Banda de caras exteriores, Y-sorteada por el pie de la casa: la de
+            // más al sur tapa a la de atrás. Ver `crate::layers`.
+            Transform::from_xyz(pos.x, pos.y, crate::layers::fachada(z_frente_mundo)),
         ));
         if let Some(a) = anim {
             ent.insert(a);
         }
+        // **Y su puerta, si el pack la dibujó animada.** Vale para las casas
+        // ENTERAS igual que para la hilera: `import-casas.py` mide dónde está el
+        // batiente dentro del recorte y lo publica en `puerta_en_sprite`. Sin
+        // esto, media docena de tiras de puerta compradas se quedaban sin usar y
+        // las casas del barrio tenían la puerta pintada y nada más.
+        if let Some(clave) = clave.as_deref() {
+            spawn_puerta_de_fachada(&mut commands, &art, clave, &r, body, z, pos, size);
+        }
+    }
+}
+
+/// **La puerta animada de una fachada que se dibuja de UN sprite.**
+///
+/// La hilera compone su fachada de a módulos y ubica la puerta dentro de cada
+/// uno; una casa entera no tiene módulos, así que el sitio lo dice el propio slot:
+/// la pose `puerta_en_sprite`, con `grid: [1, 1]`, trae en píxeles el
+/// desplazamiento del batiente desde la esquina del recorte y su tamaño.
+///
+/// El único cuidado es la ESCALA: `roof_layout` dibuja la fachada al ancho de la
+/// huella (hasta [`AGRANDE_MAX`]), así que el offset hay que llevarlo a la misma
+/// escala con la que se dibujó el paño — si no, la puerta cae donde estaría si la
+/// casa midiera lo que mide su pixel.
+#[allow(clippy::too_many_arguments)]
+fn spawn_puerta_de_fachada(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    clave: &str,
+    r: &RoofRect,
+    body: CelestialBody,
+    z: i32,
+    centro: Vec2,
+    size: Vec2,
+) {
+    let z_frente = (r.min.1 + r.h) as f32 * TILE_M;
+    let Some((puerta, _)) = art.pose(clave, "puerta_en_sprite") else { return };
+    let Some(celdas) = art.celdas_de(clave, None) else { return };
+    if celdas.x <= 0.0 {
+        return;
+    }
+    // Metros de mundo por pixel del dibujo, tal como quedó dibujado este paño.
+    let escala = size.x / (celdas.x * 32.0);
+    let (dx, dy) = (puerta[0] as f32 * escala, puerta[1] as f32 * escala);
+    let (pw, ph) = (puerta[2] as f32 * escala, puerta[3] as f32 * escala);
+    let izq = centro.x - size.x * 0.5;
+    let arriba = centro.y + size.y * 0.5;
+    let (cx, cy) = (izq + dx + pw * 0.5, arriba - dy - ph * 0.5);
+    let tam = Vec2::new(pw, ph);
+    let Some(sp) = art.pose_sprite(clave, "closed", tam) else { return };
+    commands.spawn((
+        BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+        PuertaDeFachada {
+            art: clave.to_string(),
+            tx: (cx / TILE_M).floor() as i64,
+            tz: r.min.1 + r.h - 1,
+            open: false,
+            t: 0.0,
+            size: tam,
+        },
+        sp,
+        Transform::from_xyz(cx, cy, crate::layers::fachada(z_frente) + 1.0e-5),
+    ));
+}
+
+/// **Planta la fachada de una casa en hilera**: un sprite por módulo, más su
+/// puerta animada encima.
+///
+/// Cada módulo lleva su propio [`BuildingRoof`] con el rect de la casa entera:
+/// así `fade_roofs` los desvanece a todos juntos al entrar —es una sola casa— y
+/// el streaming los da de baja de una, porque comparten la esquina con la que se
+/// deduplican.
+#[allow(clippy::too_many_arguments)]
+fn spawn_fachada_modular(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    clave: &str,
+    r: &RoofRect,
+    body: CelestialBody,
+    z: i32,
+    kit: Kit,
+) {
+    let x0 = r.min.0 as f32 * TILE_M;
+    let x1 = (r.min.0 + r.w) as f32 * TILE_M;
+    // El pie de la fachada va en el borde de ADELANTE de la huella y el dibujo
+    // crece hacia arriba: es la misma regla que `roof_layout` (el pie va donde
+    // está la cosa; lo que sube es la altura del edificio, no su suelo).
+    let z_frente = (r.min.1 + r.h) as f32 * TILE_M;
+    let y_pie = render_xy(0.0, z_frente).y;
+    // **La cara exterior Y-SORTEA por su pie.** Una fachada mide catorce tiles de
+    // alto sobre una huella de diez, así que SIEMPRE se mete sobre el terreno del
+    // vecino de atrás: si todas comparten una z plana, cuál tapa a cuál lo decide
+    // el orden en que se spawnearon, y aparece media pared ajena flotando encima
+    // de la casa. La banda `layers::fachada` existe justo para eso — la de más al
+    // sur va adelante, como cualquier cosa del mundo.
+    let z_base = crate::layers::fachada(z_frente);
+    // **Y el de la derecha va encima.** Los módulos se pisan una celda (la solapa
+    // medida) y el pack los dibujó para encadenarse de izquierda a derecha: cada
+    // uno tapa el sangrado del anterior. Como se reparten de derecha a izquierda,
+    // el z baja un pelo por módulo — un pelo de verdad, mucho más chico que lo que
+    // separa a dos casas vecinas, para no saltar por encima de ninguna.
+    let unidad = ha_shared::city::ANCHO_DE_HILERA as f32 * TILE_M;
+    for (idx, pieza) in repartir_hilera(kit, x0, x1, unidad).into_iter().enumerate() {
+        let z_pieza = z_base - idx as f32 * 1.0e-6;
+        let ancho = pieza.x1 - pieza.x0;
+        let size = Vec2::new(ancho, pieza.alto);
+        let Some(sprite) =
+            art.pose_sprite_slice(clave, pieza.pose, size, [pieza.u0, 0.0, pieza.u1, 1.0])
+        else {
+            continue;
+        };
+        let cx = (pieza.x0 + pieza.x1) * 0.5;
+        commands.spawn((
+            BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+            sprite,
+            Transform::from_xyz(cx, y_pie + pieza.alto * 0.5, z_pieza),
+        ));
+        // La puerta del módulo, si el pack la dibujó y el importador la midió.
+        // El sitio viaja en una pose con `grid: [1,1]`, o sea en PÍXELES de la
+        // página: restándole el origen de la pieza sale el offset exacto.
+        let sitio = if pieza.pose == "remate" { "puerta_en_remate" } else { "puerta_en_tramo" };
+        let Some((rect_puerta, _)) = art.pose(clave, sitio) else { continue };
+        // El rect de esa pose viene con `grid: [1, 1]`, o sea EN PÍXELES, y su
+        // esquina es un desplazamiento desde la esquina de la pieza.
+        let celda_m = crate::art2d::ESCALA_ARTE * TILE_M * pieza.escala;
+        let dx = rect_puerta[0] as f32 / 32.0 * celda_m;
+        let dy = rect_puerta[1] as f32 / 32.0 * celda_m;
+        let pw = rect_puerta[2] as f32 / 32.0 * celda_m;
+        let ph = rect_puerta[3] as f32 / 32.0 * celda_m;
+        // Recortada por la izquierda, la puerta del módulo del borde puede quedar
+        // fuera de lo que se ve: entonces no se dibuja.
+        let px = pieza.x0 + dx;
+        let size_p = Vec2::new(pw, ph);
+        let Some(sp) = art.pose_sprite(clave, "closed", size_p) else { continue };
+        // El pie de la puerta: `dy` se mide desde ARRIBA del recorte de la pieza.
+        let y_puerta = y_pie + pieza.alto - dy - ph * 0.5;
+        let tx = (px + pw * 0.5) / TILE_M;
+        commands.spawn((
+            BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+            PuertaDeFachada {
+                art: clave.to_string(),
+                tx: tx.floor() as i64,
+                tz: r.min.1 + r.h - 1,
+                open: false,
+                t: 0.0,
+                size: size_p,
+            },
+            sp,
+            // Un pelo por delante de SU paño: es la misma banda de techos, así
+            // que el orden entre hermanos lo decide este épsilon y nada más.
+            Transform::from_xyz(px + pw * 0.5, y_puerta, z_pieza + 0.001),
+        ));
+    }
+}
+
+/// La puerta dibujada en una fachada se abre al acercarte, como cualquier otra.
+///
+/// Es el gemelo de [`animate_doors`] para las puertas que viven DENTRO de un
+/// sprite de fachada: mismo ciclo de estados y misma fuente de poses, pero
+/// conservando el tamaño con el que se plantó (ver [`PuertaDeFachada`]).
+fn animar_puertas_de_fachada(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<ArtLibrary>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+    player: Query<&Transform, With<Player>>,
+    mut puertas: Query<(Entity, &mut PuertaDeFachada, &mut Sprite)>,
+) {
+    let Ok(player_tf) = player.get_single() else { return };
+    let dt = time.delta_secs();
+    let ptx = player_tf.translation.x / TILE_M;
+    let ptz = -player_tf.translation.y / TILE_M;
+    for (ent, mut p, mut sprite) in &mut puertas {
+        let size = p.size;
+        let key = p.art.clone();
+        if p.t > 0.0 {
+            p.t -= dt;
+            if p.t <= 0.0 {
+                p.t = 0.0;
+                let rest: &[&str] = if p.open { &["open"] } else { &["closed"] };
+                set_door_pose(&mut commands, ent, &art, &key, rest, &mut sprite, size);
+            }
+            continue;
+        }
+        let dx = ptx - (p.tx as f32 + 0.5);
+        let dz = ptz - (p.tz as f32 + 0.5);
+        let cerca = (dx * dx + dz * dz).sqrt() < PUERTA_FACHADA_DIST;
+        if cerca == p.open {
+            continue;
+        }
+        p.open = cerca;
+        sfx.send(crate::audio::PlaySfxAt(
+            if cerca { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
+            render_xy((p.tx as f32 + 0.5) * TILE_M, (p.tz as f32 + 0.5) * TILE_M),
+        ));
+        let transicion: &[&'static str] = if cerca { &["opening"] } else { &["closing"] };
+        let (pose, secs) = match door_transition(&art, &key, transicion) {
+            Some((po, s)) => (po, s),
+            None => (if cerca { "open" } else { "closed" }, 0.0),
+        };
+        p.t = secs;
+        set_door_pose(&mut commands, ent, &art, &key, &[pose], &mut sprite, size);
     }
 }
 

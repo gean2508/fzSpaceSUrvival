@@ -76,6 +76,20 @@ TEMAS = {
 # Frases hechas: se resuelven ANTES que las palabras sueltas. Clave en minúsculas
 # con guiones bajos, tal como viene del nombre de archivo.
 FRASES = {
+    # — LAS CASAS DEL PACK. Sin estas frases el traductor palabra-por-palabra
+    #   parte los nombres compuestos por donde no van, y tres de las casas de
+    #   `24_Additional_Houses` quedaron con un nombre que no dice qué son:
+    #
+    #     Post_Apocalyptic_House   → "poste casa apocaliptico"  ("post" = poste)
+    #     One_Story_House          → "planta casa de uno"       ("story" = planta)
+    #     Haunted_House_No_Lantern → "casa no farol embrujada"  ("no" suelto)
+    #     Country_House_No_Banisters → "casa no barandas de campo"
+    #
+    #   El primero no era sólo feo: `import-edificios.py::MARCAS_DE_PIEZA`
+    #   descarta todo lo que se llame `poste` —y hace bien, un poste no es una
+    #   fachada—, así que las DOS casas postapocalípticas del pack no llegaban
+    #   nunca al mundo. Un nombre mal traducido cuesta arte.
+    "roof_styling_piece": "pieza de techo",
     "trash_can": "tacho de basura",
     "trash_bin": "tacho de basura",
     "trash_bag": "bolsa de basura",
@@ -200,6 +214,7 @@ FRASES = {
     "watch_tower": "torre de vigilancia",
     "control_tower": "torre de control",
     "solar_panel": "panel solar",
+    "solar_panels": "paneles solares",
     "wind_turbine": "turbina eólica",
     "water_tank": "tanque de agua",
     "street_sign": "cartel de calle",
@@ -500,6 +515,26 @@ ADJETIVOS = {
     "four": ("de cuatro", "de cuatro"), "violet": ("violeta", "violeta"),
     "bordeaux": ("bordó", "bordó"), "lightblue": ("celeste", "celeste"),
     "colours": ("de colores", "de colores"),
+}
+
+# **Adjetivos de VARIAS palabras.** Van acá y no en `FRASES` porque su lugar en
+# la frase es distinto: un adjetivo va DETRÁS del sustantivo, y `FRASES` mete lo
+# que traduce en el núcleo. Puesto en `FRASES`, `Post_Apocalyptic_House` salía
+# "postapocalíptico casa" en vez de "casa postapocalíptica".
+#
+# Mismo formato que `ADJETIVOS`: (masculino, femenino), para concordar con el
+# género del núcleo.
+FRASES_ADJETIVAS = {
+    "post_apocalyptic": ("postapocalíptico", "postapocalíptica"),
+    "one_story": ("de una planta", "de una planta"),
+    "two_story": ("de dos plantas", "de dos plantas"),
+    "no_lantern": ("sin farol", "sin farol"),
+    "no_lanterns": ("sin faroles", "sin faroles"),
+    "no_banisters": ("sin barandas", "sin barandas"),
+    "no_banister": ("sin baranda", "sin baranda"),
+    "no_propeller": ("sin hélice", "sin hélice"),
+    "side_view": ("de costado", "de costado"),
+    "side_entrance": ("con entrada lateral", "con entrada lateral"),
 }
 
 # Sufijos de orientación/parte: describen QUÉ PEDAZO es, así que van al final

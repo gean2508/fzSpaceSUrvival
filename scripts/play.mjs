@@ -7,10 +7,12 @@
  *        npm run play -- --skip-tests  (build APK but skip test gates — evita OOM en PCs de poca RAM)
  *        npm run play -- --host 100.x.y.z  (bake this server host into the APK —
  *            e.g. a Tailscale IP so the phone can DOWNLOAD + PLAY from OUTSIDE the LAN)
+ *        npm run play -- --sin-pc     (no tocar el juego instalado en esta PC)
  */
 import { execSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 /** Puertos que ocupa el juego: el servidor Colyseus y la landing de Vite. */
@@ -78,6 +80,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const noShip = args.includes("--no-ship");
 const skipTests = args.includes("--skip-tests");
+// El juego instalado en ESTA PC (`npm run instalar:pc`) se actualiza junto con
+// el APK, salvo que se pida lo contrario.
+const sinPc = args.includes("--sin-pc");
 // Optional explicit server host baked into the APK (e.g. a Tailscale IP so the
 // phone downloads + plays from OUTSIDE the LAN): `npm run play -- --host 100.x.y.z`.
 // The dev server + landing bind ALL interfaces (vite host:true, colyseus 0.0.0.0),
@@ -121,6 +126,37 @@ if (!noShip || !apkOk) {
   }
 } else {
   console.log("⊘ Skip ship — APK en client/public/downloads/ OK");
+}
+
+// ── El juego instalado en ESTA PC ────────────────────────────────────────────
+//
+// Publicar el APK y dejar la PC con el build de la semana pasada es la forma más
+// fácil de mirar un bug que ya estaba arreglado. Así que la misma corrida que
+// publica para el celu deja al día lo instalado acá.
+//
+// **Sólo actualiza lo que YA está instalado**: si nunca corriste
+// `npm run instalar:pc`, esto no instala nada por su cuenta ni compila el
+// binario de escritorio (que es un release aparte del de Android).
+const BIN_PC = join(homedir(), ".local/share/ki-mundo-abierto/bin/ha-game");
+if (sinPc) {
+  console.log("\n⊘ Skip PC — no toco el juego instalado en esta máquina (--sin-pc)");
+} else if (!existsSync(BIN_PC)) {
+  console.log(
+    "\n⊘ El juego no está instalado en esta PC.\n" +
+      "  Si lo querés en la bandeja de aplicaciones:  npm run instalar:pc",
+  );
+} else {
+  console.log("\n▶ Actualizando el juego instalado en esta PC…");
+  try {
+    execSync("bash scripts/instalar-en-la-pc.sh", { cwd: ROOT, stdio: "inherit" });
+  } catch {
+    // Que no se lleve puesta la publicación: el APK ya está, y el servidor y la
+    // landing son justo lo que hace falta para mirar por qué falló.
+    console.error(
+      "\n⚠ No pude actualizar el juego de esta PC — el APK publicado no se toca.\n" +
+        "  Reintentá a mano con:  npm run instalar:pc",
+    );
+  }
 }
 
 console.log("\n▶ Levantando servidor + landing…");
@@ -172,15 +208,26 @@ for (const [nombre, hijo] of [
 }
 
 setTimeout(() => {
+  // **Las DOS puertas, siempre.** La landing y el servidor escuchan en todas las
+  // interfaces (vite `host:true`, colyseus `0.0.0.0`), así que la misma corrida
+  // se alcanza por la WiFi de casa Y por el tailnet. Antes el cartel nombraba una
+  // sola —la que se hubiera horneado en el APK— y si esa no era la buena parecía
+  // que "el servidor no anda", cuando lo que fallaba era la dirección.
+  const tailnet = execSync("node scripts/detect-lan-ip.mjs --tailscale", {
+    cwd: ROOT,
+    encoding: "utf8",
+  }).trim();
+  const linea = (etiqueta, ip) =>
+    `║  ${etiqueta.padEnd(10)} http://${ip}:5173`;
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║  HUNGER ARENA — listo para jugar                         ║
+║  KI · MUNDO ABIERTO — listo para jugar                   ║
 ╠══════════════════════════════════════════════════════════╣
-║  1. Celular en la misma WiFi que esta PC                 ║
-║  2. Abrí en Chrome:                                      ║
-║     → http://${lanHost}:5173
-║  3. Tocá DESCARGAR APK → instalá → abrí                  ║
+║  1. Abrí una de estas en el Chrome del celu:             ║
+${linea("WiFi:", lanHost)}
+${tailnet ? linea("Tailscale:", tailnet) + "\n" : ""}║  2. Tocá DESCARGAR APK → instalá → abrí                  ║
 ║                                                          ║
+║  El APK habla con  ${lanHost}  (horneado al compilar)
 ║  APK directo: http://${lanHost}:5173/downloads/hunger-arena.apk
 ╚══════════════════════════════════════════════════════════╝
 `);

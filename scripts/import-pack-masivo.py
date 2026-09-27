@@ -72,6 +72,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pack_lexico import (  # noqa: E402
     ADJETIVOS,
     FRASES,
+    FRASES_ADJETIVAS,
     PALABRAS,
     PARTES,
     RUIDO,
@@ -322,6 +323,13 @@ def castellano(familia, tema, tema_es, indice):
     # Frases hechas primero: "Trash_Can" es un tacho, no una lata de basura. Se
     # exige borde de palabra o `solar_panels` se come a `solar_panel` y deja la
     # `s` colgando fuera de la frase ("panel solar»s").
+    #
+    # Las adjetivas van ANTES que las de núcleo (son más largas y más
+    # específicas: `no_banisters` tiene que ganarle a `banisters`) y se marcan
+    # distinto —`‹m|f›`— porque su lugar en la frase es otro: detrás del
+    # sustantivo, concordando. Ver `pack_lexico::FRASES_ADJETIVAS`.
+    for frase, (m, f) in sorted(FRASES_ADJETIVAS.items(), key=lambda kv: -len(kv[0])):
+        low = re.sub(rf"(?<![a-z]){re.escape(frase)}(?![a-z])", f"‹{m}|{f}›", low)
     for frase, es in sorted(FRASES.items(), key=lambda kv: -len(kv[0])):
         low = re.sub(rf"(?<![a-z]){re.escape(frase)}(?![a-z])", f"«{es}»", low)
     piezas = re.split(r"_+", low)
@@ -329,7 +337,9 @@ def castellano(familia, tema, tema_es, indice):
     for p in piezas:
         if not p or p in RUIDO or p.isdigit():
             continue
-        if p.startswith("«"):
+        if p.startswith("‹"):
+            adjetivos.append(tuple(p.strip("‹›").split("|")))
+        elif p.startswith("«"):
             nucleo.append(p.strip("«»"))
         elif p in ADJETIVOS:
             adjetivos.append(ADJETIVOS[p])
@@ -405,9 +415,36 @@ CARPETA_POR_PALABRA = [
 ]
 
 
+#: **Carpetas que son DE AFUERA.** Un objeto de Modern Interiors no puede caer en
+#: ninguna de éstas, dijera lo que dijera su nombre de archivo.
+#:
+#: `CARPETA_POR_PALABRA` manda sobre el tema, y eso está bien para los exteriores
+#: (un árbol del cementerio sigue siendo flora) — pero aplicado a los interiores
+#: mandaba el pack de adentro para afuera, porque el pack de interiores usa esas
+#: mismas palabras para otra cosa:
+#:
+#:     Clothing_Store  → "store"   → building/tienda_de_ropa_11   (una PERCHA)
+#:     Grocery_Store   → "store"   → building/almacen_1           (una GÓNDOLA)
+#:     Ice_Cream_Shop  → "shop"    → building/heladeria_1         (un MOSTRADOR)
+#:     Bathroom        → "wall"    → fence/…                      (un AZULEJO)
+#:     Living_Room     → "plant"   → nature/…                     (una MACETA)
+#:
+#: Los tres primeros no quedaron en el catálogo y ya está: `building/heladeria_1`
+#: llegó a ser un LOTE de la ciudad (`city::LOT_PROGRAMS`), o sea que el generador
+#: plantaba un mostrador de heladería de 2×3 celdas en una parcela de la avenida
+#: como si fuera el local. Y los `nature/*` de interior entran a las tablas de
+#: siembra, que es como una maceta de living termina creciendo en el bosque.
+#:
+#: La regla es de una línea y no admite excepción: **lo de adentro se queda
+#: adentro.** Lo cuida el test `nada_de_interiores_en_las_carpetas_de_afuera`.
+CARPETAS_DE_AFUERA = ("nature", "agua", "vehicle", "fence", "building", "floor", "prop")
+
+
 def carpeta(kind, tema, familia):
     low = familia.lower()
     for destino, palabras in CARPETA_POR_PALABRA:
+        if kind != "ext" and destino in CARPETAS_DE_AFUERA:
+            continue
         if any(re.search(rf"(^|_){re.escape(p)}(_|$)", low) for p in palabras):
             return destino
     return CARPETA_POR_TEMA.get(tema, CARPETA_INTERIOR) if kind == "ext" else CARPETA_INTERIOR
@@ -576,6 +613,53 @@ def tandas_por_silueta(miembros):
     return tandas
 
 
+def pegadas(alfa, ancho, alto, celda, d):
+    """**¿El dibujo SIGUE de esta celda a la vecina?**
+
+    Es la diferencia entre dos tajadas de un mismo edificio y dos edificios
+    dibujados uno al lado del otro en la hoja, y el pack no la dice por ningún
+    otro lado: las piezas de un condominio comparten el borde con la pared
+    continuada —el techo cruza de una celda a la siguiente sin un pixel de
+    aire—, mientras que dos casas enteras vecinas están separadas por la calle
+    de transparencia que el autor dejó entre ellas.
+
+    Se mide en la propia hoja: en la línea de contacto tiene que haber alguna
+    fila (o columna) donde los dos píxeles enfrentados estén dibujados. Si en
+    todo el borde hay aire de un lado, no se tocan y son dos objetos.
+
+    ## Por qué existe
+
+    La vecindad era la de la GRILLA: dos celdas ocupadas que se tocan iban al
+    mismo grupo, y el grupo entero se recortaba como UN objeto. En
+    `24_Additional_Houses` eso pegó `Terraced_House_1` y `Terraced_House_2` —dos
+    casas de 12×15 completas, con 22 columnas de transparencia entre medio— en
+    un recorte de 24×15, y ese recorte se convirtió en el arte de
+    `building/casa_country` y de `building/casa_grande#17`. O sea: **el mapa
+    plantaba dos casas en la parcela de una**, con la mitad del dibujo colgando
+    fuera de su terreno. Lo mismo con `Modern_House` (23×14) contra su vecina y
+    con media docena más.
+
+    El tope de "un bloque de más de 24 celdas no es un objeto" que había no lo
+    cazaba: 24 no es *más* de 24, y aunque lo fuera, el problema no es el tamaño
+    —hay edificios legítimos de 24— sino que el criterio no miraba el dibujo.
+    """
+    c, r = celda
+    if d[0] != 0:
+        # Contacto vertical: la última columna de una contra la primera de la otra.
+        x0 = (c + 1) * CELL - 1 if d[0] > 0 else c * CELL
+        x1 = x0 + 1 if d[0] > 0 else x0 - 1
+        if not (0 <= x0 < ancho and 0 <= x1 < ancho):
+            return False
+        y_ini, y_fin = r * CELL, min((r + 1) * CELL, alto)
+        return any(alfa[x0, y] and alfa[x1, y] for y in range(y_ini, y_fin))
+    y0 = (r + 1) * CELL - 1 if d[1] > 0 else r * CELL
+    y1 = y0 + 1 if d[1] > 0 else y0 - 1
+    if not (0 <= y0 < alto and 0 <= y1 < alto):
+        return False
+    x_ini, x_fin = c * CELL, min((c + 1) * CELL, ancho)
+    return any(alfa[x, y0] and alfa[x, y1] for x in range(x_ini, x_fin))
+
+
 def componer(miembros, pos, hoja_im, kind):
     """Parte una familia en objetos.
 
@@ -613,7 +697,11 @@ def componer(miembros, pos, hoja_im, kind):
             for r in range(row, row + h):
                 ocupa[(c, r)] = m["file"]
 
-    # Componentes conexas (4-vecinos) sobre las celdas que ocupa la familia.
+    # Componentes conexas sobre las celdas que ocupa la familia — pero la
+    # vecindad NO es "estas dos celdas se tocan en la grilla": es **el dibujo
+    # sigue de una a la otra** ([`pegadas`]). Ver ahí por qué.
+    alfa = hoja_im.getchannel("A").load()
+    ancho_hoja, alto_hoja = hoja_im.size
     visto, clusters = set(), []
     for celda in ocupa:
         if celda in visto:
@@ -625,9 +713,14 @@ def componer(miembros, pos, hoja_im, kind):
             grupo.append((c, r))
             for d in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 v = (c + d[0], r + d[1])
-                if v in ocupa and v not in visto:
-                    visto.add(v)
-                    pila.append(v)
+                if v not in ocupa or v in visto:
+                    continue
+                if ocupa[v] != ocupa[(c, r)] and not pegadas(
+                    alfa, ancho_hoja, alto_hoja, (c, r), d
+                ):
+                    continue
+                visto.add(v)
+                pila.append(v)
         clusters.append(grupo)
 
     salida = []
@@ -720,6 +813,28 @@ def ids_curados():
     return set(re.findall(r'p\("([^"]+)"', curado))
 
 
+#: **Nombres de familia que no dicen nada solos.** Llevan el tema adelante SIEMPRE.
+#:
+#: El pack bautiza el dibujo principal de un tema con la palabra pelada: el
+#: cuartel de bomberos entero es `18_Fire_Station_32x32_Building`, o sea familia
+#: `Building`. Traducido palabra por palabra eso es "Edificio", y como la clave
+#: `building/edificio` estaba libre se la quedó — en un catálogo de 7.800 slots,
+#: el cuartel de bomberos se llamaba "Edificio".
+#:
+#: No es sólo feo. `import-edificios.py` reparte fachadas por PÁGINA, no por
+#: nombre, así que el cuartel seguía siendo elegible; pero cualquiera que abra
+#: HA Studio, el menú de construir o `slots.rs` buscando el cuartel no lo
+#: encuentra, y el que quiera saber qué es `building/edificio` tiene que ir a
+#: mirar el pixel. El desempate por tema ya existía para las colisiones de clave
+#: (`{tema}_{raiz}`); esto lo hace obligatorio cuando el nombre es genérico,
+#: colisione o no.
+FAMILIAS_GENERICAS = {
+    "building", "buildings", "house", "houses", "shop", "store", "sign",
+    "signs", "door", "doors", "window", "windows", "wall", "walls", "roof",
+    "floor", "props", "prop", "object", "objects", "item", "items",
+}
+
+
 def asignar_claves(objetos):
     usadas = claves_curadas()
     for obj in objetos:
@@ -728,8 +843,11 @@ def asignar_claves(objetos):
             obj.etiqueta = f"{obj.etiqueta} {obj.indice}"
         carp = carpeta(obj.kind, obj.tema, obj.familia)
         raiz = ascii_slug(obj.etiqueta)[:44]
+        generica = obj.familia.strip("_").lower() in FAMILIAS_GENERICAS
+        if generica:
+            obj.etiqueta = f"{obj.etiqueta} de {obj.tema_es.lower()}"
         clave = f"{carp}/{raiz}"
-        if clave in usadas:
+        if generica or clave in usadas:
             clave = f"{carp}/{ascii_slug(obj.tema_es)}_{raiz}"[:64]
         n = 2
         base = clave
@@ -817,11 +935,66 @@ def empaquetar(objetos, del_mundo=(), dry_run=False):
 # 7. Escribir manifest, slots.rs y placeables.rs
 # ---------------------------------------------------------------------------
 
+#: Cómo se dice cada `kind` del pack en el manifest.
+ORIGEN = {"ext": "exterior", "int": "interior"}
+
+#: **El juego pide una cosa y el pack la dibujó con otro nombre.**
+#:
+#: `clave del juego -> clave que este importador le puso al arte del pack`. Se
+#: publica la clave del juego apuntando a los MISMOS píxeles (mismo `png`, mismo
+#: `rect`), con las mismas variantes. No copia un pixel y no se puede quedar vieja:
+#: los rects salen del empaquetado de ESTA corrida.
+#:
+#: Existe porque el catálogo de slots (`ha-assets::slots`) es la lista de lo que el
+#: JUEGO necesita —tiene sentido de gameplay: "zona de pesca" es donde se pesca— y
+#: el nombre que sale del pack es el del archivo del artista. Cuando las dos listas
+#: hablan de lo mismo hay que unirlas en algún lado, y el único lugar donde eso no
+#: se pudre es acá, al lado de la medición.
+#:
+#: El caso que la motivó: `fishing/spot` estaba documentado en `slots.rs` como "los
+#: `Fishing_Spot_1..4` de `11_Camping`" (el muelle con las cañas, exterior) y su
+#: entrada del manifest apuntaba a **un acuario de Modern Interiors**. Se sembraba
+#: en `SHORE_DECOR`, así que las orillas del mundo tenían peceras de living
+#: apoyadas en el barro. Lo caza `la_ciudad_no_se_construye_con_interiores`.
+#: `clave del juego -> (clave del pack, etiqueta en castellano)`.
+ALIAS_CURADOS = {
+    "fishing/spot": ("agua/zona_de_pesca", "Zona de pesca"),
+}
+
+
+def origen_de_paginas(objetos, ubicacion):
+    """`art/pack/<pagina>.png` → `"exterior"` / `"interior"`.
+
+    **Por qué se publica y no se deduce.** Del lado del juego, saber de qué pack
+    salió un dibujo es la única forma barata de que nadie lo use donde no va: una
+    página es de afuera o es de adentro, y con eso un test puede plantarse si un
+    lote de la ciudad, una tabla de siembra o un slot `building/*` terminan
+    apuntando a un mostrador de heladería. Deducirlo del nombre de la página no
+    sirve —`office`, `hospital` y `condominium` son temas de LOS DOS packs— y
+    deducirlo de la carpeta de la clave es circular: la carpeta es justamente lo
+    que se está verificando.
+
+    Una página que mezcle los dos orígenes es un error de empaquetado, no un dato:
+    se marca `"mixto"` para que el test la cace en vez de elegir uno por mayoría.
+    """
+    origen = {}
+    for obj in objetos:
+        quiero = ORIGEN.get(obj.kind, obj.kind)
+        for i, _ in enumerate(obj.variantes):
+            pagina = ubicacion[(obj.clave, i)][0]
+            rel = f"{PAGES_REL}/{pagina}.png"
+            previo = origen.setdefault(rel, quiero)
+            if previo != quiero:
+                origen[rel] = "mixto"
+    return origen
+
+
 def escribir_manifest(objetos, ubicacion, dry_run=False):
     with open(MANIFEST) as fh:
         man = json.load(fh)
     sprites = man.setdefault("sprites", {})
     objects = man.setdefault("objects", {})
+    origen = man.setdefault("origen", {})
 
     previo = {"sprites": [], "objects": []}
     if os.path.exists(INDEX):
@@ -831,6 +1004,10 @@ def escribir_manifest(objetos, ubicacion, dry_run=False):
         sprites.pop(k, None)
     for k in previo.get("objects", []):
         objects.pop(k, None)
+    for k in previo.get("origen", []):
+        origen.pop(k, None)
+    nuevo_origen = origen_de_paginas(objetos, ubicacion)
+    origen.update(nuevo_origen)
 
     nuevos_sprites, nuevos_objects = [], []
     for obj in objetos:
@@ -860,11 +1037,36 @@ def escribir_manifest(objetos, ubicacion, dry_run=False):
             }
             nuevos_objects.append(obj.clave)
 
+    for clave_juego, (clave_pack, etiqueta) in sorted(ALIAS_CURADOS.items()):
+        fuente = [k for k in nuevos_sprites if k == clave_pack or k.startswith(f"{clave_pack}_")]
+        fuente = sorted({k.split("#")[0] for k in fuente})
+        if not fuente:
+            print(f"  ⚠ alias {clave_juego}: no encontré {clave_pack}* en el pack")
+            continue
+        for i, k in enumerate(fuente, 1):
+            for destino in ([clave_juego] if i == 1 else []) + [f"{clave_juego}#{i}"]:
+                sprites[destino] = dict(sprites[k])
+                nuevos_sprites.append(destino)
+        if len(fuente) > 1:
+            objects[clave_juego] = {
+                "label": etiqueta,
+                "variants": [{"id": str(i), "label": f"{etiqueta} {i}"} for i in range(1, len(fuente) + 1)],
+            }
+            nuevos_objects.append(clave_juego)
+
     if not dry_run:
         with open(MANIFEST, "w") as fh:
             json.dump(man, fh, indent=1, ensure_ascii=False, sort_keys=True)
         with open(INDEX, "w") as fh:
-            json.dump({"sprites": nuevos_sprites, "objects": nuevos_objects}, fh, indent=1)
+            json.dump(
+                {
+                    "sprites": nuevos_sprites,
+                    "objects": nuevos_objects,
+                    "origen": sorted(nuevo_origen),
+                },
+                fh,
+                indent=1,
+            )
     return len(nuevos_sprites), len(nuevos_objects)
 
 
@@ -1050,8 +1252,45 @@ MARCAS_MODULARES = tuple(
         # `_19`, `_22`). Ojo con generalizar a `props` a secas: `City_Props` es
         # el nombre de un TEMA y ahí dentro hay 900 objetos enteros.
         r"(?:^|_)tree_props(?:_|$)",
+        # **LOS BLOBS DE TERRENO.** `Grass_1`…`Grass_4`, `Grass_Fenced_1` y
+        # `Grass_Water_1`…`_4` no son nueve pastos: son nueve AUTOTILES de 22
+        # piezas cada uno —el contorno, las diagonales, las esquinas internas y,
+        # al final, los rellenos—, y lo que cambia entre familias no es el pasto
+        # sino contra QUÉ hace la costura: tierra naranja la 1, el vacío la 2,
+        # tierra khaki la 3 y la 4, la cerca de piedra la `Fenced`, el agua las
+        # `Water`. El relleno de las nueve es el MISMO verde plano (71,151,87).
+        #
+        # Sembradas sueltas ponen media costura en el pasto, y así entraron al
+        # BOSQUE: `pasto_1`, `pasto_13`…`pasto_18` (bordes de `Grass_2`) y sobre
+        # todo `pasto_cercado_15/16/19`, que son **tramos del muro de piedra** de
+        # `Grass_Fenced_1` — un pedazo de cerca tirado en mitad del monte.
+        #
+        # El número doble es lo que las distingue de un prop: la pieza del blob es
+        # `Grass_2_13` (familia 2, pieza 13) y el prop es `Props_Grass_13`, que
+        # lleva uno solo. Por eso el `\d+_\d+$` y no `grass` a secas.
+        r"(?:^|_)grass(?:_water|_fenced)?_\d+_\d+$",
+        # **`Mound_1` y `Mound_2` son UN montículo cada uno**, partido en tres y
+        # en cinco piezas que se ponen en fila (más `Mound_2_6`, que es su relleno
+        # de tierra). Sembrar una sola pone un tercio de montículo con el corte
+        # vertical a la vista, y había ocho en el bosque: `monticulo_1`…`_5` y
+        # `terreno_y_cercas_monticulo_1`…`_3`.
+        r"(?:^|_)mound_\d+_\d+$",
     )
 )
+
+
+def limpiar_nombre(nombre):
+    """El nombre de archivo listo para preguntarle si es una pieza.
+
+    Saca dos cosas y las dos importan: la **resolución** (`32x32`), que si no se
+    come el `_\\d+_` de cualquier patrón, y la **extensión**, que es lo que hacía
+    inútil a toda marca anclada con `$`. `o.variantes` guarda el nombre CON `.png`
+    (`singles[]["file"]`), así que `(?:^|_)(?:door|roof)(?:_\\d+)?$` no cazaba una
+    sola puerta desde que se escribió, y las marcas nuevas de blob de terreno
+    tampoco iban a cazar nada. Se vio en que `pasto_1` y `monticulo_1` seguían
+    apareciendo en `BOSQUE` con el filtro puesto.
+    """
+    return re.sub(r"\.png$", "", re.sub(r"\d+x\d+", "_", nombre), flags=re.I)
 
 
 def es_modular(o):
@@ -1062,7 +1301,7 @@ def es_modular(o):
     entera, y con que una lo sea ya no se puede sembrar a ciegas.
     """
     return any(
-        rx.search(re.sub(r"\d+x\d+", "_", nombre))
+        rx.search(limpiar_nombre(nombre))
         for nombre, _ in o.variantes
         for rx in MARCAS_MODULARES
     )
@@ -1100,7 +1339,7 @@ def es_gameplay(o):
     con que una lo sea, el objeto entero deja de sembrarse.
     """
     return any(
-        rx.search(re.sub(r"\d+x\d+", "_", nombre))
+        rx.search(limpiar_nombre(nombre))
         for nombre, _ in o.variantes
         for rx in NO_ES_DECORACION
     )

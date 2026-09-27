@@ -681,9 +681,24 @@ fn sync_universe(
             // punto: se textura cuando te acercás, que es justo lo que el diseño
             // original decía ("cuando ya ocupa algo en pantalla") y lo que el
             // test no comprobaba.
+            //
+            // **Y un TECHO, que es lo que faltaba.** `on_screen` grande no quiere
+            // decir "se ve enorme": quiere decir que el encuadre es minúsculo al
+            // lado del cuerpo, o sea que estás PARADO EN ÉL. El disco vive en
+            // z=−20, detrás de todo el suelo, así que ahí está tapado por el
+            // terreno y no se ve ni un píxel — y sin embargo se horneaba, porque
+            // para el cuerpo que pisás `dist ≈ r` y el test de arriba se cumple
+            // solo. Medido en el Redmi el 24 ago 2026: caminando por el pasto,
+            // `bake_body_textures` = 482–568 ms de un frame de 750 ms. Ése era el
+            // "el juego es un puto lag".
+            //
+            // Con el techo, el disco de la Tierra se cocina cuando te despegás lo
+            // bastante como para llegar a verlo (`live_view_h` ≥ r/6 ≈ 250 m),
+            // que es de sobra antes de que asome, no mientras caminás.
             let dist = (tf.translation.truncate() - eye).length();
             let in_frame = dist < zoom.live_view_h.max(1.0) * 1.5 + r;
-            if on_screen > 0.02 && in_frame {
+            let tapado_por_el_suelo = on_screen > DISCO_TAPADO_SOBRE;
+            if on_screen > 0.02 && !tapado_por_el_suelo && in_frame {
                 disc.textured = true;
                 bake.request(disc.body, mat.0.clone());
             }
@@ -843,7 +858,20 @@ fn sync_terrain_lod(
     // pantalla — que es todo el punto: un cambio de escalón deja de ser un frame
     // de 318 ms y pasa a ser un puñado de frames que nadie nota.
     let finished = match job.0.as_mut() {
-        Some(j) => j.step(&tiles, LOD_ROWS_PER_FRAME),
+        Some(j) => {
+            // **El reloj manda, la tanda es chica.** Ver `LodBake::step`: contar
+            // filas no acota nada desde que una muestra del mundo pasa por
+            // ciudades. Medido en el Redmi el 24 ago 2026, con el presupuesto en
+            // filas: `sync_terrain_lod` = 1.950-2.450 ms. Con esto, el plazo.
+            let plazo = std::time::Duration::from_secs_f32(LOD_MS_PER_FRAME / 1000.0);
+            let reloj = std::time::Instant::now();
+            loop {
+                let listo = j.step(&tiles, LOD_VERTS_POR_TANDA);
+                if listo || reloj.elapsed() >= plazo {
+                    break listo;
+                }
+            }
+        }
         None => false,
     };
 
@@ -934,7 +962,8 @@ struct LodBake {
     tile_m: f32,
     version: u64,
     /// Fila de VÉRTICES por la que va el muestreo. `side` = terminado.
-    next_row: usize,
+    /// Cursor PLANO de vértices (`iy * side + ix`) sobre `side²`. Ver `step`.
+    next_v: usize,
     side: usize,
     corner: Vec2,
     radius: f32,
@@ -985,7 +1014,7 @@ impl LodBake {
             center,
             tile_m,
             version,
-            next_row: 0,
+            next_v: 0,
             side,
             corner,
             radius,
@@ -997,12 +1026,24 @@ impl LodBake {
         }
     }
 
-    /// Muestrea hasta `rows` filas de vértices. Devuelve `true` cuando ya están
-    /// todas y la malla se puede armar.
-    fn step(&mut self, tiles: &TileWorld, rows: usize) -> bool {
-        let end = (self.next_row + rows.max(1)).min(self.side);
-        for iy in self.next_row..end {
-            for ix in 0..self.side {
+    /// Muestrea hasta `verts` VÉRTICES (no filas). Devuelve `true` cuando ya
+    /// están todos y la malla se puede armar.
+    ///
+    /// **La unidad es el vértice y no la fila** por lo mismo que el disco del
+    /// planeta cambió a píxeles (§10, 24 ago 2026): una fila son `side` = 193
+    /// vértices × 4 muestras de `topdown_tile` + un `tinte_urbano`, y desde que
+    /// la sim tiene ciudades eso puede costar cientos de ms. Con la fila como
+    /// unidad mínima, cualquier plazo que le pongas arriba es decorativo.
+    ///
+    /// Quien la llama pone el reloj (ver `sync_terrain_lod`); acá la unidad es
+    /// determinista a propósito, que es lo que hace testeable la equivalencia
+    /// con el horneado de una sola pasada.
+    fn step(&mut self, tiles: &TileWorld, verts: usize) -> bool {
+        let total = self.side * self.side;
+        let end = self.next_v.saturating_add(verts.max(1)).min(total);
+        for i in self.next_v..end {
+            let (iy, ix) = (i / self.side, i % self.side);
+            {
                 if !self.used[iy * self.side + ix] {
                     continue;
                 }
@@ -1029,8 +1070,8 @@ impl LodBake {
                 self.colors.push([lin.red, lin.green, lin.blue, 1.0]);
             }
         }
-        self.next_row = end;
-        self.next_row >= self.side
+        self.next_v = end;
+        self.next_v >= total
     }
 
     fn into_mesh(self) -> Mesh {
@@ -1054,18 +1095,29 @@ impl LodBake {
     }
 }
 
-/// Filas de VÉRTICES de la malla adaptativa que se muestrean por frame.
+/// **Plazo por frame del horneado de la malla adaptativa, en milisegundos.**
 ///
-/// **El número sale de medir el Redmi, no de estimar.** Una fila son 193
-/// vértices × 4 muestras de `topdown_tile` = ~770 evaluaciones de terreno, y ahí
-/// eso cuesta **2–4 ms**. Con 24 filas por frame la primera versión de esto
-/// marcaba 50–92 ms/frame en `ha-sys`: repartido, sí, pero cada tanda seguía
-/// costando dos o tres frames enteros.
+/// Antes esto era `LOD_ROWS_PER_FRAME = 4` — cuatro FILAS de vértices — con el
+/// número "medido en el Redmi": una fila = 193 vértices × 4 muestras ≈ 2-4 ms, o
+/// sea ~10 ms la tanda y la malla entera (193 filas) en 49 frames.
 ///
-/// A 4, la tanda cuesta ~10 ms y la malla entera (193 filas) sale en 49 frames.
-/// Mientras tanto se sigue viendo la anterior, así que lo único que se paga es
-/// que la malla queda un escalón atrasada durante ~1,5 s de vuelo.
-const LOD_ROWS_PER_FRAME: usize = 4;
+/// Ese número envejeció mal. Cada capa que gana la sim encarece la muestra, y con
+/// ciudades la fila dejó de costar 2-4 ms: medido el 24 ago 2026 en el Redmi,
+/// `sync_terrain_lod` marcaba **1.950-2.450 ms**. Es la misma lección que ya se
+/// aprendió dos veces (`DISC_BAKE_MS_PER_FRAME`, y antes el presupuesto en filas
+/// del horneado de discos): **contar unidades de trabajo sólo acota el frame si
+/// todas cuestan lo mismo**, y en un generador procedural nunca cuestan lo mismo.
+///
+/// Lo que se pierde: ya no se puede prometer "la malla sale en N frames" desde una
+/// constante, porque depende de la máquina. Se paga que la malla quede un escalón
+/// atrasada más tiempo en un teléfono lento — mucho más barato que un frame de dos
+/// segundos.
+const LOD_MS_PER_FRAME: f32 = 4.0;
+
+/// Vértices de la malla adaptativa entre dos miradas al reloj. Chico a propósito:
+/// lo que acota el fotograma es `LOD_MS_PER_FRAME`, y una tanda gorda le vuelve a
+/// poner un piso que el plazo no puede bajar.
+const LOD_VERTS_POR_TANDA: usize = 48;
 
 /// El horneado de la malla adaptativa en curso, si hay uno.
 #[derive(Resource, Default)]
@@ -1183,6 +1235,22 @@ const DISC_BAKE_ROWS_PER_FRAME: usize = 8;
 /// una en un build lento — y en los tres casos el fotograma se respeta. Las
 /// filas quedan sólo como TECHO por tanda (que no se coma la caché de niveles de
 /// un tirón).
+/// **Por encima de esto el cuerpo no se ve: lo estás pisando.**
+///
+/// `on_screen` es `2·radio / alto_del_encuadre`, o sea cuántas pantallas mide el
+/// cuerpo. Doce pantallas ya es estar tan cerca que el disco —que vive detrás de
+/// todo el suelo, en z=−20— queda tapado por el terreno. Texturarlo ahí es pagar
+/// medio segundo de frame por píxeles que nadie ve. Ver el guard de
+/// `sync_universe`.
+/// **Píxeles del disco entre dos miradas al reloj.** Chico a propósito: lo que
+/// acota el fotograma es el plazo, y una tanda gorda le vuelve a poner un piso
+/// que el plazo no puede bajar (ver [`bake_body_textures`]). Con la muestra más
+/// cara medida —~250 µs en el Redmi— treinta y dos píxeles son ~8 ms en el peor
+/// caso y ~0 en el mejor; el reloj corta en cuanto se pasa.
+const PX_POR_TANDA: usize = 32;
+
+const DISCO_TAPADO_SOBRE: f32 = 12.0;
+
 const DISC_BAKE_MS_PER_FRAME: f32 = 4.0;
 
 /// El plazo **detrás de la cortina de carga**, donde un fotograma largo no es un
@@ -1218,7 +1286,10 @@ struct DiscBake {
     material: Handle<ColorMaterial>,
     /// RGBA de `DISC_TEX_N`², se llena de arriba hacia abajo.
     data: Vec<u8>,
-    next_row: usize,
+    /// Cursor en PÍXELES (no en filas) sobre `DISC_TEX_N`². Ver
+    /// [`bake_body_textures`]: una fila entera es una unidad demasiado gorda para
+    /// que un plazo de 4 ms signifique algo.
+    next_px: usize,
 }
 
 /// Cola de texturas de disco pendientes (una en curso + las que esperan).
@@ -1245,7 +1316,7 @@ impl DiscBakeQueue {
             body,
             material,
             data: vec![0u8; DISC_TEX_N * DISC_TEX_N * 4],
-            next_row: 0,
+            next_px: 0,
         });
     }
 }
@@ -1263,22 +1334,31 @@ fn bake_body_textures(
     let _probe = crate::debug::probe("bake_body_textures");
     let Some(job) = queue.jobs.first_mut() else { return };
     let n = DISC_TEX_N;
-    // **DE A UNA FILA, MIRANDO EL RELOJ.** Ver [`DiscBakeRows`]: cuánto cuesta
-    // una fila depende del build, de la máquina y de si ese trozo de planeta
-    // tiene relieve, río o ciudad, así que un número fijo de filas no acota
-    // nada. Se pinta al menos una —el disco siempre avanza, nunca se atasca— y
-    // se sigue mientras quede plazo.
+    // **DE A TANDAS CHICAS, MIRANDO EL RELOJ.**
+    //
+    // Ver [`DiscBakeRows`]: cuánto cuesta una muestra depende del build, de la
+    // máquina y de si ese trozo de planeta tiene relieve, río o ciudad. Por eso
+    // se mira el reloj. Pero el reloj sólo acota si la unidad de trabajo entre
+    // dos miradas es CHICA, y una fila entera no lo es: son `DISC_TEX_N` píxeles
+    // × 4 muestras del resolvedor de celda completo. Medido en el Redmi el 24 ago
+    // 2026: **una fila = ~500 ms**. Con "al menos una fila" el plazo de 4 ms era
+    // decorativo — el piso del sistema era medio segundo, y ése era el lag.
+    //
+    // Ahora el cursor va por PÍXEL y la tanda es `PX_POR_TANDA`, así que el peor
+    // caso entre dos miradas al reloj son unos pocos píxeles. El disco tarda más
+    // en estar listo; el fotograma deja de pagarlo.
+    let total = n * n;
     let plazo = std::time::Duration::from_secs_f32(rows.ms.max(0.5) / 1000.0);
     let reloj = std::time::Instant::now();
-    let techo = (job.next_row + rows.filas.max(1)).min(n);
-    while job.next_row < techo {
-        fill_disc_rows(&mut job.data, &tiles, job.body, job.next_row, job.next_row + 1);
-        job.next_row += 1;
+    while job.next_px < total {
+        let hasta = (job.next_px + PX_POR_TANDA).min(total);
+        fill_disc_span(&mut job.data, &tiles, job.body, job.next_px, hasta);
+        job.next_px = hasta;
         if reloj.elapsed() >= plazo {
             break;
         }
     }
-    if job.next_row < n {
+    if job.next_px < total {
         return;
     }
     let mut job = queue.jobs.remove(0);
@@ -1308,20 +1388,17 @@ fn bake_body_textures(
 /// oscurecimiento hacia el limbo para que lea como una esfera, y transparente
 /// fuera del círculo.
 ///
-/// Pinta sólo las filas `[row0, row1)`: es una PORCIÓN del trabajo, para que
-/// `bake_body_textures` pueda repartir un disco entre varios frames.
-fn fill_disc_rows(
-    data: &mut [u8],
-    tiles: &TileWorld,
-    body: CelestialBody,
-    row0: usize,
-    row1: usize,
-) {
+/// Pinta sólo los píxeles `[px0, px1)` en índice PLANO (fila × `DISC_TEX_N` +
+/// columna): es una PORCIÓN del trabajo, para que `bake_body_textures` pueda
+/// repartir un disco entre varios frames **sin que la unidad mínima sea una fila
+/// entera** — ver el comentario del plazo en ese sistema.
+fn fill_disc_span(data: &mut [u8], tiles: &TileWorld, body: CelestialBody, px0: usize, px1: usize) {
     let n = DISC_TEX_N;
     let r = body_radius(body);
     let seed = ha_shared::body_def(body).terrain_seed;
-    for py in row0..row1 {
-        for px in 0..n {
+    for i in px0..px1 {
+        let (py, px) = (i / n, i % n);
+        {
             let u = (px as f32 + 0.5) / n as f32 - 0.5;
             let v = (py as f32 + 0.5) / n as f32 - 0.5;
             let d = (u * u + v * v).sqrt();
@@ -1625,15 +1702,18 @@ mod tests {
 
         let de_una = build_terrain_lod_mesh(&tiles, body, center, tile_m);
 
-        // Franjas chicas a propósito: 7 no divide a 193, así que la última tanda
-        // queda corta y se ejercita el recorte de `min(side)`.
+        // Tandas chicas a propósito: 7 no divide a 193² = 37 249, así que la
+        // última queda corta y se ejercita el recorte contra el total.
         let mut bake = LodBake::new(body, center, tile_m, tiles.version);
+        // El tope es generoso porque la unidad es el VÉRTICE: la malla son
+        // `side²` ≈ 37 000, así que de a 7 hacen falta unas 5.300 tandas. Lo que
+        // el tope caza es que el cursor no avance, no que tarde.
         let mut frames = 0;
         while !bake.step(&tiles, 7) {
             frames += 1;
-            assert!(frames < 1_000, "el horneado por franjas no termina nunca");
+            assert!(frames < 100_000, "el horneado por franjas no termina nunca");
         }
-        assert!(frames > 20, "con 7 filas por frame tiene que tardar varios frames");
+        assert!(frames > 20, "con 7 vértices por tanda tiene que tardar varias tandas");
         let por_franjas = bake.into_mesh();
 
         assert_eq!(de_una.count_vertices(), por_franjas.count_vertices());
@@ -1652,19 +1732,34 @@ mod tests {
         }
     }
 
-    /// El presupuesto por frame tiene que dejar la malla lista en un puñado de
-    /// frames. Si alguien lo baja demasiado, el LOD tarda tanto en cocinarse que
-    /// vuelve a verse el borde del anillo mientras se vuela — el corte que este
-    /// sistema entero existe para evitar.
+    /// **La tanda del LOD tiene que ser CHICA, y tiene que avanzar siempre.**
+    ///
+    /// Antes este test comprobaba que la malla saliera en menos de 64 frames, con
+    /// la cuenta hecha desde `LOD_ROWS_PER_FRAME`. Esa promesa se cayó a propósito
+    /// el 24 ago 2026 (ver `LOD_MS_PER_FRAME`): con un presupuesto de reloj,
+    /// cuántos frames tarda depende de la máquina, y prometerlo desde una
+    /// constante fue justamente lo que dejó pasar el frame de 2 segundos en el
+    /// Redmi. Lo que sí se puede afirmar, y es lo que protege al fotograma:
+    ///
+    /// 1. la tanda entre dos miradas al reloj es chica —una fila entera de
+    ///    vértices NO puede entrar—, así que ninguna muestra cara, por cara que
+    ///    sea, se cobra más que `LOD_VERTS_POR_TANDA` de una;
+    /// 2. y el horneado avanza aunque el plazo ya esté vencido (`verts.max(1)`),
+    ///    o sea que nunca se atasca.
     #[test]
-    fn el_horneado_del_lod_termina_rapido() {
-        let filas = LOD_QUADS as usize + 1;
-        let frames = filas.div_ceil(LOD_ROWS_PER_FRAME);
-        assert!(frames <= 64, "la malla adaptativa tarda {frames} frames en salir");
+    fn la_tanda_del_lod_es_chica_y_siempre_avanza() {
+        let fila = LOD_QUADS as usize + 1;
         assert!(
-            LOD_ROWS_PER_FRAME < filas,
-            "si entra entera en un frame, volvimos al tiron de 318 ms"
+            LOD_VERTS_POR_TANDA < fila,
+            "una tanda de {LOD_VERTS_POR_TANDA} vértices se come una fila entera ({fila}): \
+             volvimos al presupuesto que no acota"
         );
+        // Con plazo cero igual avanza: `step` toma `verts.max(1)`.
+        let tiles = crate::world2d::TileWorld::default();
+        let mut bake = LodBake::new(CelestialBody::Earth, Vec2::ZERO, 16.0, tiles.version);
+        let antes = bake.next_v;
+        bake.step(&tiles, 0);
+        assert!(bake.next_v > antes, "con tanda 0 el horneado se atasca para siempre");
     }
 
     #[test]
