@@ -106,7 +106,7 @@ const TEMP_MAX: f32 = 3.0;
 /// Slots FIJOS de la paleta creativa de spawn. El spawn resuelve el índice contra la fauna
 /// del PLANETA donde estás (F5), así el mismo botón spawnea el bicho local; los índices
 /// que ese cuerpo no tiene, no hacen nada.
-const SPAWN_PALETTE_SLOTS: usize = 6;
+const SPAWN_PALETTE_SLOTS: usize = 9;
 
 /// Cuántos slots muestra la paleta creativa (para `hud.rs`). Genéricos y body-aware.
 pub fn spawn_species_count() -> usize {
@@ -116,7 +116,8 @@ pub fn spawn_species_count() -> usize {
 /// Etiqueta ASCII del slot `i` (genérica: la especie real depende del planeta).
 pub fn spawn_species_label(i: usize) -> &'static str {
     const L: [&str; SPAWN_PALETTE_SLOTS] =
-        ["Fauna 1", "Fauna 2", "Fauna 3", "Fauna 4", "Fauna 5", "Fauna 6"];
+        ["Fauna 1", "Fauna 2", "Fauna 3", "Fauna 4", "Fauna 5", "Fauna 6", "Fauna 7", "Fauna 8",
+         "Fauna 9"];
     L.get(i).copied().unwrap_or("Fauna")
 }
 
@@ -132,7 +133,10 @@ pub fn spawn_species_art(i: usize) -> &'static str {
         "npc/fauna_sheep",
         "npc/fauna_pig",
         "npc/fauna_dog",
-        "npc/fauna_cow",
+        "npc/fauna_goat",
+        "npc/fauna_donkey",
+        "npc/fauna_rabbit",
+        "npc/fauna_duck",
     ];
     K.get(i).copied().unwrap_or("npc/fauna_cow")
 }
@@ -303,15 +307,21 @@ fn body_temperament(body: CelestialBody) -> Temperament {
     }
 }
 
-/// Fauna terrestre = pack **LimeZu Modern Farm** (amigable). El arte lo asigna el usuario
-/// (poses del pack) → se anima sola; sin arte, quad de color.
+/// Fauna terrestre (amigable). El arte sale de `scripts/fauna3d.py`: cada animal es un
+/// modelo 3D renderizado a pixel art, con poses `idle/walk/run/eat[/bark]_{dir}`.
+/// **`size` es el CUADRO de esa hoja en metros** (lo imprime el script, a 33,7 px/m):
+/// si no coincide, el sprite se estira y el pixel deja de ser cuadrado.
 fn earth_species() -> Vec<SpeciesDef> {
     let raw: &[(&str, [f32; 3], Vec2, &str)] = &[
-        ("npc/fauna_cow", [0.85, 0.82, 0.78], Vec2::new(1.4, 1.1), "Vaca"),
-        ("npc/fauna_chicken", [0.90, 0.88, 0.72], Vec2::new(0.6, 0.6), "Gallina"),
-        ("npc/fauna_sheep", [0.88, 0.86, 0.82], Vec2::new(1.0, 0.9), "Oveja"),
-        ("npc/fauna_pig", [0.82, 0.60, 0.58], Vec2::new(1.1, 0.9), "Cerdo"),
-        ("npc/fauna_dog", [0.60, 0.48, 0.34], Vec2::new(0.9, 0.7), "Perro"),
+        ("npc/fauna_cow", [0.85, 0.82, 0.78], Vec2::new(1.96, 1.78), "Vaca"),
+        ("npc/fauna_chicken", [0.90, 0.88, 0.72], Vec2::new(0.65, 0.71), "Gallina"),
+        ("npc/fauna_sheep", [0.88, 0.86, 0.82], Vec2::new(1.37, 1.40), "Oveja"),
+        ("npc/fauna_pig", [0.82, 0.60, 0.58], Vec2::new(1.48, 1.31), "Cerdo"),
+        ("npc/fauna_dog", [0.60, 0.48, 0.34], Vec2::new(1.37, 1.28), "Perro"),
+        ("npc/fauna_goat", [0.90, 0.88, 0.84], Vec2::new(1.37, 1.48), "Cabra"),
+        ("npc/fauna_donkey", [0.55, 0.53, 0.55], Vec2::new(1.78, 1.84), "Burro"),
+        ("npc/fauna_rabbit", [0.71, 0.59, 0.46], Vec2::new(1.13, 1.04), "Conejo"),
+        ("npc/fauna_duck", [0.94, 0.93, 0.90], Vec2::new(0.71, 0.71), "Pato"),
     ];
     raw.iter()
         .enumerate()
@@ -1532,7 +1542,10 @@ fn tick_fauna(
         let r = render_xy(a.x, a.z);
         tf.translation = Vec3::new(r.x, r.y, sort_z(a.z));
         let en = 0.45 + 0.55 * n.energy;
-        let c = a.color;
+        // El color de la especie es para el quad SIN arte. Con arte, multiplicarlo
+        // ensuciaba el dibujo (la vaca salía gris, el perro barroso): ahí sólo se
+        // apaga con la energía.
+        let c = if art.has_poses(&a.art_key) { [1.0; 3] } else { a.color };
         sprite.color = Color::srgb(c[0] * en, c[1] * en, c[2] * en);
 
         // Animación LimeZu-compatible: pose DIRECCIONAL según el estado (eat/drink/

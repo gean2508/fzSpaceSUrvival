@@ -1,0 +1,244 @@
+<title>Arte Ki en 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root {
+  --fondo: #eef0e8;
+  --panel: #ffffff;
+  --tinta: #262a33;
+  --suave: #5d6472;
+  --linea: #d5d9cc;
+  --pasto: #7aa05a;
+  --acento: #3a3a50;
+  --marca: #b5652f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --fondo: #171a21; --panel: #20242e; --tinta: #e6e8ee; --suave: #9aa1b0;
+    --linea: #323846; --pasto: #5c7d44; --acento: #c9cbe0; --marca: #e0935a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fondo: #171a21; --panel: #20242e; --tinta: #e6e8ee; --suave: #9aa1b0;
+  --linea: #323846; --pasto: #5c7d44; --acento: #c9cbe0; --marca: #e0935a;
+}
+body {
+  background: var(--fondo); color: var(--tinta);
+  font: 15px/1.5 "Atkinson Hyperlegible", system-ui, sans-serif;
+  padding-inline: 16px; padding-block: 20px 40px;
+}
+.envoltura { max-width: 1100px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 2rem/1.1 "Pixelify Sans", monospace; margin: 0; text-wrap: balance; }
+.bajada { color: var(--suave); max-width: 62ch; margin: 6px 0 0; }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; }
+.filtros button {
+  font: 500 0.95rem "Pixelify Sans", monospace; letter-spacing: 0.02em;
+  background: var(--panel); color: var(--tinta); border: 1px solid var(--linea);
+  border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+.filtros button[aria-pressed="true"] { background: var(--acento); color: var(--fondo); border-color: var(--acento); }
+.filtros button:focus-visible, .controles button:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+.escena {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  background: var(--panel); border: 1px solid var(--linea); border-radius: 6px; padding: 12px;
+}
+.lado { display: grid; gap: 6px; }
+.rotulo { font: 500 0.8rem "Pixelify Sans", monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--suave); }
+.cuadro {
+  aspect-ratio: 1; max-width: 100%; background: var(--pasto); border-radius: 4px;
+  display: grid; place-items: center; overflow: hidden; position: relative;
+}
+.cuadro img { image-rendering: pixelated; width: 80%; height: 80%; object-fit: contain; }
+.cuadro canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.info { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; }
+.info h2 { font: 700 1.25rem "Pixelify Sans", monospace; margin: 0; }
+.info code { color: var(--suave); font-size: 0.85rem; }
+.controles { display: flex; gap: 8px; flex-wrap: wrap; }
+.controles button {
+  font: 500 0.9rem "Pixelify Sans", monospace; background: transparent; color: var(--tinta);
+  border: 1px solid var(--linea); border-radius: 4px; padding: 4px 10px; cursor: pointer;
+}
+.galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.galeria button {
+  background: var(--pasto); border: 2px solid transparent; border-radius: 4px; padding: 6px;
+  aspect-ratio: 1; cursor: pointer; display: grid; place-items: center;
+}
+.galeria button[aria-current="true"] { border-color: var(--marca); }
+.galeria img { image-rendering: pixelated; max-width: 100%; max-height: 100%; }
+.nota { color: var(--suave); font-size: 0.9rem; max-width: 70ch; }
+@media (max-width: 560px) { .escena { grid-template-columns: 1fr; } }
+</style>
+
+<div class="envoltura">
+  <header>
+    <h1>Arte Ki en 3D</h1>
+    <p class="bajada">Cada asset del juego al lado de su modelo en vóxeles. En «Como en el juego» el modelo es el mismo dibujo, píxel por píxel; tocalo y arrastralo para girarlo y ver el volumen.</p>
+  </header>
+
+  <div class="filtros" id="filtros" role="group" aria-label="Categoría"></div>
+
+  <section class="escena" aria-live="polite">
+    <div class="lado">
+      <span class="rotulo">PNG del juego</span>
+      <div class="cuadro"><img id="png" alt=""></div>
+    </div>
+    <div class="lado">
+      <span class="rotulo">Modelo 3D (.glb)</span>
+      <div class="cuadro"><canvas id="lienzo" aria-label="Modelo 3D, arrastrar para girar"></canvas></div>
+    </div>
+    <div class="info" style="grid-column: 1 / -1">
+      <div><h2 id="nombre"></h2><code id="ruta"></code></div>
+      <div class="controles">
+        <button id="frente" type="button">Como en el juego</button>
+        <button id="girar" type="button" aria-pressed="false">Girar en 3D</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="galeria" id="galeria"></div>
+
+  <p class="nota">Los personajes se arman como en el juego: cuerpo, ojos, ropa, pelo y accesorio son modelos separados que se apilan en el mismo origen. El juego sigue cargando los PNG, así que ver esto no cambia su rendimiento.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(async function () {
+  const lista = await (await fetch("lista.json")).json();
+  const $ = (id) => document.getElementById(id);
+  const lienzo = $("lienzo");
+  const render = new THREE.WebGLRenderer({ canvas: lienzo, antialias: false, alpha: true });
+  render.setPixelRatio(Math.min(devicePixelRatio, 2));
+  render.outputEncoding = THREE.sRGBEncoding;
+  const escena = new THREE.Scene();
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -100, 100);
+  const ctl = new THREE.OrbitControls(cam, lienzo);
+  ctl.enableDamping = true;
+  ctl.autoRotate = true;
+  ctl.autoRotateSpeed = 2.2;
+  const cargador = new THREE.GLTFLoader();
+  escena.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const sol = new THREE.DirectionalLight(0xffffff, 0.7);
+  sol.position.set(-2, 3, 2);
+  escena.add(sol);
+  // La cámara del pack es oblicua: subir una fila en pantalla es subir un píxel
+  // de alto O alejarse uno de fondo. Esta cizalla (y' = y − z) más una cámara de
+  // frente reproduce el PNG exacto.
+  const OBLICUA = new THREE.Matrix4().set(1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+  let modoJuego = true;
+  function aplicarModo() {
+    if (!grupo) return;
+    grupo.children.forEach((c) => {
+      c.matrixAutoUpdate = false;
+      // la fauna se renderizó con cámara inclinada (38°), no oblicua
+      const cizalla = modoJuego && !(actualItem && actualItem.camara === "inclinada");
+      c.matrix.copy(cizalla ? OBLICUA : new THREE.Matrix4());
+      c.traverse((o) => { if (o.isMesh) o.material = modoJuego ? o.userData.plano : o.userData.luz; });
+    });
+  }
+  let grupo = null, medida = 1, actualItem = null;
+
+  function tam() {
+    const r = lienzo.getBoundingClientRect();
+    render.setSize(r.width, r.height, false);
+    const a = r.width / r.height;
+    cam.left = -medida * a; cam.right = medida * a; cam.top = medida; cam.bottom = -medida;
+    cam.updateProjectionMatrix();
+  }
+  new ResizeObserver(tam).observe(lienzo);
+
+  function deFrente() {
+    ctl.reset();
+    const inclinada = actualItem && actualItem.camara === "inclinada";
+    const a = 38 * Math.PI / 180;
+    if (inclinada) cam.position.set(0, 10 * Math.sin(a), 10 * Math.cos(a));
+    else cam.position.set(0, 0, 10);
+    cam.lookAt(0, 0, 0);
+    ctl.target.set(0, 0, 0);
+    ctl.update();
+  }
+
+  async function mostrar(item, boton) {
+    actualItem = item;
+    document.querySelectorAll(".galeria button").forEach((b) => b.setAttribute("aria-current", b === boton));
+    $("png").src = item.png;
+    $("png").alt = item.nombre;
+    $("nombre").textContent = item.nombre;
+    $("ruta").textContent = item.clave;
+    if (grupo) escena.remove(grupo);
+    grupo = new THREE.Group();
+    const partes = await Promise.all(item.glb.map((u) => cargador.loadAsync(u)));
+    for (const p of partes) {
+      p.scene.traverse((o) => {
+        if (o.isMesh) {
+          o.userData.plano = new THREE.MeshBasicMaterial({ vertexColors: true });
+          o.userData.luz = new THREE.MeshLambertMaterial({ vertexColors: true });
+          o.material = o.userData.plano;
+        }
+      });
+      grupo.add(p.scene);
+    }
+    const caja = new THREE.Box3().setFromObject(grupo);
+    const centro = caja.getCenter(new THREE.Vector3());
+    grupo.position.sub(centro);
+    const s = caja.getSize(new THREE.Vector3());
+    medida = Math.max(s.x, s.y) * 0.5 / 0.8;
+    escena.add(grupo);
+    tam();
+    modoJuego = true;
+    aplicarModo();
+    ctl.autoRotate = false;
+    $("girar").setAttribute("aria-pressed", false);
+    deFrente();
+  }
+
+  const cats = ["todo", ...new Set(lista.map((i) => i.cat))];
+  let actual = "todo";
+  function galeria() {
+    const g = $("galeria");
+    g.innerHTML = "";
+    const vis = lista.filter((i) => actual === "todo" || i.cat === actual);
+    vis.forEach((item, n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.title = item.nombre;
+      b.innerHTML = `<img src="${item.png}" alt="${item.nombre}">`;
+      b.onclick = () => mostrar(item, b);
+      g.appendChild(b);
+      if (n === 0) mostrar(item, b);
+    });
+  }
+  cats.forEach((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = c;
+    b.setAttribute("aria-pressed", c === actual);
+    b.onclick = () => {
+      actual = c;
+      document.querySelectorAll("#filtros button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      galeria();
+    };
+    $("filtros").appendChild(b);
+  });
+
+  $("frente").onclick = () => {
+    ctl.autoRotate = false; $("girar").setAttribute("aria-pressed", false);
+    modoJuego = true; aplicarModo(); deFrente();
+  };
+  $("girar").onclick = () => {
+    modoJuego = false; aplicarModo();
+    ctl.autoRotate = !ctl.autoRotate;
+    $("girar").setAttribute("aria-pressed", ctl.autoRotate);
+  };
+  lienzo.addEventListener("pointerdown", () => { if (modoJuego) { modoJuego = false; aplicarModo(); } });
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    ctl.autoRotate = false;
+    $("girar").setAttribute("aria-pressed", false);
+  }
+  (function bucle() { requestAnimationFrame(bucle); ctl.update(); render.render(escena, cam); })();
+  galeria();
+})();
+</script>

@@ -52,3 +52,10 @@ native/graphify-out/
 
 # Cache de los scripts de Python (import-pack-masivo importa pack_lexico).
 __pycache__/
+arte3d/modelos/
+# arte3d: lo regenerable por scripts/arte3d.py (--solo-modelos / --personajes) y el visor
+arte3d/fuente/objetos/
+arte3d/fuente/personajes/
+arte3d/relieve/
+arte3d/visor/m/
+arte3d/visor/lista.json

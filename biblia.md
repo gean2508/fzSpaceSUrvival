@@ -1901,6 +1901,73 @@ esos 452 son el brillo de los cantos, que no toca la meseta y no debe cambiar.
 La arena se queda como está: ahí la orilla no es una línea fuera de lugar, es el
 médano derramándose sobre la roca.
 
+### LA ONDA DE DUNA: la meseta tenía textura y el relleno no (22 ago 2026)
+
+Pedido del usuario, textual: *"ese borde de césped tiene un patrón dibujado,
+blanco sobre el césped... originalmente este asset es de arena. Se nota un cambio
+horrible desde la textura del acantilado con líneas al terreno sólido de la
+meseta. Quiero que se conserve el borde del acantilado y que con el relleno
+sólido de la meseta sea un solo color."*
+
+No es la falda de arena de la sección anterior —ésa vive entre la meseta y los
+cantos y ya estaba resuelta—. Es el plano de ARRIBA: LimeZu le dibujó al *Sand
+Mountain* las **ondas del viento sobre la duna**, bandas horizontales onduladas
+más claras que el resto. Medido sobre las doce hojas del kit son **15.152
+píxeles** en exactamente **tres tonos**, y los tres son los únicos tonos de suelo
+por encima del dominante: luminancia 1,037, 1,057 y 1,081 contra `ARENA_ESPERADA`.
+
+En un médano eso es la duna. Teñido de verde es un rayado raro sobre el pasto —y,
+sobre todo, **muere de golpe donde empieza el relleno**, que es una losa de color
+plano (`tiles/grass` son 1.024 píxeles de un solo color). Ahí no fallaba el
+recorte ni el tinte: fallaba que la pieza tuviera textura y el relleno no.
+
+La salida NO es texturar el relleno (el suelo base es color plano; lo que se lee
+son las orlas, las variantes y la sombra). Es **aplanar la onda**: los tres tonos
+se mandan al dominante, que `mapa_por_losa` ya manda al color exacto de la losa.
+Todo lo demás vive por DEBAJO del dominante —el filo, el contorno, la sombra de
+contacto, la falda— y no se entera, así que el borde del acantilado queda entero.
+
+Medido sobre la celda de meseta de `cliff/pasto`: pasa de 436 a **740 píxeles del
+color exacto de la losa** (71,151,87) y desaparecen los tres tonos claros. Meseta
+y relleno son ahora indistinguibles.
+
+**Menos la arena, y es decisión del usuario.** Preguntado en la misma sesión,
+eligió *dejar la arena con sus ondas*: ahí el rayado no está fuera de lugar —es
+la duna que el kit vino a dibujar— y vale más el asset como LimeZu lo hizo que la
+costura contra la losa. Es el mismo criterio que ya valía para su falda. Medido:
+los ocho materiales teñidos quedan en **0 píxeles más claros que su losa**;
+`cliff/arena` conserva sus **304**.
+
+`import-acantilado.py::verificar_onda` lo vuelve a medir en cada corrida: si el
+pack cambia y aparece un cuarto tono claro, el importador se planta en vez de
+dejar medio rayado puesto.
+
+### NADA SE SIEMBRA PEGADO AL FILO (22 ago 2026)
+
+Misma sesión, el otro medio del problema: *"estamos colocando árboles sobre el
+borde... lo coherente es que se detecte el borde dos cuadros antes, hacia el
+centro de la meseta, y se deje un límite de dónde no pueden estar cosas ni props,
+porque si no es un árbol grande y queda la mitad afuera flotando."*
+
+El canto ya era `Tile::Cliff` y ninguna tabla sembraba sobre él. Lo que faltaba
+era el retiro **hacia adentro**: la celda pegada al canto es terreno llano y
+edificable, así que el sorteo le plantaba el roble ahí y medio tronco quedaba
+colgando sobre la pared que cae.
+
+`relief::retiro_del_canto` responde si el terreno CAE dentro de
+`RETIRO_DEL_CANTO` (2 celdas, Chebyshev). El número es el tamaño de lo que se
+planta: un árbol del pack mide más de una celda y se dibuja hacia arriba desde su
+pie. Lo consultan `worldgen::surface_decor_at`, `nature_decor_at` y
+`prop_decor_at`, o sea las tres tablas que siembran sobre meseta.
+
+**El llano no paga nada**: la pregunta sale por nivel antes de mirar una sola
+vecina, así que las celdas de nivel 0 —la enorme mayoría del mundo— cuestan una
+consulta a la caché y se van (mismo patrón que `es_paso`).
+
+Medido (`medir_acantilados::props_pegados_al_filo`, Tierra 1.200×1.200):
+**1.434.999 celdas de tierra alta, 50.380 dentro del retiro (3,5 %)** y **0 props
+sembrados ahí** contra los que había antes.
+
 ### EL ÁRBOL CORTADO ERA UNA COPA SUELTA (10 ago 2026)
 
 *"¿Qué carajos es ese árbol cortado? ¿Está mal importado, o es un árbol modular?
@@ -2438,6 +2505,16 @@ Tres cosas lo arreglan, y las tres salen de pixel que el pack ya tenía:
    arena o a nieve y el lado del pasto al verde del clima vecino.
    `world2d::spawn_chunk_orilla` las siembra **sólo en las celdas de borde** — el
    relleno lo sigue dibujando la malla, un draw call por chunk (regla 2).
+
+   > **Y desde el 21 ago 2026, también entre dos PASTOS** (`borde/pasto_bosque`,
+   > `_seco`, `_pantano`, `_sierra` y sus cruces: 10 claves nuevas). Es la misma
+   > pieza con el lóbulo de material teñido a otro verde en vez de a un marrón,
+   > con el grano comprimido ×0,53 —cociente medido de los rangos de luminancia de
+   > los dos lóbulos del kit— para que no salga empedrada. Faltaba, y era la mitad
+   > del bug "las mesetas no tienen su terreno": la frontera sierra/pradera es un
+   > cambio de losa tan visible como la arena contra el pasto y salía a escuadra.
+   > La dibuja el pasto de mayor rango (`world2d::rango_de_pasto`) — una costura,
+   > un solo dueño. Detalle en §5.
 2. **El sólido**. `tiles/sand`, `tiles/dirt` y `tiles/ice` no tenían losa: la
    búsqueda por color de `atlas-suelo.py` no encontraba nada a menos de
    `DELTA_MAX` y se quedaban en color plano inventado. Ahora los tres salen de
@@ -2466,10 +2543,23 @@ Tres cosas lo arreglan, y las tres salen de pixel que el pack ya tenía:
    `ondula_el_borde` con ruido suave, así la nieve entra y sale en lengüetas. El
    ajedrez se queda —se pidió— pero pegado al borde, no de pantalla a pantalla.
 
+   > **Y el ajedrez se quedó SÓLO en la nieve** (21 ago 2026). Sierra (5) y
+   > montaña (8) pasan por `pasa_la_grada`, que es la misma frontera ondulada
+   > resuelta con una LÍNEA en vez de con la trama. Dos motivos: entre dos verdes
+   > parecidos el damero no se lee como degradado sino como suciedad, y —el de
+   > fondo— la costura entre dos pastos ahora la dibuja el pack, y una orla
+   > necesita una frontera con un adentro y un afuera, no una nube de celdas
+   > sorteadas. El área se conserva: 0,5 es el promedio de la matriz de Bayer.
+
 > **El acantilado NO se difumina.** Una pared es una pieza de kit de tres celdas
 > de alto y su material sale del suelo que corona: con el bioma difuminado saldría
-> a rayas. `geography::biome_de_terraza` devuelve el bioma LISO y es el que usa
-> `world2d::suelo_del_relieve`. La trama es del suelo; la pared es de la terraza.
+> a rayas. La trama es del suelo; la pared es de la terraza.
+>
+> Desde el 21 ago 2026 eso **no lo decide quien pregunta**: lo decide
+> `geography::superficie_de`, que sobre relieve contesta con el bioma liso y en
+> llano con el difuminado, y es la MISMA función con la que la malla pinta esa
+> celda. `biome_de_terraza` sigue existiendo pero ya no la llama el juego, sólo
+> las mediciones — tener dos entradas era justamente el bug del anillo (§5).
 
 **Y el sombreado volvió al suelo texturizado.** `build_chunk_mesh` ponía el color
 de vértice en BLANCO cuando la celda tenía losa —correcto, para no teñir la
@@ -2832,6 +2922,313 @@ viva del mundo es pasto**; la altura se lee por el relieve.
 > unas pocas décimas de por ciento de la superficie y sólo el remate de los cuatro
 > macizos con nombre.
 
+### EL ANILLO DE LA MESETA: el sprite no llevaba el gris de su celda (21 ago 2026)
+
+Reporte del usuario, con capturas del celu: *"todos los bordes se ven con una
+textura y el relleno se ve con otra; es como si las mesetas no tuvieran su
+terreno, como si se usaran sólo como margen y el terreno de relleno fuera el
+mismo del de abajo"*.
+
+**No era el material: era el TINTE.** La pieza de acantilado del pack **trae su
+meseta dibujada** (filas 0-2 del recorte, ver `scripts/import-acantilado.py`), y
+el importador la tiñe al color **crudo** de la losa que la corona. Pero la malla
+del chunk no pinta la losa cruda: la multiplica por
+
+```
+gris = grano × void_dim × (1 + nivel × 4,5 %) × sombra_de_terraza × sombra_de_muro
+```
+
+o sea hasta **×1,54** en la cumbre y hasta ×0,66 al pie de un muro. El sprite se
+spawneaba **sin `color`**, así que en el escalón 9 el relleno salía un **40 % más
+claro** que la franja de meseta del sprite pegado al lado: dos verdes distintos
+para el mismo pasto, con la frontera calcada al canto de la terraza. Eso es el
+anillo, y por eso la meseta se leía como un margen dibujado encima del suelo de
+abajo.
+
+El arreglo es una sola fuente, `world2d::gris_de_celda`, que aplican **todos** los
+que tapan una celda que la malla ya pintó: el acantilado suelto, el bordillo, la
+rampa, el muro apilado, el canto cóncavo, la orilla y lo que la ciudad le cuelga
+a la ladera (escalera, caño, reja). Tres detalles que costaron:
+
+- **`atenuar_sprite` cortaba en `k < 1.0`** (existía para el `VOID_DIM` del
+  pozo), así que aclarar era imposible — y el gris de una cumbre vale 1,4. De ahí
+  sale `tenir_sprite`, que también aclara (corta sólo en `k == 1.0`, que es el
+  caso de todo sprite que no es relieve). Pasarse de 1 no rompe nada: la malla ya
+  lo hace y el recorte a blanco lo hace el shader, igual para los dos.
+- **El muro apilado se tiñe por fila**: el `labio` con el gris del CANTO (arriba
+  es donde meseta toca meseta) y el `pie` con el de la celda que pisa (abajo la
+  terraza baja está varios escalones más oscura). Dos consultas por pared, no una
+  por fila; el espolón del paso va con el mismo gris.
+- **El gris del pie va sin la sombra de columna**: esa franja oscura la tira
+  ESTE muro, y un muro no se sombrea a sí mismo.
+
+Lo cuida `world2d::gris_tests::el_muro_empieza_en_el_gris_del_canto_y_termina_en_el_del_pie`.
+
+### UNA SOLA FUENTE DE SUPERFICIE — `geography::superficie_de` (21 ago 2026)
+
+El anillo tenía una segunda mitad, y es la clase de bug que ya mordió tres veces
+(la sabana coronada de médanos, el acantilado con el pie mojado, el agua sin
+familia de ribera): **dos respuestas para la misma pregunta y nadie obligando a
+que coincidan.**
+
+| pregunta | fuente 1 | fuente 2 |
+|---|---|---|
+| ¿de qué material es esta celda? | `biome_de_terraza` (liso) para la pared | `biome_at` (difuminado) para la losa |
+
+En la franja del ajedrez de `pasa_el_escalon` eso es una pared de sierra plantada
+sobre una losa de pradera, y la misma corrida de canto alternando de variante
+celda a celda.
+
+Ahora hay **una**: `geography::superficie_de(body, tx, tz) -> Superficie { tile,
+pasto }`, con caché posicional y época de partida en la clave (la misma tabla
+directa que usa `relief`, sin hash, para que un recorrido por filas no se pise a
+sí mismo). La regla que la hace correcta:
+
+> **El difuminado se suspende sobre el relieve.** Un canto, el cuerpo de su pared
+> y su rampa son UNA pieza de kit: si la trama del ajedrez entra ahí, la pieza
+> sale a rayas. Y como la malla pinta esa misma celda con esta misma función,
+> borde y relleno no pueden discrepar — no por disciplina, por construcción.
+
+Reemplaza como entrada del juego a `world2d::suelo_del_relieve` (que queda como
+envoltorio de una línea), a `world2d::pasto_de_bioma` y a
+`geography::biome_de_terraza` — esta última sigue pública **sólo para las
+mediciones**, que necesitan comparar el bioma liso con el difuminado. De paso, el
+coste BAJA: una celda de canto evaluaba el bioma tres veces y ahora una.
+
+Y dos cosas que se aprendieron al hacerlo:
+
+- **El pasto es del CLIMA, no del tile.** Atarlo al tile dejaba sin verde propio a
+  la orilla de todo el pantano: un charco no pinta pasto, pero la orla que lo
+  separa del prado sí lleva el verde del pantano.
+- **`Biome::River` sólo en el camino difuminado.** Una celda de acantilado con río
+  daba River → `Tile::Water` → pasto forzado → material `"pasto"`, o sea
+  **acantilados con el kit de pasto en plena zona de nieve**, que es lo que se ve
+  alrededor del cauce en la captura de la sierra. El río es un trazado sobre el
+  terreno; de qué está hecha la ladera que cruza lo dice la ladera.
+
+Guardián: `geography::sobre_relieve_manda_la_terraza`, que además **exige que la
+muestra contenga casos donde las dos respuestas difieren** — sin eso la
+afirmación se cumpliría sola y no guardaría nada.
+
+### LA COSTURA ENTRE DOS PASTOS (21 ago 2026)
+
+`spawn_chunk_orilla` sólo conocía tres materiales —tierra, arena, nieve— y su
+`same()` comparaba `Tile`. A los dos lados de la frontera sierra/pradera el tile
+es `Tile::Grass`, así que **nadie dibujaba nada**, aunque las losas sean
+(106,148,88) contra (71,151,87): dos verdes claramente distintos cortados a
+escuadra, siguiendo el borde de la terraza. La otra mitad de "la meseta parece un
+margen".
+
+La pieza no hubo que dibujarla: es **el mismo autotile `Grass_3` del pack** con el
+lóbulo de material teñido a otro VERDE en vez de a un marrón. `import-suelo-bordes.py`
+ya separaba los dos lóbulos (material y pasto) y los teñía por caminos distintos,
+así que fueron cuatro líneas de tabla. Medido en la hoja publicada:
+`borde/pasto_sierra` interior = (106,148,88), **exactamente** `tiles/pasto_sierra`,
+y su fleco (71,151,87), exactamente `tiles/grass`.
+
+Dos decisiones que el importador MIDE en vez de suponer:
+
+- **El grano se comprime ×0,53**, que es el cociente de los rangos de luminancia
+  de los dos lóbulos del kit. El lóbulo de material es tierra con piedritas y el
+  pasto es mucho más liso: teñido tal cual, la costura entre dos pastos salía
+  empedrada. El número lo imprime cada corrida; si el pack cambia, cambia con él.
+- **Una costura, un solo dueño** (`world2d::rango_de_pasto`): la dibuja el pasto
+  de mayor rango y su fleco se tiñe del de menor. Sin un orden total los dos lados
+  dibujarían su fleco, uno encima del otro — dos dibujos para el mismo metro de
+  mundo. El orden es pradera < bosque < sabana < pantano < sierra, y el importador
+  sólo genera las combinaciones en ese sentido (10 claves nuevas).
+
+Y por eso mismo **las gradas 5 y 8 dejaron de ir con ajedrez**
+(`geography::pasa_la_grada`): una orla necesita una FRONTERA —una línea con un
+adentro y un afuera—, no una nube de celdas sorteadas. El damero se queda en la
+línea de nieve, que es blanco contra verde y ahí sí se lee como difuminado; entre
+dos verdes parecidos se leía como suciedad. El comentario que justificaba lo
+contrario —*"sierra y montaña pintan el mismo material, su frontera no se ve"*—
+llevaba desactualizado desde que `pasto_sierra` se volvió losa propia.
+
+### EL PASO SE COLOCA ENTERO, Y LA ROCA DEL PASTO ES PIEDRA (21 ago 2026)
+
+Dos cosas del mismo reporte, mirando la lámina de ejemplo del pack:
+*"usar las rampas completas de forma modular, no sé por qué recortás sólo un
+pedazo y usás eso de rampa"* y *"en morado los assets que unen acantilados y
+rampas"*.
+
+#### La roca del pasto era mostaza
+
+Y ésta era la de fondo. El kit de acantilado del pack es una **montaña de
+arena**, y a la familia "pasto" nunca se le dio rampa de roca —nieve, regolito y
+basalto sí la tienen—, así que su pared se quedaba con el marrón rosado del
+médano. Sobre verde eso no se lee como piedra: se lee como una mancha
+**mostaza**, y es literalmente el *"el relleno se ve con otra textura"* que el
+usuario venía marcando desde las capturas del 16 ago. Puestas al lado,
+`cliff/nieve` sale roca limpia y `cliff/pasto` sale mostaza.
+
+Los cuatro tonos de [`ROCA_DE_PASTO`] **no son un gris inventado**: son colores
+del núcleo de 501 del pack, elegidos en las **mismas cuatro luminancias que la
+piedra del kit** —63, 93, 129 y 163, medidas sobre el tramo repetible— así que el
+canto rodado conserva su volumen y sólo cambia de tono. Y el más oscuro va
+**tintado**, nunca gris neutro: es la regla medida del pack (246 de 250 sprites,
+skill `pixel-art`).
+
+#### El kit del paso, importado y colocado
+
+`paso/<material>`, 12 piezas por material: boca, tramo repetible ×2, pie, los
+pasos que bajan al este y al oeste, y **los cuatro enlaces diagonales** —las
+piezas que el usuario marcó en morado, las que unen el paso con la pared—.
+
+Tres decisiones que costaron su medición:
+
+- **Hoja propia** (`art/pack/paso.png`, 1.024×1.120). Metidos en el atlas del
+  acantilado, los kits de 4×4 entre piezas de 1×1 lo inflaban de 6,75 a **15,75
+  MB de VRAM**, casi todo aire de empaquetado. Aparte, y empaquetando por altura,
+  la hoja mide exactamente las 1.080 celdas que dibuja. El atlas del acantilado
+  quedó byte por byte igual.
+- **`_1_Top` y `_1_Bottom` no se publican**: son la familia modular ya compuesta.
+  Medido buscando cada recorte dentro del plato de ejemplo, `1_Bottom` y
+  `Central_Bottom_Part` arrancan en el mismo píxel.
+- **Los peldaños conservan su tierra.** Sus tonos son **exactamente los catorce de
+  la meseta, cero exclusivos** (medido), así que separarlos por color es
+  imposible: se hace por la ventana de píxeles que el importador ya tenía medida.
+  Teñidos quedaban verde sobre verde, que es la queja vieja *"odio cómo usás las
+  rampas"*.
+
+Del lado del juego, **todavía no se coloca**, y el intento está contado abajo
+porque el resultado importa: se escribió `spawn_chunk_paso` —una pieza por paso,
+centrada en la corrida, callando la rampa embaldosada y la pared bajo sus
+espolones— y **la captura del driver mostró el terreno destrozado**: paredes
+partidas en fragmentos sueltos y claros donde antes había muro. La supresión se
+comía celdas de acantilado que ningún kit alcanzaba a cubrir, porque el kit se
+apoya donde puede y el canto zigzaguea. Se revirtió entero.
+
+#### Lo que NO se pudo, y está medido
+
+El kit necesita **cuatro celdas de canto seguidas al mismo nivel**. Medido:
+
+| | |
+|---|---|
+| cantos de 1 celda recta | **86,2 %** de todos los del mundo |
+| cantos de 4 o más | 4,4 % |
+| pasos de 1 celda de ancho | 88,9 % |
+
+Los bordes de terraza **son escaleras diagonales, no líneas**. Se probaron dos
+salidas y las dos se revirtieron con su número:
+
+1. **Ensanchar el paso** a lo largo del canto: 88,9 % → 89,4 % de pasos de una
+   celda, con un 22 % más de celdas de paso a cambio de nada.
+2. **Tallar una muesca** en el campo de altura (aplanar bloques de 4×4 en la
+   franja de paso): los cantos rectos pasaron de 4,4 % a 5,6 % preguntando por el
+   ancla, y **empeoraron a 2,8 %** preguntando por la celda.
+
+Por eso el kit se coloca **como sprite**, colgado sobre las celdas igual que la
+pared (`pared_apilada`): que el borde zigzaguee cambia cuánto se CAMINA, no cómo
+se dibuja. Enderezar el canto de verdad es trabajo de generación y queda en §13.
+
+### EL RÍO SE TALLA EN ESCALONES, NO EN DECIMALES (21 ago 2026)
+
+Segunda captura del usuario: en la sierra, *"los ríos y los acantilados se pelean
+el terreno en vez de distribuirlo"* — farallones en zig-zag cortando el cauce,
+cascadas sueltas y orlas secas marrones alrededor del agua. Medido antes de tocar
+nada (`medir_rios`, ventana de sierra de 1.200 tiles): **el 21,75 % de las celdas
+de cauce eran roca**.
+
+Tres causas, y las tres eran números que nadie había medido:
+
+1. **`HONDURA` valía 0,030 de campo y un escalón mide 0,0467.** La talla no bajaba
+   el cauce ni un nivel: sólo corría la frontera de cuantización, así que el nivel
+   de la orilla parpadeaba a lo largo del curso. Ahora la hondura se pide **en
+   escalones** (`HONDURA_EN_ESCALONES = 1,0`) y se convierte con el paso real del
+   cuerpo.
+2. **El empalme del valle pegaba un campo liso contra uno rugoso.** Era
+   `base × (1−peso) + cota × peso`, y como `base` lleva el ruido dentro, en el eje
+   del cauce el terreno quedaba perfectamente plano y a 3,6 tiles volvía entero:
+   hasta **0,06 de campo por tile, el triple de `relief::MAX_FIELD_STEP_PER_TILE`**
+   —y esa cota no es decorativa, el descarte barato de `near_step_boundary` se
+   apoya en ella—. **El propio río fabricaba los farallones que después lo
+   cortaban.** Ahora la plataforma se lleva a la cota y el ruido se atenúa aparte
+   (`RUIDO_EN_EL_CAUCE = 0,25`), y el valle nunca mide menos de `VALLE_MINIMO = 8`
+   tiles: lo que gobierna el dibujo no es la proporción, es la pendiente.
+3. **`es_canto` no conocía los ríos.** Se retiraba del mar (`nivel < 0`) pero un
+   río corre en nivel ≥ 0, así que plantaba canto dentro del cauce; y como
+   `relief_tile` gana sobre el bioma, esa roca además SECABA hasta tres filas más
+   (`bajo_el_dibujo_de_una_pared`) — las orlas marrones. Ahora se retira del cauce
+   igual que del mar, **salvo en la garganta**.
+
+> **"Cruzar" son TRES cosas, no dos.** La excepción de garganta pedía agua arriba
+> y agua abajo, y con eso un río que corre de norte a sur por un llano la cumple
+> SIEMPRE: la excepción se tragaba el retiro entero y el cauce seguía cortado en
+> el 7,4 % de la sierra. Falta la tercera: **que el terreno baje ahí**. Un salto
+> sin desnivel no es un salto.
+
+Resultado, todo medido con `medir_rios` (mismas ventanas, antes → después):
+
+| | antes | después |
+|---|---|---|
+| cauce cortado por roca (sierra) | 21,75 % | **4,12 %** |
+| cauce cortado por roca (llano) | 0,52 % | **0,01 %** |
+| salto de campo p99 dentro del valle | 0,0317 | **0,0199** (cota: 0,020) |
+| cauce por debajo de su ribera (sierra) | 83,6 % | **96,1 %** |
+| anclas de cascada en la sierra | 49 | **56** |
+
+El 4,12 % que queda **son los cruces**, y son correctos: donde el cauce baja un
+escalón hay roca a los lados, con cascada o con rápido.
+
+#### LA CASCADA ES DE FRENTE, ASÍ QUE EL RÍO TIENE QUE BAJAR (21 ago 2026)
+
+Reporte del usuario mirando las capturas: *"las cascadas sólo tenemos assets de
+frente, tipo cuando el río viene de arriba hacia abajo, no de izquierda a derecha
+horizontal; veo que pones cascadas ahí y eso está mal"*.
+
+Tenía razón, y el número es peor de lo que parecía. `agua::salto_desde` pedía tres
+cosas —agua encima, pared que baja al sur, agua al pie— y **ninguna dice hacia
+dónde corre el agua**. Las tres las cumple un río que pasa de este a oeste con su
+ribera sur cayendo. Medido con `medir_rios::rumbo_del_cauce_en_los_saltos` sobre
+las tres ventanas de cordillera:
+
+| | (−6.100,−6.100) | (−7.000,−6.100) | (−4.300,−6.100) |
+|---|---|---|---|
+| candidatos a salto | 2.408 | 1.489 | 1.185 |
+| con el cauce hacia el **norte** | **1.998** | 1.067 | 575 |
+| hacia el sur | 410 | 422 | 610 |
+| dentro de un cono de 45° del sur | 2 | 0 | 0 |
+
+O sea que **la mayoría de las cascadas del mundo caían contra la corriente**.
+
+El arreglo es preguntarle el rumbo al TRAZADO, que es quien lo sabe:
+`rios::rumbo_del_cauce` devuelve el vector unitario del tramo más cercano (el
+sentido sale gratis, los tramos se generan aguas abajo). `salto_desde` exige
+`dz > 0`.
+
+**Y no un cono, el SENTIDO.** Con 45° sobrevivían dos cascadas en todo el macizo:
+el trazado avanza a zancadas de 48 tiles con meandro, así que casi ningún tramo es
+verticalísimo. Exigir el cono deja el mundo sin saltos; exigir el sentido saca los
+que estaban al revés. Anclas por ventana: 68 → **15**, 39 → **26**, 23 → **20**.
+
+**La laguna está exenta**: `cauce` también cuenta el agua quieta, y ahí no hay
+trazado que preguntar (`rumbo_del_cauce` devuelve `None`). Un vertedero de laguna
+cayendo de frente está bien dibujado igual.
+
+#### El llano se quedó sin cascadas, y está bien
+
+`agua::hay_cascadas_donde_el_rio_cruza_un_escalon` barría 1.800×1.800 tiles
+centrados en el spawn —que es llano— y empezó a fallar. Los saltos que encontraba
+ahí **eran el defecto**: el cauce cruzaba una frontera de cuantización cada
+treinta tiles porque el valle pegaba un campo liso contra uno rugoso, y la pradera
+tenía cascadas de diez pisos en mitad del prado. Un salto es de montaña. El
+guardián ahora mira tres ventanas de cordillera **medidas** con
+`medir_rios::donde_estan_las_cascadas` —(−6.100,−6.100), (−7.000,−6.100),
+(−4.300,−6.100)— y no "la primera terraza ≥ 5", que cae en cualquier loma alta y
+una loma no tiene río: para que haya salto hacen falta las dos cosas juntas.
+
+#### Y la ciudad desmintió un número
+
+Se probó con `HONDURA_EN_ESCALONES = 1,15` —la idea era que el redondeo no dejara
+tramos empatados con su orilla— y lo tiró abajo `city::la_ciudad_no_esta_llena_de_baldios`:
+con esa hondura la ribera mete un borde de terraza más en el casco de Ciudad
+Central, y `lot_at` no planta parcelas a caballo de un escalón. **135 de 218
+manzanas**, por debajo del dos de cada tres que separa una ciudad de un
+descampado. Con 1,0 pasan las dos cosas — y el río sale mejor en las tres
+mediciones. Es la regla de siempre: *calibrar midiendo, no suponiendo*.
+
 ---
 
 ## §6 La vida — el mundo vive sin vos
@@ -3065,9 +3462,9 @@ HA_AUTOPLAY=1 HA_BAGSHOT=/tmp/juego  ./target/release-native/ha-game
   las sombras) y su posición se lee en el mini-dial del reloj.
 - **Luz 2D por asset** (`light2d.rs` + campo `emission` en el manifest): la
   oscuridad se **agujerea**, no se tapa con naranja. `night_veil.wgsl` +
-  `NightVeilMaterial`; `NightOverlay` es `Mesh2d`; hasta 16 luces. Emisor con
-  núcleo + halo + mist; luciérnagas con `Light2d` chico; `light_sprites` aclara a
-  jugador/NPCs cerca del foco.
+  `NightVeilMaterial`; `NightOverlay` es `Mesh2d`; hasta **40** luces
+  (`VEIL_LIGHTS`). Emisor con núcleo + halo; luciérnagas con `Light2d` chico;
+  `light_sprites` aclara a jugador/NPCs cerca del foco.
   ⚠ `light_sprites` está **partido en dos pasadas** (pasada cara a 20 Hz +
   re-aplicación del tinte a 60 Hz) porque vive en `PostUpdate` para pisar a
   fauna/NPCs/máquinas, que repintan `sprite.color` cada frame. **No unificarlas**:
@@ -3075,6 +3472,128 @@ HA_AUTOPLAY=1 HA_BAGSHOT=/tmp/juego  ./target/release-native/ha-game
   Probar de noche con `HA_DAYPHASE=0`. El `NIGHT_VEIL` alto es a propósito.
 - **Estrellas** que siguen a la cámara, siempre; nunca geometría finita cruzable.
 - **Bichos de ambiente** (`ambient.rs`): luciérnagas de noche, **mariposas de día**.
+
+#### LA NOCHE SE ENCIENDE — el motor estaba entero y no tenía a quién iluminar (28 ago 2026)
+
+El pedido llegó con cinco capturas de un juego de festival nocturno y una sola
+consigna: **que Ki se vea así, sin perder fps**. Lo que se encontró al medir no
+fue un problema de shader.
+
+**La causa: de los 14.440 sprites del manifest, CUATRO declaraban `emission`.**
+`prop/farol`, `furniture/campfire`, `items/lantern` y un botón de la UI. O sea que
+el pack tenía faroles, velas, fogatas, linternas de camping, letreros y torres de
+reflector dibujados, el motor tenía dos pasadas por píxel con pozo, bulbo, sombra
+direccional y tinte de sprites… y **el pueblo de noche estaba negro porque nadie
+había dicho quién emite**. Es el caso de manual de la memoria "el pixel suele
+estar; la cadena no".
+
+##### `scripts/import-emisiones.py` — la emisión se MIDE
+
+Nuevo importador, con el contrato de siempre (regla 7): idempotente vía
+`scripts/emisiones-import-index.json`, y **nada escrito a ojo**. Por cada clave
+candidata recorta el sprite de su hoja, busca el **núcleo caliente** (componentes
+conexas de píxeles por encima de un piso de luminancia y del percentil alto del
+propio recorte) y de ahí saca:
+
+| dato | de dónde sale |
+|---|---|
+| `color` | media del núcleo **más su anillo de 2 px** — el centro de una llama es blanco, el ámbar está alrededor |
+| `offset` | centroide del núcleo respecto del centro del sprite, en metros: la luz sale del vidrio del farol, no de su poste |
+| `radius` | alcance base de la familia escalado por `√área` del núcleo (o por la EXTENSIÓN del conjunto, en los multifoco) |
+
+`intensity`, `flicker` y `day` son de la FAMILIA y van declarados: no se puede
+medir en un cuadro quieto si una luz late.
+
+**Si no hay núcleo, el asset no emite**, y ése es el filtro honesto: entra
+`prop/farol_de_calle_5` (36 px de vidrio blanco) y no entra `prop/fogata_1` (leña
+sin encender, 0,686), ni la chimenea de ladrillo (0,504), ni el letrero pintado
+(0,429). **Y no entró `prop/farol`**, el candidato obvio por nombre: medido, está
+dibujado APAGADO — por eso el alumbrado público usa `farol_de_calle_5`.
+
+El piso de luminancia quedó en **0,70 y no 0,72** por una razón de PALETA: el
+color más claro y saturado del lado del rojo que tiene LimeZu es (255,160,160),
+que mide 0,707. Un piso en 0,72 no dice "esto está apagado", dice "en este pack no
+puede existir una luz roja".
+
+Resultado: **102 emisores medidos** (de 4 que había), 66 de ellos ya sembrados por
+las tablas del pack sin tocar una sola línea de siembra.
+
+##### El alumbrado público y las guirnaldas (`worldgen.rs`)
+
+Dos colocaciones nuevas, las dos **geométricas y no por sorteo**, como el semáforo
+de `esquina_decor_at`:
+
+- **`alumbrado_at`** — farol en el CORDÓN (la vereda que toca la calzada), cada
+  `PASO_ALUMBRADO` = 14 tiles, con el compás corriendo a lo largo de la acera.
+  Empezó en 8 y la captura de `HA_NIGHTTEST` mostró por qué está mal: con el pozo
+  del farol viejo (radio 7 × `LIGHT_REACH` 1,5 = 10,5 m) se superponían diez pozos
+  por celda, `cover` llegaba a cero y **la calle de medianoche se veía como un
+  mediodía nublado**. Un charco sólo se lee como charco si al lado hay oscuridad.
+- **`guirnalda_at`** — guirnaldas de luz en la acera de adentro, dentro del casco
+  (`settlement_covering`), en una retícula de 9×7 tiles. El paso en x es mayor que
+  la guirnalda más larga, así que dos nunca se pisan.
+
+Las guirnaldas **no existen en el pack** (se buscó en el manifest en castellano y
+en inglés, y en los PNG crudos: lo único que aparece es `prop/luces_calabaza_*`,
+que son calabazas de Halloween con una vela adentro). Se dibujaron con la skill
+`pixel-art` en `scripts/dibujar-guirnaldas.py` → `art/gen/prop/guirnaldas.png`,
+cuatro vanos y cuatro colores, y su emisión la mide el mismo importador que la de
+cualquier asset comprado.
+
+##### Lo que se agregó al shader, sin pagar un pase más
+
+Las dos pasadas de `night_veil.wgsl` ya barren la pantalla entera: todo lo que se
+sume ahí adentro es ALU y cero ancho de banda.
+
+1. **Halo** — un lóbulo ancho `(1-x)²` sumado con poca ganancia alrededor del
+   bulbo. Es el "bloom" de cada luz sin mip-chain de bloom, que en una GPU de
+   tiles es justo el recurso escaso.
+2. **Viñeta** — la pasada de sombra YA es un multiplicador a pantalla completa.
+   Va atada a `night` y vale 0 de día **a propósito**: `toggle_light_passes` apaga
+   las dos pasadas a mediodía, y si la viñeta valiera algo justo ahí, las esquinas
+   pegarían un salto al apagarse el pase.
+3. **Bitono** frío/cálido: la sombra se enfría, el pozo no. Ámbar contra azul.
+
+##### Y salió MÁS BARATO que antes (medido con `HA_NIGHTTEST`)
+
+El presupuesto subió de 24 a 40 luces y el costo BAJÓ. Tres cambios:
+
+- **`lights[i].z` ya no es el alcance sino `1/alcance²`**, y `tints[i].w` es
+  `1/(radio·BULB_R)`. Rechazar una luz fuera de alcance —el 90 % de los casos, 40
+  veces por píxel— pasó a costar una resta, un `dot`, una multiplicación y una
+  comparación: **ni raíz cuadrada ni división**. La raíz sólo se paga por las
+  luces que de verdad tocan el píxel.
+- El mismo rechazo al cuadrado en los dos bucles de CPU (`light_sprites` y
+  `cast_shadows`), que son bucles objeto × luz.
+- **El arte PLANO ya no se tiñe por sprite.** Todo lo que está bajo
+  `layers::YSORT_MIN` lo ilumina el shader por píxel con un degradado continuo;
+  teñirlo además por sprite le pone un valor único a toda la baldosa. Y son la
+  mayoría: 3.915 sprites de tile contra ~560 objetos en la captura del barrio.
+
+| `span[lit=…]` en la vista de barrio | µs |
+|---|---|
+| antes (24 luces) | 2.461 |
+| con 40 luces + rechazo al cuadrado | 1.219 |
+| \+ sin teñir el arte plano | **503** |
+
+#### FUEGOS ARTIFICIALES (`render/fireworks.rs`, 28 ago 2026)
+
+La pieza que le faltaba a la noche: con los faroles encendidos el pueblo ya se lee,
+pero **una noche con luz fija es una postal**. Lo que la vuelve una escena es que
+algo cambie la luz — durante un estallido la fuente dominante deja de ser el farol
+y pasa a ser el cielo.
+
+Tres piezas: el **cohete** (sube frenándose, con rastro y su propia `Light2d`
+chica), el **estallido** (44 chispas con velocidad radial, gravedad y ARRASTRE —
+el arrastre es lo que las hace abrirse de golpe y quedar colgando, que es la
+silueta que uno reconoce) y el **destello**, una `Light2d` grande y efímera que es
+lo que ilumina el suelo.
+
+Presupuesto: máximo 3 estallidos vivos, sólo de noche, sólo en superficie y sólo
+**dentro del casco** de un poblado — en el campo no hay quién los tire. De día son
+cero entidades y un `if` por frame. `HA_PIROTECNIA=1` acorta la espera para que un
+driver de QA los vea en su corrida (si no, se verificarían por el log y nunca por
+la imagen).
 
 #### Las mariposas DECIDEN (3 ago 2026)
 
@@ -3504,6 +4023,40 @@ Dos problemas distintos que se sentían igual de mal:
   huella pintada el asset bloquea su celda ancla completa, y ahí sí se siente un
   muro donde no hay nada.
 
+### EL ACANTILADO NO PROYECTABA SOMBRA DE SOL (21 ago 2026)
+
+Reporte del usuario: *"las paredes/acantilados o cualquier terreno no generan
+sombra como las rocas, me refiero a ese sol que genera la sombra"*. Tenía razón,
+y eran DOS bugs en `light2d::attach_ground_shadows`/`cast_shadows`, el sistema
+que le cuelga a cada sprite del mundo una `GroundShadow` —un quad que
+`cast_shadows` gira y estira según de dónde venga el sol (`sky2d::SkyLight`)—.
+Confirmado con el flag que el propio sistema ya traía para esto,
+`HA_SHADOW_DEBUG=1` (pinta la sombra en magenta opaco: a su alpha real se
+confunde con la roca oscura y no se ve si está o no).
+
+1. **El LARGO salía del ANCHO, no del alto.** `length = size.x * 0.62` — para un
+   decorado más o menos cuadrado (un roble, una roca) da lo mismo, pero un
+   acantilado es una columna de **una** celda de ancho que puede medir **diez**
+   de alto (`relief::SALTO_DE_TERRAZA`): la sombra salía del porte de un
+   guijarro sin importar si el muro medía uno o nueve pisos. Arreglado con
+   `size.x.max(size.y)`: a un decorado normal (alto ≤ ancho) no le cambia un
+   pixel: al que es angosto y alto, le da su tamaño real.
+2. **La pared apilada no tiene UN sprite, tiene N.** `pared_apilada` dibuja cada
+   fila (labio, cuerpo, pie) como su propia entidad de 1×1 —es lo que permite
+   que la pared sortee como un solo objeto y que la fila del medio tenga
+   variantes—, pero eso significa que `attach_ground_shadows`, que no sabe nada
+   de paredes y sólo mide `custom_size`, le colgaba a un farallón de nueve pisos
+   **nueve sombritas idénticas apiladas**, cada una del porte de un ladrillo. Se
+   arregla con un ancla invisible (`Sprite::from_color(Color::NONE, ...)`, el
+   mismo truco que ya usa la veta sin arte) del tamaño de la pared ENTERA
+   —`TILE_M` de ancho por `(filas+1) × TILE_M` de alto—, y las filas visibles se
+   marcan `light2d::sin_sombra` para no duplicar la mancha.
+
+Verificado con `HA_SHADOW_DEBUG=1` antes y después (la cuña magenta pasa de una
+línea fina a un bloque sólido) y con una captura normal (las franjas
+diagonales del sol cruzando la nieve, donde antes no había nada). Ningún test
+de mundo se movió: el cambio es puro render, no toca `relief.rs`.
+
 ---
 
 ## §8 Assets y editores — HA Studio
@@ -3620,7 +4173,15 @@ parte — las calles, sin ir más lejos, salían con el color plano del basalto.
 ```bash
 python3 scripts/import-pack-masivo.py     # el pack entero → slots + manifest + siembra
 python3 scripts/import-calles.py          # asfalto, vereda y línea de carril
+python3 scripts/import-emisiones.py       # QUIÉN ilumina de noche, medido del dibujo
+python3 scripts/dibujar-guirnaldas.py     # lo único de luz que el pack no tiene
 ```
+
+⚠ **`import-emisiones.py` va DESPUÉS de cualquier importador que agregue arte**, y
+también después de `dibujar-guirnaldas.py`: mide sobre lo que ya está publicado en
+el manifest. Es idempotente (`scripts/emisiones-import-index.json`) y **respeta la
+emisión que curó el editor a mano**. El detalle está en §7 ("La noche se
+enciende").
 
 Lo que antes era criterio humano ahora sale **del pixel**:
 
@@ -3696,6 +4257,184 @@ colocable existe en el editor y no lo pone nadie.
 (`modernuserinterface-win`, 304 archivos — es arte de HUD, no de mundo),
 `6_Home_Designs` (132 láminas de ejemplo, no assets) y los autotiles sueltos (26,
 ya cubiertos por los importadores curados de agua, calles y acantilado).
+
+### Las 54 paredes de interior, y por qué no se usaban — 24 ago 2026
+
+El reporte fue *"quiero que importe bien los assets de las paredes interiores…
+busca dónde se encuentra el bug de por qué aún no se usan"*. Las dos mitades
+resultaron ser cosas distintas, y la segunda es la interesante.
+
+**Lo que faltaba importar.** `Room_Bulder_subfiles_32x32/` trae **nueve** hojas y
+el juego tocaba tres. De la de paredes, `import-construccion.py` saca dos
+estilos —el más de madera y el más de piedra— de los **54** que dibujó LimeZu.
+Los otros 52 estaban en el disco desde el primer día, y con ellos la cocina, el
+baño y el dormitorio de toda la ciudad eran el mismo cuarto pintado del mismo
+marrón. `scripts/import-paredes-interiores.py` los importa todos: cada estilo con
+sus cuatro caras, **su vano** (la pared con el hueco, de la hoja de arcos) y **su
+losa**, emparejados por COLOR y no por orden de hoja. Más las cinco familias de
+remate que nadie había tocado: zócalos, orlas, empalmes de piso, sendas y
+sombras al pie. Son 945 claves nuevas.
+
+Los nombres salen del pixel, no de un archivo: el pack no bautiza estas celdas,
+así que el tono y la claridad medidos dan "Pared verde clara 2". Es el mismo
+criterio con el que `import-construccion.py` decide cuál bloque es "de madera".
+
+⚠ **El friso NO se conserva, tampoco en la cara de adentro.** Es tentador
+quedárselo —"el cielorraso se lee desde el cuarto"— y es un error: esos 10 px de
+blanco son el techo del cuarto **de la hoja**, el mockup con el que se dibujó el
+catálogo. La primera versión de este importador se los quedó y el guardián lo
+cazó en 108 recortes. `verificar_pagina` es el mismo de `import-construccion.py`,
+heredado a propósito.
+
+**Y ahora el bug de verdad, que no era de arte.** Las paredes no se usaban por
+tres motivos encadenados, y ninguno era "falta pixel":
+
+1. **La ciudad generada no tiene una sola pared de interior.** `residential_tile`
+   hacía `if !perimeter { return WoodFloor }`: el interior de toda casa del mundo
+   era un galpón. Una casa de campo de 23×12 era un salón de 21×10 sin una
+   división. No es que la pared de interior se viera mal — **no había dónde
+   dibujarla**. Ahora `city::tabique_de_planta` parte la planta en cuartos.
+2. **`center` era `front`.** Un tile de pared pide su forma de autotile
+   (`edge_n`, `corner_ne`…), ninguna pared tiene esas poses, y `tile_sprite` cae
+   **siempre** a `center` — que apuntaba al paño de adentro, con su zócalo. O sea
+   que las casas de todas las ciudades se dibujaban con el empapelado del cuarto
+   puesto para la calle. Desde afuera, una pared es su paño liso.
+3. **La pose `espalda` no existía en ningún asset.** `walls::Cara::Fondo` la pide
+   desde el 8 ago y la cadena caía a `front`, así que la espalda de toda casa
+   construida también salía empapelada. Ahora la escriben los dos importadores.
+
+El que las conecta es `world2d::pared_de_interior`: elige el estilo **por casa**
+(hash del rect edificado, así los cuatro muros de un cuarto combinan y la casa lo
+conserva entre partidas sin guardar nada) y la **cara por geometría** —en cenital
+3/4 la pared del norte enseña su lado de adentro y la del sur el de afuera—, que
+es la misma regla que `walls::Cara` ya aplicaba a lo que construye el jugador.
+Lo que faltaba era aplicarla a lo que genera la ciudad.
+
+**Los tabiques y la veda.** `tabique_de_planta` es una partición binaria por el
+lado largo, iterativa y sin memoria (quien pregunta es un `topdown_tile` por
+celda). Lo único delicado es que **un vano abre contra la fila que tiene
+enfrente**: si un corte posterior planta su tabique justo ahí, el cuarto se
+sella. Medido: 2.613 plantas de 16.000 con habitaciones inalcanzables. Con la
+veda —cada vano prohíbe su coordenada a los cortes que vengan después— son 0.
+Lo cuidan `ningun_cuarto_queda_sellado` y `todo_cuarto_da_para_amueblarse`.
+
+**Una abertura, una puerta.** La fachada del pack ya trae su puerta dibujada y
+animada, y el sim además estampaba su `Tile::Door` en la misma cara: la cara a la
+calle de toda casa generada tenía **dos puertas encimadas**, con pose y posición
+distintas. Manda la fachada, que es la que tiene el dibujo bueno; se calla sólo
+el SPRITE del tile, no el tile — se sigue cruzando por ahí, y las otras tres
+caras conservan la suya. Es el mismo bug que `edificio.rs` documenta como razón
+de existir ("las aberturas son UNA sola lista"), que en la ciudad generada nadie
+estaba evitando.
+
+⚠ **Lo que NO entró: las plantas altas.** El pedido incluía "fijate cuántos pisos
+tiene la casa por fuera y hacé los mismos por dentro". Se midió y **la fachada no
+lo dice**: derivar la altura de elevación del alto del PNG menos la huella da
+negativo en 38 de 45 programas, porque esos sprites no son elevaciones
+consistentes (hay plantas, hay 3/4, hay recortes al talle del lote). Inventar un
+número ahí sería justo lo que §2 prohíbe. Y el resto de la cadena tampoco está:
+`topdown_tile` devuelve `Air` en todo `z > 0`, `building::stream_roofs` sólo
+genera techos con `z == 0` (subís y la ciudad se queda sin fachadas), y fauna,
+vecinos, clima y cofres están apagados en `z != 0` con brocha gorda. Es un
+trabajo de su propio tamaño: sim en `z>0`, un `city::tramo_de_casa` colgado de
+`Escaleras::en` como ya lo hace `cuevas::tramo_natural`, y desactivar el gate de
+`z != 0` para las plantas de casa —que no son el subsuelo.
+
+### El kit de cuarto: `Room_Builder_3d_walls`, y por qué la entrada de arriba estaba mal — 24 ago 2026
+
+El reporte fue *"¿qué son esas porquerías? ¿por qué no usás las paredes
+verticales, las que tienen ángulo?"* — y tenía razón. La entrada de acá arriba
+("Las 54 paredes de interior") describe un trabajo con **la hoja equivocada** y
+con dos suposiciones que no aguantaron la medición. Queda escrita porque el
+diagnóstico de fondo —"no faltaba pixel, faltaba quien lo pidiera"— sigue siendo
+cierto, pero lo de abajo la corrige.
+
+**Hoja equivocada.** `Room_Builder_Walls` dibuja el paño de frente y nada más. Un
+cuarto no se arma con eso: un muro norte-sur salía como una hilera de carteles de
+frente puestos de canto, y no hay pieza para las esquinas. La hoja que LimeZu
+dibujó PARA armar un cuarto es **`Room_Builder_3d_walls_32x32.png`**, que estaba
+sin importar: trae el muro horizontal con su tapa, los verticales vistos de canto
+y las esquinas en ángulo.
+
+**La grilla se midió contra las casas del propio artista.** El pack trae
+`6_Home_Designs/` — casas armadas por LimeZu con este kit. Comparando celda por
+celda (hash del pixel) qué recorte usó y en qué lugar del cuarto, el uso se
+amontona en un bloque de **8×7 que se repite cada 8 columnas y cada 7 filas**:
+223 usos de la celda local (3,3) y 178 de (3,2) contra 0 de sus vecinas. De ahí
+salen las piezas, ninguna escrita a ojo:
+
+| pose | pieza local | qué es |
+|---|---|---|
+| `edge_n` | (3,2)+(3,3) | el muro horizontal: tapa arriba, paño abajo |
+| `edge_w` / `edge_e` | (1,2) / (6,2) | los verticales: de un muro norte-sur se ve el canto |
+| `edge_s` | (3,5) | el que da a la calle: se le ve la tapa y nada más |
+| `corner_nw` / `corner_ne` | (2,2) / (5,2) | las cuñas en ángulo |
+| `end_w` / `end_e` | (0,0)+(0,1) / (0,3)+(0,4) | las jambas de un vano |
+
+**Un vano es un HUECO, no un arco.** El kit no dibuja "la pared con el agujero":
+deja pasar el piso y remata el muro a cada lado con su jamba. Así que
+`Tile::Door` de tabique devuelve la LOSA y el hueco lo dibujan los dos muros que
+lo flanquean. La hoja de arcos sigue importada para colocarla a mano desde HA
+Studio, pero el mundo generado ya no la pide.
+
+⚠ **Corrección: NO hay cara de afuera en `Room_Builder_*`.** El importador viejo
+publicaba la columna 5 como `back`/`espalda`/`center` creyendo que era "el paño
+liso de la vereda". Está medido que es mentira: color medio (204,208,211) contra
+(208,212,215) del frente — **el mismo empapelado**, sólo que sin la tapa. Con eso
+toda casa generada del mundo enseñaba el empapelado del dormitorio mirando a la
+calle, que es justo lo que el punto 2 de la entrada anterior decía haber
+arreglado. Ahora el importador **no emite `back` ni `espalda`**, y el muro que da
+a la calle contesta con su tapa: lo que mira al frente es la fachada de Modern
+Exteriors.
+
+⚠ **Corrección: el friso SÍ va — es la TAPA del muro.** La entrada anterior lo
+tiraba ("son 10 px del mockup"). Sin tapa el paño queda flotando contra el piso y
+un cuarto se lee como una mancha de color. Las casas de `6_Home_Designs` tienen
+tapa en **todas** sus paredes. El guardián de salida quedó dado vuelta:
+`verificar_tapas` se planta si el muro horizontal perdió su celda de arriba.
+
+**Se probó y NO sirve como guardián**: pedirle a la tapa que sea más clara que su
+paño (la distancia de color entre las dos va de 4,2 a 150,6 en los 19 estilos, y
+cinco tienen la tapa del mismo tono), ni pedirle una línea de contorno oscura
+arriba (la traen 15 de 19). Lo que sí vale para los 19: el recorte es opaco de
+punta a punta y su celda de arriba **no es el mismo dibujo** que la de abajo
+(cambian de 456 a 1.024 píxeles de 1.024). Ese es el test.
+
+**La pieza sale de dónde está el CUARTO, no de qué borde del rect es.** Un
+tabique y una pared de borde son la misma pared mirada desde el mismo lado; lo
+que decide qué se ve de ella es para dónde le queda el piso
+(`world2d::cara_de_muro`). La regla vieja —"si es perímetro, `back`"— le pedía
+piezas distintas al tabique norte-sur y al muro oeste de la casa, siendo la misma
+pared.
+
+**El emparejado del piso por color, corregido.** Elegir para cada pared la losa
+MÁS parecida es exactamente lo que no se puede hacer: medido sobre
+`azul_clara_4`, pared (208,212,215) y piso (206,214,220) dan 8 de distancia y el
+cuarto entero sale de un solo azul. Ahora se pide un mínimo de separación de
+brillo (22, la mitad de los 45 que usa `Generic_Home_1` entre su pared gris y su
+piso de madera) y entre las que lo cumplen gana la más parecida: el cuarto sigue
+combinando, un tono más abajo.
+
+**La maqueta.** `scripts/maqueta-casa.py` dibuja una casa entera con los rects del
+manifest y la misma regla de apoyo que usa el chunk, sin compilar el juego. No
+reemplaza a la captura: reemplaza a *adivinar*. Un recorte mal elegido se ve en un
+segundo y no en veinte minutos de `cargo`.
+
+**Colisión: ya era la de abajo.** El pedido de *"controlar la colisión sólo en la
+parte de abajo, para que dé la ilusión de pasar detrás de las paredes"* no
+necesitó código: un muro ocupa UN tile de suelo y el sprite mide dos celdas hacia
+arriba, así que lo que frena es el pie y lo que tapa es el cuerpo. Lo que faltaba
+era el arte — con el paño de frente en los cuatro lados no había ilusión que
+mostrar.
+
+⚠ **Lo que NO entró: sótanos y plantas altas.** El pedido incluía "tené en cuenta
+las puertas de sótanos y para segundos y más pisos". El mecanismo de andar entre
+plantas existe (`ha_shared::escaleras` + `escaleras.rs`), pero **nadie planta un
+tramo dentro de una casa generada**: `city.rs` no coloca escaleras y el resto de
+la cadena sigue como lo describe la entrada anterior (`topdown_tile` devuelve
+`Air` en `z > 0`, `stream_roofs` sólo genera techos en `z == 0`). Es el mismo
+trabajo de su propio tamaño que ya estaba anotado, ahora con el kit de cuarto
+listo para vestirlo.
 
 ### Las hojas que el importador masivo NO podía ver — 4 ago 2026
 
@@ -3829,6 +4568,156 @@ plano gris de horizonte a horizonte. Queda un solo material sin losa,
 `tiles/subsuelo`, y ahí el color plano sigue siendo la respuesta correcta: un
 macizo sin dibujo se lee como masa, que es lo que es.
 
+### Desde la vereda no se ve el interior — 23 ago 2026
+
+El reporte fue *"adentro estaba mal colocado, sobresalía un borde"*, y era literal:
+en media ciudad se veía el piso de madera y los muebles de las casas **desde la
+calle**. Tres causas distintas, las tres arregladas.
+
+**1. El lote CRECE, el edificio crecía con él.** Un lote se agranda para llenar
+manzanas enteras (`blocks_needed`: una universidad ocupa cuatro), así que el lote
+colocado suele ser bastante más grande que el `cells` que declara su programa — el
+dúplex declara 26×18 y en una manzana ancha se plantaba en 26×24. `plain_building_tile`
+construía *todo el lote menos la vereda*, mientras `import-edificios.py` le había
+elegido la fachada para el tamaño DECLARADO. Con el edificio al doble de su dibujo
+y el cliente sin estirar más de 1,4× (`building::AGRANDE_MAX`), la fachada tapaba
+la mitad sur y por el resto se veía el interior. Ahora `city::edificado_de_lote`
+construye lo que declara el programa, centrado y apoyado contra el frente, y lo
+que sobra del lote queda de explanada.
+
+**2. Y si la fachada no llega, se INFORMA — el edificio NO se achica.**
+`import-edificios.py` compara, para cada programa, la huella contra el arte que le
+tocó, y lista los que se quedan cortos (`reportar_huellas`). Eso es todo lo que
+hace: imprime.
+
+⛔ **Achicar el lote está PROHIBIDO desde el 24 ago 2026.** Hasta ese día esta
+misma función reescribía el `cells` del `LotProgram` en `city.rs`, con el
+argumento de que "achicar un edificio para que su propia fachada lo tape es una
+corrección". No lo es, y el usuario lo cortó en seco:
+
+> *"deja de estarme achicando edificios. Si te ocupa mil tiles, que ocupe los
+> putos mil. Los assets están ahí, los usás del tamaño que son."*
+
+El tamaño de un edificio es una decisión de DISEÑO y la toma él. Que el pack haya
+dibujado una universidad más chica que su parcela es un problema de ARTE —hay que
+componer, repetir tramos o dibujar más fachada— y nunca una excusa para encoger el
+edificio. La corrida del 24 ago que achicó diez programas (universidad 44×32 →
+22×30, hangar 30×24 → 14×16, correo 20×16 → 11×16…) se revirtió entera y
+`ajustar_huellas` pasó a llamarse `reportar_huellas` para que el nombre no vuelva a
+mentir. Ningún importador escribe `city.rs`.
+
+**3. El garaje era una caja sin tapa.** La parcela residencial construía, aparte de
+la casa, un rectángulo de 6×5 con paredes de ladrillo, piso de madera y un portón
+— y como `roofed_rect` sólo tapa el edificio principal, se dibujaba **sin techo**:
+un interior a la intemperie por parcela. Se le podría haber puesto una tapa, pero
+no hay con qué: Modern Exteriors no dibuja un galpón de 6×5 en ningún lado. Lo que
+sí dibuja son **casas con el portón en la fachada**. Así que el juego se adaptó al
+arte (regla 7): el garaje pasó a ser el portón que la casa ya tiene dibujado, y de
+él sale la entrada de auto hasta la calle. Se pierde un cuarto de 4×3 al que casi
+nadie entraba; se gana que el barrio deje de tener una caja destapada por parcela.
+
+**Y el que las tapaba a todas, que era un bug de una línea.** `kit_de_hilera`
+preguntaba por el TAMAÑO de la pose `tramo` en vez de por su existencia, y
+`celdas_de` cae al tamaño del slot cuando la pose falta —es lo correcto para quien
+sólo quiere una medida—, así que **toda** fachada contestaba que era un kit
+modular, entraba por ese camino, no encontraba `remate` que dibujar y se iba sin
+dibujar nada: el barrio entero sin techos. Se ve en `barrio-2-duplex.png` antes y
+después. Preguntar `has_pose` es la diferencia.
+
+**Tres más, del mismo día, que salieron de mirar el APK en el celu.**
+
+- **Colgarle una pose a un slot lo puede ROMPER.** Al darle la puerta animada a
+  las fachadas enteras, esas 30 entradas pasaron a tener `poses` y ninguna
+  representativa — y `world_sprite` busca `idle_down`/`center`/`base` y, si no
+  hay, **se queda con la primera del mapa**, que en un `HashMap` es la que salga.
+  O sea que la casa se dibujaba con el sprite de su propia puerta; y si le tocaba
+  `opening` o `closing` (que llevan animación) ni siquiera recorta: estira la
+  HOJA ENTERA de puertas sobre el lote. De ahí el "se ven todos los frames" y el
+  "el exterior no cubre el interior". Todo slot al que se le agregue una pose se
+  lleva también una `base` con su recorte entero.
+- **Una tira de animación no se parte.** `armar_pagina` clavaba la página de
+  puertas en 1024 px y `Additional_Houses_Door_2` mide 1344 (14 cuadros de 3
+  celdas): `Image.paste` recorta sin avisar, así que los cuadros de `closing`
+  apuntaban fuera de la imagen y salía un bloque plano encima de la fachada.
+  La página mide ahora lo que mide la tira más ancha.
+- **La cara exterior Y-SORTEA por su pie.** Las fachadas generadas iban a
+  `layers::OVERHEAD`, que es una z PLANA. Una fachada mide catorce tiles de alto
+  sobre una huella de diez, así que siempre se mete sobre el terreno del vecino de
+  atrás — y con z plana, cuál tapa a cuál lo decidía el orden de spawn: aparecía
+  media pared ajena flotando sobre la casa de adelante. Ahora van a
+  `layers::fachada(z_del_frente)`, la banda que ya existía para las caras
+  exteriores construidas, y la de más al sur va adelante como cualquier cosa del
+  mundo.
+
+### Una hilera son VARIAS viviendas, no una casa ancha — 23 ago 2026
+
+El reporte fue una captura y una frase: *"estás colocando dos casas como si fuera
+una"*. Y era exacto. La primera versión de la casa en hilera hacía un lote ancho
+con **una** vivienda —un interior, una puerta— y encima le pintaba tres módulos
+del pack. Desde la vereda se contaban tres casas; desde adentro, una. Eso no es un
+detalle de arte: es el exterior mintiendo sobre el interior, que es justo lo que
+este sistema existe para evitar.
+
+Ahora el sim parte la hilera en viviendas de `city::ANCHO_DE_HILERA` tiles (10: el
+módulo del pack, 10 celdas × 0,95 m, redondeado a la grilla). Cada tramo es una
+casa entera —su medianera, su puerta al frente y otra al fondo— y el cliente le
+dibuja **un módulo a cada una**. Que la constante viva en `ha-shared` y no en el
+cliente es lo que hace que las dos mitades cuenten las mismas casas.
+
+Dos cosas que costaron una corrida de tests cada una:
+
+- **Se redondea hacia ABAJO, nunca hacia arriba.** Forzar un mínimo de dos
+  viviendas hacía crecer la casa más allá de su jardín, así que su fila del frente
+  —con las puertas— caía fuera del lote y la casa quedaba sellada.
+- **La hilera necesita puerta en las dos PUNTAS.** Con puertas sólo al frente y al
+  fondo, una calle que cruce la fila de este a oeste se come las dos: 1 sellada de
+  1.743. Es la misma razón por la que la casa suelta ya tenía portal en las cuatro
+  caras.
+
+El módulo se dibuja estirado de su **paso** a una vivienda, no de su ancho: lo que
+sobra es el sangrado que el pack dibujó para que se monte sobre el vecino.
+
+### La parcela no es un cuadrado fijo — 23 ago 2026
+
+Dos reportes del usuario, misma causa: *"el cerramiento llegó al límite de la
+parcela e invadió la carretera"* y *"las parcelas varían el tamaño para dar
+variedad"*.
+
+El rectángulo del lote es `p.cells` acotado a la manzana, o sea **el mismo número
+para las mil casas del barrio**, y la cerca se plantaba en su filo (`lx == 0 ||
+lz == 0 || …`). Como el margen del lote sale de la calle más ancha que lo rodea
+(`bounding_margin`), del lado de la calle angosta ese filo queda pegado al
+asfalto — y ahí aparecía el cerramiento, cruzado en la calzada.
+
+`jardin_de_la_parcela` mete un **retiro por lado**, distinto en cada lado y en
+cada lote (0 a 3 tiles, de bits distintos del hash; el frente se retira menos,
+que es la cara que da la línea del barrio). Resuelve los dos de una: la cerca
+nunca nace en el filo y dos parcelas vecinas no miden lo mismo aunque el programa
+sea el mismo. Lo que queda afuera es terreno natural. Se achica sólo hasta donde
+la casa siga entrando.
+
+**Y la cerca no siempre da la vuelta entera.** Una cuadra donde las mil parcelas
+están cercadas igual se lee como una grilla. El borde se recorre como una recta
+(`indice_de_borde`, sentido horario desde el noroeste) y la cerca es un
+**intervalo** de esa recta: el largo sale de una fracción sorteada —entera, media,
+un tercio, un cuarto— y el arranque se cuenta desde el frente, porque lo primero
+que cerca cualquiera es la cara que da a la calle. La entera pesa más que el resto:
+un barrio sin ninguna cerca completa tampoco se lee como un barrio.
+
+Lo mira el driver **`HA_BARRIOTEST`** (`debug/autodrive.rs`): busca una casa de
+cada programa de vivienda de la ciudad más cercana, retrata cada una desde su
+vereda, después se para pegado a la puerta de la casa en hilera —para ver el
+batiente abierto con la fachada todavía opaca— y termina adentro. Lo residencial
+vive en las AFUERAS (`district_at`), así que barre hasta el borde del asentamiento:
+barriendo sólo el centro te devuelve tiendas y torres, que fue lo que pasó la
+primera vez.
+
+```bash
+cd native && cargo build -q -p ha-game --profile qa
+timeout 480 env HA_BARRIOTEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=/tmp/ha-qa \
+  WGPU_BACKEND=gl ./target/qa/ha-game
+```
+
 ### Las casas del mapa tienen fachada — 4 ago 2026
 
 `building.rs` ya dibujaba la fachada encima de la casa y **la transparentaba al
@@ -3941,6 +4830,191 @@ aparecen tres veces cada uno, y las dos copias de los costados quedan cortadas a
 medio ("BUT…", "…ERY", "B… S…"). Son la misma pieza que ya se exporta entera:
 sacarlas (`RECORTADAS`) es la única forma de no meter medio cartel en el juego. Se
 ve en el contact sheet (`--hoja`), que **se mira antes de escribir nada**.
+
+### La casa en HILERA: el otro kit modular — `import-casas.py` (23 ago 2026)
+
+`24_Additional_Houses` no trae sólo casas enteras: trae un kit, y es la respuesta
+del pack a *"esta misma casa, más grande o más chica"*.
+
+```
+┌──────────┬──────────┬────────────┐
+│  tramo   │  tramo   │   remate   │   tramo  = 10 celdas, se repite
+│ (10 c.)  │ (10 c.)  │  (12 c.)   │   remate = cierra la fila por la derecha,
+└──────────┴──────────┴────────────┘             con su pared de costado
+```
+
+**Lo que estaba roto.** `import-pack-masivo.py` recorta la carpeta de singles sin
+preguntarse para qué dibujó el autor cada archivo, e `import-edificios.py` le
+buscaba a cada lote la fachada por TAMAÑO. Dos resultados, medidos:
+
+- `building/casa_chica` —la casa más común del mapa— era
+  `casa_base_en_terrazas_costado`: **las dos paredes de costado apiladas, sin
+  techo**. El empaquetador dejó `Side_View_Base_1` y `_2` pegadas en un recorte de
+  10×12 que apoya, llena su caja y pasa todos los filtros de pixel.
+- Las cuatro `casa_en_terrazas_*` que le tocaban al barrio son REMATES de hilera
+  plantados solos, con el techo cortado a cuchillo por la izquierda — que es por
+  donde iba la casa vecina.
+
+**Cómo quedó.** `scripts/import-casas.py` publica el kit COMO kit y `city.rs` le da
+su propio programa de lote (`building/casa_hilera`). El cliente
+(`building::spawn_fachada_modular`) reparte los módulos **de derecha a izquierda**:
+primero el remate contra el borde de la casa —es el que trae la pared de costado—
+y después tramos hasta cubrir; el último se recorta por la izquierda, que es
+justo el borde que el pack ya dibuja al ras. Resultado: la fachada mide
+**exactamente** lo que mide la casa, sin estirar un pixel.
+
+Tres cosas que hubo que MEDIR y no se podían escribir:
+
+1. **El paso entre módulos.** No es el ancho: el autor dibujó cada pieza con medio
+   sangrado por lado, así que pegadas al ras dejan una ranura de una celda por la
+   que se ve el pasto. `solapa()` pega las dos piezas con 0 y con 1 celda de
+   solapa y se queda con la que no deja **fondo encerrado** en la costura (píxeles
+   transparentes con dibujo a izquierda y derecha en la misma fila). La búsqueda
+   llega hasta una celda porque el sangrado del pack es de media por lado — se ve
+   en el perfil de opacidad: las columnas de las puntas están al 81–84 % y las del
+   cuerpo al 88–96 %. Sin ese tope la medición se iba a dos y tres celdas
+   persiguiendo el triángulo de cielo bajo el alero —que es dibujo, no ranura— y
+   se comía el pilar que separa una casa de la otra.
+2. **Cuánto mide un cuadro de la tira de puerta.** Las hojas animadas no separan
+   los cuadros con aire. Lo primero que se probó —"el primer ancho que divida la
+   tira y cuyo cuadro 0 aparezca en una casa"— está mal: `Door_2` mide 42 celdas y
+   sus cuadros son de 3, pero las dos primeras celdas de un cuadro de 3 también
+   contienen la puerta cerrada, así que 2 "calzaba" y la tira quedaba cortada en
+   diagonal. Lo que separa el ancho bueno de sus tajadas es que **una animación es
+   continua**: se elige el ancho que minimiza el salto entre cuadros vecinos.
+3. **Cuál es el cuadro de "abierta".** No es el más distinto del cerrado: un
+   batiente a medio abrir cruza el vano con su hoja y cambia más píxeles que uno
+   abierto del todo, que es un agujero oscuro (medido en `Door_3`: del cuadro 2 al
+   12 la diferencia es plana ±8 %, o sea que el máximo lo decidía el ruido). Lo
+   que sí se mide es la FORMA: la tira es un palíndromo (va y vuelve), y si lo es
+   —se comprueba— el vértice está en el medio.
+
+**Y un offset en píxeles dentro del manifest, sin inventar un campo.** Las puertas
+del pack no caen en la grilla de 32 (la de `Terraced_House_Modular_2` arranca en el
+píxel 204). Una `Pose` ya puede declarar su propia `grid` —está para que convivan
+hojas de 16 y de 32 px—, así que `puerta_en_tramo`, `puerta_en_remate`,
+`paso_tramo` y `paso_remate` se publican con `grid: [1, 1]` y su rect **es** el
+rect en píxeles. El cliente le resta el origen de la pieza y tiene el offset
+exacto.
+
+**La puerta se dibuja encima del paño, en el pixel donde el pack la dibujó
+cerrada** (`PuertaDeFachada`), así que el cuadro 0 de la animación es idéntico al
+pixel que tapa: no hay costura ni salto al abrirse. No reusa `DoorArt` porque
+aquélla es la puerta de una CELDA y se dibuja alta y apoyada
+(`door_render_size`) — correcto para un vano de obra, y lo que arruinaría el calce
+acá.
+
+**Y no sólo en la hilera.** Una casa entera se planta de un sprite, así que no
+hay dónde meterle la puerta… salvo que el propio slot diga dónde está: la pose
+`puerta_en_sprite` trae, en píxeles y desde la esquina del recorte, el sitio del
+batiente, y `building::spawn_puerta_de_fachada` lo lleva a la escala con la que se
+dibujó ese paño (`roof_layout` puede agrandarlo hasta 1,4×, y sin corregir por eso
+la puerta cae donde estaría si la casa midiera lo que mide su pixel). Las fachadas
+se buscan **por RECORTE y no por nombre**: el importador masivo bautiza automático
+y el de edificios reparte alias, así que la misma casa vive bajo media docena de
+claves (`building/casa_mediana#3`, `building/villa#7`…) y lo único que no miente es
+a qué píxeles apunta cada una. Al 24 ago 2026: 48 claves tocadas y 40 fachadas con
+puerta animada viva (Modern House, One Story, Post Apocalyptic, las Terraced y sus
+alias) — ver "El ORDEN de la cadena de importadores" más abajo para por qué el
+número baja de 48 a 40 y cómo se verifica. La japonesa y las
+victorianas no calzan con su hoja —el pack las dibujó con otro color— y eso se
+reporta en la corrida en vez de publicarse a medias.
+
+Se abre a **3 tiles** (`PUERTA_FACHADA_DIST`) y no a 1,7 como una puerta de obra:
+el techo empieza a desvanecerse en cuanto pisás la huella más un tile, así que con
+el alcance corto la franja donde la puerta estaba abierta Y la fachada todavía
+opaca medía una décima de tile — o sea que desde la vereda el batiente no se veía
+abrir nunca.
+
+### El pasto salía como una alfombra de puntitos — 24 ago 2026
+
+Reporte literal: *"le pones un pasto con tanta mierda que parecen puntos… esos
+forman figuritas como charquitos de huecos de césped"*, con el campo entero
+empedrado de matas repetidas en grilla.
+
+No era el arte: las losas base (`tiles/pasto_bosque`, `_seco`, `_sierra`,
+`_pantano`) son **verde liso**, y la de matas es una VARIANTE (`#s1`). Era el
+sorteo. En `art2d.rs`, al armar `suelo_variantes`:
+
+```rust
+if let Some(vs) = art.variant_art.get(&base) {
+    uvs.extend(...);          // sólo las VARIANTES
+}
+if uvs.is_empty() { /* recién acá entraba la losa base */ }
+```
+
+O sea: **un material con variantes sorteaba sin la losa base**. Para el asfalto o
+la vereda da igual —sus variantes son la misma baldosa con otro dibujo— pero
+`pasto_bosque` tiene exactamente una variante y es la de matas, así que el 100 %
+del campo salía con matas.
+
+Arreglo: en el pasto (y sólo en el pasto, `PASTOS_DE_BIOMA`) la losa lisa entra al
+sorteo repetida `PESO_PASTO_LISO = 7` veces por variante. El campo se lee sólido y
+la mata aparece salteada, que es para lo que está: marcar que el suelo tiene
+textura, no empedrarlo.
+
+⚠ Si algún día el atlas publica las siete variantes de mata que `atlas-suelo.py`
+contempla, el peso sigue valiendo (se multiplica por la cantidad de variantes),
+pero conviene volver a mirarlo en pantalla.
+
+### El ORDEN de la cadena de importadores — 24 ago 2026
+
+Los importadores de `scripts/` no son independientes: **el masivo va primero y el
+de casas va después del de edificios en lo que toca a las poses**. El orden bueno
+es
+
+```
+import-pack-masivo.py  →  import-casas.py  →  import-edificios.py
+```
+
+y saltárselo deja el árbol de arte a medias, en silencio, sin que ningún test lo
+cace.
+
+**Por qué.** Cada importador lleva su índice (`scripts/*-import-index.json`) con
+las claves que publicó, y al re-correr borra las suyas viejas y las vuelve a
+escribir. El masivo las escribe **enteras y peladas**:
+
+```python
+# import-pack-masivo.py::escribir_manifest
+sprites[clave] = entrada        # dict nuevo: png + grid + rect, y NADA más
+```
+
+Ese `=` pisa la entrada completa, incluido el campo `poses`. Y `poses` es
+justamente lo que `import-casas.py::colgar_puertas_en_fachadas` le cuelga a las
+casas enteras: las cuatro poses del batiente más `puerta_en_sprite`. O sea que
+**re-correr el masivo al final deja a las casas sin puerta animada**, que es
+exactamente lo que pasó el 23 ago 2026 y hubo que rehacer al día siguiente.
+
+El de edificios, en cambio, propaga en vez de pisar: sus alias por lote salen de
+`sprites[destino] = dict(sprites[k])`, una copia de la clave del pack. Si casas ya
+la enriqueció, la puerta viaja sola a `building/casa_mediana#3` y compañía — por
+eso casas va ANTES que edificios y no al revés.
+
+**Cómo se comprueba que quedó bien** (no hay test que lo haga; es un chequeo de
+corrida):
+
+```bash
+python3 - <<'EOF'
+import json
+m=json.load(open('native/crates/ha-game/assets/art/manifest.json'))
+c=json.load(open('scripts/casas-import-index.json'))
+sp=m['sprites']
+BAT=('opening','closing','open','closed','base')
+print([k for k in c['poses_en'] if k in sp and not all(p in sp[k].get('poses',{}) for p in BAT)])
+EOF
+```
+
+Tiene que dar lista vacía. Ojo con un falso positivo: usar `sp.get(k,{})` confunde
+*ausente* con *sin poses*, y hay claves del índice que edificios elimina
+legítimamente después (los alias `#n` de un slot que esta vez recibió una sola
+fachada). Al 24 ago 2026: 48 claves tocadas por casas, 40 vivas con el batiente
+completo y 8 borradas por edificios.
+
+⚠ **Ningún importador escribe `city.rs`.** `import-edificios.py` lo LEE (para
+`LOTES_MODULARES` y `AGRANDE_MAX`) y nada más: una corrida suya sólo puede aparecer
+en el `git diff` del manifest. Si ves `city.rs` modificado después de un
+importador, es un bug — ver "la fachada no llega, se INFORMA" más arriba en este §8.
+
 
 ### La escala del pack: una celda son 0,95 m — la mide el personaje — 8 ago 2026
 
@@ -4268,17 +5342,48 @@ trae: el RELLENO de todas esas familias es el mismo verde (71,148,86 ±2). Lo qu
 cambia entre ellas es la **transición** — a tierra khaki la 3, a tierra naranja
 la 4, a agua las `Water` —, o sea que las "versiones" del pasto son piezas de kit
 (regla 8) y sembrar una como relleno pinta cuñas verdes en cuadrícula por todo el
-campo. El filtro de losa de `atlas-suelo.py` (`CUADRANTES_MAX`, `BORDE_MAX`) las
-echa, y está bien que las eche: se probó tapizando con `Grass_3_9…13` y sale una
-grilla de triángulos.
+campo.
 
-Lo que sí hay son **tres juegos de píxeles de relleno distintos** (las matas
-puestas en otro lado), y el color del clima sale de correr esa losa hacia un
-color que el propio pack declara en sus paletas planas (`derivar` +
-`PACK_KHAKI`/`PACK_AGUA`/`PACK_SETO`). No se mezcla pixel a pixel —a 0,8 de
-mezcla las matas desaparecen y queda un rectángulo liso, que es el baldío otra
-vez—: se mide la media de la losa y se **traslada** entera, así la mata verde de
-la pradera llega a la sabana como mata seca y no como mancha.
+> ⚠ **Y eso es exactamente lo que estuvo pasando hasta el 22 ago 2026.** El
+> párrafo de arriba decía que el filtro de losa (`CUADRANTES_MAX`, `BORDE_MAX`)
+> las echaba. Echaba los BORDES —donde media celda es del otro material— y no las
+> **esquinas internas**, que son 98 % pasto: mismo color medio, misma desviación,
+> mismos cuatro cuadrantes, misma sombra por los cuatro lados. Pasaban limpias
+> por los tres filtros.
+>
+> Las siete "variantes" de `tiles/grass` eran, píxel por píxel, las siete
+> esquinas internas de `Grass_1` (`_9`…`_13`, `_17`, `_20`), cada una con su
+> lengüeta de tierra naranja en un rincón. Y como `COLOR_DEL_TILE` ató a la misma
+> familia a la tierra, la arena, la nieve, el regolito, el basalto y los cuatro
+> pastos de bioma —justamente para heredarles esas "variantes"—, **diez
+> materiales sembraban confeti naranja celda por celda**.
+>
+> Lo caza ahora `atlas-suelo.py::contamina`: una losa es relleno sólo si no trae
+> píxeles de OTRO material, medido por [`croma`] contra los nueve rellenos que el
+> pack declara (sus celdas de un solo color). El corte sale de
+> `--calibrar`, no de la intuición.
+
+**Y el pasto no tiene tres juegos de píxeles: tiene uno, y es un color plano.**
+Medido sobre las cuatro carpetas de terreno celda a celda: el único relleno de
+pasto del pack es `Grass_1_22` —**un único (71,151,87) en sus 1.024 píxeles**—,
+repetido idéntico en nueve archivos (`Grass_2_21`, `Grass_3_22`, `Grass_4_21`,
+`Grass_Fenced_1_22`, `Grass_Water_*_22/23`). La **única** variante de verdad que
+existe es `Grass_Fenced_1_9` (= `Grass_Water_1_9` = `_2_9` = `_3_9`): el mismo
+verde con cuatro matas, tres colores, cero costura. Entra por `pasto_bosque` y
+`pasto_pantano`, que son los que apuntan a esas familias.
+
+La variedad del campo NO sale de la losa, entonces: sale de la **siembra de
+props** (`pack_siembra::BOSQUE` — `Props_Grass_8…13` y `Props_Dirt`, el 4 % de
+las celdas) y del grano por celda de `tile_render_color`, que desde el mismo día
+va a la mitad (±2,25 %): sobre una losa de color plano, ±4,5 % no se leía como
+grano sino como **damero**, con la frontera clavada en la grilla de 32 px.
+
+El color del clima sale de correr esa losa hacia un color que el propio pack
+declara en sus paletas planas (`derivar` + `PACK_KHAKI`/`PACK_AGUA`/`PACK_SETO`).
+No se mezcla pixel a pixel —a 0,8 de mezcla las matas desaparecen y queda un
+rectángulo liso, que es el baldío otra vez—: se mide la media de la losa y se
+**traslada** entera, así la mata verde de la pradera llega a la sabana como mata
+seca y no como mancha.
 
 | clima | slot | de dónde sale | a dónde va |
 |---|---|---|---|
@@ -4756,6 +5861,65 @@ dos slots que recorten el mismo atlas comparten archivo y el APK no se infla.
 
 ---
 
+### EL ARTE PASÓ POR 3D Y VOLVIÓ A 2D (27 sep 2026)
+
+Pedido del usuario: *"agarrá todos los assets 2D, apartalos en una carpeta y
+convertí asset por asset a 3D sin perder diseño ni color, respetando la
+iluminación o mejorándola, y sin lag"*. Se eligió **3D pre-renderizado**: el
+modelo vive FUERA del juego y lo que el juego carga es el mismo PNG, del mismo
+tamaño, con los mismos rects. El manifest no cambia y el Redmi no paga nada
+(reglas 1 y 2 intactas).
+
+`scripts/arte3d.py` + `scripts/lib/volumen3d.py`, con salida en `arte3d/`:
+
+| carpeta | qué hay |
+|---|---|
+| `arte3d/fuente/paginas/` | la página ORIGINAL de cada PNG. Es la entrada del script: correrlo dos veces da lo mismo, y `--deshacer` la devuelve al juego |
+| `arte3d/fuente/objetos/<cat>/<nombre>/` | cada asset recortado, una carpeta por objeto y un PNG por variante/pose — los objetos de varias piezas (casa = cuerpo + puertas + techo) quedan juntos |
+| `arte3d/relieve/` | por página, `*_altura.png` (el modelo) y `*_normal.png` |
+| `arte3d/modelos/` | un `.glb` por asset, en VÓXELES con color por vértice. No se versiona: `--solo-modelos` lo regenera (y `--personajes` las capas del creador) |
+
+**Cómo se reconstruye** (el método de SpriteIlluminator/Laigter): distancia al
+borde del alfa, redondeada con un radio proporcional al lado corto de cada pieza
+(30 %, entre 3 y 10 px) — un tanque sale cilindro, una fachada sigue siendo
+bloque —, más el paso alto de la luminancia como relieve fino (sólo en el
+modelo). **El horneado** re-ilumina desde ese modelo con la luz medida del pack
+(arriba-izquierda): sube +5 del lado a la luz, baja medio o un escalón de rampa
+(12) del lado en sombra, EN BANDAS, y cada píxel tocado va al color más cercano
+entre los del propio sprite y la paleta del pack. Lo que no cambia queda bit a
+bit igual.
+
+**Lo que NO se bisela**: el suelo (`PLANAS` en el script: agua, piso, senda,
+calle, orla, bordes, taludes, sombras, UI…), `art/chargen` (capas que se
+componen en runtime: biselarlas por separado pintaría costuras al apilarlas), y
+**el borde del rect de una pieza de kit**: el rect se extiende con padding
+`edge`, así una cerca o una copa cortada a ras siguen empalmando sin raya.
+
+**Los modelos son VÓXELES, no inflado** (`lib/voxel3d.py`). La primera versión
+inflaba la silueta y el usuario la rechazó con razón: *"la biblioteca parece una
+almohada"*, y la fogata tenía huecos entre frente y dorso. El pack dibuja en
+proyección oblicua (subir una fila = subir un píxel de alto O alejarse uno de
+fondo), así que cada columna de un objeto CONSTRUIDO es un bloque: arriba la
+tapa que se aleja, abajo el frente vertical; la profundidad de la tapa se mide
+por el salto de luz entre tapa y canto. Las ranuras oscuras se hunden un vóxel
+(libros separados del mueble). Lo ORGÁNICO (fuego, árboles, rocas, bichos:
+`voxel3d::es_organico`) va parado y redondo. Todo sólido, sin costuras. En el
+visor (`arte3d/visor`, `scripts/arte3d-visor.py`), «Como en el juego» aplica la
+cizalla oblicua y el modelo coincide con el PNG píxel por píxel.
+
+**La fauna de la Tierra se MODELA** (`scripts/fauna3d.py`, 27 sep 2026). Los
+animales dibujados a mano eran "arte basura" (usuario, con razón). Ahora cada uno
+es un modelo de elipsoides articulado (patas en la cadera, cabeza en el cuello) y
+el pixel art se RENDERIZA desde él: cámara inclinada 38°, luz del pack, cuatro
+bandas por material sacadas de `rampa()`, limpieza de píxeles huérfanos, y
+`verificar()` del corsé. Salen 3 direcciones × idle/walk/run/eat (+bark del
+perro) para vaca, gallina, oveja, cerdo, perro, cabra, burro, conejo y pato. El
+tamaño de `SpeciesDef.size` es el CUADRO en metros que imprime el script.
+
+Si llega arte nuevo al pack: `python3 scripts/arte3d.py` después del
+importador. Si el horneado no gusta: `--deshacer`, retocar `FORMA`/`SUBE_MAX`/
+`BAJA_MAX` en `volumen3d.py`, volver a correr.
+
 ## §9 Build, publicación y comandos
 
 **El atajo** — un solo comando, pensado para correrlo sin la IA:
@@ -4775,6 +5939,38 @@ dos slots que recorten el mismo atlas comparten archivo y el APK no se infla.
 Cuando termina imprime la URL. Abrís esa URL en el celu (misma WiFi), descargás el
 APK, lo instalás y jugás. Dejá la terminal abierta: mantiene vivos el servidor y la
 landing.
+
+#### "El servidor local no anda con la IP que usábamos" (23 ago 2026)
+
+El servidor andaba. Lo que no andaba era **la IP horneada en el APK**.
+
+`scripts/detect-lan-ip.mjs` devolvía *"la primera IPv4 que no sea interna"*, y ese
+orden no lo decide nadie: lo devuelve el sistema como se le da la gana. En esta PC
+conviven la WiFi (`192.168.1.5`) y Tailscale (`100.83.97.54`), así que según el
+día el APK salía apuntando al tailnet — y entonces el celu **en la WiFi de casa**
+no encontraba nada. Desde afuera se ve idéntico a "el servidor no levantó".
+
+Ahora el orden es explícito y está escrito: **LAN de verdad** (192.168/10/172.16-31)
+→ Tailscale (100.64.0.0/10) sólo si no hay LAN → `127.0.0.1`. Y se saltean las
+interfaces virtuales (docker, puentes, veth, VPN de trabajo), que nunca son
+alcanzables desde el teléfono.
+
+De paso, el cartel del final ahora imprime **las dos puertas**, porque las dos
+están abiertas siempre (vite escucha con `host:true` y Colyseus en `0.0.0.0`):
+
+```
+║  1. Abrí una de estas en el Chrome del celu:
+║  WiFi:      http://192.168.1.5:5173
+║  Tailscale: http://100.83.97.54:5173
+```
+
+El puerto **5173** (landing) y el **2567** (servidor) no cambiaron ni van a
+cambiar. Si la landing no responde, antes de tocar nada:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://192.168.1.5:5173/
+ss -lptn 'sport = :5173'
+```
 
 #### "Compiló pero no levantó el servidor" (10 ago 2026)
 
@@ -4902,6 +6098,48 @@ app en el celu actualiza sola.
 ## §10 Rendimiento
 
 Escrito para leerse en frío. Objetivo: **60 FPS sin tirones en el Redmi**.
+
+### RESUELTO (24 ago 2026) — el disco de la Tierra se horneaba MIENTRAS CAMINABAS
+
+El reporte fue *"el juego es un puto lag, antes no era así"*. Medido en el Redmi,
+en release, caminando por el pasto:
+
+```text
+ha-sys: bake_body_textures=568.6 tick_fauna=1.6 stream_tile_chunks=0.6 … (ms/frame)
+ha-perf fps=1 frame_ms=804.0 … span[chk=46513 lit=600]us
+```
+
+**Dos tercios del fotograma en texturar el disco de un planeta.** Y de paso: el
+chunk 0,6 ms y las luces 0,6 ms, o sea que los dos sospechosos históricos de §10
+—`stream_tile_chunks` y `light2d::attach`— estaban limpios. La sonda de sistemas
+lo cerró en una corrida; sin ella habríamos vuelto a optimizar el chunk.
+
+**Causa 1: el guard de visibilidad no cubría el caso de estar parado encima.** El
+arreglo del 1 ago pedía `on_screen > 0.02 && in_frame` con
+`in_frame = dist < live_view_h·1,5 + r`. Para el cuerpo que PISÁS, `dist ≈ r`, así
+que el test se cumple solo, siempre. El disco vive en `z = −20`, detrás de todo el
+suelo: se estaba cocinando un millón de píxeles que el terreno tapa por completo.
+Ahora hay techo: `on_screen > DISCO_TAPADO_SOBRE` (12 pantallas de ancho) significa
+"lo estás pisando", y ahí no se hornea.
+
+**Causa 2: el plazo de 4 ms era decorativo, porque la unidad era una FILA.** El
+bucle pintaba "al menos una fila y después miro el reloj". Una fila son 512 px × 4
+muestras del resolvedor de celda completo (`suelo_a_la_vista`, que hoy pasa por
+biomas, relieve, ríos **y ciudades**) — **medido: ~500 ms la fila en el Redmi, ~1 ms
+el píxel**. Con ese piso, el plazo no podía acotar nada. El cursor pasó a ir por
+PÍXEL (`next_px`) en tandas de `PX_POR_TANDA = 32`, así que entre dos miradas al
+reloj hay unos pocos píxeles y el plazo manda de verdad.
+
+Después: `bake_body_textures = 0,0 ms` a ras del suelo, y **4,5–6,2 ms** volando,
+que es el presupuesto. El disco tarda más en estar listo; el fotograma dejó de
+pagarlo.
+
+**La lección, otra vez la misma de "un presupuesto en FILAS no acota nada"**: un
+plazo sólo acota si la unidad de trabajo entre dos miradas al reloj es chica. Cada
+vez que una muestra del mundo se encarece —y se encarece cada vez que la sim gana
+una capa: ciudades, ríos, sociedad— toda unidad de trabajo que la contenga en
+bloque vuelve a romper su presupuesto. Si agregás una capa al mundo, revisá quién
+la muestrea en lote.
 
 ### RESUELTO (1 ago 2026) — el suelo en `Blend` era el 65 % del frame
 
@@ -5341,6 +6579,30 @@ cargo check -p ha-game --features desktop
 cargo ndk -t arm64-v8a check -p ha-game --features android
 ```
 
+#### El perfil `qa`: mirar una captura sin esperar trece minutos (23 ago 2026)
+
+Los drivers de QA se corrían con `release-native`, que es el perfil del APK:
+`lto = "thin"` y `codegen-units = 1`. Tocar una línea de `ha-game` y volver a
+tener binario costaba **13 minutos**, y un driver visual se itera diez veces por
+sesión — o sea que el ciclo de "cambio algo y miro la captura" era de dos horas.
+
+`native/Cargo.toml` declara ahora un tercer perfil, `qa`: el mismo `release` sin
+LTO y con `codegen-units = 16`. El juego corre igual de rápido para mirar una
+captura y el rebuild baja a **4 min y medio**. **Nunca se publica con este
+perfil** — el APK sale de `release-native`, que no se tocó.
+
+```bash
+cd native && cargo build -q -p ha-game --profile qa
+timeout 480 env HA_BARRIOTEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=/tmp/ha-qa \
+  WGPU_BACKEND=gl ./target/qa/ha-game
+```
+
+Y una trampa que cuesta una corrida entera: **el driver tiene que respirar antes de
+salir**. `save_to_disk` escribe la captura un par de frames después de pedirla, así
+que un `process::exit(0)` inmediatamente después del último `shot()` deja el
+archivo sin escribir — el driver "pasa" y no hay evidencia. `HA_BARRIOTEST` espera
+1,5 s.
+
 ### Mirar el mapa — el volcado ASCII de una ciudad
 
 ```bash
@@ -5422,6 +6684,7 @@ ese número.
 | `HA_CUEVATEST=1` | Busca una boca de cueva de verdad en el mundo generado, se planta afuera y camina hacia adentro. Exige que se entre **andando** (bajar de nivel en el primer paso sería un portal) y que el encierro suba en **gradiente**, sin saltos de más de 0.5 por medio segundo — **descontando los beats en los que se anda el tramo**, donde la luz cambia rápido a propósito (`interior::sombra_del_tramo`). Deja `cueva-1-boca.png`, la serie `cueva-baja-5..9.png` (la bajada beat a beat, que es la prueba visual del fundido), `cueva-2-entrando.png` y `cueva-3-adentro.png`. |
 | `HA_RELIEVETEST=1` | **El relieve**, buscado en el mundo de verdad: una pared que mira al sur en el campo, un paso (rampa), una ladera DENTRO de un casco urbano y **la cumbre del monte más alto de la plantilla** (`world_map::cumbres`, no una coordenada a mano). Deja `relieve-0-pared.png`, `relieve-1-rampa.png`, `relieve-2-urbano.png` y `relieve-3-cumbre.png`, y hay que MIRARLAS — ninguna de estas cinco cosas la puede afirmar un assert y todas fueron bugs: (1) la celda del acantilado es TERRAZA, no un cuadrado gris pardo; (2) el de pasto se ve de pasto y el de arena de arena, no el mismo dibujo con una tira verde de cuatro píxeles arriba; (3) la rampa tiene sus dos espolones de roca; (4) la ladera urbana lleva escaleras y caños y la del campo NO; (5) la cumbre es BLANCA —suelo y acantilado del mismo blanco, sin franja verde en el medio— y se le ve el sendero subiendo, que en el dibujo es una rampa cada tantos metros y no una pared cerrada. |
 | `HA_AGUATEST=1` | **El agua**, con los seis sitios buscados en el mundo de verdad (`agua_pick_sites`): laguna, río, cascada, playa, sierra y **la boca de un afluente** — la celda donde un cauce entra a un lago, que hasta el 14 ago 2026 casi no existía (25 de 36 lagunas no tenían ninguno). Deja `agua-0-laguna.png` … `agua-5-afluente.png` y hay que MIRARLAS: (1) el chorro cae DENTRO de su garganta, no al lado; (2) al pie del salto no hay un ribete de orilla cruzado bajo la poza; (3) la laguna del bosque tiene ribera de PASTO, no el panal de arena de la playa; (4) la desembocadura se lee como una desembocadura y no como dos manchas de agua que se tocan. |
+| `HA_NIGHTTEST=1` | **La noche**: se planta en la ciudad más cercana, clava el reloj en medianoche y captura el mismo sitio a tres encuadres (`night-0-close`, `night-1-block`, `night-2-district`). Es el ojo de `light2d` + `night_veil.wgsl`, y desde el 28 ago 2026 también del alumbrado, las guirnaldas y la pirotecnia. Hay que MIRARLAS: (1) **entre farol y farol tiene que haber oscuridad** — si la vereda es una sábana de luz, el pozo está muy grande o el paso muy corto (fue exactamente el bug de `PASO_ALUMBRADO = 8`); (2) el pozo conserva el albedo, no lava el pixel art a crema; (3) las esquinas del cuadro las cierra la viñeta. Complementos: `HA_NIGHTPHASE=0.02` mueve la hora, **`HA_PIROTECNIA=1`** acorta la espera de los fuegos artificiales para que entren en la corrida. Y el log deja `ha-pirotecnia:` por cada cohete y `span[lit=…]` con el costo real del sistema de luz, que es como se midió que 40 luces salieran más baratas que 24. |
 | `HA_ECOTEST=1` | Planta al jugador en un yermo, en el mejor bosque y en una ciudad. Afirma: yermo vacío · bosque con manada + depredador + forraje · la cadena no se come a sí misma · la ciudad se puebla sola. (`HA_ECOSETTLE=90` alarga la observación.) |
 | `HA_AUTODRIVE=1` | Arnés end-to-end: walk, dig, chop, craft, machine-place, automation, vuelo, oxígeno, place-tile. |
 | `HA_TESTER=1` | Tester-IA continuo: juega en bucle (roam/cava/construye/vuelo Ki) buscando crashes y bajones. Comandos on-demand por `tester-cmd.txt`; se mata con `pkill -x ha-game`. |
@@ -5779,15 +7042,12 @@ todavía no está medido.
 
 ### Mundo — relieve y agua (14 ago 2026)
 
-- **El río todavía no BAJA.** Medido con `medir_rios`: la bajada media siguiendo
-  un cauce aguas abajo es de 0,01 a 0,19 escalones y **todas** las cabeceras
-  mueren en seco a unos doce tiles. El tirón del sumidero le dio destino (20 de 36
-  lagunas tienen afluente, contra 11) y el sesgo de pendiente se probó y no
-  sirvió (§5). Lo que falta no es otra deformación del ruido: **hay que trazar el
-  cauce**, o sea recorrer la pendiente desde una cabecera hasta el mar o la cuenca
-  y marcar las celdas del camino. Se puede hacer determinista y sin estado si el
-  trazado arranca de un punto que la propia celda sepa calcular (la cabecera de su
-  cuenca), que es el mismo truco de `relief::paso_de_meseta_chica`.
+- ~~**El río todavía no BAJA.**~~ **RESUELTO** — primero por el trazado
+  (`rios.rs`, 14 ago 2026: el 78 % de los cauces llega al mar o a un lago) y
+  después por la talla (21 ago 2026: el cauce va por debajo de su ribera en el
+  96 % de las celdas de sierra, contra el 84 % de antes, y el 21,75 % de cauce
+  cortado por acantilados bajó al 4,12 %). Detalle y números en §5, *"El río se
+  talla en escalones"*.
 - **Las 16 lagunas sin afluente** son correctas por diseño ("no todos los ríos
   terminan en lago") pero no están elegidas: son las que el entramado no alcanzó.
   Si algún día molesta, el sitio es `world_map::sumidero_cercano`.
@@ -5800,6 +7060,59 @@ todavía no está medido.
   recortarle nada—, o que el usuario le asigne pixel a `decor/rock_moon`. Con
   cualquiera de las dos, `rock_permille` de `Snow`/`Ice` vuelve a 30 y la cumbre
   recupera su piedra asomando.
+- **EL ACANTILADO ES UNA MONTAÑA DE ARENA TEÑIDA, y el pack tiene el talud de
+  pasto sin usar** (21 ago 2026). Reporte del usuario: *"no olvides los bordes de
+  las terrazas, se ven horribles y ajenos al terreno; la idea es que todo el
+  terreno esté en armonía"*.
+
+  El tinte ya no es el problema —el labio del muro lleva el material del terreno
+  que corona y el gris de su celda (§5, "el anillo de la meseta")— y desde hoy la
+  roca del pasto es piedra y no mostaza. Lo que sigue siendo ajeno es **la
+  FORMA**: el único kit de relieve que el juego importa es `Sand_Mountain`, o sea
+  una montaña de PLAYA con canto rodado grueso. Teñida de verde sigue leyéndose
+  como muro de castillo apoyado en el pasto.
+
+  Y el pack tiene lo otro: la familia **`Mound_1`/`Mound_2`** de
+  `1_Terrains_and_Fences` — nueve piezas de **talud de tierra con pasto asomando
+  por el canto y matas al pie**, con bordes en diagonal y cuerpo repetible. No
+  está importada ni una. `import-acantilado.py` las nombra y las descarta como
+  *"montículos de un tile"*; miradas, `Mound_2` tiene cuerpo y costados, que es lo
+  que hace falta para vestir un desnivel.
+
+  Es un importador nuevo más el mapeo del autotile de 13 formas, y la decisión de
+  qué material usa cuál: el talud de tierra para pasto y bosque, y la roca del
+  `Sand_Mountain` donde de verdad hay roca (cumbre, sierra alta, basalto).
+
+- **EL PASO NO USA EL KIT DEL PACK, y para usarlo hay que ENDEREZAR EL CANTO**
+  (21 ago 2026). Pedido del usuario, mirando la lámina del pack: *"usar las
+  rampas completas de forma modular; no sé por qué recortás sólo un pedazo y usás
+  eso de rampa"*, y *"en morado los assets que unen acantilados y rampas"*.
+
+  Hecho ya: el kit **está importado entero** (`paso/<material>`, 12 piezas — boca,
+  tramo repetible, pie, los pasos que bajan de lado y los cuatro enlaces
+  diagonales), en su propia hoja `art/pack/paso.png` de 1.024×1.120 sin una celda
+  de aire. Falta **colocarlo**, y ahí está el problema de fondo, medido:
+
+  | medición | resultado |
+  |---|---|
+  | `medir_acantilados::ancho_de_los_pasos` | **88,9 %** de los pasos mide 1 celda; 3,4 % llega a 4 |
+  | `medir_acantilados::corridas_rectas_de_canto` | **86,2 %** de TODOS los cantos mide 1 celda recta; 4,4 % llega a 4 |
+
+  O sea que **los bordes de terraza son escaleras diagonales, no líneas**, y el
+  kit del pack mide 4 celdas de ancho: no se apoya en el 95,6 % de los cantos del
+  mundo. Por eso el juego terminó autotileando celda a celda — es lo único que
+  viste un borde que zigzaguea.
+
+  Ensanchar el paso **no alcanza** y está probado: ensanchando a lo largo del
+  canto se pasó de 88,9 % a 89,4 % de pasos de una celda, con un 22 % más de
+  celdas de paso a cambio de nada. Se revirtió.
+
+  Lo que falta es que **el paso talle una muesca RECTA de cuatro celdas al mismo
+  nivel**, que es literalmente lo que el kit dibuja (`Four_Sand_Mountains_1_Top`
+  ES una muesca en la meseta). Eso es trabajo de generación —`relief::es_paso` y
+  la cuantización del campo—, no de dibujo, y mueve el mundo: los tests de
+  caminar hasta la cumbre, de caminos y de manzanas van a moverse con él.
+
 - **El muro de terraza se ve REPETITIVO**, y en una ladera empinada se ve peor:
   cada celda de canto cuelga su pared, así que un borde largo es la misma pieza
   del kit estampada tile a tile, y donde el terreno baja un escalón POR TILE
@@ -5898,6 +7211,36 @@ vos.
   oportunistas, no gym-optimizados. Falta sumar agua + amenaza al sensor
   (`fauna_brain::sense`) y a la arena del gym, y reentrenar `FAUNA.adn`.
 - Generalizar el genoma a colonos/enemigos (uno por rol).
+
+### Arte y 3D (27 sep 2026)
+- **Cultivos por etapas** (plantita → cosecha), como la lámina de referencia que
+  pasó el usuario. No hay sistema de cultivo: es mecánica nueva (sembrar,
+  crecer, cosechar) más el arte de cada etapa.
+- **Más fauna**: variantes de color (vaca overa colorada, cerdo manchado), crías,
+  gallo, y la fauna de los otros planetas, que sigue siendo quad de color.
+- **EL JUEGO PASA A 3D — plan por fases** (pedido del usuario, 27 sep 2026). El
+  motivo es de fondo, no estético: entrar a las casas como en Project Zomboid (sin
+  pantalla de carga, el techo se corta, las paredes que tapan se vuelven
+  translúcidas) con capas 2D se volvió inmanejable; en 3D es "ocultar lo que está
+  por encima de tu piso". Ojo: PZ mismo es 2.5D — lo que se copia es el CORTE, no
+  su render. La regla 1 queda en suspenso SÓLO en la rama `motor-3d` hasta que el
+  Redmi mida 60 fps; `main` sigue 2D.
+  - **3D-F0 prototipo**: cámara tercera persona sobre la MISMA sim (`ha-shared`),
+    un barrio con una casa enterable y corte de techo/paredes, la iluminación
+    portada (velo multiplicativo de noche + luz aditiva con aura y gradiente; el
+    presupuesto de 16 luces sigue), fps en el Redmi.
+  - **3D-F1 mundo**: chunk = UNA malla (vóxeles fundidos, greedy meshing), lo
+    repetido instanciado; la calle se genera como malla continua desde el trazado
+    de la ciudad (recta/curva/esquina con vereda y cordón), no por baldosas.
+  - **3D-F2 casas y luz**: pisos, corte por piso, focos y lámparas que se prenden
+    y apagan, animación sólo en lo que se mueve (fuego, focos, agua, molinos).
+  - **3D-F3 vida**: crías que crecen (edad en la sim → escala/modelo), cultivos por
+    etapas, fauna con los modelos de `fauna3d.py`.
+  - **3D-F4 director IAFZ**: un orquestador tipo "AI Director" arma escuadras,
+    lee hacia dónde vas y reparte roles (emboscar, flanquear, cortar el paso). Se
+    hereda la regla del dron: **la red nunca toca los motores** — emite
+    intenciones a baja frecuencia y el pathfinding/steering determinista las
+    ejecuta; un genoma malo juega torpe, no rompe el juego.
 
 ### Perf / render
 - **Componer también el cuerpo de los aldeanos** (hoy sólo el jugador y los

@@ -5,6 +5,8 @@
 #   ./editor_assets                       abre HA STUDIO: TODOS los editores en una
 #                                         sola ventana (Assets · Imagen · Mundo ·
 #                                         Sonido · Fauna; F1..F5 cambian de espacio)
+#   ./editor_assets web                   HA Studio EN EL NAVEGADOR (celu por tailnet,
+#                                         http://<ip-tailnet>:8790)
 #   ./editor_assets assets                sólo el editor de assets/objetos (ventana aparte)
 #   ./editor_assets sonido                sólo el editor de sonido (mini-DAW)
 #   ./editor_assets mundo                 sólo el editor de MUNDO (WYSIWYG, overrides)
@@ -46,6 +48,13 @@ case "$cmd" in
     build
     echo "▶ abriendo sólo el editor de assets… (ventana aparte del Studio)" >&2
     run gui
+    ;;
+
+  web|celu)
+    # HA Studio en el navegador (pantalla virtual + página por tailnet).
+    build
+    cd "$ROOT"
+    exec python3 scripts/studio-web.py
     ;;
 
   sonido|sound)

@@ -10191,13 +10191,17 @@ pub fn game_slots() -> Vec<SlotDef> {
     out.push(anim("npc/colonist", "Colono", "npc"));
     out.push(anim("npc/aldeano", "Aldeano", "npc"));
     out.push(anim("npc/comerciante", "Comerciante", "npc"));
-    // Fauna con cerebro IAFZ (FASE 8) — especies del pack LimeZu Modern Farm.
-    // Poses del pack por dirección: idle/walk/eat/drink (perro: + run/bark).
+    // Fauna con cerebro IAFZ (FASE 8). Arte: `scripts/fauna3d.py` (modelo 3D
+    // renderizado a pixel art), poses idle/walk/run/eat por dirección (perro: + bark).
     out.push(anim("npc/fauna_cow", "Vaca", "npc"));
     out.push(anim("npc/fauna_chicken", "Gallina", "npc"));
     out.push(anim("npc/fauna_sheep", "Oveja", "npc"));
     out.push(anim("npc/fauna_pig", "Cerdo", "npc"));
     out.push(anim("npc/fauna_dog", "Perro", "npc"));
+    out.push(anim("npc/fauna_goat", "Cabra", "npc"));
+    out.push(anim("npc/fauna_donkey", "Burro", "npc"));
+    out.push(anim("npc/fauna_rabbit", "Conejo", "npc"));
+    out.push(anim("npc/fauna_duck", "Pato", "npc"));
     out.push(s("ship/rocket", "Cohete", "ship"));
     // Decoración.
     for &(k, l) in DECOR_KEYS {

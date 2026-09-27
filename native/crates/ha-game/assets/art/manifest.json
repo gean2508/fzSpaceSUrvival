@@ -27145,6 +27145,18 @@
      "label": "Helicóptero 2"
     }
    ]
+  },
+  "npc/fauna_goat": {
+   "label": "Cabra"
+  },
+  "npc/fauna_donkey": {
+   "label": "Burro"
+  },
+  "npc/fauna_rabbit": {
+   "label": "Conejo"
+  },
+  "npc/fauna_duck": {
+   "label": "Pato"
   }
  },
  "origen": {
@@ -198685,28 +198697,344 @@
   },
   "npc/fauna_chicken": {
    "grid": [
-    32,
-    32
+    22,
+    24
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/fauna/chicken.png",
    "rect": {
-    "col": 22,
-    "h": 1,
-    "row": 4,
-    "w": 1
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_cow": {
    "grid": [
-    32,
-    32
+    66,
+    60
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/fauna/cow.png",
    "rect": {
-    "col": 21,
-    "h": 1,
-    "row": 4,
-    "w": 1
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_crow": {
@@ -198729,41 +199057,554 @@
   },
   "npc/fauna_dog": {
    "grid": [
-    32,
-    32
+    46,
+    43
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/fauna/dog.png",
    "rect": {
-    "col": 25,
-    "h": 1,
-    "row": 4,
-    "w": 1
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "bark_right": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 6.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "bark_down": {
+     "rect": {
+      "col": 38,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 6.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "bark_up": {
+     "rect": {
+      "col": 40,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 6.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_pig": {
    "grid": [
-    32,
-    32
+    50,
+    44
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/fauna/pig.png",
    "rect": {
-    "col": 24,
-    "h": 1,
-    "row": 4,
-    "w": 1
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_sheep": {
    "grid": [
-    32,
-    32
+    46,
+    47
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/fauna/sheep.png",
    "rect": {
-    "col": 23,
-    "h": 1,
-    "row": 4,
-    "w": 1
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "orla/int_1": {
@@ -244458,6 +245299,690 @@
     "h": 1,
     "row": 14,
     "w": 1
+   }
+  },
+  "npc/fauna_goat": {
+   "grid": [
+    46,
+    50
+   ],
+   "png": "art/gen/fauna/goat.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
+   }
+  },
+  "npc/fauna_donkey": {
+   "grid": [
+    60,
+    62
+   ],
+   "png": "art/gen/fauna/donkey.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
+   }
+  },
+  "npc/fauna_rabbit": {
+   "grid": [
+    38,
+    35
+   ],
+   "png": "art/gen/fauna/rabbit.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
+   }
+  },
+  "npc/fauna_duck": {
+   "grid": [
+    24,
+    24
+   ],
+   "png": "art/gen/fauna/duck.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 10,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 14,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 8.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 22,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 26,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 12.0,
+      "frames": 4
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 32,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 34,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   }
  }

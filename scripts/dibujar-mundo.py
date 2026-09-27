@@ -569,12 +569,7 @@ RECETAS = {
     "backgrounds/sky_day": ("Cielo de día", cielo((122, 178, 226), (186, 214, 236)), 4, 2, False),
     "backgrounds/sky_night": ("Cielo de noche", cielo((28, 32, 62), (58, 62, 96), 40), 4, 2, False),
     "backgrounds/stars": ("Estrellas", cielo((18, 20, 38), (24, 26, 48), 90), 4, 2, False),
-    # fauna
-    "npc/fauna_cow": ("Vaca", animal(BLANCO, 12, mancha=(62, 58, 66)), 1, 1, True),
-    "npc/fauna_chicken": ("Gallina", animal(BLANCO, 8, cresta=ROJO), 1, 1, True),
-    "npc/fauna_sheep": ("Oveja", animal((228, 226, 218), 12, patas_c=(92, 84, 80)), 1, 1, True),
-    "npc/fauna_pig": ("Cerdo", animal((222, 152, 152), 10), 1, 1, True),
-    "npc/fauna_dog": ("Perro", animal((166, 116, 66), 9), 1, 1, True),
+    # fauna — vaca, gallina, oveja, cerdo y perro salen de scripts/fauna3d.py
 }
 
 
