@@ -6980,7 +6980,12 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   `universe::pixelar_disco` baja el disco a 128 px, terminador (luz de arriba a
   la derecha), cráteres en cuerpos sin aire, luz en 5 bandas, muestreo nearest.
   `cargo test -p ha-game --release --lib hornear_discos -- --ignored` deja los
-  discos en `HA_DISCO_DIR`. Antes: los cuerpos vistos de lejos en el estilo de
+  discos de TODOS los cuerpos en `HA_DISCO_DIR`. La cara de noche
+  (`BodyNightSide`, gira con el Sol) usa `NightTexture` en bandas y el Sol su
+  `SunTexture` pixelada; el horneado sólo pone el volumen simétrico. **Queda**:
+  el anillo gris del borde (el "fin del mundo" caminable pintado como agua/roca)
+  y Urano/Neptuno salen verdes como planetas de tierra en vez de gaseosos con
+  bandas (lo decide la sim del terreno de cada cuerpo). Antes: los cuerpos vistos de lejos en el estilo de
   `luna-pixel-art.png` (mares, cráteres, terminador), no el disco actual.
 - **E6 · FACHADATEST**: al entrar al cuarto construido se abren la cara sur pero
   no las norte/laterales (`layers::fade_overhead`, `walls::huella_que_tapa`).

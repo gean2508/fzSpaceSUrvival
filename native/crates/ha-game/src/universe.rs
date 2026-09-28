@@ -393,7 +393,74 @@ fn spawn_glow_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>)
     );
     image.sampler = bevy::image::ImageSampler::linear();
     commands.insert_resource(GlowTexture(images.add(image)));
+
+    // **La NOCHE del cuerpo, en pixel art** (28 sep 2026): la cara oscura giraba
+    // con el Sol pero era un degradé suave encima de un disco de píxeles. Ésta es
+    // la misma sombra en tres bandas duras, 48 px y vecino más próximo.
+    const M: usize = 48;
+    let mut noche = vec![0u8; M * M * 4];
+    for y in 0..M {
+        for x in 0..M {
+            let u = (x as f32 + 0.5) / M as f32 - 0.5;
+            let v = (y as f32 + 0.5) / M as f32 - 0.5;
+            let d = (u * u + v * v).sqrt() * 2.0;
+            let a = if d < 0.62 { 1.0 } else if d < 0.80 { 0.66 } else if d < 0.93 { 0.33 } else { 0.0 };
+            let i = (y * M + x) * 4;
+            noche[i..i + 3].copy_from_slice(&[255, 255, 255]);
+            noche[i + 3] = (a * 255.0) as u8;
+        }
+    }
+    let mut img = Image::new(
+        Extent3d { width: M as u32, height: M as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        noche,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    img.sampler = bevy::image::ImageSampler::nearest();
+    commands.insert_resource(NightTexture(images.add(img)));
+
+    // **El SOL en pixel art**: núcleo claro y bandas hacia el naranja del borde,
+    // 64 px, vecino más próximo. Era un círculo plano de un solo color.
+    const S: usize = 64;
+    let bandas: [(f32, [u8; 3]); 5] = [
+        (0.40, [255, 250, 214]),
+        (0.62, [255, 232, 150]),
+        (0.80, [255, 205, 96]),
+        (0.93, [248, 164, 62]),
+        (1.00, [226, 118, 44]),
+    ];
+    let mut sol = vec![0u8; S * S * 4];
+    for y in 0..S {
+        for x in 0..S {
+            let u = (x as f32 + 0.5) / S as f32 - 0.5;
+            let v = (y as f32 + 0.5) / S as f32 - 0.5;
+            let d = (u * u + v * v).sqrt() * 2.0;
+            let i = (y * S + x) * 4;
+            if let Some((_, c)) = bandas.iter().find(|(r, _)| d <= *r) {
+                sol[i..i + 3].copy_from_slice(c);
+                sol[i + 3] = 255;
+            }
+        }
+    }
+    let mut img = Image::new(
+        Extent3d { width: S as u32, height: S as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        sol,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    img.sampler = bevy::image::ImageSampler::nearest();
+    commands.insert_resource(SunTexture(images.add(img)));
 }
+
+/// El disco del Sol en pixel art (ver `spawn_glow_texture`).
+#[derive(Resource)]
+pub struct SunTexture(pub Handle<Image>);
+
+/// La sombra del lado de noche de un cuerpo, en bandas (ver `spawn_glow_texture`).
+#[derive(Resource)]
+pub struct NightTexture(pub Handle<Image>);
 
 /// Mantiene la cara nocturna de cada cuerpo mirando en contra del Sol.
 fn sync_terminators(
@@ -458,6 +525,8 @@ impl Plugin for UniversePlugin {
 fn spawn_universe(
     mut commands: Commands,
     glow: Res<GlowTexture>,
+    noche: Res<NightTexture>,
+    sol: Res<SunTexture>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     existing: Query<(), With<BodyDisc>>,
@@ -487,7 +556,11 @@ fn spawn_universe(
         commands.spawn((
             BodyDisc { body, textured: false },
             Mesh2d(meshes.add(Circle::new(r))),
-            MeshMaterial2d(materials.add(ColorMaterial::from_color(disc_color))),
+            MeshMaterial2d(materials.add(if body == CelestialBody::Sun {
+                ColorMaterial { color: Color::WHITE, texture: Some(sol.0.clone()), ..default() }
+            } else {
+                ColorMaterial::from_color(disc_color)
+            })),
             // Detrás de todo el suelo (tiles finos z≈0, satelital z=-1).
             Transform::from_xyz(0.0, 0.0, -20.0 + dz),
         ));
@@ -569,12 +642,12 @@ fn spawn_universe(
             commands.spawn((
                 BodyNightSide { body },
                 Sprite {
-                    image: glow.0.clone(),
+                    image: noche.0.clone(),
                     // Sombra SUAVE, no un disco recortado: un círculo oscuro
                     // desplazado se salía del planeta y se leía como anillos
                     // negros concéntricos encima del halo. Con el degradado
                     // radial la noche se difumina y el limbo queda limpio.
-                    color: Color::srgba(0.01, 0.01, 0.03, 0.58),
+                    color: Color::srgba(0.01, 0.01, 0.03, 0.62),
                     custom_size: Some(Vec2::splat(r * 2.2)),
                     ..default()
                 },
@@ -1453,7 +1526,11 @@ fn pixelar_disco(data: &[u8], n: usize, body: CelestialBody) -> (Vec<u8>, usize)
             let (u, v) = ((mx as f32 + 0.5) / m as f32 * 2.0 - 1.0, (my as f32 + 0.5) / m as f32 * 2.0 - 1.0);
             let nz = (1.0 - u * u - v * v).max(0.0).sqrt();
             let normal = Vec3::new(u, v, nz);
-            let mut k = 0.22 + 0.78 * normal.dot(luz).max(0.0);
+            // Volumen SIMÉTRICO (limbo oscuro): la cara de noche la pone
+            // `BodyNightSide`, que gira con el Sol; una luz horneada fija se
+            // pelearía con ella.
+            let _ = normal;
+            let mut k = 0.45 + 0.55 * nz.powf(0.6);
             // cráteres: piso hundido, borde claro del lado de la luz
             for &(cx, cy, r) in &crateres {
                 let (dx, dy) = (mx as f32 + 0.5 - cx, my as f32 + 0.5 - cy);
@@ -1613,7 +1690,7 @@ mod tests {
     fn hornear_discos_a_png() {
         let dir = std::env::var("HA_DISCO_DIR").unwrap_or_else(|_| "/tmp".into());
         let tiles = crate::world2d::TileWorld::default();
-        for body in [CelestialBody::Earth, CelestialBody::Moon] {
+        for &body in CelestialBody::all().iter().filter(|b| **b != CelestialBody::Sun) {
             let n = DISC_TEX_N;
             let mut data = vec![0u8; n * n * 4];
             fill_disc_span(&mut data, &tiles, body, 0, n * n);
