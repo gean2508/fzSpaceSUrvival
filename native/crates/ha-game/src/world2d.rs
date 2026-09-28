@@ -3959,7 +3959,7 @@ fn spawn_chunk_tile_art(
             };
             if matches!(tile, Tile::Cliff | Tile::Slope)
                 && CARAS_QUE_CUELGAN.contains(&shape)
-                && pared_apilada(commands, &art, tiles, body, key, &vk, tx, tz, cx, cz, z, gris)
+                && pared_apilada(commands, &art, tiles, body, key, &vk, shape, tx, tz, cx, cz, z, gris)
             {
                 continue;
             }
@@ -4321,6 +4321,7 @@ fn pared_apilada(
     body: CelestialBody,
     key: &'static str,
     vk: &str,
+    shape: &str,
     tx: i64,
     tz: i64,
     cx: i64,
@@ -4409,11 +4410,33 @@ fn pared_apilada(
             }
         }
     };
-    poner("labio", tz);
-    for i in 1..filas {
-        poner(cuerpo_de_la_fila(art, vk, tx, tz + i), tz + i);
+    // **LA ESQUINA DOBLA TAMBIÉN EN LA PARED ALTA.** Una celda `corner_se`/`_sw`
+    // se armaba con las filas de la pared RECTA, así que su labio no doblaba y
+    // cada esquina se veía rota entre dos tramos sanos (27 sep 2026). Las filas
+    // de esquina las deriva `scripts/derivar-esquinas-de-acantilado.py` del rect
+    // medido de la pieza 1×3 del kit.
+    let esquina = match shape {
+        "corner_se" => Some(("labio_se", "cuerpo_se", "pie_se")),
+        "corner_sw" => Some(("labio_sw", "cuerpo_sw", "pie_sw")),
+        _ => None,
     }
-    poner("pie", tz + filas);
+    .filter(|(l, c, p)| art.has_pose(vk, l) && art.has_pose(vk, c) && art.has_pose(vk, p));
+    match esquina {
+        Some((labio, cuerpo, pie)) => {
+            poner(labio, tz);
+            for i in 1..filas {
+                poner(cuerpo, tz + i);
+            }
+            poner(pie, tz + filas);
+        }
+        None => {
+            poner("labio", tz);
+            for i in 1..filas {
+                poner(cuerpo_de_la_fila(art, vk, tx, tz + i), tz + i);
+            }
+            poner("pie", tz + filas);
+        }
+    }
     // **EL ESPOLÓN QUE ENMARCA EL PASO.** El kit no dibuja la escalinata suelta:
     // la dibuja entre dos costillas de roca (regla 8 del proyecto — una pieza de
     // kit no se siembra sola). En una pared de un escalón eso lo resolvía la

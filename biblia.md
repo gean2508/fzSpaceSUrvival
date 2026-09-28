@@ -6952,7 +6952,11 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   props repartidos al azar: sospecha de importación mal interpretada del pack
   (regla 8: pieza vs objeto). Ver §5/§8 (`pack_siembra.rs`, `roads.rs`,
   `city.rs`, `import-calles.py`, `import-marcas-calzada.py`).
-- **E2 · ESQUINAS DE ACANTILADO ROTAS**: en cada ángulo de 90° la pieza de la
+- **E2 · ESQUINAS DE ACANTILADO** — ✅ hecho (28 sep 2026): en una pared de más
+  de un escalón `pared_apilada` armaba las esquinas con las filas de la pared
+  RECTA. Ahora `corner_se/sw` usan `labio_/cuerpo_/pie_{se,sw}`, que
+  `scripts/derivar-esquinas-de-acantilado.py` parte del rect medido de la pieza
+  1×3 (correrlo después de `import-acantilado.py`). Antes: en cada ángulo de 90° la pieza de la
   esquina sale mal y el borde superior (donde se pisa) no es continuo. Kit en
   `world2d.rs` (`corner_*`, `inner_*`, `edge_*`, `CARAS_QUE_CUELGAN`) e
   `import-acantilado.py`. Referencia: `design/referencias/terrazas-y-cascadas.png`.
