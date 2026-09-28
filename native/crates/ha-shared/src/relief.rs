@@ -259,7 +259,35 @@ fn campo_crudo(body: CelestialBody, tx: i64, tz: i64) -> f32 {
         }
         None => base,
     };
-    h.clamp(0.0, 1.0)
+    rellenar_pueblo(body, tx, tz, h).clamp(0.0, 1.0)
+}
+
+/// **NINGÚN HUECO DE MAR ADENTRO DE UN PUEBLO** (27 sep 2026).
+///
+/// El pueblo se funda mirando la forma GRUESA del continente
+/// (`geography::continental_at`, una octava), pero su casco mide cientos de
+/// metros y el ruido fino hunde huecos bajo el nivel del mar dentro de él:
+/// lagos irregulares en medio de las manzanas, con la calle cruzándolos
+/// (medido: 2.616 de 2.623 celdas de agua de un casco eran nivel < 0, sin río ni
+/// laguna). Adentro del casco, donde la forma gruesa dice TIERRA, el terreno se
+/// levanta a media grada sobre el mar. Donde la forma gruesa dice mar (la costa
+/// de una ciudad costera) no se toca: la ciudad sigue terminando en su orilla.
+///
+/// No hay recursión: `settlement_covering` y `continental_at` usan la plataforma
+/// sin lagunas y nunca el campo del relieve.
+fn rellenar_pueblo(body: CelestialBody, tx: i64, tz: i64, h: f32) -> f32 {
+    let sea = sea_level(body);
+    if sea <= 0.0 || h >= sea {
+        return h;
+    }
+    if crate::geography::settlement_covering(body, tx, tz).is_none() {
+        return h;
+    }
+    if crate::geography::continental_at(body, tx, tz) < sea + 0.01 {
+        return h;
+    }
+    let paso = (1.0 - sea).max(1e-3) / LEVELS_UP as f32;
+    h.max(sea + paso * 0.5)
 }
 
 /// Las cuatro octavas de ruido, 0..1 (sin plataforma). Separado de

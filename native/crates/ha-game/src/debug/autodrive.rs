@@ -2203,6 +2203,14 @@ fn city_test_drive(world: &mut World) {
     ];
     let shots = world.resource::<FlyTestState>().shots as usize;
     if shots >= beats.len() {
+        // La captura se escribe unos frames DESPUÉS de pedirla: salir en el acto
+        // perdía la última (y en una pantalla virtual, lenta, todas).
+        let entered = world.resource::<FlyTestState>().stage_entered;
+        // la última se pidió a los ~3 s de la etapa; con render por software
+        // (pantalla virtual) un frame tarda más de un segundo: 20 s de margen
+        if now - entered < 20.0 {
+            return;
+        }
         eprintln!("ha-citytest: DONE");
         std::process::exit(0);
     }

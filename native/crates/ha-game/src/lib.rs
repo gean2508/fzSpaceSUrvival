@@ -346,6 +346,15 @@ fn run_app_inner() {
 
 #[cfg(not(target_os = "android"))]
 fn desktop_wgpu_backends() -> Backends {
+    // `WGPU_BACKEND=gl` manda (lo documentan los drivers de QA y la skill
+    // `swarm-sim`, pero estaba fijado a Vulkan y se ignoraba). Hace falta para
+    // correr el juego en una pantalla virtual (Xvfb), donde Vulkan no tiene
+    // superficie: así se capturan pantallas con la compu bloqueada.
+    match std::env::var("WGPU_BACKEND").map(|v| v.to_ascii_lowercase()) {
+        Ok(v) if v == "gl" || v == "opengl" || v == "gles" => return Backends::GL,
+        Ok(v) if v == "vulkan" || v == "vk" => return Backends::VULKAN,
+        _ => {}
+    }
     #[cfg(target_os = "linux")]
     {
         Backends::VULKAN

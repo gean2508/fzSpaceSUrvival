@@ -47,6 +47,7 @@ native/graphify-out/
 # Screenshots/log de los QA drivers (debug/perf.rs, autodrive.rs) — se
 # regeneran en cada corrida, no son fuente.
 /ha-shot-*.png
+native/ha-shot-*.png
 /native/bugreport.jsonl
 /native/crates/ha-game/assets/art/manifest.json.bak
 

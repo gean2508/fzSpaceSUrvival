@@ -1147,6 +1147,10 @@ CONTEXTOS = {
     "VEREDA": {
         "temas": ("City_Props",),
         "carpetas": ("prop", "nature"),
+        # **Lista blanca** (27 sep 2026): el tema City_Props trae de todo —escalera
+        # rota, pozos, chatarra, piezas de estructuras, señales sueltas— y la vereda
+        # salía hecha un depósito. En una vereda hay mobiliario urbano.
+        "solo": r"banco|tacho_de_basura|contenedor_de_basura|trashbin|calle_hidrante|calle_buzon|parquimetro|maceta|arbusto|flores|paloma|cartel_informativo",
         # Dos celdas y pico. Con el tope en una sólo entraban los objetos de UNA
         # celda y la vereda se llenaba de basura y tapas de alcantarilla: el
         # banco, el farol y el hidrante miden dos.
@@ -1166,10 +1170,16 @@ CONTEXTOS = {
     "CALLE": {
         "temas": ("City_Props",),
         "carpetas": ("prop",),
+        # En la calzada sólo va lo que es PISO de la calle.
+        "solo": r"tapa_de_alcantarilla|rejilla|marcas_de_frenada|lata_tirada",
         "max": 3.33,
         "max_alto": 1.07,
     },
     "PARQUE": {
+        # Lista blanca (27 sep 2026): el tema de jardín trae el vivero entero
+        # —regaderas, rastrillos, palas tiradas, estanterías, carretillas— y el
+        # parque salía hecho un galpón. En un parque hay bancos, flores y fuentes.
+        "solo": r"^(?!.*estante).*(banco|flor|girasol|arbusto|fuente|arco|estatua|brote)",
         "temas": ("Garden",),
         "carpetas": ("nature", "prop"),
         "max": 3.33,
@@ -1199,9 +1209,12 @@ CONTEXTOS = {
         "carpetas": ("prop", "vehicle"),
         "max": 3.33,
     },
+    # Sin `Swimming_Pool` ni `fence` (27 sep 2026): la pileta es un KIT —bordes,
+    # partidores, soporte de salvavidas, juguetes que flotan ADENTRO del agua— y
+    # sembrados sueltos en el pasto de la parcela eran "piezas que nada que ver".
     "PATIO": {
-        "temas": ("Villas", "Additional_Houses", "Swimming_Pool"),
-        "carpetas": ("prop", "nature", "fence"),
+        "temas": ("Villas", "Additional_Houses"),
+        "carpetas": ("prop", "nature"),
         "max": 3.33,
     },
 }
@@ -1243,6 +1256,9 @@ MARCAS_MODULARES = tuple(
         r"(?:^|_)diagonal(?:_|$)",
         r"(?:^|_)(?:door|roof)(?:_\d+)?$",
         r"traffic_light",
+        # La casa del árbol se arma con escalera + plataforma + copa: la
+        # escalera sola en el pasto es media cosa.
+        r"tree_?house",
         # **`Tree_Props_*` es la COPA, no el árbol.** Los 24 recortes de esa
         # familia miden 4×2 celdas y son la copa con el arranque del tronco,
         # cortada a ras por arriba y por abajo: van encima de un `Tree_N`, que
@@ -1359,6 +1375,8 @@ def elegir_siembra(objetos):
         elegidos = []
         for o in objetos:
             if o.tema not in regla["temas"] or o.carpeta not in regla["carpetas"]:
+                continue
+            if "solo" in regla and not re.search(regla["solo"], o.clave):
                 continue
             # **Primero: ¿es una pieza o es un objeto?** Antes de mirar dónde
             # entra hay que saber si va sola. Ver `MARCAS_MODULARES`.

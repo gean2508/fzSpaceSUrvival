@@ -81,3 +81,28 @@ mod tests {
         assert_eq!(sucio, limpio, "el valor grueso quedó en la caché");
     }
 }
+
+#[cfg(test)]
+mod ciudad_sin_lagos {
+    /// **Una ciudad tierra adentro no tiene lagos en las manzanas.** Antes del 27 sep
+    /// 2026 el casco de (−3248, 3313) tenía 2.623 celdas de agua, todas terreno bajo
+    /// el mar hundido por el ruido fino (`relief::rellenar_pueblo`).
+    #[test]
+    fn una_ciudad_tierra_adentro_no_tiene_lagos() {
+        use crate::CelestialBody;
+        let b = CelestialBody::Earth;
+        let (cx, cz) = (-3248i64, 3313i64);
+        assert!(crate::geography::settlement_covering(b, cx, cz).is_some(), "la ciudad del caso se movió");
+        let (mut agua, mut total) = (0, 0);
+        for tz in (cz - 200..cz + 200).step_by(2) {
+            for tx in (cx - 300..cx + 300).step_by(2) {
+                total += 1;
+                let t = crate::topdown::topdown_tile(b, 0, tx, tz);
+                if matches!(t, crate::topdown::Tile::Water | crate::topdown::Tile::WaterDeep) {
+                    agua += 1;
+                }
+            }
+        }
+        assert!(agua * 200 < total, "{agua} de {total} celdas del casco son agua");
+    }
+}

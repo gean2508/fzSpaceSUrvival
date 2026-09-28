@@ -6937,7 +6937,15 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
 
 **Pendiente, POR ETAPAS (orden del usuario, 27 sep 2026 noche):**
 
-- **E1 · CALLES Y CIUDAD** (en curso). Una calle es, de afuera hacia adentro:
+- **E1 · CALLES Y CIUDAD** — ✅ primera pasada hecha (27-28 sep 2026):
+  interior de manzana = pasto de parcela (`topdown_tile`), sin fleco en la
+  vereda (`geography::urban_civil`), ningún lago en un casco
+  (`relief::rellenar_pueblo` + `world_map::pond_in`, guardián
+  `grueso::ciudad_sin_lagos`), y listas blancas en las tablas de siembra
+  (`import-pack-masivo.py` "solo": vereda = mobiliario urbano, calzada = piso de
+  calle, parque = bancos/flores/fuentes, patio sin kit de pileta). Falta
+  revisar con el usuario: lotes (qué edificio va en cada parcela) y esquinas.
+  Antes: Una calle es, de afuera hacia adentro:
   parcela → vereda (con su ancho) → cordón/filo contra la calzada (o contra la
   alcantarilla) → calzada → línea central. Más las esquinas. Hoy "están todas
   rotas", y DENTRO de las parcelas de ciudad aparecen lagos, piezas sueltas y

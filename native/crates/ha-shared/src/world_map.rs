@@ -494,6 +494,18 @@ fn ridge(d: f32, radius: f32) -> f32 {
 /// salvo el borde, que se aplica al final para que NADA pueda salvar el reborde:
 /// el mundo tiene que terminar en mar abierto siempre.
 pub fn platform(body: CelestialBody, tx: i64, tz: i64) -> f32 {
+    plataforma(body, tx, tz, true)
+}
+
+/// La plataforma SIN las lagunas repartidas. La usa la fundación de pueblos
+/// (`geography::continental_at`): una charca no decide si el centro de un pueblo
+/// es tierra firme, y es lo que permite que las lagunas SÍ miren a los pueblos
+/// (`pond_in`) sin que las dos consultas se llamen en círculo.
+pub fn platform_sin_lagunas(body: CelestialBody, tx: i64, tz: i64) -> f32 {
+    plataforma(body, tx, tz, false)
+}
+
+fn plataforma(body: CelestialBody, tx: i64, tz: i64, lagunas: bool) -> f32 {
     let t = template(body);
     let sea = crate::relief::sea_level(body);
     // Sin líquido (Luna), el "nivel del mar" es 0 y no sirve de referencia: se usa
@@ -533,7 +545,9 @@ pub fn platform(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     // tienen nombre. Éstas son las charcas de las afueras — una cada ~1.4 km,
     // donde ir a pescar, montar un campamento o simplemente beber. Un mundo con
     // cuatro lagos declarados y nada más se siente vacío entre ciudad y ciudad.
-    h -= pond_depth(body, tx, tz);
+    if lagunas {
+        h -= pond_depth(body, tx, tz);
+    }
 
     // EL BORDE DEL MUNDO, al final y sin apelación: los últimos kilómetros bajan
     // a mar abierto. Sin esto una cordillera declarada cerca del borde crearía un
@@ -564,6 +578,30 @@ const POND_MAX_R: f32 = 190.0;
 /// cumbre queda por encima del nivel del mar y no se llena). Filtrarlo acá
 /// costaría una consulta de relieve dentro del cálculo del relieve — recursión.
 pub fn pond_in(body: CelestialBody, rx: i64, rz: i64) -> Option<((i64, i64), f32)> {
+    let clave = (body as u8, crate::partida::epoca(), rx, rz);
+    if let Some(v) = LAGUNAS.with(|m| m.borrow().get(&clave).copied()) {
+        return v;
+    }
+    let v = pond_in_sin_memo(body, rx, rz);
+    LAGUNAS.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() > 4096 {
+            m.clear();
+        }
+        m.insert(clave, v);
+    });
+    v
+}
+
+thread_local! {
+    /// Lagunas ya decididas. Barato por celda, pero decidir si una laguna cae en un
+    /// pueblo cuesta cinco consultas de asentamiento y `platform` pregunta cuatro
+    /// veces por celda del mundo.
+    static LAGUNAS: std::cell::RefCell<std::collections::HashMap<(u8, u32, i64, i64), Option<((i64, i64), f32)>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn pond_in_sin_memo(body: CelestialBody, rx: i64, rz: i64) -> Option<((i64, i64), f32)> {
     let h = crate::geography::hash2(crate::celestial_bodies::body_terrain_seed(body) ^ 0x1a6e_0000, rx, rz);
     // Poco más de la mitad de las celdas tienen laguna; el resto es tierra seca.
     if h % 100 >= 55 {
@@ -575,6 +613,16 @@ pub fn pond_in(body: CelestialBody, rx: i64, rz: i64) -> Option<((i64, i64), f32
     let cz = rz * POND_PERIOD + margin + ((h >> 17) as i64).rem_euclid(span);
     // Tamaños variados: charcas de 60 m y lagos de 190 m.
     let r = 60.0 + ((h >> 3) % 130) as f32;
+    // **NINGUNA LAGUNA DENTRO DE UN PUEBLO** (27 sep 2026). Se sorteaban sin
+    // mirar el mapa y caían en medio de las manzanas: lagos adentro de las
+    // parcelas, con la vereda rodeándolos. Se prueba el centro y cuatro puntos
+    // del borde (con el 25 % de margen que usa `pond_covering`).
+    let m = (r * 1.25) as i64 + 8;
+    for (dx, dz) in [(0, 0), (m, 0), (-m, 0), (0, m), (0, -m)] {
+        if crate::geography::settlement_covering(body, cx + dx, cz + dz).is_some() {
+            return None;
+        }
+    }
     Some(((cx, cz), r))
 }
 

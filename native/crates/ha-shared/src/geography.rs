@@ -135,7 +135,9 @@ pub fn continental_at(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     // plataforma de la plantilla y sólo se ahorra tres de las cuatro octavas.
     let h = fbm(body_terrain_seed(body), tx, tz, 9_000);
     let amp = crate::world_map::RELIEF_AMPLITUDE * 0.7;
-    (crate::world_map::platform(body, tx, tz) + (h - 0.5) * amp).clamp(0.0, 1.0)
+    // Sin lagunas: ver `world_map::platform_sin_lagunas` (rompe el círculo
+    // laguna → pueblo → continental → laguna).
+    (crate::world_map::platform_sin_lagunas(body, tx, tz) + (h - 0.5) * amp).clamp(0.0, 1.0)
 }
 
 /// Relieve compuesto, 0 (fosa) … 1 (cumbre).
@@ -1347,9 +1349,9 @@ fn urban_civil(s: &Settlement, tx: i64, tz: i64) -> Option<Civil> {
     // terreno en la mano.
     if borde < anillo.half_width() || dist_x < cv.half_width() || dist_z < ch.half_width() {
         Some(Civil::Road)
-    } else if dist_x < cv.half_shoulder() + fleco(tz, line_x)
-        || dist_z < ch.half_shoulder() + fleco(tx, line_z)
-        || borde < anillo.half_shoulder() + fleco(tx ^ tz, s.radius)
+    } else if dist_x < cv.half_shoulder()
+        || dist_z < ch.half_shoulder()
+        || borde < anillo.half_shoulder()
     {
         Some(Civil::Pavement)
     } else {
@@ -1359,23 +1361,10 @@ fn urban_civil(s: &Settlement, tx: i64, tz: i64) -> Option<Civil> {
     }
 }
 
-/// **El FLECO de la vereda**: 0 o 1 tile de más, sorteado a lo largo de la calle.
-///
-/// El borde exterior de la acera era una recta perfecta de kilómetros, y del otro
-/// lado empezaba el bioma de golpe: se veían retazos duros de pasto, de arena y de
-/// piedra pegados a la vereda, como recortados con tijera. Ninguna ciudad se ve
-/// así — la baldosa termina desparejo, el pasto se mete, y esa raspadura es lo que
-/// hace que el suelo urbano y el natural parezcan el mismo mundo.
-///
-/// **Sólo crece hacia AFUERA**, nunca hacia adentro: la calzada no se toca y la
-/// vereda no puede desaparecer de un lado. Así siguen valiendo
-/// `toda_via_tiene_vereda_a_los_dos_lados` y `una_calle_mide_lo_mismo_de_punta_a_punta`,
-/// que es lo que hace seguro tocar esto.
-fn fleco(a_lo_largo: i64, linea: i64) -> f32 {
-    // Rachas de dos tiles: pixel a pixel el borde se ve con ruido, de a dos se lee
-    // como una baldosa suelta.
-    (hash2(0xf1ec_0000, a_lo_largo.div_euclid(2), linea) % 2) as f32
-}
+/// (El "fleco" de la vereda —0 o 1 tile de más sorteado a lo largo de la calle—
+/// se quitó el 27 sep 2026: el borde salía deshilachado, salpicado de baldosas
+/// sueltas, y el usuario lo leyó como calles rotas. Una vereda del pack termina
+/// en una línea recta con su cordón; el pasto de la parcela arranca ahí.)
 
 /// La línea de retícula más cercana a un desplazamiento del centro: a qué
 /// distancia queda (tiles) y qué índice tiene.

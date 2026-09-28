@@ -823,7 +823,17 @@ pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
         if let Some(t) = crate::cuevas::tile_natural(body, 0, tx, tz) {
             return t;
         }
-        return surface_tile(body, tx, tz);
+        let nat = surface_tile(body, tx, tz);
+        // **EL INTERIOR DE LA MANZANA ES PARCELA, no el bioma** (27 sep 2026). Sin
+        // lote ni obra civil, la celda caía al terreno natural: manzanas enteras de
+        // arena naranja entre veredas. Adentro de un casco el suelo suelto es
+        // pasto de parcela; el agua (ríos y canales) y la roca se quedan.
+        if matches!(nat, Tile::Sand | Tile::Dirt)
+            && crate::geography::settlement_covering(body, tx, tz).is_some()
+        {
+            return Tile::Grass;
+        }
+        return nat;
     }
     if z > 0 {
         // **Los pisos altos son VACÍO, no roca.**
