@@ -91,6 +91,20 @@ pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKi
     if urban_decor_blocked(body, tx, tz) {
         return None;
     }
+    // **LA COPA NO CUELGA SOBRE LA RUTA** (28 sep 2026). Un árbol plantado al lado
+    // del asfalto tapaba media calzada con su copa. Retiro de dos celdas a los
+    // cuatro lados (tres celdas: la copa grande mide cuatro de ancho); sólo se
+    // paga en la celda que ya sacó árbol.
+    if kind == DecorKind::Tree {
+        for (dx, dz) in [(3, 0), (-3, 0), (0, 3), (0, -3), (2, 0), (-2, 0), (0, 2), (0, -2), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+            if matches!(
+                crate::geography::civil_at(body, tx + dx, tz + dz),
+                Some(crate::geography::Civil::Road | crate::geography::Civil::Bridge)
+            ) {
+                return None;
+            }
+        }
+    }
     Some(kind)
 }
 
@@ -712,6 +726,11 @@ pub fn calzada_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'stati
     }
     let h = hash_cell(0xca11_0003, tx, tz);
     if h % 1000 >= 8 {
+        return None;
+    }
+    // Alcantarillas y rejillas son de la CALLE del pueblo, no de la ruta de campo.
+    // Va después del sorteo: sólo lo paga la celda que ya sacó algo.
+    if crate::geography::settlement_covering(body, tx, tz).is_none() {
         return None;
     }
     pick_weighted(crate::pack_siembra::CALLE, h >> 10)

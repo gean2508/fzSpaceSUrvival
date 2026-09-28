@@ -106,3 +106,40 @@ mod ciudad_sin_lagos {
         assert!(agua * 200 < total, "{agua} de {total} celdas del casco son agua");
     }
 }
+
+#[cfg(test)]
+mod diag_enlace {
+    #[test]
+    #[ignore]
+    fn donde_hay_un_enlace_diagonal() {
+        use crate::geography::{civil_at, settlement_covering, settlement_in, Civil, SITE_PERIOD};
+        let b = crate::CelestialBody::Earth;
+        for ax in -8..8i64 {
+            for az in -8..8i64 {
+                let Some(from) = settlement_in(b, ax, az) else { continue };
+                for (nx, nz) in [(ax + 1, az), (ax, az + 1)] {
+                    let Some(to) = settlement_in(b, nx, nz) else { continue };
+                    let (fx, fz) = (from.center.0 as f32, from.center.1 as f32);
+                    let (tx, tz) = (to.center.0 as f32, to.center.1 as f32);
+                    let (dx, dz) = (tx - fx, tz - fz);
+                    // diagonal de verdad: ni casi horizontal ni casi vertical
+                    let ang = dz.atan2(dx).abs().to_degrees() % 90.0;
+                    if !(20.0..70.0).contains(&ang) { continue; }
+                    let l = (dx * dx + dz * dz).sqrt();
+                    let (px, pz) = (-dz / l, dx / l);
+                    for k in 3..12 {
+                        let t = k as f32 / 30.0;
+                        for off in -300..300 {
+                            let (x, z) = ((fx + dx * t + px * off as f32) as i64, (fz + dz * t + pz * off as f32) as i64);
+                            if civil_at(b, x, z) == Some(Civil::Road) && settlement_covering(b, x, z).is_none() {
+                                eprintln!("ENLACE_DIAGONAL {x} {z} ang={ang:.0} sitio={SITE_PERIOD}");
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("ninguno");
+    }
+}

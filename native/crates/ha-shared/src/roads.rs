@@ -557,7 +557,7 @@ pub enum Pintura {
 /// La pintura de una celda suelta. Para dibujar un chunk se usa
 /// [`pintura_rect`], que hace lo mismo dos órdenes de magnitud más barato.
 pub fn pintura_at(body: CelestialBody, tx: i64, tz: i64) -> Option<Pintura> {
-    pintura_con(&|x, z| es_calzada(body, x, z), tx, tz)
+    sin_marca_en_la_ruta(body, pintura_con(&|x, z| es_calzada(body, x, z), tx, tz), tx, tz)
 }
 
 fn pintura_con(calzada: &impl Fn(i64, i64) -> bool, tx: i64, tz: i64) -> Option<Pintura> {
@@ -794,10 +794,21 @@ pub fn pintura_rect(
     let mut out = Vec::with_capacity(w * h);
     for dz in 0..h as i64 {
         for dx in 0..w as i64 {
-            out.push(pintura_con(&calzada, x0 + dx, z0 + dz));
+            out.push(sin_marca_en_la_ruta(body, pintura_con(&calzada, x0 + dx, z0 + dz), x0 + dx, z0 + dz));
         }
     }
     out
+}
+
+/// **Bahías de colectivo y cajones, sólo en el pueblo** (28 sep 2026). Se miden
+/// sobre el asfalto sin saber dónde están, y desde que los enlaces van en tramos
+/// rectos una ruta en medio del campo recibía su cajón "BUS". Fuera de un casco
+/// la marca de rectángulo se descarta; la línea y la senda quedan.
+fn sin_marca_en_la_ruta(body: CelestialBody, p: Option<Pintura>, tx: i64, tz: i64) -> Option<Pintura> {
+    match p {
+        Some(Pintura::Marca { .. }) if crate::geography::settlement_covering(body, tx, tz).is_none() => None,
+        otra => otra,
+    }
 }
 
 /// ¿Esta celda está sobre calzada? Lo usa el RELIEVE para abrir rampa donde el
@@ -937,9 +948,20 @@ mod tests {
         use crate::topdown::{topdown_tile, Tile};
         let body = CelestialBody::Earth;
         let r = crate::celestial_bodies::body_walk_radius(body) as i64;
-        // Se busca un tramo largo de calzada y se camina entero.
+        // Se busca un tramo largo de calzada y se camina entero. Los enlaces van en
+        // tramos rectos (ver `geography::link_clearance`) y el tramo este-oeste
+        // sale por la fila del CENTRO de cada pueblo: se miran esas filas.
+        let mut filas: Vec<i64> = Vec::new();
+        let sp = crate::geography::SITE_PERIOD;
+        for sx in (-r / 3) / sp..=(r / 3) / sp {
+            for sz in (-r / 3) / sp..=(r / 3) / sp {
+                if let Some(s) = crate::geography::settlement_in(body, sx, sz) {
+                    filas.push(s.center.1);
+                }
+            }
+        }
         let mut runs = 0;
-        for tz in (-r / 3..r / 3).step_by(419) {
+        for tz in filas {
             let mut run = 0;
             for tx in -r / 3..r / 3 {
                 if is_drivable_at(body, tx, tz) {

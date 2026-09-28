@@ -150,6 +150,19 @@ impl Plugin for AutoDrivePlugin {
             );
             return;
         }
+        // **Mirar un lugar cualquiera** (HA_VISTA="x,z"): va a esa celda, espera el
+        // mundo, captura a pie y desde 120 m, y sale. Para revisar un sitio
+        // puntual sin escribir un driver entero.
+        if crate::flags::var("HA_VISTA").is_ok() {
+            app.init_resource::<FlyTestState>();
+            app.add_systems(
+                Update,
+                vista_drive
+                    .before(aplicar_actuacion_del_driver)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            return;
+        }
         if crate::flags::var("HA_CITYTEST").is_ok() {
             app.init_resource::<FlyTestState>();
             app.add_systems(
@@ -5461,5 +5474,53 @@ fn prop_test_drive(world: &mut World) {
             eprintln!("ha-verify: PROPTEST {}", if fallo { "FAIL" } else { "DONE" });
             std::process::exit(i32::from(fallo));
         }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_VISTA — mirar un lugar
+// ---------------------------------------------------------------------------
+
+fn vista_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 2.0 || !player_ready(world) {
+        return;
+    }
+    let stage = world.resource::<FlyTestState>().stage;
+    if stage == 0 {
+        let v = crate::flags::var("HA_VISTA").unwrap_or_default();
+        let mut it = v.split(',').filter_map(|p| p.trim().parse::<f32>().ok());
+        let (Some(x), Some(z)) = (it.next(), it.next()) else {
+            eprintln!("ha-vista: HA_VISTA tiene que ser \"x,z\"");
+            std::process::exit(1);
+        };
+        teleport_a_celda(world, x, z);
+        eprintln!("ha-vista: en ({x}, {z})");
+        advance_stage(world, now);
+        return;
+    }
+    // el salto largo vuelve a mostrar la pantalla de carga: se espera a que se vaya
+    let beats: [(f32, f32, &str); 2] = [(25.0, 0.0, "vista-0-a-pie"), (40.0, 120.0, "vista-1-alto")];
+    let shots = world.resource::<FlyTestState>().shots as usize;
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    if shots >= beats.len() {
+        if now - entered < beats[beats.len() - 1].0 + 15.0 {
+            return;
+        }
+        eprintln!("ha-vista: DONE");
+        std::process::exit(0);
+    }
+    let (at, alt, name) = beats[shots];
+    if alt > 0.0 {
+        let mut fly = world.resource_mut::<crate::creative_fly::CreativeFlight>();
+        fly.phase = crate::creative_fly::Phase::Climb;
+        fly.vert = alt;
+        fly.alt = alt;
+        fly.vy = 0.0;
+    }
+    if now - entered > at && mundo_listo(world) {
+        shot(world, &format!("{}/{name}.png", flytest_dir()));
+        world.resource_mut::<FlyTestState>().shots += 1;
     }
 }

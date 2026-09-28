@@ -1302,22 +1302,53 @@ pub fn link_clearance(body: CelestialBody, px: f32, pz: f32) -> Option<f32> {
                 let a = (fx as f32, fz as f32);
                 let b = (to.center.0 as f32, to.center.1 as f32);
                 let hh = hash2(seed, ax + nx * 7, az + nz * 13);
-                let bend = ((hh & 0xffff) as f32 / 65535.0 - 0.5) * 0.22;
-                // Punto medio desplazado en perpendicular: la curva del tramo.
-                let mid = (
-                    (a.0 + b.0) * 0.5 - (b.1 - a.1) * bend,
-                    (a.1 + b.1) * 0.5 + (b.0 - a.0) * bend,
-                );
+                // **EL ENLACE VA EN TRAMOS RECTOS, NO EN DIAGONAL** (28 sep 2026).
+                // Era una recta (con un quiebre) a cualquier ángulo, y el kit del
+                // pack sólo dibuja calles ortogonales: a 25° el asfalto salía en
+                // escalones de un metro, la línea central saltaba de columna en
+                // columna y el borde contra el pasto quedaba serruchado ("las
+                // calles en diagonal están rotas", reporte del usuario). Ahora sale
+                // del centro del pueblo por su eje —que es una calle de la
+                // retícula—, dobla 90° en un punto sorteado entre el 35 y el 65 %
+                // del camino, y entra al otro pueblo por su eje. Con eso la línea,
+                // los cruces y las sendas salen solos: se miden sobre el asfalto
+                // (`roads::pintura_con`), igual que en la ciudad.
+                let t = 0.35 + (hh & 0xffff) as f32 / 65535.0 * 0.30;
+                // vecino al este → tramos E-O con el quiebre N-S; al sur, al revés
+                let este = nx != ax;
+                let tramos: [((f32, f32), (f32, f32)); 3] = if este {
+                    let xm = (a.0 + (b.0 - a.0) * t).round();
+                    [(a, (xm, a.1)), ((xm, a.1), (xm, b.1)), ((xm, b.1), b)]
+                } else {
+                    let zm = (a.1 + (b.1 - a.1) * t).round();
+                    [(a, (a.0, zm)), ((a.0, zm), (b.0, zm)), ((b.0, zm), b)]
+                };
                 // El ancho del enlace sale del RANGO de los dos extremos: dos
                 // ciudades se unen por autopista, a una aldea le llega una ruta.
                 let half = crate::roads::link_class(from.tier, to.tier).half_width();
-                let d = dist_to_segment(p, a, mid).min(dist_to_segment(p, mid, b));
+                let d = tramos
+                    .iter()
+                    .map(|&(p0, p1)| dist_caja_a_tramo(p, p0, p1))
+                    .fold(f32::INFINITY, f32::min);
                 let margen = half - d;
                 best = Some(best.map_or(margen, |m: f32| m.max(margen)));
             }
         }
     }
     best
+}
+
+/// Distancia de un punto a un tramo ORTOGONAL, en norma de caja (L∞): así la
+/// calzada de alrededor es un rectángulo y dos tramos que se tocan forman una
+/// esquina en ángulo recto, no un cuarto de círculo que la grilla raspa en
+/// escalones. Se mide al centro de la celda (el `+0,5`).
+fn dist_caja_a_tramo(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+    let (px, pz) = (p.0.floor() + 0.5, p.1.floor() + 0.5);
+    let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
+    let (z0, z1) = (a.1.min(b.1), a.1.max(b.1));
+    let dx = (x0 - px).max(0.0).max(px - x1);
+    let dz = (z0 - pz).max(0.0).max(pz - z1);
+    dx.max(dz)
 }
 
 /// **La trama urbana de un núcleo en una celda**: calzada, vereda, o nada (el

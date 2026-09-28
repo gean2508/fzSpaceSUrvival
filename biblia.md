@@ -6945,7 +6945,17 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   (`import-pack-masivo.py` "solo": vereda = mobiliario urbano, calzada = piso de
   calle, parque = bancos/flores/fuentes, patio sin kit de pileta). Falta
   revisar con el usuario: lotes (qué edificio va en cada parcela) y esquinas.
-  Antes: Una calle es, de afuera hacia adentro:
+  **Rutas entre pueblos** (28 sep 2026, "las calles en diagonal están rotas"):
+  el pack sólo dibuja calles ortogonales y el enlace era una recta a cualquier
+  ángulo → asfalto en escalones, línea central saltando de columna, borde
+  serruchado. `geography::link_clearance` ahora traza tres tramos ortogonales
+  (sale por el eje del pueblo, dobla 90° entre el 35 y el 65 % del camino, entra
+  por el eje del otro) con distancia de caja (`dist_caja_a_tramo`): esquinas en
+  ángulo recto, y la línea/cruces/sendas salen solos porque `roads::pintura_con`
+  mide el asfalto. Fuera del casco no hay bahías de colectivo ni cajones
+  (`roads::sin_marca_en_la_ruta`) ni alcantarillas (`calzada_decor_at`), y ningún
+  árbol nace a menos de 3 celdas de la calzada (`surface_decor_at`). Para mirar un
+  sitio: `HA_VISTA="x,z"`. Antes: Una calle es, de afuera hacia adentro:
   parcela → vereda (con su ancho) → cordón/filo contra la calzada (o contra la
   alcantarilla) → calzada → línea central. Más las esquinas. Hoy "están todas
   rotas", y DENTRO de las parcelas de ciudad aparecen lagos, piezas sueltas y
