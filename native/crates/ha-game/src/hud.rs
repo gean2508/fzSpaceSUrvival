@@ -1282,6 +1282,11 @@ fn spawn_hotbar(parent: &mut ChildBuilder, layout: &TouchLayout, _short: f32, he
                 column_gap: Val::Px(gap),
                 ..default()
             },
+            // **La base oscura de la tira** (28 sep 2026): las casillas flotaban
+            // sobre el pasto sin nada detrás. Mismo tono que el marco del panel
+            // de la mochila, translúcido para no tapar el mundo.
+            BackgroundColor(Color::srgba(0.12, 0.10, 0.14, 0.62)),
+            BorderRadius::all(Val::Px(6.0)),
             HudArmado,
             HotbarRoot,
             Name::new("Hotbar"),
@@ -2460,15 +2465,23 @@ fn spawn_bag_panel(
                             // **Once columnas EXACTAS**, por el mismo motivo que
                             // la grilla del creador: envolver por flex depende
                             // del redondeo y perdía una columna.
+                            // **Flex con wrap y ancho EXACTO**, no CSS Grid (28 sep
+                            // 2026): con `Display::Grid` las casillas salían en UNA
+                            // fila, aplastadas a rayitas (captura `HA_BAGSHOT`).
+                            // El ancho es el de once casillas y sus diez huecos más
+                            // 2 px de holgura —el redondeo que antes perdía una
+                            // columna no alcanza a mandar la undécima abajo— y
+                            // cada casilla va con `flex_shrink: 0`.
+                            let paso = u(INV_SLOT) * k;
+                            let hueco = u(INV_GAP) * k;
+                            let ancho = GRID_COLS as f32 * paso + (GRID_COLS as f32 - 1.0) * hueco + 2.0;
                             let grilla = || Node {
-                                display: Display::Grid,
-                                width: Val::Percent(100.0),
-                                grid_template_columns: vec![RepeatedGridTrack::px(
-                                    GRID_COLS as u16,
-                                    u(INV_SLOT) * k,
-                                )],
-                                column_gap: Val::Px(u(INV_GAP) * k),
-                                row_gap: Val::Px(u(INV_GAP) * k),
+                                width: Val::Px(ancho),
+                                flex_direction: FlexDirection::Row,
+                                flex_wrap: FlexWrap::Wrap,
+                                align_content: AlignContent::FlexStart,
+                                column_gap: Val::Px(hueco),
+                                row_gap: Val::Px(hueco),
                                 ..default()
                             };
                             match tab {
@@ -3085,6 +3098,9 @@ fn spawn_inventory_grid_cell(parent: &mut ChildBuilder, index: usize, lado: f32,
             Node {
                 width: Val::Px(lado),
                 height: Val::Px(lado),
+                min_width: Val::Px(lado),
+                min_height: Val::Px(lado),
+                flex_shrink: 0.0,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 overflow: Overflow::clip(),
@@ -3476,6 +3492,7 @@ fn spawn_build_piece_card(
             Node {
                 width: Val::Px(card),
                 height: Val::Px(card),
+                flex_shrink: 0.0,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 overflow: Overflow::clip(),
@@ -3573,11 +3590,11 @@ fn skin_ui_from_art(
             }
         }
     }
-    for e in &hotbar {
-        if let Some(img) = art.ui_image_node("ui/hotbar_slot") {
-            commands.entity(e).try_insert(img);
-        }
-    }
+    // (La hotbar ya NO se pinta con `ui/hotbar_slot`: esa losa beige plana pisaba
+    // el marco del kit que le pone `casillas_del_kit` —según qué sistema corriera
+    // último— y la tira salía como cuadrados sin borde, distinta a la mochila. La
+    // casilla de la hotbar y la del inventario son la misma pieza.)
+    let _ = &hotbar;
     for (e, action) in &actions {
         let key = match action.0 {
             crate::input::ActionKind::Use => "ui/use_button",

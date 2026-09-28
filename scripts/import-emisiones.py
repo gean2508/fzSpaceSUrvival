@@ -340,7 +340,14 @@ def tinte_de(img, grupo):
     for x, y in muestras:
         c = px[x, y]
         # El núcleo pesa doble: es la fuente; el anillo aporta el matiz.
-        p = luminancia(c) * (2.0 if (x, y) in en_grupo else 1.0)
+        #
+        # **Y el COLOR pesa, no sólo el brillo** (28 sep 2026). Pesando sólo por
+        # luminancia ganaba el núcleo blanco de la llama y una vela amarilla salía
+        # con luz blanca (1,0.99,0.99): el usuario lo vio en las antorchas. La
+        # croma (max−min) sube el peso de los píxeles con matiz; un farol blanco no
+        # tiene croma en ningún lado y sigue saliendo blanco.
+        croma = (max(c[:3]) - min(c[:3])) / 255.0
+        p = luminancia(c) * (0.15 + croma) * (2.0 if (x, y) in en_grupo else 1.0)
         acc[0] += c[0] * p
         acc[1] += c[1] * p
         acc[2] += c[2] * p
@@ -350,6 +357,25 @@ def tinte_de(img, grupo):
     rgb = [v / peso / 255.0 for v in acc]
     mx = max(rgb) or 1.0
     return [round(v / mx, 4) for v in rgb]
+
+
+#: El ámbar de una llama: lo que emite el fuego aunque su núcleo se dibuje blanco.
+LLAMA = [1.0, 0.74, 0.30]
+#: Por debajo de esta saturación (0..1) un emisor de fuego se lee como luz blanca.
+SATURACION_MINIMA_DE_LLAMA = 0.30
+
+
+def color_de_llama(fam, rgb):
+    """**Una llama emite luz cálida.** Una vela del pack son cuatro píxeles de
+    llama sobre una cera blanca: la medida sale casi blanca (1, 0.99, 0.97) y la
+    luz de la antorcha se veía blanca (reporte del usuario, 28 sep 2026). Para el
+    fuego, la vela y la antorcha, si lo medido no tiene color se toma el ámbar de
+    llama; si lo tiene (una vela roja, una brasa), manda lo medido."""
+    if fam.nombre not in ("fuego", "antorcha", "vela"):
+        return rgb
+    mx, mn = max(rgb), min(rgb)
+    sat = (mx - mn) / mx if mx > 0 else 0.0
+    return LLAMA if sat < SATURACION_MINIMA_DE_LLAMA else rgb
 
 
 def familia_de(clave):
@@ -397,7 +423,7 @@ def medir(clave, entrada, cache):
     off_y = round((h / 2.0 - cy) * mpp, 3)
 
     return {
-        "color": tinte_de(img, grupo),
+        "color": color_de_llama(fam, tinte_de(img, grupo)),
         "radius": radius,
         "intensity": fam.intensidad,
         "offset": [off_x, off_y],

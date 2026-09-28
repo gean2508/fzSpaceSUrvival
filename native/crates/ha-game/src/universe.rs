@@ -1372,20 +1372,114 @@ fn bake_body_textures(
     // sigue siendo metros de terreno: sin esto el planeta se ve granulado como
     // estática en vez de con biomas.
     box_blur_rgb(&mut job.data, n, 2);
+    // **EL PLANETA EN PIXEL ART** (28 sep 2026, referencia del usuario:
+    // `design/referencias/luna-pixel-art.png`). El disco suave de 512 px parecía una
+    // foto borrosa pegada en un juego de píxeles. Se baja a `DISC_PIXEL_N` por
+    // bloques, la luz se posteriza en bandas (tonos planos, el matiz de cada
+    // material se conserva) y se dibuja con vecino más próximo.
+    let (datos, m) = pixelar_disco(&job.data, n, job.body);
     let mut image = Image::new(
-        Extent3d { width: n as u32, height: n as u32, depth_or_array_layers: 1 },
+        Extent3d { width: m as u32, height: m as u32, depth_or_array_layers: 1 },
         TextureDimension::D2,
-        std::mem::take(&mut job.data),
+        datos,
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::RENDER_WORLD,
     );
-    // Lineal: el disco se ve a todas las escalas, desde llenar la pantalla hasta
-    // ser un punto, y con vecino más próximo el limbo se escalona.
-    image.sampler = bevy::image::ImageSampler::linear();
+    image.sampler = bevy::image::ImageSampler::nearest();
     if let Some(m) = materials.get_mut(&job.material) {
         m.texture = Some(images.add(image));
         m.color = Color::WHITE;
     }
+}
+
+/// Lado del disco pixelado: 128 píxeles de planeta, como la luna de referencia.
+const DISC_PIXEL_N: usize = 128;
+/// Bandas de luz por material. Cinco tonos planos: luz, medio, sombra, y los dos
+/// del limbo.
+const DISC_BANDAS: f32 = 5.0;
+
+/// Baja el disco de `n` a [`DISC_PIXEL_N`] por bloques y lo pinta como la luna
+/// de referencia: **terminador** (la esfera iluminada de arriba a la derecha,
+/// con su lado de noche), **cráteres** en los cuerpos sin aire, y la luz
+/// posterizada en bandas. El alfa sale duro (0 o 255): borde de píxeles.
+fn pixelar_disco(data: &[u8], n: usize, body: CelestialBody) -> (Vec<u8>, usize) {
+    let m = DISC_PIXEL_N.min(n);
+    let b = n / m;
+    // Luz: de arriba a la derecha y algo de frente (imagen: x→derecha, y→abajo).
+    let luz = Vec3::new(0.62, -0.38, 0.69).normalize();
+    // Cráteres: sólo donde no hay aire que los borre.
+    let crateres: Vec<(f32, f32, f32)> = if ha_shared::body_atmo_top(body) <= 0.0 {
+        let seed = ha_shared::body_def(body).terrain_seed;
+        (0..46u32)
+            .map(|i| {
+                let h = |k: u32| {
+                    let mut x = seed ^ i.wrapping_mul(0x9E37_79B9) ^ k.wrapping_mul(0x85EB_CA6B);
+                    x ^= x >> 16;
+                    x = x.wrapping_mul(0x7FEB_352D);
+                    x ^= x >> 15;
+                    (x & 0xFFFF) as f32 / 65535.0
+                };
+                // radio en píxeles del disco: muchos chicos, pocos grandes
+                let r = 1.5 + h(3).powi(3) * 9.0;
+                let ang = h(1) * std::f32::consts::TAU;
+                let d = h(2).sqrt() * (m as f32 * 0.5 - r - 1.0);
+                (m as f32 * 0.5 + ang.cos() * d, m as f32 * 0.5 + ang.sin() * d, r)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut out = vec![0u8; m * m * 4];
+    for my in 0..m {
+        for mx in 0..m {
+            let (mut acc, mut op) = ([0.0f32; 3], 0usize);
+            for y in my * b..(my + 1) * b {
+                for x in mx * b..(mx + 1) * b {
+                    let i = (y * n + x) * 4;
+                    if data[i + 3] > 127 {
+                        for c in 0..3 {
+                            acc[c] += data[i + c] as f32;
+                        }
+                        op += 1;
+                    }
+                }
+            }
+            let o = (my * m + mx) * 4;
+            if op * 2 < b * b {
+                continue; // queda transparente
+            }
+            let rgb = acc.map(|v| v / op as f32 / 255.0);
+            // normal de la esfera en este píxel
+            let (u, v) = ((mx as f32 + 0.5) / m as f32 * 2.0 - 1.0, (my as f32 + 0.5) / m as f32 * 2.0 - 1.0);
+            let nz = (1.0 - u * u - v * v).max(0.0).sqrt();
+            let normal = Vec3::new(u, v, nz);
+            let mut k = 0.22 + 0.78 * normal.dot(luz).max(0.0);
+            // cráteres: piso hundido, borde claro del lado de la luz
+            for &(cx, cy, r) in &crateres {
+                let (dx, dy) = (mx as f32 + 0.5 - cx, my as f32 + 0.5 - cy);
+                let d = (dx * dx + dy * dy).sqrt();
+                if d > r {
+                    continue;
+                }
+                if d > r * 0.72 {
+                    let de_cara = (dx * luz.x + dy * luz.y) / d.max(1e-3);
+                    k *= if de_cara > 0.0 { 1.18 } else { 0.70 };
+                } else {
+                    k *= 0.84;
+                }
+                break;
+            }
+            let lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]).max(1e-4);
+            let objetivo = (lum * k).clamp(0.0, 1.0);
+            let banda = ((objetivo * DISC_BANDAS).round() / DISC_BANDAS).max(0.35 / DISC_BANDAS);
+            let f = banda / lum;
+            for c in 0..3 {
+                out[o + c] = ((rgb[c] * f).clamp(0.0, 1.0) * 255.0) as u8;
+            }
+            out[o + 3] = 255;
+        }
+    }
+    (out, m)
 }
 
 /// El disco del planeta pintado con SU PROPIO terreno (`topdown_tile`), no con
@@ -1512,6 +1606,33 @@ fn box_blur_rgb(data: &mut [u8], n: usize, passes: u32) {
 
 #[cfg(test)]
 mod tests {
+    /// Hornea el disco de la Tierra y de la Luna y los deja en `HA_DISCO_DIR` para
+    /// mirarlos (el estilo pixel art de `pixelar_disco`). `--ignored` porque tarda.
+    #[test]
+    #[ignore]
+    fn hornear_discos_a_png() {
+        let dir = std::env::var("HA_DISCO_DIR").unwrap_or_else(|_| "/tmp".into());
+        let tiles = crate::world2d::TileWorld::default();
+        for body in [CelestialBody::Earth, CelestialBody::Moon] {
+            let n = DISC_TEX_N;
+            let mut data = vec![0u8; n * n * 4];
+            fill_disc_span(&mut data, &tiles, body, 0, n * n);
+            box_blur_rgb(&mut data, n, 2);
+            let (px, m) = pixelar_disco(&data, n, body);
+            let ruta = format!("{dir}/disco-{body:?}.ppm");
+            let mut f = std::fs::File::create(&ruta).unwrap();
+            use std::io::Write;
+            write!(f, "P6\n{m} {m}\n255\n").unwrap();
+            for i in 0..m * m {
+                let a = px[i * 4 + 3] as u32;
+                for c in 0..3 {
+                    f.write_all(&[((px[i * 4 + c] as u32 * a + 12 * (255 - a)) / 255) as u8]).unwrap();
+                }
+            }
+            eprintln!("disco → {ruta}");
+        }
+    }
+
     use super::*;
 
     #[test]

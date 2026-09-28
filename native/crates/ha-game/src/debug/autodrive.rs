@@ -1166,6 +1166,11 @@ fn night_test_drive(world: &mut World) {
     ];
     let shots = world.resource::<FlyTestState>().shots as usize;
     if shots >= beats.len() {
+        // la captura se escribe frames después de pedirla (ver `city_test_drive`)
+        let entered = world.resource::<FlyTestState>().stage_entered;
+        if now - entered < beats[beats.len() - 1].0 + 15.0 {
+            return;
+        }
         eprintln!("ha-nighttest: DONE");
         std::process::exit(0);
     }
@@ -1180,7 +1185,8 @@ fn night_test_drive(world: &mut World) {
             fly.vy = 0.0;
         }
     }
-    if now - entered > at {
+    // Igual que la ciudad: con el mundo armado, o sale la pantalla de carga.
+    if now - entered > at && mundo_listo(world) {
         // Cuántas sombras hay VIVAS. Es la diferencia entre "no se ven las
         // sombras porque son sutiles" y "el sistema no está colgando ninguna":
         // sin este número se tunea a ciegas el alpha de algo que no existe.

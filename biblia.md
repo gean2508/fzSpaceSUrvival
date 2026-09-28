@@ -6960,14 +6960,27 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   esquina sale mal y el borde superior (donde se pisa) no es continuo. Kit en
   `world2d.rs` (`corner_*`, `inner_*`, `edge_*`, `CARAS_QUE_CUELGAN`) e
   `import-acantilado.py`. Referencia: `design/referencias/terrazas-y-cascadas.png`.
-- **E3 · LUZ DEL COLOR DE SU FUENTE**: la antorcha es amarilla → su luz, amarilla;
+- **E3 · LUZ DEL COLOR DE SU FUENTE** — ✅ hecho (28 sep 2026), falta verlo de
+  noche con pantalla real (en Xvfb la noche no carga): `import-emisiones.py`
+  pondera el color por croma (antes ganaba el núcleo blanco) y una llama sin
+  color medible toma el ámbar `LLAMA`; en `night_veil.wgsl` el pozo y el halo
+  suman el color saturado (potencia 1,6), el núcleo puede quemar a blanco.
+  Antes: la antorcha es amarilla → su luz, amarilla;
   el farol blanco → blanca. `emission` del manifest / `light2d.rs`
   (`Light2d.color`). Referencia: `iluminacion-noche.png` (brillos neón,
   gradiente luz→oscuridad).
-- **E4 · INVENTARIO ROTO**: la grilla de la mochila sale como líneas en vez de
+- **E4 · INVENTARIO** — ✅ hecho (28 sep 2026): la grilla de la mochila es flex
+  con wrap y ancho exacto (con `Display::Grid` salía en una fila de rayitas) y
+  las casillas no se encogen; la hotbar usa el mismo marco del kit (lo pisaba
+  `ui/hotbar_slot` en `skin_ui_from_art`) sobre una base oscura. Verificado con
+  `HA_BAGSHOT`. Antes: la grilla de la mochila sale como líneas en vez de
   casillas, y la hotbar no tiene el fondo oscuro que tiene el inventario
   (`hud.rs`, `casillas_del_kit`, `marcos_del_kit`).
-- **E5 · ESPACIO Y PLANETAS**: los cuerpos vistos de lejos en el estilo de
+- **E5 · PLANETAS EN PIXEL ART** — ✅ primera pasada (28 sep 2026):
+  `universe::pixelar_disco` baja el disco a 128 px, terminador (luz de arriba a
+  la derecha), cráteres en cuerpos sin aire, luz en 5 bandas, muestreo nearest.
+  `cargo test -p ha-game --release --lib hornear_discos -- --ignored` deja los
+  discos en `HA_DISCO_DIR`. Antes: los cuerpos vistos de lejos en el estilo de
   `luna-pixel-art.png` (mares, cráteres, terminador), no el disco actual.
 - **E6 · FACHADATEST**: al entrar al cuarto construido se abren la cara sur pero
   no las norte/laterales (`layers::fade_overhead`, `walls::huella_que_tapa`).

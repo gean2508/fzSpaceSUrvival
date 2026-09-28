@@ -340,22 +340,30 @@ fn fragment_add(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // tiene punto chiquito y halo chiquito, y una hoguera los tiene gordos.
         // `w <= 0` = el emisor ya dibuja su propio brillo (luciérnagas,
         // `Light2d::draw_glow == false`) y sumarle otro lo quemaría a blanco.
-        var nucleo = 0.0;
+        // **EL POZO Y EL HALO LLEVAN EL COLOR DE SU FUENTE** (28 sep 2026). Sumado
+        // tal cual, el ámbar de una antorcha (1, 0.71, 0.17) sobre un suelo ya
+        // iluminado recortaba a (1, 1, 0.9): la luz de fuego se veía blanca. Se
+        // suma el color SATURADO (potencia 1,6: el canal dominante queda, los
+        // otros bajan); un farol blanco (canales iguales) no cambia. El núcleo sí
+        // puede quemar a blanco, como una llama de verdad.
+        let col = pow(max(t.rgb, vec3<f32>(0.0)), vec3<f32>(1.6));
+        var bulbo = 0.0;
+        var halo = 0.0;
         if t.w > 0.001 {
             // La raíz SÓLO acá: para las luces que de verdad tocan este píxel.
             let d = sqrt(d2);
             let ub = clamp(1.0 - d * t.w, 0.0, 1.0);
             // Bulbo: el punto caliente, exponente alto = chiquito y quemado.
-            nucleo = pow(ub, 3.5) * BULB_GAIN;
+            bulbo = pow(ub, 3.5) * BULB_GAIN;
             // **Halo — el "bloom" de esta luz.** Mismo centro, `HALO_R` veces
             // más ancho y con poca ganancia: es lo que hace que un farol se lea
             // como un resplandor y no como una mancha recortada en el piso.
             // `(1-u)²` tiene derivada 0 en el borde igual que el poly6, así que
             // tampoco tiene dónde hacer escalón.
             let uh = clamp(1.0 - d * t.w / HALO_R, 0.0, 1.0);
-            nucleo += uh * uh * HALO_GAIN;
+            halo = uh * uh * HALO_GAIN;
         }
-        acc += t.rgb * (diffuse * ADD_GAIN + nucleo * k);
+        acc += col * (diffuse * ADD_GAIN + halo * k) + t.rgb * (bulbo * k);
     }
 
     let dither = (hash12(mesh.position.xy + vec2<f32>(37.0, 11.0)) - 0.5) * (1.4 / 255.0);
