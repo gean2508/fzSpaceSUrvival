@@ -6935,38 +6935,37 @@ paneles de depuración apagados (`/depurar`); botón CAM al lado de MENU;
 `layers::fade_overhead`); ✅ tope de dt del vuelo 1/20 → 1/10 (un celu lento
 volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el APK.
 
-**Pendiente, en este orden:**
+**Pendiente, POR ETAPAS (orden del usuario, 27 sep 2026 noche):**
 
-1. **LAS ESQUINAS DE LOS ACANTILADOS SE VEN ROTAS** (reporte del usuario, lo más
-   visible). En cada ángulo de 90° el tramo recto sale bien y la pieza de la
-   esquina sale mal: el borde superior (donde pisa el jugador) no es continuo.
-   Mirar `world2d.rs` → la elección de pose del kit de acantilado
-   (`corner_ne/nw/se/sw`, `inner_*`, `edge_*`; ~l. 3418 y 3593, y
-   `CARAS_QUE_CUELGAN`), y el importador `scripts/import-acantilado.py` (qué
-   recorte del pack es cada esquina). Hipótesis: la esquina interior/exterior
-   está invertida o recortada de otra fila del pack. Reproducir con
-   `HA_RELIEVETEST` y comparar contra `design/referencias/terrazas-y-cascadas.png`.
-2. **FACHADATEST falla**: al entrar al cuarto construido se abre la cara sur pero
-   no las caras norte/laterales (`caras [29,4=1.00 …]`). `Cuartos::en` no
-   devuelve el recinto en esa corrida, o el `pie` de las caras laterales no cae
-   en [z0, z1+1]. Ver `layers::fade_overhead` y `walls::huella_que_tapa`.
-3. **Terrazas como la referencia**: los cantos son escaleras de 1 celda (86 %).
-   Es el pendiente "EL PASO NO USA EL KIT… ENDEREZAR EL CANTO" de más abajo:
-   cantos rectos de ≥4 celdas y piezas diagonales. Mueve el mundo (tests de
-   cumbre/caminos).
-4. **Agua en la nieve**: el valle que talla el río baja de la línea de nieve y
-   sale pasto verde en cuadros sueltos junto a las cascadas nevadas.
-5. **Probar en el Redmi** (`leo-celu conectar` → `probar`; el ADB inalámbrico ya
-   quedó habilitado en 100.110.132.40:5555) y reactivar la **escala de render** en
-   Android midiendo con el cable (la palanca grande para celus débiles; §10).
-6. **ECOTEST**: invariante de forraje (`no hay forraje donde el bioma lo da`);
-   los `FoodDot` son cuadrados rojos planos — falta arte o quitar.
-7. **Planetas vistos de lejos** con el estilo de `luna-pixel-art.png`, y mapa del
-   mundo con la variedad de `distribucion-del-mapa.png`.
-8. **Luz nocturna** como `iluminacion-noche.png` (brillos neón de hongos y
-   luciérnagas, fogata cálida con gradiente).
-9. Del día: fauna de otros planetas sin arte (quad de color), crías y cultivos
-   por etapas, variantes de color de animales.
+- **E1 · CALLES Y CIUDAD** (en curso). Una calle es, de afuera hacia adentro:
+  parcela → vereda (con su ancho) → cordón/filo contra la calzada (o contra la
+  alcantarilla) → calzada → línea central. Más las esquinas. Hoy "están todas
+  rotas", y DENTRO de las parcelas de ciudad aparecen lagos, piezas sueltas y
+  props repartidos al azar: sospecha de importación mal interpretada del pack
+  (regla 8: pieza vs objeto). Ver §5/§8 (`pack_siembra.rs`, `roads.rs`,
+  `city.rs`, `import-calles.py`, `import-marcas-calzada.py`).
+- **E2 · ESQUINAS DE ACANTILADO ROTAS**: en cada ángulo de 90° la pieza de la
+  esquina sale mal y el borde superior (donde se pisa) no es continuo. Kit en
+  `world2d.rs` (`corner_*`, `inner_*`, `edge_*`, `CARAS_QUE_CUELGAN`) e
+  `import-acantilado.py`. Referencia: `design/referencias/terrazas-y-cascadas.png`.
+- **E3 · LUZ DEL COLOR DE SU FUENTE**: la antorcha es amarilla → su luz, amarilla;
+  el farol blanco → blanca. `emission` del manifest / `light2d.rs`
+  (`Light2d.color`). Referencia: `iluminacion-noche.png` (brillos neón,
+  gradiente luz→oscuridad).
+- **E4 · INVENTARIO ROTO**: la grilla de la mochila sale como líneas en vez de
+  casillas, y la hotbar no tiene el fondo oscuro que tiene el inventario
+  (`hud.rs`, `casillas_del_kit`, `marcos_del_kit`).
+- **E5 · ESPACIO Y PLANETAS**: los cuerpos vistos de lejos en el estilo de
+  `luna-pixel-art.png` (mares, cráteres, terminador), no el disco actual.
+- **E6 · FACHADATEST**: al entrar al cuarto construido se abren la cara sur pero
+  no las norte/laterales (`layers::fade_overhead`, `walls::huella_que_tapa`).
+- **E7 · Terrazas como la referencia** (cantos rectos ≥4 celdas; hoy escaleras de
+  1 celda, ver "EL PASO NO USA EL KIT" más abajo) y **agua en la nieve** (pasto
+  verde en cuadros junto a cascadas nevadas).
+- **E8 · Redmi**: probar el APK (`leo-celu conectar` → `probar`), reactivar la
+  escala de render en Android midiéndola.
+- **E9 · Resto**: forraje (ECOTEST, cuadrados rojos planos), mapa del mundo como
+  `distribucion-del-mapa.png`, fauna de otros planetas, crías, cultivos.
 
 **Cómo se mide** (lo que funcionó): drivers `HA_<X>TEST=1 HA_AUTOPLAY=1
 HA_FORCE_TOUCH=1 HA_SHOTDIR=… WGPU_BACKEND=gl ./target/release/ha-game`; sonda
