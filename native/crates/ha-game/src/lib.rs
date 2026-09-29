@@ -317,6 +317,7 @@ fn run_app_inner() {
         .add_plugins(render::fireworks::FireworksPlugin)
         .add_plugins(AblatePlugin)
         .add_plugins(debug::StageProbePlugin)
+        .add_plugins(debug::VerColisionPlugin)
         .add_plugins(chargen::ChargenPlugin)
         .add_plugins(loading::LoadingPlugin)
         .add_plugins(vault::VaultPlugin)

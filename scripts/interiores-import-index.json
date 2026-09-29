@@ -54,9 +54,24 @@
   "wall/int_azul_3",
   "doorway/int_azul_3",
   "floor/int_azul_3",
+  "wall/int_azul_4",
+  "doorway/int_azul_4",
+  "floor/int_azul_4",
+  "wall/int_roja_2",
+  "doorway/int_roja_2",
+  "floor/int_roja_2",
+  "wall/int_crema_1",
+  "doorway/int_crema_1",
+  "floor/int_crema_1",
   "wall/int_gris_clara_3",
   "doorway/int_gris_clara_3",
   "floor/int_gris_clara_3",
+  "wall/int_roja_3",
+  "doorway/int_roja_3",
+  "floor/int_roja_3",
+  "wall/int_madera_4",
+  "doorway/int_madera_4",
+  "floor/int_madera_4",
   "zocalo/int_1",
   "zocalo/int_2",
   "zocalo/int_3",
@@ -840,5 +855,8 @@
   "sombra/int_35",
   "sombra/int_36",
   "sombra/int_37"
+ ],
+ "origen": [
+  "art/pack/interiores.png"
  ]
 }

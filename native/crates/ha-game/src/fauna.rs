@@ -447,7 +447,7 @@ impl FaunaCatalog {
 }
 
 #[derive(Component)]
-struct Animal {
+pub(crate) struct Animal {
     brain: i32,
     heading: f32,
     x: f32,

@@ -1549,6 +1549,7 @@ fn update_survival_hud(
     names: Query<&crate::structures::StructureName>,
     props: Query<&crate::harvest::PropArt>,
     ayuda_animal: Res<crate::fauna::AyudaAnimal>,
+    contenedores: Query<&crate::chests::MuebleContenedor>,
     mut cache: ResMut<HudDisplayCache>,
     mut prompts: Query<(&mut Text, &mut TextColor), With<InteractPromptText>>,
     mut prompt_roots: Query<(&mut Node, &mut BackgroundColor, &mut BorderColor), With<StatusPromptRoot>>,
@@ -1575,6 +1576,10 @@ fn update_survival_hud(
         editor.creative,
         target_name,
         ayuda_animal.0.as_deref(),
+        target
+            .entity
+            .and_then(|e| contenedores.get(e).ok())
+            .map(|m| m.tipo.nombre()),
     );
     let visible = prompt.is_some();
     let prompt_line = prompt.unwrap_or_default();
@@ -1875,6 +1880,8 @@ fn build_interact_prompt(
     target_name: Option<&str>,
     // Qué se puede hacer con el animal apuntado (`fauna::rotular_animal_apuntado`).
     ayuda_animal: Option<&str>,
+    // El mueble apuntado se abre (ropero, heladera…): su nombre.
+    mueble_que_se_abre: Option<&str>,
 ) -> Option<String> {
     if flight.active {
         let alt = flight.altitude_m();
@@ -1926,6 +1933,9 @@ fn build_interact_prompt(
         ));
     }
 
+    if let Some(m) = mueble_que_se_abre {
+        return Some(format!("Tocá para abrir: {}", m.to_lowercase()));
+    }
     // — Granja —
     if hold.active && hold.placing_crop {
         return Some("Sembrando…".to_string());

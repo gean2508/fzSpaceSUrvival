@@ -203,6 +203,7 @@ pub fn pick_tree_species(tx: i64, tz: i64) -> &'static TreeSpecies {
 }
 
 /// Flora/props sólo visuales (sin cosecha ni colisión). `size`=[ancho,alto] en metros.
+#[derive(Debug)]
 pub struct ExtraDecor {
     pub key: &'static str,
     pub size: [f32; 2],
@@ -599,43 +600,16 @@ fn tabla_interior(lote: &str, roll: u32) -> Option<&'static [ExtraDecor]> {
 /// cuarto queda libre para caminar— y **nunca en la celda de la puerta ni en su
 /// paso**, que si no te quedás afuera de tu propia casa.
 pub fn interior_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
-    if body != CelestialBody::Earth {
-        return None;
-    }
-    // Sólo el piso construido de la casa: ni la pared, ni la puerta, ni el jardín.
-    if topdown_tile(body, 0, tx, tz) != crate::topdown::Tile::WoodFloor {
-        return None;
-    }
-    let s = crate::geography::settlement_covering(body, tx, tz)?;
-    let (x, z, w, h, lote) = crate::city::roofed_rect(body, &s, tx, tz)?;
-    if tx < x || tz < z || tx >= x + w || tz >= z + h {
-        return None;
-    }
-    let pared = |dx: i64, dz: i64| {
-        matches!(
-            topdown_tile(body, 0, tx + dx, tz + dz),
-            crate::topdown::Tile::WoodWall
-                | crate::topdown::Tile::StoneBrick
-                | crate::topdown::Tile::Window
-        )
-    };
-    if !(pared(1, 0) || pared(-1, 0) || pared(0, 1) || pared(0, -1)) {
-        return None;
-    }
-    // La puerta del prefab está centrada en el borde sur: se deja libre esa celda
-    // y la de adelante, que es por donde se entra.
-    let puerta_x = x + w / 2;
-    if tx == puerta_x && tz >= z + h - 2 {
-        return None;
-    }
-    let hsh = hash_cell(0x1a7e_0d0c, tx, tz);
-    // Densidad: poco más de la mitad de las celdas pegadas a un muro. Con todas,
-    // el cuarto se lee como un depósito.
-    if hsh % 100 >= 55 {
-        return None;
-    }
-    let tabla = tabla_interior(lote, hash_cell(0x5a1a_0001, x, z))?;
-    pick_weighted(tabla, hsh >> 10)
+    // **El reparto lo decide `amueblado`**, cuarto por cuarto y con paso
+    // garantizado (29 sep 2026). Acá sólo se contesta si en esta celda está
+    // ANCLADO un mueble; el resto de sus celdas no siembra nada.
+    crate::amueblado::mueble_anclado(body, tx, tz).map(|m| m.decor)
+}
+
+/// La tabla de muebles de un edificio que NO es casa (la casa reparte sus
+/// ambientes por cuarto en `amueblado`).
+pub fn tabla_interior_de(lote: &str) -> Option<&'static [ExtraDecor]> {
+    tabla_interior(lote, 0)
 }
 
 /// Campamento y puesto de pesca en la ORILLA de una laguna: la franja de tierra

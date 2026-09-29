@@ -25,6 +25,7 @@ pub mod rios;
 pub mod grueso;
 pub mod ps1_palette;
 pub mod worldgen;
+pub mod amueblado;
 /// Tablas de siembra del pack (generadas por `scripts/import-pack-masivo.py`).
 pub mod interior_siembra;
 pub mod pack_siembra;

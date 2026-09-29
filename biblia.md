@@ -4687,6 +4687,55 @@ plano gris de horizonte a horizonte. Queda un solo material sin losa,
 `tiles/subsuelo`, y ahí el color plano sigue siendo la respuesta correcta: un
 macizo sin dibujo se lee como masa, que es lo que es.
 
+### Casas: colisión exacta, muebles que se caminan y se abren — 29 sep 2026
+
+Reporte del usuario: *"me quedo atorado en las esquinas o atravieso paredes"*,
+*"hay arbustos dentro de la casa"*, *"las ventanas están horizontales en muros
+verticales"*, *"cercas incompletas"*, *"el importador falla"*. Se midió con
+`HA_VER_COLISION=1` (pinta en rojo lo que frena, en verde la caja del jugador) y
+el driver `HA_MUROTEST=1` (camina contra cada pared en ocho rumbos y abre un
+mueble). Lo que salió, y cómo quedó:
+
+- **Muebles sin colisión y a escala 1,5×.** `import-interiores.py` escalaba
+  "una celda del pack = 1,5 tiles"; las paredes van a 1 tile por celda
+  (`medida_de_obra`). Una cama de 2×3 celdas ocupaba 3×4,5 m. Ahora 1,0.
+- **El sorteo por celda encerraba al jugador.** `interior_decor_at` ponía un mueble
+  en el 55 % de las celdas junto a un muro, encimados. Lo reemplaza
+  `ha_shared::amueblado`: amuebla la casa ENTERA de una vez (cacheado,
+  determinista), cuarto por cuarto (living, dormitorio, cocina, baño de mayor a
+  menor), contra la pared norte y los angostos contra los costados, reserva la
+  puerta y la celda de adelante, y **cada mueble se prueba contra la invariante
+  "toda celda libre sigue unida a sus puertas"** (`transitable`). Máximo 34 % del
+  cuarto. La colisión es el PIE del mueble (`Mueble::caja`): angosto y alto
+  (ropero) apoya 1 celda; ancho apoya la mitad de su alto.
+- **Muebles que se abren** (Project Zomboid): ropero, cómoda/mesita/escritorio,
+  heladera, alacena, botiquín (`amueblado::contenedor_de`, elegidos mirando la
+  lámina porque los singles están numerados). Tocar abre el panel del cofre con
+  su título; el botín se sortea la PRIMERA vez (determinista por mueble y
+  partida) y queda guardado en `chests.json` (`LocalChest::mueble`). Todo cuarto
+  que puede, tiene uno. No se levantan.
+- **Muebles animados**: quietos en el cuadro 0; se animan al tocarlos
+  (`harvest::animar_mueble_al_tocar`) o mientras su panel está abierto.
+- **Arbustos adentro**: la flora/props del patio se sorteaba sobre `WoodFloor`
+  (suelo edificable). Ahora el piso de una casa sólo recibe muebles, y un prop de
+  afuera cuyo DIBUJO pisa una celda de edificio no se siembra
+  (`pisa_un_edificio`).
+- **Fachadas**: lo que el sprite dibuja FUERA de la huella (el techo en 3/4 sobre
+  las celdas de atrás, los costados si es más ancho) frena
+  (`building::SolidoDeFachada`, `resta_rect`). Las puertas están en la huella.
+- **Cercas**: completas siempre (`city::residential_tile`), y frenan por su pie
+  (`cercas::pie_de_cerca`: murete en la mitad sur, tramo N-S de 0,6 m), no la
+  celda entera.
+- **Ventanas** en muros de costado se dibujan con la pieza de canto del muro
+  (`arte_de_interior`); el vidrio sólo en el muro que enseña su paño (`edge_n`).
+- **Importador de paredes**: la hoja `Room_Builder_3d_walls` NO es grilla fija de
+  7 filas (fila de marco extra en la 35, estilo con tapa doble en 43-44). Se
+  barre fila por fila buscando la firma del bloque: salen **24 estilos** (antes
+  19). Y `import-interiores.py` tiene `NO_SON_MUEBLES` con las losas, manteles y
+  cortinas que se sembraban de pie.
+- **Desatasco**: si el jugador ya está encimado con algo (partida vieja con
+  muebles nuevos), puede salir caminando (`sim::tick_sim`).
+
 ### Desde la vereda no se ve el interior — 23 ago 2026
 
 El reporte fue *"adentro estaba mal colocado, sobresalía un borde"*, y era literal:

@@ -1155,6 +1155,9 @@ pub struct ArtAnimated {
     mode: PlayMode,
     /// Sólo con `OnceHold`: ya llegó al último frame y ahí se queda.
     done: bool,
+    /// Quieta en el cuadro 0 hasta que alguien la toque (muebles: ver
+    /// `harvest::animar_mueble_al_tocar`).
+    pausada: bool,
 }
 
 impl ArtAnimated {
@@ -1168,6 +1171,7 @@ impl ArtAnimated {
             ready: false,
             mode: PlayMode::Loop,
             done: false,
+            pausada: false,
         }
     }
 
@@ -1181,6 +1185,7 @@ impl ArtAnimated {
             ready: false,
             mode: PlayMode::Loop,
             done: false,
+            pausada: false,
         }
     }
 
@@ -1193,6 +1198,27 @@ impl ArtAnimated {
     /// `true` cuando una `OnceHold` ya terminó su recorrido.
     pub fn done(&self) -> bool {
         self.done
+    }
+
+    /// Arranca quieta en el cuadro 0: se anima sólo cuando se la reanuda.
+    pub fn quieta(mut self) -> Self {
+        self.pausada = true;
+        self
+    }
+
+    pub fn pausada(&self) -> bool {
+        self.pausada
+    }
+
+    /// Alterna quieta/animada. Al pararla vuelve al cuadro 0 (el mueble "cerrado",
+    /// "apagado"), que es como estaba antes de tocarlo.
+    pub fn alternar(&mut self, sprite: &mut Sprite) {
+        self.pausada = !self.pausada;
+        if self.pausada {
+            if let Some(atlas) = sprite.texture_atlas.as_mut() {
+                atlas.index = 0;
+            }
+        }
     }
 }
 
@@ -1319,7 +1345,7 @@ fn setup_art_atlases(
 /// queda en el último frame — de ahí sale el cofre que "queda abierto").
 fn tick_art_animations(time: Res<Time>, mut q: Query<(&mut Sprite, &mut ArtAnimated)>) {
     for (mut sprite, mut anim) in &mut q {
-        if !anim.ready || anim.done {
+        if !anim.ready || anim.done || anim.pausada {
             continue;
         }
         anim.timer.tick(time.delta());

@@ -761,6 +761,9 @@ pub fn decor_hits_box(
     // Celdas ancla candidatas: las que toca la caja, más el alcance de las huellas
     // multi-celda (un asset anclado lejos puede tener una caja acá). Sin huellas
     // declaradas el escaneo es la vecindad inmediata — el costo de antes.
+    if z == 0 && muebles_frenan(flora, body, aabb) {
+        return true;
+    }
     let reach: i64 = art.footprint_reach();
     let x0 = (aabb[0] / TILE_M).floor() as i64 - reach;
     let x1 = (aabb[2] / TILE_M).floor() as i64 + reach;
@@ -774,6 +777,34 @@ pub fn decor_hits_box(
         }
     }
     false
+}
+
+/// ¿El dibujo de un decor de `size` metros anclado en `(tx, tz)` (pie en el borde
+/// sur de la celda, centrado en ella) pisa alguna celda de edificio?
+fn pisa_un_edificio(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64, size: [f32; 2]) -> bool {
+    let medio = size[0] * 0.5;
+    let (x0, x1) = ((tx as f32 + 0.5 - medio).floor() as i64, (tx as f32 + 0.5 + medio - 0.01).floor() as i64);
+    let (z0, z1) = ((tz as f32 + 1.0 - size[1]).floor() as i64, tz);
+    (z0..=z1).any(|z| {
+        (x0..=x1).any(|x| {
+            matches!(
+                tiles.tile_at(body, x, z),
+                Tile::WoodFloor | Tile::WoodWall | Tile::StoneBrick | Tile::Window | Tile::Door
+            )
+        })
+    })
+}
+
+/// **Los muebles frenan** (29 sep 2026): su pie, medido por `amueblado`. Antes no
+/// tenían colisión y se atravesaban camas y roperos. Lo que el jugador levantó ya
+/// no está y no frena.
+fn muebles_frenan(flora: Option<&FloraHarvest>, body: CelestialBody, aabb: [f32; 4]) -> bool {
+    ha_shared::amueblado::muebles_cerca(body, aabb).iter().any(|m| {
+        let (ax, az) = m.ancla();
+        let (kx, kz) = crate::targeting::PROP_REMOVED_KEY;
+        let levantado = flora.is_some_and(|f| f.is_removed(body, kx, kz, pack_cell(ax, az)));
+        !levantado && overlaps(m.caja(), aabb)
+    })
 }
 
 /// Cajas de colisión del decor anclado en `(cx, cz)` contra `aabb`.
@@ -2820,22 +2851,24 @@ fn spawn_chunk_small_decor(
             // a la deriva donde hay corriente y el cardumen lejos de la orilla.
             // Ver `ha_shared::agua::sitio_de_agua` — con la tabla única que había
             // antes, el salvavidas del pack aparecía en un charco de la sierra.
+            // **ADENTRO DE UNA CASA SÓLO HAY MUEBLES** (29 sep 2026). La flora del
+            // jardín y los props del patio se sorteaban también sobre el piso de
+            // madera —`WoodFloor` es suelo edificable—, y adentro de las casas
+            // aparecían arbustos, fuentes y arcos de seto. El piso de una casa
+            // lo decide `ha_shared::amueblado` y nadie más.
+            let mueble = (tile == Tile::WoodFloor)
+                .then(|| ha_shared::amueblado::mueble_anclado(body, tx, tz))
+                .flatten();
             let e = if tile.swim() {
                 ha_shared::agua::decor_at(body, tx, tz)
+            } else if tile == Tile::WoodFloor {
+                mueble.map(|m| m.decor)
             } else if !tile.buildable_ground() || surface_decor_at(body, tx, tz).is_some() {
                 None
             } else {
-                // La VEREDA va primero: es la única de estas tablas que tiene una
-                // celda propia (`Pavement`) y no compite con la flora, que no
-                // crece sobre la acera.
-                // ADENTRO PRIMERO: es lo más específico que hay. Una celda de
-                // piso de una casa generada se amuebla con el tema de su lote
-                // (`interior_decor_at`) y no compite con la flora ni la vereda,
-                // que no tienen nada que hacer dentro de un cuarto.
-                ha_shared::worldgen::interior_decor_at(body, tx, tz)
-                    // La ESQUINA manda sobre la vereda: el semáforo tiene sitio
-                    // fijo y no puede perderlo contra un banco sorteado.
-                    .or_else(|| ha_shared::worldgen::esquina_decor_at(body, tx, tz))
+                // La ESQUINA manda sobre la vereda: el semáforo tiene sitio
+                // fijo y no puede perderlo contra un banco sorteado.
+                ha_shared::worldgen::esquina_decor_at(body, tx, tz)
                     // El ALUMBRADO también tiene sitio fijo (el cordón, con
                     // ritmo) y por el mismo motivo va antes del sorteo: una
                     // hilera de faroles con un hueco donde ganó un tacho deja de
@@ -2854,6 +2887,12 @@ fn spawn_chunk_small_decor(
                     .or_else(|| prop_decor_at(body, tx, tz))
             };
             let Some(e) = e else { continue };
+            // **Y lo de afuera no se mete adentro.** Un prop de patio de 3×3 anclado
+            // en la celda de al lado de la pared se dibujaba media casa adentro:
+            // si su dibujo pisa una celda de edificio, no va.
+            if mueble.is_none() && !tile.swim() && pisa_un_edificio(tiles, body, tx, tz, e.size) {
+                continue;
+            }
             // Levantado = levantado. El prop que sacaste del mundo no vuelve a
             // sembrarse cuando el chunk se re-streamea (mismo set que el árbol
             // talado, misma clave de celda).
@@ -2873,8 +2912,15 @@ fn spawn_chunk_small_decor(
             let Some((mut s, anim)) = art.world_sprite_seeded(e.key, semilla, e.size.into()) else {
                 continue;
             };
-            let wx = tx as f32 * TILE_M + 0.5;
-            let wz = tz as f32 * TILE_M + 0.5;
+            // El mueble va donde lo puso el amueblado: centrado en su ancho y con
+            // el pie en la línea de su última celda (no en la del ancla).
+            let (wx, wz) = match mueble {
+                Some(m) => {
+                    let (cx_m, pie) = m.centro_pie();
+                    (cx_m, pie - 0.5)
+                }
+                None => (tx as f32 * TILE_M + 0.5, tz as f32 * TILE_M + 0.5),
+            };
             let r = render_xy(wx, wz);
             s.custom_size = Some(e.size.into());
             // Pivote al pie (LimeZu): el centro sube medio alto.
@@ -2920,12 +2966,26 @@ fn spawn_chunk_small_decor(
                     crate::harvest::PropArt(std::borrow::Cow::Borrowed(e.key)),
                 ));
             }
+            // El ropero, la heladera, la cómoda: se abren (ver `chests.rs`).
+            if let (Some(m), Some(tipo)) = (mueble, ha_shared::amueblado::contenedor_de(e.key)) {
+                let (x, z) = m.ancla();
+                ent.insert(crate::chests::MuebleContenedor { x, z, tipo });
+            }
             // **Lo animado se mueve.** `world_sprite_seeded` devolvía la animación
             // y acá se tiraba: el pack trae peceras, fuego, cardúmenes y un cuervo
             // con sus cuadros ya recortados, y el mundo los plantaba congelados.
             // Sólo pagan reloj los slots que declaran animación.
             if let Some(a) = anim {
-                ent.insert(a);
+                // **Un mueble animado se queda quieto hasta que lo tocás**
+                // (29 sep 2026, pedido del usuario): la heladera, el televisor, la
+                // pecera del living no se mueven solos; se animan al tocarlos y se
+                // detienen al volver a tocarlos. El resto (fuego, agua, bichos) sí
+                // vive solo.
+                if mueble.is_some() {
+                    ent.insert((a.quieta(), crate::harvest::AnimaAlTocar));
+                } else {
+                    ent.insert(a);
+                }
             }
             // Faroles, fogatas, hongos brillantes: la luz viene del slot, no de
             // una lista hardcodeada acá.
@@ -3353,7 +3413,7 @@ fn arte_de_interior(
     tz: i64,
     memo: &mut CasaResuelta,
 ) -> Option<(&'static str, &'static str)> {
-    if !matches!(tile, Tile::WoodWall | Tile::StoneBrick | Tile::WoodFloor | Tile::Door) {
+    if !matches!(tile, Tile::WoodWall | Tile::StoneBrick | Tile::WoodFloor | Tile::Door | Tile::Window) {
         return None;
     }
     let estilos = ha_assets::interior_styles();
@@ -3392,10 +3452,21 @@ fn arte_de_interior(
     if !art.tile_has_art(clave) {
         return None;
     }
-    if !matches!(tile, Tile::WoodWall | Tile::StoneBrick) {
+    if !matches!(tile, Tile::WoodWall | Tile::StoneBrick | Tile::Window) {
         return Some((clave, "center"));
     }
-    Some((clave, cara_de_muro(tiles, body, tx, tz)?))
+    let cara = cara_de_muro(tiles, body, tx, tz)?;
+    // **UNA VENTANA EN UN MURO DE COSTADO SE VE DE CANTO** (29 sep 2026). El
+    // arte de ventana es un paño DE FRENTE; plantado en un muro norte-sur salía
+    // "en vertical pero horizontal", como dijo el usuario: una ventana de frente
+    // acostada sobre la tira de la pared. En cenital 3/4 de un muro de costado se
+    // ve la tapa, no el paño, así que ahí va la pieza del muro. Sólo el muro que
+    // enseña su paño (`edge_n`, el del fondo del cuarto) lleva el vidrio; el que
+    // da a la calle lo dibuja la fachada.
+    if tile == Tile::Window && cara == "edge_n" {
+        return None;
+    }
+    Some((clave, cara))
 }
 
 /// **Qué pieza del kit de cuarto le toca a este muro**, o `None` si no le toca

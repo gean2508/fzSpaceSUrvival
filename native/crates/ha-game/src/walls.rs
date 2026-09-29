@@ -1189,3 +1189,17 @@ mod tests {
         }
     }
 }
+
+/// ¿Cae el punto `(x, z)` dentro del grosor de alguna pared de borde? Para el
+/// overlay de depuración (`debug::colision`); el movimiento usa la cápsula.
+pub fn punto_bloqueado(walls: &BuiltWalls, body: CelestialBody, z_nivel: i32, x: f32, z: f32) -> bool {
+    use ha_shared::build_grid::{WallAxis, WALL_THICK};
+    let h = WALL_THICK * 0.5;
+    let (tx, tz) = (x.floor() as i64, z.floor() as i64);
+    let bx = x.round() as i64;
+    if (x - bx as f32).abs() <= h && walls.blocks(body, z_nivel, bx, tz, WallAxis::V) {
+        return true;
+    }
+    let bz = z.round() as i64;
+    (z - bz as f32).abs() <= h && walls.blocks(body, z_nivel, tx, bz, WallAxis::H)
+}

@@ -40,8 +40,12 @@ ASSETS = os.path.join(ROOT, "native/crates/ha-game/assets")
 MANIFEST = os.path.join(ASSETS, "art/manifest.json")
 SALIDA = os.path.join(ROOT, "native/crates/ha-shared/src/interior_siembra.rs")
 
-#: Una celda de 32 px del pack son 1,5 tiles del juego.
-ESCALA_TILE = 1.5
+#: **Una celda de 32 px del pack es UN tile del juego**, la misma regla que las
+#: paredes (`ArtLibrary::medida_de_obra`: una celda del pack, un tile). Estaba en
+#: 1,5 y los muebles salían un 50 % más grandes que el cuarto que los contiene:
+#: una cama de 2×3 celdas ocupaba 3×4,5 m de una casa de 11×8, y los cuartos
+#: quedaban tapados (reporte del 29 sep 2026, "me quedo atorado").
+ESCALA_TILE = 1.0
 #: Lado máximo de un mueble, en tiles. Más que esto no entra en un cuarto.
 MAX_TILES = 6.0
 #: Fracción mínima del recorte dibujada.
@@ -71,6 +75,28 @@ TEMAS = {
 #: para componer cuartos, y sembradas sueltas quedan tiradas en el piso.
 NO_ES_MUEBLE = ("pared", "piso", "techo", "ventana", "puerta", "capa", "modular", "suelo")
 
+#: **Lo que el nombre no delata y la lámina sí** (mirado el 29 sep 2026, uno por
+#: uno): los singles de Modern Interiors están NUMERADOS, así que las losas de
+#: piso, los manteles, las tapas de mesada y las cortinas entraban como muebles y
+#: se sembraban de pie en mitad del cuarto — el usuario lo vio como "el
+#: importador trae cosas que no son". Son planos o cuelgan de una ventana: ninguno
+#: es un objeto que se apoya en el piso.
+NO_SON_MUEBLES = {
+    # cocina: losas de color, manteles, tablas de mesada sueltas
+    "furniture/cocina_2", "furniture/cocina_4", "furniture/cocina_13", "furniture/cocina_17",
+    "furniture/cocina_20", "furniture/cocina_22", "furniture/cocina_31", "furniture/cocina_40",
+    "furniture/cocina_49", "furniture/cocina_58", "furniture/cocina_67", "furniture/cocina_76",
+    "furniture/cocina_85", "furniture/cocina_253", "furniture/cocina_256", "furniture/cocina_336",
+    # dormitorio: cortinas y ventanas
+    "furniture/dormitorio_57", "furniture/dormitorio_119", "furniture/dormitorio_196",
+    "furniture/dormitorio_197", "furniture/dormitorio_198", "furniture/dormitorio_199",
+    "furniture/dormitorio_200", "furniture/dormitorio_201", "furniture/dormitorio_202",
+    "furniture/dormitorio_203", "furniture/dormitorio_204", "furniture/dormitorio_205",
+    "furniture/dormitorio_206", "furniture/dormitorio_207", "furniture/dormitorio_208",
+    # baño: la alfombra de toalla; living: el marco suelto
+    "furniture/bano_76", "furniture/living_4",
+}
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -89,7 +115,7 @@ def main():
         tema = next((t for t in TEMAS if familia.startswith(t + "_")), None)
         if tema is None:
             continue
-        if any(p in familia for p in NO_ES_MUEBLE):
+        if any(p in familia for p in NO_ES_MUEBLE) or clave in NO_SON_MUEBLES:
             continue
         r = e.get("rect") or e.get("strip")
         if not r:

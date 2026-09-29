@@ -400,20 +400,38 @@ def bloques_cuarto(im):
     """
     W, H = im.size
     out = []
-    for by in range(0, H // CELL - BLOQUE_H + 1, BLOQUE_H):
-        for bx in range(0, W // CELL - BLOQUE_W + 1, BLOQUE_W):
-            def celda(c, r):
-                x, y = (bx + c) * CELL, (by + r) * CELL
-                t = im.crop((x, y, x + CELL, y + CELL))
-                return t if t.getbbox() else None
-            if any(celda(*p) is None for p in ((3, 2), (3, 3))):
-                continue
-            if celda(1, 2) is None and celda(6, 2) is None:
-                continue
-            m = medir(im, (bx + CUARTO_MEDIR[0]) * CELL, (by + CUARTO_MEDIR[1]) * CELL, CELL, CELL)
-            if m is None or m["opaco"] < 0.99:
-                continue
-            out.append((bx, by, m))
+    # **La hoja NO es una grilla fija de 7 filas** (medido el 29 sep 2026). Hasta
+    # la fila 34 sí; después LimeZu metió una fila de marco de más (la 35) y un
+    # estilo gris con la tapa doble (filas 43-44), y los bloques de abajo quedan
+    # corridos una y dos filas. Con el paso fijo, el importador cortaba esos
+    # estilos desfasados o los perdía: salían 19 de 24 — "el importador trae
+    # cosas con otros nombres o no las trae". Ahora cada columna de bloques se
+    # BARRE fila por fila y un bloque empieza donde su firma calza: el muro
+    # horizontal opaco en (3,2)+(3,3), un vertical en (1,2) o (6,2), y la fila
+    # de aire que separa un bloque del siguiente en (0,6).
+    def celda(bx, by, c, r):
+        x, y = (bx + c) * CELL, (by + r) * CELL
+        if y + CELL > H or x + CELL > W:
+            return None
+        t = im.crop((x, y, x + CELL, y + CELL))
+        return t if t.getbbox() else None
+
+    for bx in range(0, W // CELL - BLOQUE_W + 1, BLOQUE_W):
+        by = 0
+        while by + BLOQUE_H <= H // CELL:
+            firma = (
+                celda(bx, by, 3, 2) is not None
+                and celda(bx, by, 3, 3) is not None
+                and (celda(bx, by, 1, 2) is not None or celda(bx, by, 6, 2) is not None)
+                and celda(bx, by, 0, 6) is None
+            )
+            m = medir(im, (bx + CUARTO_MEDIR[0]) * CELL, (by + CUARTO_MEDIR[1]) * CELL, CELL, CELL) if firma else None
+            if m is not None and m["opaco"] >= 0.99:
+                out.append((bx, by, m))
+                by += BLOQUE_H
+            else:
+                by += 1
+    out.sort(key=lambda t: (t[1], t[0]))
     return out
 
 
@@ -556,8 +574,8 @@ def main():
     bv = bloques_vano(vanos)
     bf = bloques_piso(pisos)
     print(f"kit de cuartos: {len(bc)} estilos · vanos: {len(bv)} · pisos: {len(bf)}")
-    if len(bc) < 12:
-        raise SystemExit(f"esperaba ~19 estilos de cuarto y encontré {len(bc)}")
+    if len(bc) < 24:
+        raise SystemExit(f"la hoja trae 24 estilos de cuarto y encontré {len(bc)}: el pack cambió")
 
     # --- nombres, y que no se repitan ---
     vistos = {}

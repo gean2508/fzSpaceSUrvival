@@ -77,6 +77,14 @@ impl Plugin for ChestsPlugin {
                     update_split_bar.after(tick_chest_press),
                     debounced_chests_save,
                 ),
+            )
+            .add_systems(
+                Update,
+                (
+                    abrir_mueble_contenedor.before(use_or_pick_up_chest),
+                    animar_mueble_abierto,
+                    titulo_del_panel,
+                ),
             );
     }
 }
@@ -88,6 +96,9 @@ pub struct LocalChest {
     pub x: f32,
     pub z: f32,
     pub slots: Vec<Stack>,
+    /// **Un MUEBLE que se abre** (ropero, heladera, cómoda…): el título del panel.
+    /// No se dibuja como cofre ni se levanta: el dibujo es el del mueble.
+    pub mueble: Option<String>,
 }
 
 impl LocalChest {
@@ -250,6 +261,7 @@ fn place_chest_on_hold(
         x,
         z,
         slots: vec![Stack::default(); CHEST_SLOTS],
+        mueble: None,
     });
     world.dirty = true;
 
@@ -397,7 +409,7 @@ fn sync_chest_visuals(
     let Some(body) = body else {
         return;
     };
-    for c in world.placed.iter().filter(|c| c.body == body) {
+    for c in world.placed.iter().filter(|c| c.body == body && c.mueble.is_none()) {
         if spawned.contains(&c.uid) {
             continue;
         }
@@ -665,6 +677,7 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                             Text::new("COFRE"),
                             TextFont { font_size: font * 1.05, ..default() },
                             TextColor(ui_theme::text_primary()),
+                            ChestTitulo,
                         ));
                         for row in 0..CHEST_ROWS {
                             c.spawn(Node {
@@ -1056,7 +1069,9 @@ fn chest_panel_buttons(
             }
         }
     }
-    if pick_up.iter().any(|i| *i == Interaction::Pressed) {
+    // Un mueble no se levanta como cofre (se perdería el ropero).
+    let es_mueble = world.get(uid).is_some_and(|c| c.mueble.is_some());
+    if !es_mueble && pick_up.iter().any(|i| *i == Interaction::Pressed) {
         // Sólo se puede levantar vacío: así el cofre nunca se lleva su
         // contenido a un limbo del que no se pueda sacar.
         let empty = world.get(uid).map(|c| c.is_empty()).unwrap_or(false);
@@ -1198,6 +1213,9 @@ struct ChestSave {
     z: f32,
     /// `(item_id, qty)` por slot; `None` = hueco.
     slots: Vec<Option<(String, u32)>>,
+    /// Título si es un mueble contenedor (ver `LocalChest::mueble`).
+    #[serde(default)]
+    mueble: Option<String>,
 }
 
 fn chests_path() -> std::path::PathBuf {
@@ -1240,6 +1258,7 @@ fn load_chests_on_startup(mut world: ResMut<ChestWorld>) {
             x: c.x,
             z: c.z,
             slots,
+            mueble: c.mueble,
         });
     }
     if !world.placed.is_empty() {
@@ -1268,6 +1287,7 @@ fn save_chests_to_disk(world: &ChestWorld) {
                             .map(|id| (id.clone(), s.qty))
                     })
                     .collect(),
+                mueble: c.mueble.clone(),
             })
             .collect(),
     };
@@ -1297,5 +1317,108 @@ fn debounced_chests_save(time: Res<Time>, mut world: ResMut<ChestWorld>) {
         save_chests_to_disk(&world);
         world.dirty = false;
         world.debounce = 0.0;
+    }
+}
+
+
+// --- Muebles que se abren (Project Zomboid) ------------------------------------
+
+/// Título del panel: "COFRE" o el nombre del mueble.
+#[derive(Component)]
+struct ChestTitulo;
+
+/// **Un mueble contenedor sembrado en una casa**: ropero, heladera, cómoda,
+/// alacena o botiquín (`ha_shared::amueblado::contenedor_de`). Tocarlo abre el
+/// mismo panel que un cofre; su contenido se sortea la PRIMERA vez que se abre
+/// (determinista por mueble) y desde ahí se guarda con la partida: lo que
+/// saqueaste queda saqueado, lo que guardaste queda guardado.
+#[derive(Component, Clone, Copy)]
+pub struct MuebleContenedor {
+    pub x: i64,
+    pub z: i64,
+    pub tipo: ha_shared::amueblado::Contenedor,
+}
+
+/// El centro del mueble: la clave con la que su contenido vive en `ChestWorld`.
+fn sitio_de(m: &MuebleContenedor) -> (f32, f32) {
+    (m.x as f32 + 0.5, m.z as f32 + 0.5)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn abrir_mueble_contenedor(
+    mut hold: ResMut<HoldInteractState>,
+    target: Res<LookTarget>,
+    ctx: PlacementCtx,
+    muebles: Query<&MuebleContenedor>,
+    mut world: ResMut<ChestWorld>,
+    mut panel: ResMut<ChestPanelState>,
+) {
+    if target.kind != Some(InteractTargetKind::Prop) || !(hold.tapped || hold.completed) {
+        return;
+    }
+    let Some(e) = target.entity else { return };
+    let Ok(m) = muebles.get(e) else { return };
+    let Some(body) = ctx.body() else { return };
+    // Tocar o mantener: los dos abren (un ropero no se levanta).
+    hold.tapped = false;
+    hold.completed = false;
+    let (x, z) = sitio_de(m);
+    let uid = match world
+        .placed
+        .iter()
+        .find(|c| c.mueble.is_some() && c.body == body && (c.x - x).abs() < 0.01 && (c.z - z).abs() < 0.01)
+    {
+        Some(c) => c.uid,
+        None => {
+            let uid = world.next_uid;
+            world.next_uid += 1;
+            let semilla = ha_shared::worldgen::hash_cell(0xc0f4_e5a1 ^ ha_shared::partida::semilla(), m.x, m.z);
+            let mut slots = vec![Stack::default(); CHEST_SLOTS];
+            for (i, (it, n)) in m.tipo.botin(semilla).into_iter().enumerate().take(CHEST_SLOTS) {
+                slots[i] = Stack { item_id: Some(it.to_string()), qty: n };
+            }
+            world.placed.push(LocalChest {
+                uid,
+                body,
+                x,
+                z,
+                slots,
+                mueble: Some(m.tipo.nombre().to_string()),
+            });
+            world.dirty = true;
+            uid
+        }
+    };
+    panel.open_uid = Some(uid);
+}
+
+/// El mueble animado (la puerta del ropero, la heladera) se abre mientras su
+/// panel está abierto y vuelve a su cuadro quieto al cerrarlo.
+fn animar_mueble_abierto(
+    world: Res<ChestWorld>,
+    panel: Res<ChestPanelState>,
+    mut q: Query<(&MuebleContenedor, &mut Sprite, &mut crate::art2d::ArtAnimated)>,
+) {
+    let abierto = panel.open_uid.and_then(|u| world.get(u)).map(|c| (c.x, c.z));
+    for (m, mut sprite, mut anim) in &mut q {
+        let (x, z) = sitio_de(m);
+        let quiere = abierto.is_some_and(|(ax, az)| (ax - x).abs() < 0.01 && (az - z).abs() < 0.01);
+        if quiere == anim.pausada() {
+            anim.alternar(&mut sprite);
+        }
+    }
+}
+
+fn titulo_del_panel(
+    world: Res<ChestWorld>,
+    panel: Res<ChestPanelState>,
+    mut q: Query<&mut Text, With<ChestTitulo>>,
+) {
+    let Some(c) = panel.open_uid.and_then(|u| world.get(u)) else { return };
+    let quiero = c.mueble.clone().unwrap_or_else(|| "COFRE".to_string());
+    for mut t in &mut q {
+        if t.0 != quiero {
+            t.0 = quiero.clone();
+        }
     }
 }

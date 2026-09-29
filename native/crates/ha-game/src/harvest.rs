@@ -44,13 +44,37 @@ impl PropArt {
     }
 }
 
+/// Marca de un objeto (mueble) cuya animación se enciende y apaga al TOCARLO.
+#[derive(Component)]
+pub struct AnimaAlTocar;
+
+/// **Tocar un mueble animado lo anima; volver a tocarlo lo detiene.** Es el toque
+/// corto sobre el objeto —mantener lo sigue levantando, `pick_up_prop`—, el mismo
+/// reparto que ya tienen el cofre (tocar abre, mantener levanta) y las puertas.
+fn animar_mueble_al_tocar(
+    mut hold: ResMut<crate::input::HoldInteractState>,
+    target: Res<crate::targeting::LookTarget>,
+    mut q: Query<
+        (&mut Sprite, &mut crate::art2d::ArtAnimated),
+        (With<AnimaAlTocar>, Without<crate::chests::MuebleContenedor>),
+    >,
+) {
+    if target.kind != Some(ha_shared::InteractTargetKind::Prop) || !hold.tapped {
+        return;
+    }
+    let Some(e) = target.entity else { return };
+    let Ok((mut sprite, mut anim)) = q.get_mut(e) else { return };
+    hold.tapped = false;
+    anim.alternar(&mut sprite);
+}
+
 pub struct HarvestPlugin;
 
 impl Plugin for HarvestPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FloraHarvest>()
             .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_harvest_on_startup)
-            .add_systems(Update, (debounced_harvest_save, pick_up_prop));
+            .add_systems(Update, (debounced_harvest_save, pick_up_prop, animar_mueble_al_tocar));
     }
 }
 
@@ -70,6 +94,7 @@ fn pick_up_prop(
     mut hold: ResMut<crate::input::HoldInteractState>,
     target: Res<crate::targeting::LookTarget>,
     props: Query<&PropArt>,
+    contenedores: Query<(), With<crate::chests::MuebleContenedor>>,
     ctx: Res<crate::scene::WorldContextRuntime>,
     planet: Res<crate::world2d::ActivePlanet>,
     editor: Res<crate::ui_editor::UiEditorState>,
@@ -82,6 +107,10 @@ fn pick_up_prop(
         return;
     }
     let Some(entity) = target.entity else { return };
+    // Un mueble que se abre no se levanta: lo atiende `chests::abrir_mueble_contenedor`.
+    if contenedores.contains(entity) {
+        return;
+    }
     hold.completed = false;
 
     if !editor.creative {

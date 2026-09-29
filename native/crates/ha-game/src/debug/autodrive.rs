@@ -261,6 +261,13 @@ impl Plugin for AutoDrivePlugin {
             app.add_systems(Update, granja_test_drive.before(aplicar_actuacion_del_driver));
             return;
         }
+        // **Chocar contra cada pared de una casa.** HA_MUROTEST=1 — ver
+        // `muro_test_drive`.
+        if crate::flags::var("HA_MUROTEST").is_ok() {
+            app.init_resource::<MuroTestState>();
+            app.add_systems(Update, muro_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         if crate::flags::var("HA_PROPTEST").is_ok() {
             app.init_resource::<PropTestState>();
             app.add_systems(Update, prop_test_drive.before(aplicar_actuacion_del_driver));
@@ -6236,4 +6243,272 @@ fn granja_test_drive(world: &mut World) {
             std::process::exit(i32::from(fallo));
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_MUROTEST — el jugador contra las paredes de una casa generada
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct MuroTestState {
+    paso: u32,
+    t0: f32,
+    casa: Option<(i64, i64, i64, i64, String)>,
+    fallo: bool,
+}
+
+/// **Caminar contra cada pared de una casa y mirar dónde se frena.** Entra a
+/// una casa del barrio, se para en el medio de un cuarto y empuja en ocho
+/// rumbos (los cuatro lados y las cuatro diagonales, que son las esquinas).
+/// En cada tope deja una captura cercana (`muro-<rumbo>.png`) y loguea dónde
+/// quedó el pie contra la celda del muro — la comparación entre lo que se ve y
+/// lo que frena es de ojo, y para eso están las fotos.
+fn muro_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+    let body = ha_shared::CelestialBody::Earth;
+    let paso = world.resource::<MuroTestState>().paso;
+    const RUMBOS: [(&str, f32, f32); 8] = [
+        ("oeste", -1.0, 0.0),
+        ("norte", 0.0, -1.0),
+        ("este", 1.0, 0.0),
+        ("sur", 0.0, 1.0),
+        ("noroeste", -0.7, -0.7),
+        ("noreste", 0.7, -0.7),
+        ("sureste", 0.7, 0.7),
+        ("suroeste", -0.7, 0.7),
+    ];
+    if paso == 0 {
+        let mut best: Option<(i64, ha_shared::geography::Settlement)> = None;
+        for sx in -25..25 {
+            for sz in -25..25 {
+                let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                if s.tier != ha_shared::geography::SettlementTier::City {
+                    continue;
+                }
+                let d = s.center.0.abs() + s.center.1.abs();
+                if best.as_ref().map_or(true, |(bd, _)| d < *bd) {
+                    best = Some((d, s));
+                }
+            }
+        }
+        let Some((_, s)) = best else {
+            eprintln!("ha-muro: no hay ciudad");
+            std::process::exit(1);
+        };
+        let quiero = crate::flags::var("HA_MURO_CASA").unwrap_or_else(|_| "building/casa_mediana".into());
+        let (cx, cz) = s.center;
+        let mut casa = None;
+        'b: for r in 1..90i64 {
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs() != r && dz.abs() != r {
+                        continue;
+                    }
+                    if let Some(rect) = ha_shared::city::roofed_rect(body, &s, cx + dx * 8, cz + dz * 8) {
+                        if rect.4 == quiero {
+                            casa = Some((rect.0, rect.1, rect.2, rect.3, rect.4.to_string()));
+                            break 'b;
+                        }
+                    }
+                }
+            }
+        }
+        let Some(c) = casa else {
+            eprintln!("ha-muro: no encontré {quiero}");
+            std::process::exit(1);
+        };
+        eprintln!("ha-muro: {} en ({},{}) {}×{}", c.4, c.0, c.1, c.2, c.3);
+        // Un piso del primer cuarto: la primera celda de madera desde el rincón NO.
+        let (hx, hz, hw, hd) = (c.0, c.1, c.2, c.3);
+        let tiles = world.resource::<TileWorld>();
+        let mut piso = None;
+        'p: for z in hz + 1..hz + hd - 1 {
+            for x in hx + 1..hx + hw - 1 {
+                let libre = |dx: i64, dz: i64| tiles.tile_at(body, x + dx, z + dz) == ha_shared::topdown::Tile::WoodFloor;
+                if libre(0, 0) && libre(1, 0) && libre(0, 1) && libre(1, 1) && libre(2, 1) && libre(1, 2) {
+                    piso = Some((x + 1, z + 1));
+                    break 'p;
+                }
+            }
+        }
+        let (px, pz) = piso.unwrap_or((hx + hw / 2, hz + hd / 2));
+        teleport_a_celda(world, px as f32 + 0.5, pz as f32 + 0.5);
+        let zoom = crate::flags::var("HA_MURO_ZOOM").ok().and_then(|v| v.parse().ok()).unwrap_or(9.0);
+        world.resource_mut::<crate::camera::CameraZoom>().pedir_encuadre(zoom);
+        let mut st = world.resource_mut::<MuroTestState>();
+        st.casa = Some(c);
+        st.paso = 1;
+        st.t0 = now;
+        return;
+    }
+    // Cada rumbo: 2 s empujando, 1 s quieto (foto), vuelta al centro.
+    let k = (paso - 1) as usize;
+    // ── Después de los ocho rumbos: abrir un mueble que se abre (ropero,
+    // heladera…) con un TOQUE y ver que aparece su panel.
+    if k == RUMBOS.len() {
+        release_all(world);
+        let t = now - world.resource::<MuroTestState>().t0;
+        let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+        if t < 0.5 {
+            let mut cand: Vec<(f32, Entity, Vec2)> = {
+                let mut q = world.query::<(Entity, &GlobalTransform, &crate::chests::MuebleContenedor)>();
+                q.iter(world)
+                    .map(|(e, g, m)| {
+                        let c = Vec2::new(m.x as f32 + 0.5, m.z as f32 + 0.5);
+                        ((c.x - px).powi(2) + (c.y - pz).powi(2), e, Vec2::new(g.translation().x, -g.translation().y))
+                    })
+                    .collect()
+            };
+            cand.sort_by(|a, b| a.0.total_cmp(&b.0));
+            match cand.first() {
+                Some(&(_, e, p)) => {
+                    let (mx, mz) = {
+                        let m = world.get::<crate::chests::MuebleContenedor>(e).unwrap();
+                        (m.x, m.z)
+                    };
+                    // Pararse en una celda libre al lado del mueble.
+                    teleport_a_celda(world, mx as f32 + 0.5, mz as f32 + 1.8);
+                    world.resource_mut::<MuroTestState>().casa.as_mut().map(|c| c.4 = format!("abrir {e:?}"));
+                    let _ = p;
+                    eprintln!("ha-muro: mueble que se abre en ({mx},{mz})");
+                }
+                None => {
+                    eprintln!("ha-muro: FALLA no hay ningún mueble que se abra a la vista");
+                    world.resource_mut::<MuroTestState>().fallo = true;
+                    world.resource_mut::<MuroTestState>().paso += 1;
+                }
+            }
+            world.resource_mut::<MuroTestState>().t0 = now - 0.5;
+            return;
+        }
+        if t < 1.0 {
+            return;
+        }
+        if t < 1.05 {
+            // El dedo sobre el mueble; el toque, el frame siguiente.
+            let mut q = world.query::<(&GlobalTransform, &crate::chests::MuebleContenedor)>();
+            let objetivo = q
+                .iter(world)
+                .map(|(g, _)| Vec2::new(g.translation().x, -g.translation().y))
+                .min_by(|a, b| (a.distance(Vec2::new(px, pz))).total_cmp(&b.distance(Vec2::new(px, pz))));
+            if let Some(o) = objetivo {
+                gt_dedo(world, o.x, o.y);
+            }
+            return;
+        }
+        if t < 1.3 {
+            let lt = *world.resource::<LookTarget>();
+            let kind = lt.kind;
+            let es_mueble = lt.entity.is_some_and(|e| world.get::<crate::chests::MuebleContenedor>(e).is_some());
+            eprintln!("ha-muro: dedo → {:?} {:?} mueble={es_mueble}", kind, lt.entity);
+            if kind == Some(ha_shared::InteractTargetKind::Prop) && !world.resource::<crate::chests::ChestPanelState>().is_open() {
+                world.resource_mut::<HoldInteractState>().tapped = true;
+            }
+            return;
+        }
+        if t < 1.6 {
+            return;
+        }
+        let abierto = world.resource::<crate::chests::ChestPanelState>().open_uid;
+        let contenido = abierto.and_then(|u| {
+            world.resource::<crate::chests::ChestWorld>().placed.iter().find(|c| c.uid == u).map(|c| {
+                (c.mueble.clone(), c.slots.iter().filter_map(|s| s.item_id.clone().map(|i| format!("{i}×{}", s.qty))).collect::<Vec<_>>())
+            })
+        });
+        eprintln!("ha-muro: panel del mueble: {contenido:?}");
+        if contenido.as_ref().map_or(true, |c| c.0.is_none()) {
+            eprintln!("ha-muro: FALLA tocar el mueble no abrió su panel");
+            world.resource_mut::<MuroTestState>().fallo = true;
+        }
+        foto(world, "muro-8-mueble-abierto.png");
+        world.resource_mut::<MuroTestState>().paso += 1;
+        world.resource_mut::<MuroTestState>().t0 = now;
+        return;
+    }
+    if k > RUMBOS.len() {
+        release_all(world);
+        if now - world.resource::<MuroTestState>().t0 > 2.0 {
+            let fallo = world.resource::<MuroTestState>().fallo;
+            if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() {
+                if let Some(id) = crate::partida::activa() {
+                    crate::partida::borrar(&id);
+                }
+            }
+            eprintln!("ha-verify: MUROTEST {}", if fallo { "FAIL" } else { "DONE" });
+            std::process::exit(i32::from(fallo));
+        }
+        return;
+    }
+    let t = now - world.resource::<MuroTestState>().t0;
+    let (nombre, dx, dz) = RUMBOS[k];
+    let origen = {
+        let st = world.resource::<MuroTestState>();
+        st.casa.clone()
+    };
+    if t < 4.0 {
+        // (espera a que el mundo esté armado la primera vez)
+        if k == 0 && !mundo_listo(world) && t < 3.0 {
+            return;
+        }
+        release_all(world);
+        if t > 0.8 && t < 3.0 {
+            actuar(world, Accion::Mover(Vec2::new(dx, dz)));
+        }
+        return;
+    }
+    if t < 4.05 {
+        return;
+    }
+    if world.resource::<MuroTestState>().t0 > 0.0 && t < 4.6 {
+        // una foto, una vez
+        let (x, z) = posicion_del_jugador(world).unwrap_or_default();
+        let r = ha_shared::topdown::PLAYER_RADIUS;
+        eprintln!(
+            "ha-muro: {nombre}: pie en ({x:.2},{z:.2}) → celda ({},{}), caja x[{:.2},{:.2}] z[{:.2},{:.2}] casa {:?}",
+            x.floor(),
+            z.floor(),
+            x - r,
+            x + r,
+            z - r,
+            z + r,
+            origen.as_ref().map(|c| (c.0, c.1, c.2, c.3)),
+        );
+        foto(world, &format!("muro-{}-{nombre}.png", k));
+        world.resource_mut::<MuroTestState>().t0 = now - 4.6;
+        return;
+    }
+    if t < 5.2 {
+        return;
+    }
+    // Volver al punto de partida del cuarto.
+    if let Some(c) = origen {
+        let _ = c;
+    }
+    let mut st = world.resource_mut::<MuroTestState>();
+    st.paso += 1;
+    st.t0 = now;
+    drop(st);
+    // al centro del cuarto de nuevo
+    let (hx, hz, hw, hd) = {
+        let st = world.resource::<MuroTestState>();
+        let c = st.casa.as_ref().unwrap();
+        (c.0, c.1, c.2, c.3)
+    };
+    let tiles = world.resource::<TileWorld>();
+    let mut piso = None;
+    'p: for z in hz + 1..hz + hd - 1 {
+        for x in hx + 1..hx + hw - 1 {
+            let libre = |dx: i64, dz: i64| tiles.tile_at(body, x + dx, z + dz) == ha_shared::topdown::Tile::WoodFloor;
+            if libre(0, 0) && libre(1, 0) && libre(0, 1) && libre(1, 1) && libre(2, 1) && libre(1, 2) {
+                piso = Some((x + 1, z + 1));
+                break 'p;
+            }
+        }
+    }
+    let (px, pz) = piso.unwrap_or((hx + hw / 2, hz + hd / 2));
+    teleport_a_celda(world, px as f32 + 0.5, pz as f32 + 0.5);
 }

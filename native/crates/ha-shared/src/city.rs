@@ -1557,14 +1557,13 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
     let (cam0, cam1) = (cam0.clamp(jx + 1, jx + jw - 2), cam1.clamp(jx + 2, jx + jw - 1));
     if let Some(idx) = indice_de_borde(jw, jd, lx - jx, lz - jz) {
         let perimetro = 2 * (w - 1) + 2 * (d - 1);
-        // Cuánto del perímetro se cerca. La entera pesa más que el resto: un
-        // barrio sin ninguna cerca completa tampoco se lee como un barrio.
-        let largo = match (h >> 13) % 8 {
-            0 | 1 | 2 | 3 => perimetro,
-            4 | 5 => perimetro / 2,
-            6 => perimetro / 3,
-            _ => perimetro / 4,
-        };
+        // **LA CERCA DA LA VUELTA ENTERA** (29 sep 2026). Antes se cercaba un
+        // tramo sorteado del perímetro —la mitad, un tercio, un cuarto— para que
+        // el barrio no se leyera como una grilla; el usuario lo vio como lo que
+        // parecía: cercas rotas, a medio hacer. Un cerco se cierra, con sus
+        // portones al frente. La variedad del barrio la dan el tamaño de la
+        // parcela, la casa y el jardín, no una cerca incompleta.
+        let largo = perimetro;
         // El arranque se cuenta desde el frente: lo primero que cerca cualquiera
         // es la cara que da a la calle, no el fondo del terreno.
         let frente = 2 * (w - 1) + (d - 1) - w / 2;

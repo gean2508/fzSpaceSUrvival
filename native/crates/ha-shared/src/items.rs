@@ -57,6 +57,9 @@ pub fn item_display_name(id: &str) -> &'static str {
         "bone" => "Bone",
         "egg" => "Egg",
         "name_tag" => "Name Tag",
+        "supply" => "Supply Pack",
+        "map_small" => "Small Map",
+        "map_large" => "Large Map",
         _ => "Item",
     }
 }

@@ -126,6 +126,7 @@ pub(crate) fn tick_sim(
     structures: Res<crate::structures::BuiltStructures>,
     walls: Res<crate::walls::BuiltWalls>,
     editor: Res<crate::ui_editor::UiEditorState>,
+    fachadas: Query<&crate::building::SolidoDeFachada>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     if flight.blocks_walking() {
@@ -172,8 +173,12 @@ pub(crate) fn tick_sim(
                 // escalón es un bordillo que se trepa y se baja, así que dejó de
                 // frenar a quien va a pie. Los desniveles altos siguen siendo
                 // pared — para ésos hay que buscar la rampa.
+                // La CERCA no frena por celda: frena su pie (ver `cerca_frena`).
+                let es_cerca = |tx: i64, tz: i64| {
+                    tiles.z == 0 && tiles.tile_at(body_surface, tx, tz) == ha_shared::topdown::Tile::Fence
+                };
                 let solid = |tx: i64, tz: i64| {
-                    tiles.walk_blocked(body_surface, tx, tz)
+                    (tiles.walk_blocked(body_surface, tx, tz) && !es_cerca(tx, tz))
                         || structures.blocks(body_surface, tiles.z, tx, tz)
                 };
                 // Paredes de BORDE (construcción LDoE): viven en la arista
@@ -194,18 +199,28 @@ pub(crate) fn tick_sim(
                         body_surface,
                         tiles.z,
                         [x - r, z - r, x + r, z + r],
-                    )
+                    ) || (tiles.z == 0
+                        && crate::building::fachada_frena(&fachadas, [x - r, z - r, x + r, z + r]))
+                        || cerca_frena(&es_cerca, [x - r, z - r, x + r, z + r])
                 };
                 // Nadar: el bajío no frena, pero se cruza a media velocidad y con
                 // la pose de natación. Sale del TILE (que ya incluye tus ediciones),
                 // así que rellenar un charco con bloques deja de mojarte.
                 let swim = |tx: i64, tz: i64| tiles.tile_at(body_surface, tx, tz).swim();
+                // **DESATASCO.** Si YA estás encimado con algo que frena (cargaste
+                // una partida vieja y ahí ahora hay un mueble, te teletransportaste
+                // encima de una cerca), cualquier paso seguiría encimado y quedabas
+                // clavado para siempre. Mientras dure el encime, lo que frena por
+                // metros no cuenta — salís caminando y desde ahí todo vuelve a frenar.
+                let (x0, z0) = (sim.body.x, sim.body.z);
+                let encimado = wall_hit(x0, z0);
+                let nada = |_: f32, _: f32| false;
                 ha_shared::topdown::step_topdown_movement_full(
                     &mut sim.body,
                     &input,
                     dt,
                     &solid,
-                    &wall_hit,
+                    if encimado { &nada } else { &wall_hit },
                     &swim,
                 );
             }
@@ -467,4 +482,32 @@ fn face_player_sprite(
 /// Compat shim: top-down ground is flat (y=0).
 pub fn earth_surface_y(_tx: f32, _tz: f32) -> f32 {
     0.0
+}
+
+
+/// **La cerca frena donde se dibuja**, no en toda su celda: el murete en la mitad
+/// sur, el tramo norte-sur en su franja (`ha_shared::cercas::pie_de_cerca`).
+pub(crate) fn cerca_frena(es_cerca: &dyn Fn(i64, i64) -> bool, caja: [f32; 4]) -> bool {
+    let (x0, x1) = (caja[0].floor() as i64, caja[2].floor() as i64);
+    let (z0, z1) = (caja[1].floor() as i64, caja[3].floor() as i64);
+    for tz in z0..=z1 {
+        for tx in x0..=x1 {
+            if !es_cerca(tx, tz) {
+                continue;
+            }
+            let v = ha_shared::cercas::Vecinos::new(
+                es_cerca(tx, tz - 1),
+                es_cerca(tx + 1, tz),
+                es_cerca(tx, tz + 1),
+                es_cerca(tx - 1, tz),
+            );
+            for p in ha_shared::cercas::pie_de_cerca(v) {
+                let r = [tx as f32 + p[0], tz as f32 + p[1], tx as f32 + p[2], tz as f32 + p[3]];
+                if r[0] < caja[2] && caja[0] < r[2] && r[1] < caja[3] && caja[1] < r[3] {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }

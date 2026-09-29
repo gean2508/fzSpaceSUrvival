@@ -183,8 +183,97 @@ impl Plugin for BuildingPlugin {
                     animate_doors,
                     animar_puertas_de_fachada,
                     debounced_roofs_save,
+                    medir_solidos_de_fachada,
                 ),
             );
+    }
+}
+
+/// **Lo que la fachada dibuja FUERA de la casa, frena** (29 sep 2026).
+///
+/// La huella de la casa ya tiene sus paredes de verdad (`city::residential_tile`):
+/// el frente con su puerta, el fondo y los costados. Pero la fachada del pack es
+/// techo y pared en 3/4 y se dibuja más alta (y a veces más ancha) que esa huella:
+/// el techo cae sobre las celdas de atrás de la casa. Ahí se caminaba "dentro del
+/// dibujo" de la casa, que es lo que el usuario reportó como atravesar la fachada.
+/// Ahora esa franja —dibujo menos huella— es sólida. Las puertas están en la
+/// huella, así que por ellas se sigue entrando.
+#[derive(Component, Clone, Default)]
+pub struct SolidoDeFachada(pub Vec<[f32; 4]>);
+
+/// Rectángulos `[x0, z0, x1, z1]` de `dibujo` que quedan fuera de `huella`.
+pub fn resta_rect(dibujo: [f32; 4], huella: [f32; 4]) -> Vec<[f32; 4]> {
+    let [dx0, dz0, dx1, dz1] = dibujo;
+    let [hx0, hz0, hx1, hz1] = huella;
+    // Sin solape: todo el dibujo sobra.
+    if dx1 <= hx0 || hx1 <= dx0 || dz1 <= hz0 || hz1 <= dz0 {
+        return vec![dibujo];
+    }
+    let mut v = Vec::new();
+    if dz0 < hz0 {
+        v.push([dx0, dz0, dx1, hz0]); // atrás (norte)
+    }
+    if dz1 > hz1 {
+        v.push([dx0, hz1, dx1, dz1]); // adelante (sur)
+    }
+    let (z0, z1) = (dz0.max(hz0), dz1.min(hz1));
+    if dx0 < hx0 {
+        v.push([dx0, z0, hx0, z1]); // oeste
+    }
+    if dx1 > hx1 {
+        v.push([hx1, z0, dx1, z1]); // este
+    }
+    v.retain(|r| r[2] - r[0] > 0.05 && r[3] - r[1] > 0.05);
+    v
+}
+
+#[allow(clippy::type_complexity)]
+fn medir_solidos_de_fachada(
+    mut commands: Commands,
+    q: Query<
+        (Entity, &BuildingRoof, &Sprite, &Transform),
+        (Without<SolidoDeFachada>, Without<PuertaDeFachada>, Without<DoorArt>),
+    >,
+) {
+    for (e, roof, sprite, tf) in &q {
+        let Some(size) = sprite.custom_size else { continue };
+        let (x, y) = (tf.translation.x, tf.translation.y);
+        // Pantalla → mundo: x igual, z = −y.
+        let dibujo = [x - size.x * 0.5, -(y + size.y * 0.5), x + size.x * 0.5, -(y - size.y * 0.5)];
+        let huella = [
+            roof.min.0 as f32 * TILE_M,
+            roof.min.1 as f32 * TILE_M,
+            (roof.min.0 + roof.w) as f32 * TILE_M,
+            (roof.min.1 + roof.h) as f32 * TILE_M,
+        ];
+        // Sólo lo generado en superficie: un techo construido a mano no frena.
+        let v = if roof.z == 0 { resta_rect(dibujo, huella) } else { Vec::new() };
+        if crate::flags::var("HA_VER_COLISION").is_ok() {
+            eprintln!("ha-fachada: huella {huella:?} dibujo {dibujo:?} → sólido {v:?}");
+        }
+        commands.entity(e).try_insert(SolidoDeFachada(v));
+    }
+}
+
+/// ¿La caja toca lo sólido de alguna fachada? (ver [`SolidoDeFachada`]).
+pub fn fachada_frena(fachadas: &Query<&SolidoDeFachada>, caja: [f32; 4]) -> bool {
+    fachadas.iter().any(|s| {
+        s.0.iter().any(|r| r[0] < caja[2] && caja[0] < r[2] && r[1] < caja[3] && caja[1] < r[3])
+    })
+}
+
+#[cfg(test)]
+mod tests_fachada {
+    use super::*;
+
+    #[test]
+    fn lo_que_sobra_de_la_fachada_es_el_techo_de_atras() {
+        // Casa 10×8 con el pie en z=8; fachada 10 de ancho × 12 de alto.
+        let v = resta_rect([0.0, -4.0, 10.0, 8.0], [0.0, 0.0, 10.0, 8.0]);
+        assert_eq!(v, vec![[0.0, -4.0, 10.0, 0.0]]);
+        // Más ancha: también los costados.
+        let v = resta_rect([-1.0, -4.0, 11.0, 8.0], [0.0, 0.0, 10.0, 8.0]);
+        assert_eq!(v.len(), 3);
     }
 }
 

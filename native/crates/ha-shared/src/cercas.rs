@@ -203,3 +203,47 @@ mod tests {
         assert_eq!(vistas.len(), 16, "dos vecindades distintas comparten nombre");
     }
 }
+
+/// **El pie de una cerca**: dónde frena dentro de su celda, en coordenadas
+/// locales `[x0, z0, x1, z1]` (0..1). Medido sobre `fence/madera` (29 sep 2026):
+/// el tramo este-oeste es un murete que apoya en la MITAD SUR de la celda (la
+/// reja sube por detrás en el dibujo, no en el suelo), y el tramo norte-sur es una
+/// franja de ~0,6 de ancho. Antes la cerca frenaba la celda entera y el jugador
+/// chocaba medio metro antes de tocar el dibujo.
+pub fn pie_de_cerca(v: Vecinos) -> Vec<[f32; 4]> {
+    const Z_MURETE: f32 = 0.45;
+    const X0_POSTE: f32 = 0.2;
+    const X1_POSTE: f32 = 0.8;
+    let mut cajas = Vec::new();
+    let horizontal = v.e || v.w;
+    let vertical = v.n || v.s;
+    if horizontal {
+        let x0 = if v.w { 0.0 } else { X0_POSTE };
+        let x1 = if v.e { 1.0 } else { X1_POSTE };
+        cajas.push([x0, Z_MURETE, x1, 1.0]);
+    }
+    if vertical {
+        let z0 = if v.n { 0.0 } else { Z_MURETE };
+        let z1 = if v.s { 1.0 } else { 1.0 };
+        cajas.push([X0_POSTE, z0, X1_POSTE, z1]);
+    }
+    if cajas.is_empty() {
+        cajas.push([X0_POSTE, Z_MURETE, X1_POSTE, 1.0]);
+    }
+    cajas
+}
+
+#[cfg(test)]
+mod tests_pie {
+    use super::*;
+
+    #[test]
+    fn la_cerca_frena_donde_se_dibuja() {
+        let tramo = pie_de_cerca(Vecinos::new(false, true, false, true));
+        assert_eq!(tramo, vec![[0.0, 0.45, 1.0, 1.0]], "murete en la mitad sur");
+        let costado = pie_de_cerca(Vecinos::new(true, false, true, false));
+        assert_eq!(costado, vec![[0.2, 0.0, 0.8, 1.0]]);
+        // Una esquina tapa las dos direcciones: no queda hueco entre los tramos.
+        assert_eq!(pie_de_cerca(Vecinos::new(true, true, false, false)).len(), 2);
+    }
+}
