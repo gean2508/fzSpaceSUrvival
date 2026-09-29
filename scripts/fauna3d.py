@@ -39,6 +39,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pixel import SOMBRA, SOMBRA_ALFA, Lienzo, rampa  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
+#: Donde van las láminas de control (`--ver`). `FAUNA_SCRATCH` lo cambia.
+SCRATCH = Path(__import__("os").environ.get("FAUNA_SCRATCH", "/tmp/fauna3d"))
+SCRATCH.mkdir(parents=True, exist_ok=True)
 PX_M = 32 / 0.95
 PITCH = math.radians(38)
 LUZ = np.array([-0.55, 0.75, 0.45])
@@ -65,6 +68,9 @@ class Prim:
     mat: str
     grupo: str = "cuerpo"
     rot: np.ndarray = field(default_factory=lambda: np.eye(3))
+    #: Segmento de la pata DEBAJO de la rodilla (caña + pezuña): gira además
+    #: alrededor de este punto (la rodilla, en reposo), no sólo de la cadera.
+    rodilla: tuple | None = None
 
 
 @dataclass
@@ -78,13 +84,32 @@ class Animal:
     manchas: list = field(default_factory=list)  # (centro local, radio) sobre el material "piel"
     ladra: bool = False
     zancada: float = 0.45
+    #: cuánto se dobla la rodilla en el paso (rad) — la pata que avanza se recoge.
+    #: Sólo cuenta en las patas armadas con `pata()` (aves y conejo: patas
+    #: demasiado cortas para que se lea una rodilla, quedan rígidas).
+    flexion: float = 0.95
 
 
 # — los modelos ————————————————————————————————————————————————————————
 
 def pata(x, z, largo, grueso, mat, pezuna, g):
-    return [Prim((x, largo / 2 + grueso * 0.6, z), (grueso, largo / 2, grueso), mat, g),
-            Prim((x, grueso * 0.6, z), (grueso * 1.08, grueso * 0.7, grueso * 1.08), pezuna, g)]
+    """**Una pata ARTICULADA**: muslo (cadera→rodilla) y caña (rodilla→pezuña).
+
+    Antes era un solo elipsoide que giraba en la cadera: dos palos que se
+    balanceaban (*"que las patas no sean como dos palos moviéndose, que
+    flexionen"*, pidió el usuario). Ahora la rodilla está al 45 % del largo y la
+    caña gira sobre ella en el paso (`posar`). La caña es un pelo más fina que el
+    muslo, como en el animal de verdad, y los dos segmentos se solapan en la
+    rodilla para que al doblar no se abra un hueco."""
+    base = grueso * 0.6
+    y_rod = base + largo * 0.45
+    y_top = base + largo
+    sup = Prim((x, (y_rod + y_top) / 2, z), (grueso * 1.05, (y_top - y_rod) / 2 + grueso * 0.35, grueso * 1.05), mat, g)
+    rod = (x, y_rod, z)
+    inf = Prim((x, (base + y_rod) / 2, z), (grueso * 0.85, (y_rod - base) / 2 + grueso * 0.3, grueso * 0.85), mat, g,
+               rodilla=rod)
+    pez = Prim((x, base, z), (grueso * 1.08, grueso * 0.7, grueso * 1.08), pezuna, g, rodilla=rod)
+    return [sup, inf, pez]
 
 
 def vaca():
@@ -212,6 +237,8 @@ def escalar(a: Animal, f: float) -> Animal:
     for p in a.prims:
         p.c = tuple(v * f for v in p.c)
         p.r = tuple(v * f for v in p.r)
+        if p.rodilla is not None:
+            p.rodilla = tuple(v * f for v in p.rodilla)
     a.caderas = {g: (tuple(v * f for v in c), ph) for g, (c, ph) in a.caderas.items()}
     a.cuello = tuple(v * f for v in a.cuello)
     a.manchas = [(tuple(v * f for v in c), r * f) for c, r in a.manchas]
@@ -324,7 +351,9 @@ ANIMALES = [vaca, gallina, oveja, cerdo, perro, cabra, burro, conejo, pato]
 # — poses ——————————————————————————————————————————————————————————————
 
 POSES = {  # verbo → (cuadros, fps)
-    "idle": (2, 3.0), "walk": (4, 8.0), "run": (4, 12.0), "eat": (2, 3.0), "bark": (2, 6.0),
+    # 6 cuadros de paso (antes 4): con 4 la rodilla sólo aparecía doblada en uno
+    # y el ojo no la registraba.
+    "idle": (2, 3.0), "walk": (6, 10.0), "run": (6, 15.0), "eat": (2, 3.0), "bark": (2, 6.0),
 }
 DIRS = {"right": 0.0, "down": -math.pi / 2, "up": math.pi / 2}
 
@@ -342,7 +371,21 @@ def posar(a: Animal, verbo: str, k: int, n: int) -> list[Prim]:
         R = p.rot.copy()
         if p.grupo in a.caderas:
             cad, f0 = a.caderas[p.grupo]
-            Rg = rot_z(swing * math.sin(fase + f0))
+            ph = fase + f0
+            # La RODILLA: la caña se recoge mientras la pata AVANZA en el aire
+            # (cuando la cadera gira hacia adelante, d/dt sin = cos > 0) y queda
+            # derecha mientras apoya y empuja. Es lo que hace que el paso se lea
+            # como un paso y no como un péndulo. La pezuña va hacia atrás: así
+            # doblan el carpo (delante) y el corvejón (atrás) de un cuadrúpedo.
+            if p.rodilla is not None and swing:
+                dobla = a.flexion * (swing / a.zancada) * max(0.0, math.cos(ph)) ** 1.5
+                if verbo == "run":
+                    dobla *= 1.25
+                Rk = rot_z(-dobla)
+                kn = np.array(p.rodilla)
+                c = kn + Rk @ (c - kn)
+                R = Rk @ R
+            Rg = rot_z(swing * math.sin(ph))
             c = np.array(cad) + Rg @ (c - np.array(cad))
             R = Rg @ R
         else:
@@ -515,7 +558,7 @@ def main():
                         l.verificar(apoyado=False)
                     except SystemExit as e:
                         l.im.resize((W * 12, H * 12), Image.NEAREST).save(
-                            "/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/5e52c5ed-ff80-43cb-ac48-0abbc2a63dbd/scratchpad/falla.png")
+                            str(SCRATCH / "falla.png"))
                         raise SystemExit(f"{a.clave} {verbo}_{dnom} #{k}: {e}")
                     cuadros.append(l.im)
                 poses[f"{verbo}_{dnom}"] = {"rect": {"col": inicio, "row": len(filas), "w": 1, "h": 1},
@@ -542,7 +585,7 @@ def main():
             gen.mkdir(parents=True, exist_ok=True)
             hoja.save(gen / f"{nombre}.png")
 
-    scratch = Path("/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/5e52c5ed-ff80-43cb-ac48-0abbc2a63dbd/scratchpad")
+    scratch = SCRATCH
     ancho = max(h.width for h in lamina)
     L = Image.new("RGBA", (ancho, sum(h.height + 4 for h in lamina)), (122, 160, 90, 255))
     y = 0

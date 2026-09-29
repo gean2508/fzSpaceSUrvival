@@ -49,7 +49,7 @@ pub struct HarvestPlugin;
 impl Plugin for HarvestPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FloraHarvest>()
-            .add_systems(Startup, load_harvest_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_harvest_on_startup)
             .add_systems(Update, (debounced_harvest_save, pick_up_prop));
     }
 }
@@ -93,6 +93,22 @@ fn pick_up_prop(
                 crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, a.cost_item, a.cost_qty);
                 crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
                 persist.mark_immediate();
+            }
+            // **Arrancar una planta a veces deja semillas** (el pasto alto de
+            // Minecraft). El azar sale de la celda, así que la misma mata da
+            // siempre lo mismo: no se "farmea" levantando y recargando.
+            let h = target.flora_cell.map(|(_, _, id)| id).unwrap_or(entity.index());
+            if let Some((item, n)) = crate::granja::semillas_de_planta(&prop.0, h) {
+                crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, item, n);
+                crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+                persist.mark_immediate();
+                let p = target.hit_point;
+                crate::granja::globo(
+                    &mut commands,
+                    p.x,
+                    -p.y,
+                    format!("+{n} {}", crate::granja::nombre_item(item)),
+                );
             }
         }
     }
@@ -218,6 +234,14 @@ fn harvest_path() -> PathBuf {
 }
 
 fn load_harvest_on_startup(mut harvest: ResMut<FloraHarvest>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    // Sólo lo cosechado: los árboles apuntables los anota el streamer.
+    harvest.removed.clear();
+    harvest.dirty = false;
+    harvest.version = harvest.version.wrapping_add(1);
     let Ok(text) = std::fs::read_to_string(harvest_path()) else {
         return;
     };

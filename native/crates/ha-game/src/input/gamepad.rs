@@ -156,6 +156,7 @@ pub(super) fn gamepad_hold_interact(
         hold.flight_hold = false;
         hold.eating = false;
         hold.placing_chest = false;
+        hold.placing_crop = false;
         hold.placing_torch = false;
         hold.placing_map = false;
         hold.locked_kind = None;
@@ -169,6 +170,12 @@ pub(super) fn gamepad_hold_interact(
                 hold.active = true;
                 hold.duration_ms = 300;
                 hold.placing_block = true;
+            } else if crate::granja::Planta::de_semilla(&equipped.item_id).is_some()
+                && target.place_cell.is_some()
+            {
+                hold.active = true;
+                hold.duration_ms = 250;
+                hold.placing_crop = true;
             } else if equipped.item_id == crate::chests::CHEST_ITEM && target.kind.is_none() {
                 hold.active = true;
                 hold.duration_ms = 450;

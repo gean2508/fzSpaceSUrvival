@@ -52,6 +52,8 @@ pub struct HoldInteractState {
     /// Mapa equipado + sin objetivo — lo cuelga `map_item.rs` en la pared/mesa
     /// que tenés delante, retratando el sector donde estás.
     pub placing_map: bool,
+    /// Semilla en la mano + celda sembrable — la siembra `granja.rs`.
+    pub placing_crop: bool,
 }
 
 impl HoldInteractState {
@@ -71,6 +73,7 @@ impl HoldInteractState {
             || self.placing_chest
             || self.placing_torch
             || self.placing_map
+            || self.placing_crop
     }
 }
 
@@ -159,6 +162,7 @@ pub(crate) fn tick_hold_interact(
         || hold.placing_torch
         || hold.placing_map
         || (hold.placing_block && target.place_cell.is_some())
+        || (hold.placing_crop && target.place_cell.is_some())
         || (hold.flight_hold && hold.locked_kind.is_some());
     let delta_ms = (time.delta_secs() * 1000.0) as u32;
     let next = ha_shared::advance_hold_progress(

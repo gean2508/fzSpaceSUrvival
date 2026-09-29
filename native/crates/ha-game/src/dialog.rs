@@ -142,6 +142,8 @@ fn spawn_bubbles(
                 ..default()
             },
             SpeechBubble { ttl: 2.8, total_ttl: 2.8, owner, y_offset },
+            // Mide lo mismo en pantalla con cualquier zoom (ver `textos_mundo`).
+            crate::textos_mundo::TextoEnMundo { px: 16.0, font_size: 22.0 },
         ));
         alive += 1;
         *cooldown = GLOBAL_BUBBLE_COOLDOWN;

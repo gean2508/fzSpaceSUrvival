@@ -88,14 +88,32 @@ const PREDATION_D2: f32 = 2.56; // radio² (~1.6 m) para concretar la caza
 /// con piezas/prefabs/assets reales). `build.rs` lo detecta antes de `build_selection`.
 pub const SPAWN_PALETTE_BASE: usize = 10_000;
 /// Tope de residentes por sesión (perf/batería) — cuentan aparte del `MAX_POP` ambiental.
-const MAX_RESIDENTS: usize = 24;
-/// Rango de ids de cerebro reservado a residentes (ambiental usa `0..MAX_FAUNA_ID`).
-const RES_ID_BASE: i32 = MAX_FAUNA_ID;
+///
+/// Subió de 24 a 64 con la GRANJA: los animales que alimentás se vuelven residentes
+/// (tuyos, persisten) y las crías también; un corral de vacas + gallinero + chiquero
+/// se come 24 enseguida.
+const MAX_RESIDENTS: usize = 64;
+/// Rango de ids de cerebro reservado a residentes (ambiental usa `0..MAX_FAUNA_ID`,
+/// NPCs `72..120`, compañero `990/991`). Arranca en 200 para caber 64 sin pisar a nadie.
+const RES_ID_BASE: i32 = 200;
 /// Salvaguarda anti mínimos locales: cada N nacimientos, el hijo nace del SEED del gym
 /// (inmigración) en vez del padre → reinyecta diversidad perdida (PLAN_VIVARIO §4.3).
 const RES_SEED_EVERY: u32 = 6;
 /// Hipermutación esporádica (§4.2): tasa ×4 para saltos exploratorios.
 const RES_HYPERMUTATE_RATE: f32 = MUTATE_RATE * 4.0;
+// --- GRANJA: cría a mano (Minecraft) ---------------------------------------------
+/// Cuánto dura el celo después de darle de comer (Minecraft: 30 s).
+pub const CELO_SECS: f32 = 30.0;
+/// Descanso de un padre antes de volver a criar (Minecraft: 5 min).
+pub const CRIA_CD_SECS: f32 = 300.0;
+/// Lo que tarda una cría en hacerse adulta (Minecraft: 20 min). Cada comida le
+/// descuenta un 10 %, igual que allá.
+pub const CRECER_SECS: f32 = 1200.0;
+/// A qué distancia un animal en celo ve a su pareja y camina hacia ella (m).
+const PAREJA_R: f32 = 14.0;
+/// Distancia² a la que la pareja se junta y nace la cría (~1,3 m).
+const CITA_D2: f32 = 1.7;
+
 /// Temperatura evolutiva (F3, §4.5): escala mutación + frecuencia de inmigración según la
 /// DIVERSIDAD de conducta de los residentes vivos. Diversidad alta → temp≈`TEMP_MIN`
 /// (estable); diversidad baja (estancamiento = mínimo local) → sube a `TEMP_MAX` → más
@@ -203,6 +221,28 @@ struct ResidentRecord {
     hunger: f32,
     thirst: f32,
     energy: f32,
+    /// GRANJA: 0 = cría, 1 = adulto (los registros viejos son adultos).
+    #[serde(default = "adulto")]
+    edad: f32,
+    #[serde(default)]
+    cria_cd: f32,
+    /// GRANJA: se cría a mano, no solo (ver `DeGranja`).
+    #[serde(default)]
+    granja: bool,
+    /// Vida guardada (0 = sin dato → llena).
+    #[serde(default)]
+    vida: f32,
+    #[serde(default)]
+    domado: bool,
+    #[serde(default)]
+    sentado: bool,
+    /// El nombre de la etiqueta.
+    #[serde(default)]
+    nombre: Option<String>,
+}
+
+fn adulto() -> f32 {
+    1.0
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -313,7 +353,7 @@ fn body_temperament(body: CelestialBody) -> Temperament {
 /// si no coincide, el sprite se estira y el pixel deja de ser cuadrado.
 fn earth_species() -> Vec<SpeciesDef> {
     let raw: &[(&str, [f32; 3], Vec2, &str)] = &[
-        ("npc/fauna_cow", [0.85, 0.82, 0.78], Vec2::new(1.96, 1.78), "Vaca"),
+        ("npc/fauna_cow", [0.85, 0.82, 0.78], Vec2::new(1.96, 1.75), "Vaca"),
         ("npc/fauna_chicken", [0.90, 0.88, 0.72], Vec2::new(0.65, 0.71), "Gallina"),
         ("npc/fauna_sheep", [0.88, 0.86, 0.82], Vec2::new(1.37, 1.40), "Oveja"),
         ("npc/fauna_pig", [0.82, 0.60, 0.58], Vec2::new(1.48, 1.31), "Cerdo"),
@@ -428,6 +468,33 @@ struct Animal {
     eat_t: f32,
     drink_t: f32,
     running: bool, // huyendo (alarma) → animación "run"
+    /// GRANJA: segundos de celo que le quedan (alimentado con su comida).
+    celo: f32,
+    /// GRANJA: descanso tras criar; mientras dure no entra en celo.
+    cria_cd: f32,
+    /// 0 = recién nacido, 1 = adulto. Las crías se dibujan chicas y no crían.
+    edad: f32,
+    /// Nombre humano de la especie ("Vaca").
+    nombre: String,
+    /// GRANJA — vida y golpes.
+    vida: f32,
+    vida_max: f32,
+    /// Destello rojo tras un golpe (s).
+    herido_t: f32,
+    /// Huye del jugador tras un golpe (s).
+    panico_t: f32,
+    /// Perro que golpeaste: te persigue y te muerde (el lobo de Minecraft).
+    enojado: bool,
+    mordida_cd: f32,
+    /// Perro domado con un hueso: te sigue; `sentado` lo deja quieto.
+    domado: bool,
+    sentado: bool,
+    /// El nombre que le pusiste con la etiqueta.
+    nombre_propio: Option<String>,
+    /// Corazones sin celo (domado, bautizado).
+    corazones_t: f32,
+    /// Cuenta regresiva al próximo huevo (gallina/pato de granja).
+    huevo_t: f32,
 }
 
 /// Psicología: necesidades que sesgan la conducta y gatillan reproducción/muerte.
@@ -690,6 +757,7 @@ impl Plugin for FaunaPlugin {
             .init_resource::<EcologyWorld>()
             .add_event::<SpawnResidentEvent>()
             .add_event::<SpawnFoodEvent>()
+            .add_plugins(GranjaAnimalesPlugin)
             .add_systems(
                 Update,
                 (
@@ -969,7 +1037,7 @@ fn stream_regions(
         iafz_sys::reset_echo(brain);
         world.alive += 1;
         let heading = (brain as f32) * 2.399963;
-        spawn_animal(commands, &art, brain, x, z, heading, 0.8, idx, &def, (rx, rz), trophic);
+        spawn_animal(commands, &art, brain, x, z, heading, 0.8, idx, &def, (rx, rz), trophic, 1.0);
         true
     };
 
@@ -1170,6 +1238,7 @@ fn spawn_residents(
             &def,
             ecology::region_of(ev.x, ev.z),
             trophic_of(&def),
+            1.0,
         );
         commands.entity(e).try_insert(Resident { uid });
     }
@@ -1305,6 +1374,7 @@ fn spawn_animal(
     def: &SpeciesDef,
     region: (i32, i32),
     trophic: Trophic,
+    edad: f32,
 ) -> Entity {
     let sprite = art.sprite_or_color(
         &def.key,
@@ -1328,11 +1398,34 @@ fn spawn_animal(
                 eat_t: 0.0,
                 drink_t: 0.0,
                 running: false,
+                celo: 0.0,
+                cria_cd: 0.0,
+                edad: edad.clamp(0.0, 1.0),
+                nombre: def.label.clone(),
+                vida: vida_de(&def.key),
+                vida_max: vida_de(&def.key),
+                herido_t: 0.0,
+                panico_t: 0.0,
+                enojado: false,
+                mordida_cd: 0.0,
+                domado: false,
+                sentado: false,
+                nombre_propio: None,
+                corazones_t: 0.0,
+                // Desfasado por cerebro: no ponen todas a la vez.
+                huevo_t: HUEVO_MIN + (brain as f32 * 37.0) % (HUEVO_MAX - HUEVO_MIN),
             },
             Needs { hunger: 0.3, thirst: 0.3, energy },
             FaunaPose::default(),
             sprite,
-            Transform::from_xyz(x, -z, sort_z(z)),
+            Transform::from_xyz(x, -z, sort_z(z)).with_scale(Vec3::splat(escala_de_edad(edad))),
+            // Se toca: con su comida en la mano se alimenta (cría), con espada se
+            // faena. Lo resuelve `alimentar_animales`.
+            crate::targeting::InteractTarget {
+                kind: ha_shared::InteractTargetKind::Animal,
+                id: brain as u32,
+            },
+            crate::structures::StructureName(def.label.clone()),
         ))
         .id()
 }
@@ -1352,9 +1445,13 @@ fn tick_fauna(
     mut field: ResMut<SignalField>,
     mut eco: ResMut<EcologyWorld>,
     player: Query<&Transform, (With<Player>, Without<Animal>, Without<FoodDot>)>,
-    mut animals: Query<(Entity, &mut Animal, &mut Needs, &mut Transform, &mut Sprite, &mut FaunaPose, Option<&Resident>), (Without<FoodDot>, Without<Player>)>,
+    mut animals: Query<(Entity, &mut Animal, &mut Needs, &mut Transform, &mut Sprite, &mut FaunaPose, Option<&Resident>, Has<DeGranja>), (Without<FoodDot>, Without<Player>)>,
     foods: Query<(Entity, &FoodDot, Option<&PlacedFood>), (Without<Animal>, Without<Player>)>,
-    mut acc: Local<f32>,
+    (mut tirados, mut jugador_sim, mut acc): (
+        ResMut<crate::tirados::Tirados>,
+        Query<&mut crate::sim::SimState, With<Player>>,
+        Local<f32>,
+    ),
 ) {
     let _probe = crate::debug::probe("tick_fauna");
     // BATERÍA: el cerebro de la fauna corre a ~15 Hz (no 60), acumulando el dt →
@@ -1398,13 +1495,23 @@ fn tick_fauna(
     let mut census: Vec<(Entity, f32, f32, bool, bool, i32, (i32, i32), Trophic)> = Vec::new();
     // Forraje comido este tick: se despawnea y se le descuenta biomasa a su región.
     let mut eaten: Vec<(Entity, (i32, i32))> = Vec::new();
+    // GRANJA: los adultos en celo (entity, x, z, especie). Se buscan entre sí.
+    // GRANJA: mordidas de perros enojados y huevos puestos en este paso.
+    let mut mordidas = 0u32;
+    let mut huevos: Vec<(f32, f32)> = Vec::new();
+    let enamorados: Vec<(Entity, f32, f32, usize)> = animals
+        .iter()
+        .filter(|(_, a, ..)| a.celo > 0.0 && a.edad >= 1.0)
+        .map(|(e, a, ..)| (e, a.x, a.z, a.species))
+        .collect();
 
-    for (e, mut a, mut n, mut tf, mut sprite, mut pose, resident) in &mut animals {
+    for (e, mut a, mut n, mut tf, mut sprite, mut pose, resident, de_granja) in &mut animals {
         let is_res = resident.is_some();
         // F2: un residente LEJOS del jugador queda CONGELADO (no piensa/mueve/gasta) — sigue
         // como dato en su lugar y `cull_fauna` lo oculta; revive al acercarte. Así "no
         // desaparece mi granja" pero tampoco cuesta cómputo/batería estando lejos.
-        if is_res {
+        // (El perro domado no se congela: te sigue a donde vayas.)
+        if is_res && !a.domado {
             let dr2 = (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz);
             if dr2 > RENDER_R * RENDER_R {
                 continue;
@@ -1421,6 +1528,8 @@ fn tick_fauna(
         n.energy = (n.energy - dt * 0.02 * (1.0 + n.thirst * 0.5)).clamp(STARVE_FLOOR, 1.0);
         a.eat_t = (a.eat_t - dt).max(0.0);
         a.drink_t = (a.drink_t - dt).max(0.0);
+        a.celo = (a.celo - dt).max(0.0);
+        a.cria_cd = (a.cria_cd - dt).max(0.0);
 
         // Sensor compartido (bioma + comida + social) + ESTIGMERGIA (bits 14-18:
         // gradiente de alarma/aglomeración del campo de feromonas) → IAFZ → giro.
@@ -1491,17 +1600,62 @@ fn tick_fauna(
             }
         }
 
+        // GRANJA: en celo, el animal va hacia la pareja más cercana de su especie
+        // (Minecraft). Pisa la decisión del cerebro sólo mientras dura el celo —
+        // 30 s—, así que no poda nada: es el jugador eligiendo quién cría.
+        if a.celo > 0.0 && a.edad >= 1.0 {
+            let mut mejor = PAREJA_R * PAREJA_R;
+            let mut hacia: Option<(f32, f32)> = None;
+            for &(oe, ox, oz, sp) in &enamorados {
+                if oe == e || sp != a.species {
+                    continue;
+                }
+                let d2 = (ox - a.x) * (ox - a.x) + (oz - a.z) * (oz - a.z);
+                if d2 < mejor {
+                    mejor = d2;
+                    hacia = Some((ox, oz));
+                }
+            }
+            if let Some((tx, tz)) = hacia {
+                a.heading = (tz - a.z).atan2(tx - a.x);
+            }
+        }
+
         // HUIDA: si siente ALARMA cerca (bit 17 de la estigmergia) → corre.
         a.running = (s & (1 << 17)) != 0;
-        let speed = VEL
-            * (0.4 + 0.6 * n.energy)
-            * if a.running {
-                1.9
-            } else if n.hunger > 0.6 || n.thirst > 0.6 {
-                1.2
-            } else {
-                1.0
-            };
+        // GRANJA: pánico tras un golpe, perro enojado, perro domado que te sigue.
+        let conducta = conducta_granja(&mut a, px, pz, dt);
+        if let Some((sx, sz)) = conducta.saltar_a {
+            a.x = sx;
+            a.z = sz;
+        }
+        if conducta.muerde {
+            mordidas += 1;
+        }
+        // Huevos: la gallina (y el pato) de granja adulta pone cada 5-10 min.
+        if de_granja && a.edad >= 1.0 && pone_huevos(&a.art_key) {
+            a.huevo_t -= dt;
+            if a.huevo_t <= 0.0 {
+                huevos.push((a.x, a.z));
+                let r = ((a.brain as u32).wrapping_mul(2654435761) ^ (a.x.to_bits())) % 1000;
+                a.huevo_t = HUEVO_MIN + (HUEVO_MAX - HUEVO_MIN) * r as f32 / 1000.0;
+            }
+        }
+        let speed = if conducta.quieto {
+            0.0
+        } else if conducta.prisa > 1.0 {
+            VEL * conducta.prisa
+        } else {
+            VEL
+                * (0.4 + 0.6 * n.energy)
+                * if a.running {
+                    1.9
+                } else if n.hunger > 0.6 || n.thirst > 0.6 {
+                    1.2
+                } else {
+                    1.0
+                }
+        };
         let (nx, nz) = (a.x + a.heading.cos() * speed * dt, a.z + a.heading.sin() * speed * dt);
         // Las paredes construidas (bordes) también las encierran — es lo que
         // hace que el corral del vivario funcione.
@@ -1575,7 +1729,7 @@ fn tick_fauna(
         // dispara si algo externo baja la energía a 0 (futuro combate). ---
         if n.energy <= 0.0 {
             deaths.push((e, a.brain, is_res, a.region, a.trophic));
-        } else if n.energy >= REPRO_ENERGY {
+        } else if n.energy >= REPRO_ENERGY && a.edad >= 1.0 && !de_granja {
             // Cada categoría se reproduce contra SU pool/censo (ambiental vs. residente),
             // reservando espacio por los nacimientos ya encolados de esa misma categoría.
             let can = if is_res {
@@ -1624,14 +1778,20 @@ fn tick_fauna(
         // ensuciaba el dibujo (la vaca salía gris, el perro barroso): ahí sólo se
         // apaga con la energía.
         let c = if art.has_poses(&a.art_key) { [1.0; 3] } else { a.color };
-        sprite.color = Color::srgb(c[0] * en, c[1] * en, c[2] * en);
+        // El golpe se ve: destello rojo, como en Minecraft.
+        let rojo = if a.herido_t > 0.0 { 0.35 } else { 1.0 };
+        sprite.color = Color::srgb(c[0] * en, c[1] * en * rojo, c[2] * en * rojo);
 
         // Animación LimeZu-compatible: pose DIRECCIONAL según el estado (eat/drink/
         // run/idle/walk). Si aún no asignaste las poses del pack, se ve el quad de
         // color (fallback) orientado por flip.
+        let esc = escala_de_edad(a.edad);
         let key = a.art_key.clone();
         if art.has_poses(&key) {
-            let verb = if a.eat_t > 0.0 {
+            tf.scale = Vec3::new(esc, esc, 1.0);
+            let verb = if conducta.quieto && !conducta.muerde {
+                "idle"
+            } else if a.eat_t > 0.0 {
                 "eat"
             } else if a.drink_t > 0.0 {
                 "drink"
@@ -1650,8 +1810,68 @@ fn tick_fauna(
             let wanted = format!("{verb}_{}", dir4(a.heading));
             apply_pose(&mut commands, e, &art, &key, &wanted, &mut sprite, &mut pose.0);
         } else {
-            tf.scale.x = if a.heading.cos() < 0.0 { -1.0 } else { 1.0 };
+            tf.scale = Vec3::new(if a.heading.cos() < 0.0 { -esc } else { esc }, esc, 1.0);
         }
+    }
+
+    // GRANJA: las mordidas duelen de verdad y los huevos caen al piso.
+    if mordidas > 0 {
+        if let Ok(mut sim) = jugador_sim.get_single_mut() {
+            sim.hp = (sim.hp - MORDIDA_DANO * mordidas as f32).max(0.0);
+        }
+    }
+    for (hx, hz) in huevos {
+        crate::tirados::tirar(&mut tirados, hx, hz + 0.2, "egg", 1);
+    }
+
+    // GRANJA — CITA: dos adultos en celo de la misma especie que se tocan tienen una
+    // cría. Los dos quedan descansando `CRIA_CD_SECS`; la cría es residente (tuya) y
+    // hereda el genoma de AMBOS padres (cruza + mutación), no de uno solo.
+    let mut crias: Vec<(f32, f32, i32, i32, usize, f32)> = Vec::new();
+    let mut usados: Vec<Entity> = Vec::new();
+    for (i, &(e1, x1, z1, sp1)) in enamorados.iter().enumerate() {
+        if usados.contains(&e1) {
+            continue;
+        }
+        for &(e2, x2, z2, sp2) in &enamorados[i + 1..] {
+            if sp1 != sp2 || usados.contains(&e2) {
+                continue;
+            }
+            if (x1 - x2) * (x1 - x2) + (z1 - z2) * (z1 - z2) > CITA_D2 {
+                continue;
+            }
+            let (Ok(b1), Ok(b2)) = (animals.get(e1).map(|q| q.1.brain), animals.get(e2).map(|q| q.1.brain))
+            else {
+                continue;
+            };
+            let heading = animals.get(e1).map(|q| q.1.heading).unwrap_or(0.0);
+            usados.push(e1);
+            usados.push(e2);
+            crias.push(((x1 + x2) * 0.5, (z1 + z2) * 0.5, b1, b2, sp1, heading));
+            break;
+        }
+    }
+    for &e in &usados {
+        if let Ok((_, mut a, ..)) = animals.get_mut(e) {
+            a.celo = 0.0;
+            a.cria_cd = CRIA_CD_SECS;
+        }
+    }
+    for (x, z, b1, b2, species, heading) in crias {
+        let Some(child) = vivarium.free_ids.pop() else { continue };
+        iafz_sys::crossover(b1, b2, child);
+        iafz_sys::mutate(child, child, MUTATE_RATE);
+        iafz_sys::reset_echo(child);
+        vivarium.alive += 1;
+        let uid = vivarium.next_uid;
+        vivarium.next_uid = vivarium.next_uid.wrapping_add(1);
+        let def = &defs[species % defs.len()];
+        let e = spawn_animal(
+            &mut commands, &art, child, x, z + 0.4, heading + 2.0, 0.7, species, def,
+            ecology::region_of(x, z), trophic_of(def), 0.0,
+        );
+        commands.entity(e).try_insert((Resident { uid }, DeGranja));
+        crate::granja::globo(&mut commands, x, z, format!("¡Nació una cría de {}!", def.label));
     }
 
     // PREDACIÓN: un depredador MUY cerca de una presa la caza (muerte VISIBLE). Es la fuente
@@ -1737,7 +1957,7 @@ fn tick_fauna(
             let (cx, cz) = (x + ox, z + oz);
             let e = spawn_animal(
                 &mut commands, &art, child, cx, cz, heading + 1.0, 0.55, species, def,
-                ecology::region_of(cx, cz), trophic_of(def),
+                ecology::region_of(cx, cz), trophic_of(def), 1.0,
             );
             commands.entity(e).try_insert(Resident { uid });
         } else {
@@ -1760,6 +1980,7 @@ fn tick_fauna(
             def.hostile = trophic == Trophic::Carnivore;
             spawn_animal(
                 &mut commands, &art, child, cx, cz, heading + 1.0, 0.55, species, &def, reg, trophic,
+                1.0,
             );
         }
     }
@@ -1779,7 +2000,7 @@ fn manage_vivarium(
     planet: Res<ActivePlanet>,
     mut vivarium: ResMut<VivariumWorld>,
     mut catalog: ResMut<FaunaCatalog>,
-    live: Query<(&Animal, &Needs, &Resident)>,
+    live: Query<(&Animal, &Needs, &Resident, Has<DeGranja>)>,
     live_ents: Query<Entity, With<Resident>>,
 ) {
     if !vivarium.loaded {
@@ -1799,7 +2020,7 @@ fn manage_vivarium(
     // Snapshot + despawn del cuerpo VIEJO → registros + genomas a disco.
     if let Some(old) = vivarium.active_body {
         vivarium.records.retain(|r| r.body != old);
-        for (a, n, res) in &live {
+        for (a, n, res, granja) in &live {
             iafz_sys::save(a.brain, genome_path(res.uid).to_str().unwrap_or(""));
             vivarium.records.push(ResidentRecord {
                 uid: res.uid,
@@ -1811,6 +2032,13 @@ fn manage_vivarium(
                 hunger: n.hunger,
                 thirst: n.thirst,
                 energy: n.energy,
+                edad: a.edad,
+                cria_cd: a.cria_cd,
+                granja,
+                vida: a.vida,
+                domado: a.domado,
+                sentado: a.sentado,
+                nombre: a.nombre_propio.clone(),
             });
         }
         for e in &live_ents {
@@ -1845,12 +2073,22 @@ fn manage_vivarium(
             let def = defs.get(rec.species).unwrap_or(&defs[0]);
             let e = spawn_animal(
                 &mut commands, &art, brain, rec.x, rec.z, rec.heading, rec.energy, rec.species, def,
-                ecology::region_of(rec.x, rec.z), trophic_of(def),
+                ecology::region_of(rec.x, rec.z), trophic_of(def), rec.edad,
             );
             commands.entity(e).try_insert((
                 Resident { uid: rec.uid },
                 Needs { hunger: rec.hunger, thirst: rec.thirst, energy: rec.energy },
+                Restaurar {
+                    cria_cd: rec.cria_cd,
+                    vida: rec.vida,
+                    domado: rec.domado,
+                    sentado: rec.sentado,
+                    nombre: rec.nombre.clone(),
+                },
             ));
+            if rec.granja {
+                commands.entity(e).try_insert(DeGranja);
+            }
         }
     }
     vivarium.active_body = current;
@@ -2112,7 +2350,7 @@ fn save_vivarium_periodic(
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     vivarium: Res<VivariumWorld>,
-    live: Query<(&Animal, &Needs, &Resident)>,
+    live: Query<(&Animal, &Needs, &Resident, Has<DeGranja>)>,
     mut acc: Local<f32>,
     mut was_paused: Local<bool>,
 ) {
@@ -2135,7 +2373,7 @@ fn save_vivarium_periodic(
     let mut all = vivarium.records.clone();
     if let Some(b) = current {
         all.retain(|r| r.body != b);
-        for (a, n, res) in &live {
+        for (a, n, res, granja) in &live {
             iafz_sys::save(a.brain, genome_path(res.uid).to_str().unwrap_or(""));
             all.push(ResidentRecord {
                 uid: res.uid,
@@ -2147,6 +2385,13 @@ fn save_vivarium_periodic(
                 hunger: n.hunger,
                 thirst: n.thirst,
                 energy: n.energy,
+                edad: a.edad,
+                cria_cd: a.cria_cd,
+                granja,
+                vida: a.vida,
+                domado: a.domado,
+                sentado: a.sentado,
+                nombre: a.nombre_propio.clone(),
             });
         }
     }
@@ -2207,4 +2452,879 @@ fn update_fauna_sightings(
                 .push(Sighting { x: a.x, z: a.z, color: a.color, hostile: a.hostile });
         }
     }
+}
+
+// ─── GRANJA: alimentar, criar, golpear, domar, bautizar ─────────────────────────
+//
+// El modelo es el de Minecraft: cada especie come algo; dárselo a un adulto lo pone
+// en celo 30 s; dos en celo de la misma especie se buscan y tienen una cría que
+// tarda 20 min en crecer (cada comida le ahorra un 10 %). Los padres descansan 5 min.
+//
+// El GESTO es uno solo (tocar o mantener sobre el animal) y lo que hace depende de
+// lo que llevás en la mano, como el clic derecho/izquierdo de Minecraft fundidos:
+//
+// | en la mano              | hace                                             |
+// |-------------------------|--------------------------------------------------|
+// | su comida               | celo (adulto) o +10 % de crecimiento (cría)      |
+// | etiqueta                | abre el panel para ponerle nombre (`bautizo.rs`) |
+// | hueso (perro salvaje)   | intenta domarlo (1 de 3, como el lobo)           |
+// | lo que sea (perro tuyo) | sentado / te sigue                               |
+// | cualquier otra cosa     | GOLPE: daño según lo que tengas (mano 1, espada 5-7), retroceso, huye; el perro se ENOJA y te muerde |
+//
+// Al morir suelta su botín en el SUELO (`tirados.rs`): res → carne y cuero, cerdo →
+// carne de cerdo, gallina → pollo y plumas, oveja → cordero y lana… Las crías no
+// sueltan nada.
+//
+// Lo propio de este juego: la fauna del mundo es una VISTA de la población de su
+// región (ver la cabecera). Un animal que alimentás, domás o bautizás deja de ser
+// del monte y pasa a ser TUYO — residente de granja: persiste, no se desmaterializa
+// al alejarte, no se reproduce solo y viaja con la partida.
+
+/// Qué come cada especie para criar. La clave es la del arte (`npc/fauna_*`).
+pub fn comida_de_cria(art_key: &str, hostil: bool) -> &'static [&'static str] {
+    if hostil {
+        return &[];
+    }
+    match art_key {
+        "npc/fauna_cow" | "npc/fauna_sheep" | "npc/fauna_goat" => &["wheat"],
+        "npc/fauna_chicken" | "npc/fauna_duck" => &["wheat_seeds", "pumpkin_seeds"],
+        "npc/fauna_pig" | "npc/fauna_rabbit" => &["carrot"],
+        "npc/fauna_donkey" => &["apple", "carrot"],
+        // El perro, como el lobo: cualquier carne.
+        "npc/fauna_dog" => &["meat", "beef", "pork", "mutton", "chicken", "rabbit_meat"],
+        // Fauna de otros planetas: come de la huerta como cualquier herbívoro.
+        _ => &["wheat", "carrot"],
+    }
+}
+
+/// Vida de cada especie (Minecraft: vaca/cerdo 10, oveja 8, gallina 4, conejo 3,
+/// lobo 8, burro ~15).
+pub fn vida_de(art_key: &str) -> f32 {
+    match art_key {
+        "npc/fauna_cow" | "npc/fauna_pig" | "npc/fauna_goat" => 10.0,
+        "npc/fauna_sheep" | "npc/fauna_dog" => 8.0,
+        "npc/fauna_donkey" => 15.0,
+        "npc/fauna_chicken" | "npc/fauna_duck" => 4.0,
+        "npc/fauna_rabbit" => 3.0,
+        _ => 8.0,
+    }
+}
+
+/// Daño de un golpe según lo que llevás en la mano. Las espadas usan el de su
+/// regla de interacción; el resto, lo que pegaría esa herramienta.
+pub fn dano_de(item: &str) -> f32 {
+    if let Some(d) = ha_shared::resolve_interaction(Some(item), ha_shared::InteractTargetKind::Animal)
+        .and_then(|r| r.damage)
+    {
+        return d / 3.6; // 18 → 5, 26 → 7: la escala de vida de los animales
+    }
+    match item {
+        "axe" | "stone_axe" => 4.0,
+        "wood_axe" | "pickaxe" | "stone_pickaxe" => 3.0,
+        "wood_pickaxe" => 2.0,
+        _ => 1.0,
+    }
+}
+
+/// **El botín de cada especie** (Minecraft), con `r` una fuente de azar 0..1.
+/// Adultos sólo. Los huesos no los da Minecraft, pero acá son la única forma de
+/// conseguir con qué domar un perro hasta que haya enemigos que los suelten.
+pub fn botin(art_key: &str, mut r: impl FnMut() -> f32) -> Vec<(&'static str, u32)> {
+    let mut rango = |a: u32, b: u32| a + ((r() * (b - a + 1) as f32) as u32).min(b - a);
+    let mut v = match art_key {
+        "npc/fauna_cow" => vec![("beef", rango(1, 3)), ("leather", rango(0, 2))],
+        "npc/fauna_pig" => vec![("pork", rango(1, 3))],
+        "npc/fauna_chicken" | "npc/fauna_duck" => vec![("chicken", 1), ("feather", rango(0, 2))],
+        "npc/fauna_sheep" => vec![("mutton", rango(1, 2)), ("wool", 1)],
+        "npc/fauna_goat" => vec![("mutton", rango(1, 2)), ("leather", rango(0, 1))],
+        "npc/fauna_donkey" => vec![("leather", rango(0, 2))],
+        "npc/fauna_rabbit" => vec![("rabbit_meat", 1), ("leather", rango(0, 1))],
+        "npc/fauna_dog" => vec![],
+        _ => vec![("meat", 1)],
+    };
+    if matches!(
+        art_key,
+        "npc/fauna_cow" | "npc/fauna_pig" | "npc/fauna_sheep" | "npc/fauna_goat" | "npc/fauna_donkey"
+    ) {
+        v.push(("bone", rango(0, 1)));
+    }
+    v.retain(|(_, n)| *n > 0);
+    v
+}
+
+/// ¿Pone huevos? (gallina y pato de granja, adultos).
+fn pone_huevos(art_key: &str) -> bool {
+    matches!(art_key, "npc/fauna_chicken" | "npc/fauna_duck")
+}
+
+/// Tamaño de dibujo por edad: una cría mide la mitad.
+pub fn escala_de_edad(edad: f32) -> f32 {
+    0.5 + 0.5 * edad.clamp(0.0, 1.0)
+}
+
+/// Cada cuánto pone un huevo una gallina (s). Minecraft: 5-10 min.
+const HUEVO_MIN: f32 = 300.0;
+const HUEVO_MAX: f32 = 600.0;
+/// Un perro enojado muerde cada tanto y a esta distancia.
+const MORDIDA_D: f32 = 1.3;
+const MORDIDA_CD: f32 = 1.0;
+const MORDIDA_DANO: f32 = 2.0;
+/// El perro domado te sigue si te alejás más que esto, y aparece a tu lado si te
+/// alejás muchísimo (volaste, te teletransportaste).
+const PERRO_SIGUE_D: f32 = 4.5;
+const PERRO_SALTA_D: f32 = 30.0;
+
+/// Azar barato y reproducible (xorshift sobre una semilla).
+fn azar(semilla: &mut u32) -> f32 {
+    let mut x = *semilla | 1;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *semilla = x;
+    (x % 10_000) as f32 / 10_000.0
+}
+
+/// Lo que la conducta de granja le pide al movimiento este paso.
+#[derive(Default, Debug, PartialEq)]
+pub(crate) struct Conducta {
+    /// No se mueve (perro sentado).
+    pub(crate) quieto: bool,
+    /// Multiplicador de velocidad (huye, persigue, te alcanza).
+    pub(crate) prisa: f32,
+    /// Aparecer al lado del jugador (perro domado que quedó muy lejos).
+    pub(crate) saltar_a: Option<(f32, f32)>,
+    /// Muerde al jugador este paso.
+    pub(crate) muerde: bool,
+}
+
+/// **La conducta de granja**, encima de lo que decide el cerebro: pánico tras un
+/// golpe, el perro enojado que persigue y muerde, el domado que te sigue. Pisa el
+/// rumbo sólo mientras dura cada estado, así que la conducta emergente del resto
+/// del tiempo queda intacta. Función pura para poder probarla sin Bevy.
+pub(crate) fn conducta_granja(a: &mut Animal, px: f32, pz: f32, dt: f32) -> Conducta {
+    let mut c = Conducta { prisa: 1.0, ..default() };
+    a.herido_t = (a.herido_t - dt).max(0.0);
+    a.panico_t = (a.panico_t - dt).max(0.0);
+    a.mordida_cd = (a.mordida_cd - dt).max(0.0);
+    a.corazones_t = (a.corazones_t - dt).max(0.0);
+    let (dx, dz) = (px - a.x, pz - a.z);
+    let d = (dx * dx + dz * dz).sqrt();
+    if a.domado {
+        a.enojado = false;
+        if a.sentado {
+            c.quieto = true;
+        } else if d > PERRO_SALTA_D {
+            c.saltar_a = Some((px - 1.2, pz + 0.6));
+        } else if d > PERRO_SIGUE_D {
+            a.heading = dz.atan2(dx);
+            c.prisa = 1.7;
+            a.running = true;
+        }
+        return c;
+    }
+    if a.enojado {
+        if d > 30.0 {
+            a.enojado = false; // lo perdiste de vista
+        } else {
+            a.heading = dz.atan2(dx);
+            c.prisa = 1.9;
+            a.running = true;
+            if d < MORDIDA_D && a.mordida_cd <= 0.0 {
+                a.mordida_cd = MORDIDA_CD;
+                c.muerde = true;
+            }
+            if d < 0.8 {
+                c.quieto = true; // encima tuyo no empuja: muerde
+            }
+        }
+        return c;
+    }
+    if a.panico_t > 0.0 {
+        a.heading = (-dz).atan2(-dx);
+        c.prisa = 1.9;
+        a.running = true;
+    }
+    c
+}
+
+/// Estado de un animal en palabras, para el cartel y la ayuda.
+fn estado_animal(a: &Animal, tuyo: bool) -> String {
+    let mut s = match &a.nombre_propio {
+        Some(n) => format!("{n} ({})", a.nombre),
+        None => a.nombre.clone(),
+    };
+    if a.edad < 1.0 {
+        s.push_str(&format!(" · cría {} %", (a.edad * 100.0).floor() as u32));
+    } else if a.celo > 0.0 {
+        s.push_str(" · en celo");
+    } else if a.cria_cd > 0.0 {
+        s.push_str(" · descansando");
+    }
+    if a.enojado {
+        s.push_str(" · ¡enojado!");
+    }
+    if a.domado {
+        s.push_str(if a.sentado { " · sentado" } else { " · te sigue" });
+    } else if tuyo {
+        s.push_str(" · tuyo");
+    }
+    if a.vida < a.vida_max {
+        s.push_str(&format!(" · vida {}/{}", a.vida.ceil() as u32, a.vida_max as u32));
+    }
+    s
+}
+
+/// El cartel de acción del animal apuntado (lo lee el HUD). `None` sin animal.
+#[derive(Resource, Default)]
+pub struct AyudaAnimal(pub Option<String>);
+
+/// **Animal de GRANJA**: lo alimentaste, lo domaste o lo bautizaste vos, o nació de
+/// una cría tuya. A diferencia del residente del vivario (creativo), no se
+/// reproduce solo cuando está bien comido: se cría a mano, como en Minecraft. Sin
+/// esto la reproducción emergente del vivario convertía dos vacas en treinta y dos
+/// en un minuto (medido con `HA_GRANJATEST`), y la granja dejaba de ser una
+/// decisión del jugador. La fauna salvaje y el vivario siguen exactamente igual.
+#[derive(Component)]
+pub struct DeGranja;
+
+/// Estado guardado en disco que hay que devolverle al animal al re-spawnearlo.
+#[derive(Component)]
+struct Restaurar {
+    cria_cd: f32,
+    vida: f32,
+    domado: bool,
+    sentado: bool,
+    nombre: Option<String>,
+}
+
+/// Corazón que sube sobre un animal en celo.
+#[derive(Component)]
+struct Corazon {
+    vida: f32,
+}
+
+/// El nombre flotando sobre un animal bautizado. Sigue a su dueño (no es hijo:
+/// el animal se espeja y se escala, y el texto no tiene que hacerlo).
+#[derive(Component)]
+struct EtiquetaNombre(Entity);
+
+/// Marca en el animal: ya tiene su etiqueta dibujada.
+#[derive(Component)]
+struct ConEtiqueta(Entity);
+
+pub struct GranjaAnimalesPlugin;
+
+impl Plugin for GranjaAnimalesPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<AyudaAnimal>().add_systems(
+            Update,
+            (
+                aplicar_restauracion,
+                crecer_crias,
+                interactuar_animal.before(crate::hud::update_interact_hud),
+                aplicar_nombres,
+                rotular_animal_apuntado,
+                corazones,
+                etiquetas_de_nombre,
+            )
+                .chain()
+                .run_if(crate::game_phase::world_active),
+        );
+    }
+}
+
+fn aplicar_restauracion(mut commands: Commands, mut q: Query<(Entity, &mut Animal, &Restaurar)>) {
+    for (e, mut a, r) in &mut q {
+        a.cria_cd = r.cria_cd;
+        if r.vida > 0.0 {
+            a.vida = r.vida.min(a.vida_max);
+        }
+        a.domado = r.domado;
+        a.sentado = r.sentado;
+        a.nombre_propio = r.nombre.clone();
+        commands.entity(e).remove::<Restaurar>();
+    }
+}
+
+/// Las crías crecen con el reloj, estén o no a la vista (un residente lejano
+/// está congelado para el cerebro, no para el calendario). Y los heridos se
+/// curan despacio (Minecraft: medio corazón cada tanto).
+fn crecer_crias(time: Res<Time>, mut q: Query<&mut Animal>) {
+    let dt = time.delta_secs();
+    for mut a in &mut q {
+        if a.edad < 1.0 {
+            a.edad = (a.edad + dt / CRECER_SECS).min(1.0);
+        }
+        if a.vida < a.vida_max && a.herido_t <= 0.0 {
+            a.vida = (a.vida + dt / 20.0).min(a.vida_max);
+        }
+    }
+}
+
+/// **Pasa un animal del monte a tu granja**: cerebro nuevo del rango de
+/// residentes (copia exacta del que tenía), baja del censo de su región, y desde
+/// ahora persiste. Si el vivario está lleno queda como estaba (igual es tuyo en la
+/// sesión: lleva `DeGranja`).
+#[allow(clippy::too_many_arguments)]
+fn domesticar(
+    commands: &mut Commands,
+    entity: Entity,
+    a: &mut Animal,
+    residente: bool,
+    body: CelestialBody,
+    world: &mut FaunaWorld,
+    vivarium: &mut VivariumWorld,
+    eco: &mut EcologyWorld,
+) {
+    if !residente && !a.hostile {
+        if let Some(nuevo) = vivarium.free_ids.pop() {
+            iafz_sys::mutate(a.brain, nuevo, 0.0);
+            world.free_ids.push(a.brain);
+            world.alive = world.alive.saturating_sub(1);
+            eco.add_head(body, a.region.0, a.region.1, a.trophic, -1.0);
+            a.brain = nuevo;
+            vivarium.alive += 1;
+            let uid = vivarium.next_uid;
+            vivarium.next_uid = vivarium.next_uid.wrapping_add(1);
+            commands.entity(entity).try_insert(Resident { uid });
+        }
+    }
+    commands.entity(entity).try_insert(DeGranja);
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn interactuar_animal(
+    mut commands: Commands,
+    mut hold: ResMut<crate::input::HoldInteractState>,
+    target: Res<crate::targeting::LookTarget>,
+    time: Res<Time>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut equipped: ResMut<crate::input::EquippedItem>,
+    (mut inv, mut inv_ui, mut persist): (
+        ResMut<crate::inventory_persist::PlayerInventory>,
+        ResMut<crate::hud::inventory_ui::InventoryUiState>,
+        ResMut<crate::inventory_persist::InventoryPersistState>,
+    ),
+    (mut world, mut vivarium, mut eco): (ResMut<FaunaWorld>, ResMut<VivariumWorld>, ResMut<EcologyWorld>),
+    (mut bautizo, mut tirados): (ResMut<crate::bautizo::Bautizo>, ResMut<crate::tirados::Tirados>),
+    player: Query<&Transform, (With<Player>, Without<Animal>)>,
+    mut animals: Query<(&mut Animal, &mut Needs, Option<&Resident>)>,
+) {
+    use crate::hud::inventory_ui::{consume_from_ui_slots, flush_slots_to_inventory};
+    if target.kind != Some(ha_shared::InteractTargetKind::Animal) {
+        return;
+    }
+    // Un TOQUE (soltar antes de llenar la barra) vale lo mismo que el mantenido:
+    // golpear un pollo a toques es como se juega en Minecraft.
+    let tocado = std::mem::take(&mut hold.tapped);
+    if !hold.completed && !tocado {
+        return;
+    }
+    hold.completed = false;
+    let Some(entity) = target.entity else { return };
+    let body = active_surface_body(&ctx, &planet);
+    let (px, pz) = player
+        .get_single()
+        .map(|t| (t.translation.x, -t.translation.y))
+        .unwrap_or_default();
+    let item = equipped.item_id.clone();
+    let mut semilla = (time.elapsed_secs() * 1000.0) as u32 ^ entity.index().wrapping_mul(2654435761);
+    let mut gastar = |item: &str,
+                      inv: &mut crate::inventory_persist::PlayerInventory,
+                      inv_ui: &mut crate::hud::inventory_ui::InventoryUiState,
+                      persist: &mut crate::inventory_persist::InventoryPersistState,
+                      equipped: &mut crate::input::EquippedItem| {
+        consume_from_ui_slots(inv_ui, &[(item, 1)]);
+        flush_slots_to_inventory(inv_ui, inv);
+        persist.mark_immediate();
+        if inv.qty(item) == 0 {
+            equipped.item_id = "hand".to_string();
+        }
+    };
+
+    // Los perros salvajes de alrededor, por si hay que enojarlos a todos (la
+    // jauría de Minecraft). Se juntan antes del préstamo mutable.
+    let jauria: Vec<(f32, f32)> = animals
+        .iter()
+        .filter(|(a, ..)| a.art_key == "npc/fauna_dog" && !a.domado)
+        .map(|(a, ..)| (a.x, a.z))
+        .collect();
+
+    let Ok((mut a, mut n, resident)) = animals.get_mut(entity) else { return };
+    let (x, z) = (a.x, a.z);
+    let es_perro = a.art_key == "npc/fauna_dog";
+    let come = comida_de_cria(&a.art_key, a.hostile);
+
+    // 1) Etiqueta: abrir el panel del nombre (la etiqueta se gasta al confirmar).
+    if item == "name_tag" && inv.qty("name_tag") > 0 {
+        bautizo.abrir(entity, a.nombre_propio.as_deref());
+        return;
+    }
+    // 2) Hueso a un perro salvaje: domarlo, uno de cada tres (el lobo).
+    if es_perro && !a.domado && item == "bone" && inv.qty("bone") > 0 {
+        gastar("bone", &mut inv, &mut inv_ui, &mut persist, &mut equipped);
+        if azar(&mut semilla) < 1.0 / 3.0 {
+            a.domado = true;
+            a.enojado = false;
+            a.sentado = false;
+            a.corazones_t = 2.5;
+            domesticar(&mut commands, entity, &mut a, resident.is_some(), body, &mut world, &mut vivarium, &mut eco);
+            crate::granja::globo(&mut commands, x, z, format!("¡{} domado! Ahora te sigue", a.nombre));
+        } else {
+            crate::granja::globo(&mut commands, x, z, "…lo olfatea y no se decide".to_string());
+        }
+        return;
+    }
+    // 3) Su comida: celo (adulto) o crecer (cría). Minecraft: un adulto que ya está
+    //    en celo o descansando no la acepta (y no se gasta).
+    if come.contains(&item.as_str()) && inv.qty(&item) > 0 {
+        let msg = if a.edad < 1.0 {
+            a.edad = (a.edad + 0.1).min(1.0);
+            format!("{} crece ({} %)", a.nombre, (a.edad * 100.0).floor() as u32)
+        } else if a.celo > 0.0 {
+            crate::granja::globo(&mut commands, x, z, format!("{} ya está en celo", a.nombre));
+            return;
+        } else if a.cria_cd > 0.0 {
+            crate::granja::globo(
+                &mut commands,
+                x,
+                z,
+                format!("{} descansa ({} s)", a.nombre, a.cria_cd.ceil() as u32),
+            );
+            return;
+        } else {
+            a.celo = CELO_SECS;
+            format!("¡{} en celo!", a.nombre)
+        };
+        n.hunger = 0.0;
+        a.vida = (a.vida + 4.0).min(a.vida_max);
+        gastar(&item, &mut inv, &mut inv_ui, &mut persist, &mut equipped);
+        domesticar(&mut commands, entity, &mut a, resident.is_some(), body, &mut world, &mut vivarium, &mut eco);
+        crate::granja::globo(&mut commands, x, z, msg);
+        return;
+    }
+    // 4) Tu perro: sentarse / seguirte. Nunca se le pega por error.
+    if a.domado {
+        a.sentado = !a.sentado;
+        let msg = if a.sentado { "se sienta y espera" } else { "te sigue" };
+        crate::granja::globo(&mut commands, x, z, format!("{} {msg}", a.nombre_propio.clone().unwrap_or(a.nombre.clone())));
+        return;
+    }
+    // 5) El golpe.
+    let dano = dano_de(&item);
+    a.vida -= dano;
+    a.herido_t = 0.35;
+    let (dx, dz) = (a.x - px, a.z - pz);
+    let d = (dx * dx + dz * dz).sqrt().max(0.1);
+    // Retroceso: medio metro largo, lejos del golpe (lo frena el movimiento normal
+    // si hay pared, que corre en el paso siguiente).
+    a.x += dx / d * 0.7;
+    a.z += dz / d * 0.7;
+    if es_perro {
+        a.enojado = true;
+    } else {
+        a.panico_t = 5.0;
+    }
+    if a.vida > 0.0 {
+        if es_perro {
+            // La jauría: los perros salvajes cerca también se enojan (abajo).
+            drop(a);
+            for (mut o, ..) in &mut animals {
+                if o.art_key == "npc/fauna_dog"
+                    && !o.domado
+                    && jauria.iter().any(|&(jx, jz)| (jx - o.x).abs() < 0.01 && (jz - o.z).abs() < 0.01)
+                    && (o.x - x).powi(2) + (o.z - z).powi(2) < 100.0
+                {
+                    o.enojado = true;
+                }
+            }
+        }
+        return;
+    }
+    // Murió: baja del censo (o del vivario) y suelta su botín en el piso.
+    if resident.is_some() {
+        vivarium.free_ids.push(a.brain);
+        vivarium.alive = vivarium.alive.saturating_sub(1);
+    } else {
+        world.free_ids.push(a.brain);
+        world.alive = world.alive.saturating_sub(1);
+        eco.add_head(body, a.region.0, a.region.1, a.trophic, -1.0);
+    }
+    if a.edad >= 1.0 {
+        for (it, q) in botin(&a.art_key, || azar(&mut semilla)) {
+            crate::tirados::tirar(&mut tirados, a.x, a.z, it, q);
+        }
+    }
+    if let Some(nombre) = &a.nombre_propio {
+        crate::granja::globo(&mut commands, a.x, a.z, format!("{nombre} murió"));
+    }
+    commands.entity(entity).despawn_recursive();
+}
+
+/// El nombre confirmado en el panel: queda puesto, gasta la etiqueta y el animal
+/// pasa a ser tuyo.
+#[allow(clippy::too_many_arguments)]
+fn aplicar_nombres(
+    mut commands: Commands,
+    mut eventos: EventReader<crate::bautizo::NombreElegido>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut equipped: ResMut<crate::input::EquippedItem>,
+    (mut inv, mut inv_ui, mut persist): (
+        ResMut<crate::inventory_persist::PlayerInventory>,
+        ResMut<crate::hud::inventory_ui::InventoryUiState>,
+        ResMut<crate::inventory_persist::InventoryPersistState>,
+    ),
+    (mut world, mut vivarium, mut eco): (ResMut<FaunaWorld>, ResMut<VivariumWorld>, ResMut<EcologyWorld>),
+    mut animals: Query<(&mut Animal, Option<&Resident>)>,
+) {
+    use crate::hud::inventory_ui::{consume_from_ui_slots, flush_slots_to_inventory};
+    let body = active_surface_body(&ctx, &planet);
+    for ev in eventos.read() {
+        let Ok((mut a, res)) = animals.get_mut(ev.animal) else { continue };
+        if inv.qty("name_tag") == 0 {
+            continue;
+        }
+        a.nombre_propio = Some(ev.nombre.clone());
+        consume_from_ui_slots(&mut inv_ui, &[("name_tag", 1)]);
+        flush_slots_to_inventory(&inv_ui, &mut inv);
+        persist.mark_immediate();
+        if inv.qty("name_tag") == 0 {
+            equipped.item_id = "hand".to_string();
+        }
+        domesticar(&mut commands, ev.animal, &mut a, res.is_some(), body, &mut world, &mut vivarium, &mut eco);
+        a.corazones_t = 1.5;
+        crate::granja::globo(&mut commands, a.x, a.z, format!("Se llama {}", ev.nombre));
+    }
+}
+
+/// Cartel del animal que estás tocando + la ayuda de qué hacer con él.
+fn rotular_animal_apuntado(
+    target: Res<crate::targeting::LookTarget>,
+    equipped: Res<crate::input::EquippedItem>,
+    mut ayuda: ResMut<AyudaAnimal>,
+    mut q: Query<(&Animal, Option<&Resident>, &mut crate::structures::StructureName)>,
+) {
+    let apuntado = target
+        .entity
+        .filter(|_| target.kind == Some(ha_shared::InteractTargetKind::Animal));
+    let Some((a, res, mut nombre)) = apuntado.and_then(|e| q.get_mut(e).ok()) else {
+        if ayuda.0.is_some() {
+            ayuda.0 = None;
+        }
+        return;
+    };
+    let rotulo = estado_animal(a, res.is_some());
+    if nombre.0 != rotulo {
+        nombre.0 = rotulo;
+    }
+    let item = equipped.item_id.as_str();
+    let come = comida_de_cria(&a.art_key, a.hostile);
+    let quien = a.nombre_propio.clone().unwrap_or_else(|| a.nombre.to_lowercase());
+    let pide = come.iter().map(|i| crate::granja::nombre_item(i)).collect::<Vec<_>>().join(" o ");
+    let texto = if item == "name_tag" {
+        format!("Mantené para ponerle nombre a {quien}")
+    } else if a.art_key == "npc/fauna_dog" && !a.domado && item == "bone" {
+        "Mantené para darle el hueso (domarlo)".to_string()
+    } else if come.contains(&item) {
+        if a.edad < 1.0 {
+            format!("Mantené para dar {} a la cría", crate::granja::nombre_item(item))
+        } else {
+            format!("Mantené para dar {} (celo)", crate::granja::nombre_item(item))
+        }
+    } else if a.domado {
+        if a.sentado {
+            format!("Tocá a {quien} para que te siga")
+        } else {
+            format!("Tocá a {quien} para que se siente")
+        }
+    } else if come.is_empty() {
+        format!("Tocá para golpear a {quien}")
+    } else {
+        format!("Tocá para golpear · come {pide}")
+    };
+    if ayuda.0.as_deref() != Some(texto.as_str()) {
+        ayuda.0 = Some(texto);
+    }
+}
+
+/// Corazones sobre los animales en celo o recién domados (uno cada ~0,7 s).
+fn corazones(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<crate::art2d::ArtLibrary>,
+    animals: Query<(&Animal, &Visibility)>,
+    mut vivos: Query<(Entity, &mut Corazon, &mut Transform, &mut Sprite)>,
+    mut acc: Local<f32>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut c, mut tf, mut s) in &mut vivos {
+        c.vida -= dt;
+        if c.vida <= 0.0 {
+            commands.entity(e).despawn_recursive();
+            continue;
+        }
+        tf.translation.y += dt * 0.7;
+        s.color.set_alpha(c.vida.min(1.0));
+    }
+    *acc += dt;
+    if *acc < 0.7 {
+        return;
+    }
+    *acc = 0.0;
+    for (a, vis) in &animals {
+        if (a.celo <= 0.0 && a.corazones_t <= 0.0) || *vis == Visibility::Hidden {
+            continue;
+        }
+        let r = render_xy(a.x, a.z);
+        commands.spawn((
+            art.sprite_or_color("ui/corazon_celo", Color::srgb(0.85, 0.3, 0.35), Vec2::splat(0.55)),
+            Transform::from_xyz(r.x + (a.brain as f32 * 0.37).sin() * 0.3, r.y + 1.3, crate::layers::GLOBO),
+            Corazon { vida: 1.3 },
+        ));
+    }
+}
+
+/// El nombre flotando sobre cada animal bautizado.
+#[allow(clippy::type_complexity)]
+fn etiquetas_de_nombre(
+    mut commands: Commands,
+    nuevos: Query<(Entity, &Animal), Without<ConEtiqueta>>,
+    duenos: Query<(&Animal, &Visibility, &Sprite), With<ConEtiqueta>>,
+    mut etiquetas: Query<
+        (Entity, &EtiquetaNombre, &mut Transform, &mut Text2d, &mut Visibility),
+        (Without<Animal>, Without<Corazon>),
+    >,
+) {
+    for (e, a) in &nuevos {
+        let Some(n) = &a.nombre_propio else { continue };
+        let et = commands
+            .spawn((
+                Text2d::new(n.clone()),
+                TextFont { font_size: 22.0, ..default() },
+                TextColor(Color::srgb(1.0, 0.95, 0.70)),
+                Transform::from_xyz(a.x, -a.z, crate::layers::GLOBO),
+                crate::textos_mundo::TextoEnMundo { px: 14.0, font_size: 22.0 },
+                EtiquetaNombre(e),
+                Name::new("EtiquetaNombre"),
+            ))
+            .id();
+        commands.entity(e).try_insert(ConEtiqueta(et));
+    }
+    for (et, dueno, mut tf, mut texto, mut vis) in &mut etiquetas {
+        let Ok((a, v, s)) = duenos.get(dueno.0) else {
+            commands.entity(et).despawn_recursive();
+            continue;
+        };
+        let Some(n) = &a.nombre_propio else {
+            commands.entity(et).despawn_recursive();
+            commands.entity(dueno.0).remove::<ConEtiqueta>();
+            continue;
+        };
+        if texto.0 != *n {
+            texto.0 = n.clone();
+        }
+        let alto = s.custom_size.map_or(1.0, |c| c.y) * escala_de_edad(a.edad);
+        let r = render_xy(a.x, a.z);
+        tf.translation.x = r.x;
+        tf.translation.y = r.y + alto * 0.5 + 0.25;
+        if *vis != *v {
+            *vis = *v;
+        }
+    }
+}
+
+#[cfg(test)]
+mod granja_tests {
+    use super::*;
+
+    /// Cada animal de granja de la Tierra come algo que la huerta produce (o que
+    /// ya existe): si no, no hay forma de criarlo.
+    #[test]
+    fn cada_animal_de_la_tierra_tiene_su_comida() {
+        let producibles = [
+            "wheat", "wheat_seeds", "pumpkin_seeds", "carrot", "apple", "meat", "beef", "pork", "mutton",
+            "chicken", "rabbit_meat",
+        ];
+        for def in earth_species() {
+            let come = comida_de_cria(&def.key, false);
+            assert!(!come.is_empty(), "{} no come nada", def.label);
+            for c in come {
+                assert!(producibles.contains(c), "{} come {c}, que no se consigue", def.label);
+            }
+        }
+        assert!(comida_de_cria("npc/fauna_cow", true).is_empty(), "un depredador no se cría");
+    }
+
+    #[test]
+    fn la_cria_nace_chica_y_crece_a_tamano_adulto() {
+        assert_eq!(escala_de_edad(0.0), 0.5);
+        assert_eq!(escala_de_edad(1.0), 1.0);
+        // Diez comidas (10 % cada una) la hacen adulta, como en Minecraft.
+        let mut edad = 0.0f32;
+        for _ in 0..10 {
+            edad = (edad + 0.1).min(1.0);
+        }
+        assert!(edad >= 0.999);
+    }
+
+    fn animal(key: &str) -> Animal {
+        Animal {
+            brain: 1,
+            heading: 0.0,
+            x: 0.0,
+            z: 0.0,
+            species: 0,
+            region: (0, 0),
+            trophic: Trophic::Herbivore,
+            color: [1.0; 3],
+            art_key: key.to_string(),
+            hostile: false,
+            relays_alarm: false,
+            eat_t: 0.0,
+            drink_t: 0.0,
+            running: false,
+            celo: 0.0,
+            cria_cd: 0.0,
+            edad: 1.0,
+            nombre: "Bicho".into(),
+            vida: vida_de(key),
+            vida_max: vida_de(key),
+            herido_t: 0.0,
+            panico_t: 0.0,
+            enojado: false,
+            mordida_cd: 0.0,
+            domado: false,
+            sentado: false,
+            nombre_propio: None,
+            corazones_t: 0.0,
+            huevo_t: HUEVO_MIN,
+        }
+    }
+
+    /// **El botín de Minecraft**: la vaca da carne de res y cuero, el cerdo carne de
+    /// cerdo, la gallina pollo y plumas, la oveja cordero y lana. El perro nada.
+    #[test]
+    fn cada_animal_suelta_lo_suyo() {
+        let mut k = 0u32;
+        let mut r = || {
+            k = k.wrapping_add(7919);
+            (k % 1000) as f32 / 1000.0
+        };
+        let mut junta = |key: &str, r: &mut dyn FnMut() -> f32| {
+            let mut vistos = std::collections::HashSet::new();
+            for _ in 0..200 {
+                for (it, n) in botin(key, &mut *r) {
+                    assert!(n >= 1);
+                    vistos.insert(it);
+                }
+            }
+            vistos
+        };
+        let vaca = junta("npc/fauna_cow", &mut r);
+        assert!(vaca.contains("beef") && vaca.contains("leather") && vaca.contains("bone"));
+        assert!(junta("npc/fauna_pig", &mut r).contains("pork"));
+        let gallina = junta("npc/fauna_chicken", &mut r);
+        assert!(gallina.contains("chicken") && gallina.contains("feather"));
+        let oveja = junta("npc/fauna_sheep", &mut r);
+        assert!(oveja.contains("mutton") && oveja.contains("wool"));
+        assert!(junta("npc/fauna_dog", &mut r).is_empty(), "el perro no se come");
+        // Y todo lo que suelta tiene ícono declarado.
+        for key in ["npc/fauna_cow", "npc/fauna_pig", "npc/fauna_chicken", "npc/fauna_sheep", "npc/fauna_rabbit"] {
+            for it in junta(key, &mut r) {
+                assert!(ha_assets::slots::slot_label(&format!("items/{it}")).is_some(), "sin slot: {it}");
+            }
+        }
+    }
+
+    /// Una vaca muere de dos espadazos de acero o de diez puñetazos, como allá.
+    #[test]
+    fn el_dano_depende_de_lo_que_tenes_en_la_mano() {
+        assert_eq!(dano_de("hand"), 1.0);
+        assert!(dano_de("sword_steel") > dano_de("sword_iron"));
+        assert!(dano_de("sword_iron") > dano_de("axe"));
+        let vaca = vida_de("npc/fauna_cow");
+        assert!((vaca / dano_de("sword_steel")).ceil() <= 2.0);
+        assert_eq!((vaca / dano_de("hand")).ceil(), 10.0);
+    }
+
+    /// El perro enojado te persigue y muerde con pausa; el domado te sigue y,
+    /// sentado, se queda; el golpeado huye.
+    #[test]
+    fn perros_y_panico() {
+        let mut p = animal("npc/fauna_dog");
+        p.enojado = true;
+        p.x = 5.0;
+        let c = conducta_granja(&mut p, 0.0, 0.0, 0.1);
+        assert!(c.prisa > 1.0 && !c.muerde);
+        assert!((p.heading - std::f32::consts::PI).abs() < 1e-3, "corre hacia vos");
+        p.x = 1.0;
+        assert!(conducta_granja(&mut p, 0.0, 0.0, 0.1).muerde);
+        assert!(!conducta_granja(&mut p, 0.0, 0.0, 0.1).muerde, "no muerde en cada paso");
+
+        let mut d = animal("npc/fauna_dog");
+        d.domado = true;
+        d.x = 10.0;
+        assert!(conducta_granja(&mut d, 0.0, 0.0, 0.1).prisa > 1.0, "te alcanza");
+        d.x = 100.0;
+        assert!(conducta_granja(&mut d, 0.0, 0.0, 0.1).saltar_a.is_some(), "aparece a tu lado");
+        d.sentado = true;
+        assert!(conducta_granja(&mut d, 0.0, 0.0, 0.1).quieto);
+
+        let mut v = animal("npc/fauna_cow");
+        v.panico_t = 3.0;
+        v.x = 2.0;
+        conducta_granja(&mut v, 0.0, 0.0, 0.1);
+        assert!(v.heading.abs() < 1e-3, "huye para el otro lado");
+    }
+
+    /// Los rangos de cerebros no se pisan: fauna 0..48, NPCs 72..120, residentes
+    /// (granja) 200..264, compañero 990.
+    #[test]
+    fn los_cerebros_de_la_granja_no_pisan_a_nadie() {
+        let res = RES_ID_BASE..RES_ID_BASE + MAX_RESIDENTS as i32;
+        assert!(res.start >= 120 && res.end <= 990);
+        assert!(res.end <= iafz_sys::MAX_AGENTS);
+    }
+}
+
+/// Foto de un animal para los drivers de QA (`HA_GRANJATEST`).
+pub(crate) struct AnimalProbe {
+    pub(crate) entity: Entity,
+    pub(crate) x: f32,
+    pub(crate) z: f32,
+    pub(crate) edad: f32,
+    pub(crate) celo: f32,
+    pub(crate) cria_cd: f32,
+    pub(crate) residente: bool,
+    pub(crate) especie: usize,
+    pub(crate) granja: bool,
+    pub(crate) vida: f32,
+    pub(crate) enojado: bool,
+    pub(crate) domado: bool,
+    pub(crate) nombre: Option<String>,
+    pub(crate) clave: String,
+}
+
+pub(crate) fn probe_animales(world: &mut World) -> Vec<AnimalProbe> {
+    let mut q = world.query::<(Entity, &Animal, Has<Resident>, Has<DeGranja>)>();
+    q.iter(world)
+        .map(|(e, a, r, g)| AnimalProbe {
+            granja: g,
+            vida: a.vida,
+            enojado: a.enojado,
+            domado: a.domado,
+            nombre: a.nombre_propio.clone(),
+            clave: a.art_key.clone(),
+            entity: e,
+            x: a.x,
+            z: a.z,
+            edad: a.edad,
+            celo: a.celo,
+            cria_cd: a.cria_cd,
+            residente: r,
+            especie: a.species,
+        })
+        .collect()
 }

@@ -42,7 +42,7 @@ impl Plugin for WorldPersistPlugin {
         app.init_resource::<VesselRegistryRes>()
             .init_resource::<VesselPersistState>()
             .init_resource::<VesselTickTimer>()
-            .add_systems(Startup, load_vessels_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_vessels_on_startup)
             .add_systems(FixedUpdate, tick_vessel_registry)
             .add_systems(Update, (debounced_vessel_save, sync_player_vessel_from_flight));
     }

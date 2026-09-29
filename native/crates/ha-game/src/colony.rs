@@ -22,7 +22,7 @@ pub struct ColonyPlugin;
 impl Plugin for ColonyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ColonyRuntime>()
-            .add_systems(Startup, load_colony_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_colony_on_startup)
             .add_systems(FixedUpdate, tick_colony)
             .add_systems(Update, (colony_button_system, debounced_colony_save));
     }
@@ -152,6 +152,11 @@ fn colony_path() -> std::path::PathBuf {
 }
 
 fn load_colony_on_startup(mut colony: ResMut<ColonyRuntime>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *colony = ColonyRuntime::default();
     let Ok(text) = std::fs::read_to_string(colony_path()) else {
         return;
     };

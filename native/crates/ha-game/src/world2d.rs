@@ -388,6 +388,12 @@ struct RegrowCell {
 }
 
 impl TileWorld {
+    /// Cuántas celdas editó el jugador (pozos, bloques, tierra picada) en todos
+    /// los cuerpos. Una partida NUEVA tiene cero.
+    pub fn edit_count(&self) -> usize {
+        self.edits.len()
+    }
+
     pub fn tile_at(&self, body: CelestialBody, tx: i64, tz: i64) -> Tile {
         self.tile_at_level(body, self.z, tx, tz)
     }
@@ -1046,12 +1052,9 @@ impl Plugin for World2dPlugin {
             .init_resource::<FineDetailOff>()
             .add_systems(
                 Startup,
-                (
-                    load_tiles_on_startup,
-                    init_chunk_material,
-                    spawn_cursor_highlight,
-                ),
+                (init_chunk_material, spawn_cursor_highlight),
             )
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_tiles_on_startup)
             .add_systems(
                 Update,
                 (
@@ -5547,6 +5550,19 @@ fn tiles_path() -> std::path::PathBuf {
 }
 
 fn load_tiles_on_startup(mut tiles: ResMut<TileWorld>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    // Los pozos, la tierra picada y los bloques son de la partida: se vacían.
+    // `z` vuelve a la superficie (una partida nueva no arranca en un sótano).
+    tiles.edits.clear();
+    tiles.removed_floors.clear();
+    tiles.edit_log.clear();
+    tiles.regrow.clear();
+    tiles.dirty = false;
+    tiles.z = 0;
+    tiles.version = tiles.version.wrapping_add(1);
     let Ok(raw) = std::fs::read_to_string(tiles_path()) else {
         return;
     };

@@ -195,7 +195,7 @@ pub struct EdificiosPlugin;
 impl Plugin for EdificiosPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Edificios>()
-            .add_systems(Startup, cargar_al_arrancar)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), cargar_al_arrancar)
             .add_systems(Update, (dibujar_cascara, guardado_debounced));
     }
 }
@@ -460,6 +460,13 @@ fn edificios_path() -> std::path::PathBuf {
 }
 
 fn cargar_al_arrancar(mut eds: ResMut<Edificios>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    let rev = eds.rev;
+    *eds = Edificios::default();
+    eds.rev = rev.wrapping_add(1);
     let Ok(raw) = std::fs::read_to_string(edificios_path()) else {
         return;
     };

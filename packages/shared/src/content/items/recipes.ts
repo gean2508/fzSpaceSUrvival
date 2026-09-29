@@ -191,6 +191,51 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     ],
     output: { itemId: "part_nose", qty: 1 },
   },
+  // Granja (espejo de ha-shared/recipes.rs 25-27).
+  {
+    id: 25,
+    key: "bread",
+    displayName: "Pan",
+    ingredients: [{ itemId: "wheat", qty: 3 }],
+    output: { itemId: "bread", qty: 1 },
+  },
+  {
+    id: 26,
+    key: "pumpkin_seeds",
+    displayName: "Semillas de calabaza",
+    ingredients: [{ itemId: "pumpkin", qty: 1 }],
+    output: { itemId: "pumpkin_seeds", qty: 4 },
+  },
+  {
+    id: 27,
+    key: "pumpkin_pie",
+    displayName: "Tarta de calabaza",
+    ingredients: [
+      { itemId: "pumpkin", qty: 1 },
+      { itemId: "wheat", qty: 1 },
+    ],
+    output: { itemId: "pie", qty: 1 },
+  },
+  {
+    id: 28,
+    key: "name_tag",
+    displayName: "Etiqueta",
+    ingredients: [
+      { itemId: "leather", qty: 1 },
+      { itemId: "sticks", qty: 1 },
+    ],
+    output: { itemId: "name_tag", qty: 1 },
+  },
+  {
+    id: 29,
+    key: "sweet_bread",
+    displayName: "Pan dulce",
+    ingredients: [
+      { itemId: "wheat", qty: 2 },
+      { itemId: "egg", qty: 1 },
+    ],
+    output: { itemId: "pie", qty: 1 },
+  },
 ];
 
 const byId = new Map<number, CraftRecipe>(CRAFT_RECIPES.map((r) => [r.id, r]));

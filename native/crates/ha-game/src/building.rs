@@ -174,7 +174,7 @@ pub struct BuildingPlugin;
 impl Plugin for BuildingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BuiltRoofs>()
-            .add_systems(Startup, load_roofs_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_roofs_on_startup)
             .add_systems(
                 Update,
                 (
@@ -1108,6 +1108,11 @@ fn intern_room_art(name: &str) -> Option<&'static str> {
 }
 
 fn load_roofs_on_startup(mut built: ResMut<BuiltRoofs>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *built = BuiltRoofs::default();
     let Ok(raw) = std::fs::read_to_string(roofs_path()) else {
         return;
     };

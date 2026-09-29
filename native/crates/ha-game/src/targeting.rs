@@ -166,6 +166,8 @@ pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionI
                 | InteractTargetKind::Block
                 | InteractTargetKind::Entity
                 | InteractTargetKind::Prop
+                | InteractTargetKind::Crop
+                | InteractTargetKind::Animal
         ),
         RegionId::Luna | RegionId::Planet(_) | RegionId::Cave(_) => matches!(
             kind,
@@ -180,6 +182,8 @@ pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionI
                 | InteractTargetKind::GemRed
                 | InteractTargetKind::Block
                 | InteractTargetKind::Prop
+                | InteractTargetKind::Crop
+                | InteractTargetKind::Animal
         ),
         RegionId::Space => matches!(
             kind,
@@ -203,7 +207,13 @@ fn update_look_target(
     equipped: Res<EquippedItem>,
     build_mode: Res<crate::input::BuildModeActive>,
     player: Query<(&Transform, &SimState), With<Player>>,
-    targets: Query<(Entity, &GlobalTransform, &InteractTarget, Option<&Sprite>)>,
+    targets: Query<(
+        Entity,
+        &GlobalTransform,
+        &InteractTarget,
+        Option<&Sprite>,
+        Option<&crate::harvest::PropArt>,
+    )>,
     mut current: ResMut<LookTarget>,
 ) {
     if current.locked {
@@ -261,9 +271,24 @@ fn update_look_target(
     // [`PICK_FORGIVENESS`] (grado 1). Es la diferencia entre "tocaste al lado del
     // banco, no pasa nada" y "tocaste el banco": lo primero era el 90 % de los
     // intentos sobre un prop de un tile.
-    for (entity, gtf, target, sprite) in &targets {
+    // Con una semilla en la mano, las matas silvestres (pasto, brotes, flores) no
+    // son objetivo: el pasto del mundo está sembrado de ellas y bloqueaban el
+    // surco. Sembrar encima las desmaleza (`granja::sembrar_al_completar`).
+    let sembrando = crate::granja::Planta::de_semilla(&equipped.item_id).is_some();
+    for (entity, gtf, target, sprite, prop) in &targets {
+        if sembrando
+            && target.kind == InteractTargetKind::Prop
+            && prop.is_some_and(|p| crate::granja::es_planta_silvestre(&p.0))
+        {
+            continue;
+        }
         let center = gtf.translation().truncate();
-        let size = sprite.and_then(|s| s.custom_size);
+        // El tamaño que SE VE: `custom_size` por la escala del transform. Las crías
+        // de la granja se dibujan a media escala con el `custom_size` del adulto, y
+        // sin esto el dedo las medía como adultas — tocar la cría agarraba al padre
+        // que tenía al lado (lo cazó `HA_GRANJATEST`).
+        let escala = gtf.compute_transform().scale.truncate().abs();
+        let size = sprite.and_then(|s| s.custom_size).map(|s| s * escala);
         let Some(grado) = grado_de_toque(pick, center, size) else {
             continue;
         };
@@ -275,6 +300,12 @@ fn update_look_target(
         if grado > 0 && build_mode.active {
             continue;
         }
+        // **Sembrando, lo mismo con los cultivos**: la intención es la celda. Sin
+        // esto, sembrar la hilera de al lado agarraba por el margen la planta
+        // vecina y el surco nuevo no salía (lo cazó `HA_GRANJATEST`).
+        if grado > 0 && sembrando && target.kind == InteractTargetKind::Crop {
+            continue;
+        }
         // El alcance se mide al PIE del sprite, no a su centro: un árbol alto
         // tiene el centro un par de metros "arriba" en pantalla, y medir hasta
         // ahí lo dejaba fuera del brazo estando parado al lado del tronco.
@@ -282,6 +313,17 @@ fn update_look_target(
             Some(s) => Vec2::new(center.x, center.y - s.y.abs() * 0.5 + 0.3),
             None => center,
         };
+        // **Sembrando manda el suelo.** Con una semilla en la mano lo que se toca
+        // es la celda: la copa de un árbol o el techo de un puesto que caen encima
+        // del pasto no pueden robarle el toque al surco. Sólo cuenta el PIE del
+        // objeto (su último metro), que es lo que de verdad ocupa esa celda.
+        if sembrando
+            && target.kind != InteractTargetKind::Crop
+            && size.is_some_and(|s| s.y.abs() > 1.2)
+            && pick.y > center.y - size.map_or(0.0, |s| s.y.abs() * 0.5) + 1.0
+        {
+            continue;
+        }
         consider(entity, target.kind, foot, target.id, center.distance(pick), grado);
     }
 
@@ -337,6 +379,30 @@ fn update_look_target(
                 };
                 return;
             }
+        } else if crate::granja::Planta::de_semilla(&equipped.item_id).is_some()
+            && !build_mode.active
+            && tiles.z == 0
+            && crate::granja::suelo_sembrable(tiles.tile_at(body, tx, tz))
+            // Tu propia celda no: tocarte a vos mismo con una zanahoria es
+            // comerla (el mantener sin objetivo de `resolve_hold`).
+            && ((sim.body.x / TILE_M).floor() as i64, (sim.body.z / TILE_M).floor() as i64) != (tx, tz)
+        {
+            // **Semilla en la mano: el suelo apuntado es un surco posible.** Va
+            // antes que cavar porque sembrar es lo que significa tocar el pasto
+            // con una semilla — nadie cava con un puñado de trigo. Si ya hay un
+            // cultivo ahí, el cultivo es entidad y ganó arriba.
+            *current = LookTarget {
+                entity: None,
+                kind: None,
+                distance: origin.distance(aim),
+                hit_point: aim.extend(0.0),
+                block_cell: None,
+                place_cell: Some((tx as i32, tz as i32, 0)),
+                dig_down: false,
+                flora_cell: None,
+                locked: false,
+            };
+            return;
         } else if can_dig_down(&equipped.item_id)
             && !build_mode.active
             && !ha_shared::is_block_item(&equipped.item_id)

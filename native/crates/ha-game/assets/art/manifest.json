@@ -27371,6 +27371,90 @@
      "label": "Helicóptero 2"
     }
    ]
+  },
+  "cultivo/tierra_arada": {
+   "label": "Tierra arada"
+  },
+  "cultivo/tierra_regada": {
+   "label": "Tierra arada (húmeda)"
+  },
+  "cultivo/sembrado": {
+   "label": "Semillas sembradas"
+  },
+  "cultivo/trigo_3": {
+   "label": "Trigo maduro"
+  },
+  "cultivo/zanahoria_3": {
+   "label": "Zanahorias listas"
+  },
+  "cultivo/calabaza_3": {
+   "label": "Calabaza madura"
+  },
+  "items/wheat_seeds": {
+   "label": "Semillas de trigo"
+  },
+  "items/pumpkin_seeds": {
+   "label": "Semillas de calabaza"
+  },
+  "items/wheat": {
+   "label": "Trigo"
+  },
+  "items/carrot": {
+   "label": "Zanahoria"
+  },
+  "items/pumpkin": {
+   "label": "Calabaza"
+  },
+  "ui/corazon_celo": {
+   "label": "Corazón (animal en celo)"
+  },
+  "cultivo/trigo_1": {
+   "label": "Trigo (brote)"
+  },
+  "cultivo/trigo_2": {
+   "label": "Trigo (creciendo)"
+  },
+  "cultivo/zanahoria_1": {
+   "label": "Zanahoria (brote)"
+  },
+  "cultivo/zanahoria_2": {
+   "label": "Zanahoria (creciendo)"
+  },
+  "cultivo/calabaza_1": {
+   "label": "Calabaza (brote)"
+  },
+  "cultivo/calabaza_2": {
+   "label": "Calabaza (creciendo)"
+  },
+  "items/beef": {
+   "label": "Carne de res"
+  },
+  "items/pork": {
+   "label": "Carne de cerdo"
+  },
+  "items/mutton": {
+   "label": "Carne de cordero"
+  },
+  "items/chicken": {
+   "label": "Pollo crudo"
+  },
+  "items/rabbit_meat": {
+   "label": "Carne de conejo"
+  },
+  "items/feather": {
+   "label": "Pluma"
+  },
+  "items/wool": {
+   "label": "Lana"
+  },
+  "items/bone": {
+   "label": "Hueso"
+  },
+  "items/egg": {
+   "label": "Huevo"
+  },
+  "items/name_tag": {
+   "label": "Etiqueta"
   }
  },
  "origen": {
@@ -227859,340 +227943,340 @@
     24
    ],
    "png": "art/gen/fauna/chicken.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_cow": {
    "grid": [
     66,
-    60
+    59
    ],
    "png": "art/gen/fauna/cow.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_crow": {
@@ -228219,208 +228303,208 @@
     43
    ],
    "png": "art/gen/fauna/dog.png",
-   "poses": {
-    "bark_down": {
-     "anim": {
-      "fps": 6.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 38,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "bark_right": {
-     "anim": {
-      "fps": 6.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 36,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "bark_up": {
-     "anim": {
-      "fps": 6.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 40,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "bark_right": {
+     "rect": {
+      "col": 48,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 6.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "bark_down": {
+     "rect": {
+      "col": 50,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 6.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "bark_up": {
+     "rect": {
+      "col": 52,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 6.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_donkey": {
@@ -228429,169 +228513,169 @@
     62
    ],
    "png": "art/gen/fauna/donkey.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_duck": {
@@ -228600,169 +228684,169 @@
     24
    ],
    "png": "art/gen/fauna/duck.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_goat": {
@@ -228771,169 +228855,169 @@
     50
    ],
    "png": "art/gen/fauna/goat.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_pig": {
@@ -228942,169 +229026,169 @@
     44
    ],
    "png": "art/gen/fauna/pig.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_rabbit": {
@@ -229113,169 +229197,169 @@
     35
    ],
    "png": "art/gen/fauna/rabbit.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "npc/fauna_sheep": {
@@ -229284,169 +229368,169 @@
     47
    ],
    "png": "art/gen/fauna/sheep.png",
-   "poses": {
-    "eat_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 32,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 30,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "eat_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 34,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_down": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 2,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_right": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 0,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "idle_up": {
-     "anim": {
-      "fps": 3.0,
-      "frames": 2
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 4,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_down": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 22,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_right": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 18,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "run_up": {
-     "anim": {
-      "fps": 12.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 26,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_down": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 10,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_right": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 6,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    },
-    "walk_up": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 4
-     },
-     "dir": "Right",
-     "rect": {
-      "col": 14,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "idle_right": {
+     "rect": {
+      "col": 0,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_down": {
+     "rect": {
+      "col": 2,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "idle_up": {
+     "rect": {
+      "col": 4,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "walk_right": {
+     "rect": {
+      "col": 6,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_down": {
+     "rect": {
+      "col": 12,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "walk_up": {
+     "rect": {
+      "col": 18,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 10.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_right": {
+     "rect": {
+      "col": 24,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_down": {
+     "rect": {
+      "col": 30,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "run_up": {
+     "rect": {
+      "col": 36,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 15.0,
+      "frames": 6
+     },
+     "dir": "Right"
+    },
+    "eat_right": {
+     "rect": {
+      "col": 42,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_down": {
+     "rect": {
+      "col": 44,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    },
+    "eat_up": {
+     "rect": {
+      "col": 46,
+      "row": 0,
+      "w": 1,
+      "h": 1
+     },
+     "anim": {
+      "fps": 3.0,
+      "frames": 2
+     },
+     "dir": "Right"
+    }
    }
   },
   "orla/int_1": {
@@ -276316,6 +276400,370 @@
     "h": 1,
     "row": 14,
     "w": 1
+   }
+  },
+  "cultivo/tierra_arada": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 0,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "cultivo/tierra_regada": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 1,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "cultivo/sembrado": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "cultivo/trigo_3": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 3,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "cultivo/zanahoria_3": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 4,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "cultivo/calabaza_3": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 5,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/wheat_seeds": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 6,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/pumpkin_seeds": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 7,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/wheat": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 8,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/carrot": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 9,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/pumpkin": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 10,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "ui/corazon_celo": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 11,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "cultivo/trigo_1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/garden_4.png",
+   "rect": {
+    "col": 29,
+    "h": 1,
+    "row": 6,
+    "w": 1
+   }
+  },
+  "cultivo/trigo_2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/garden_4.png",
+   "rect": {
+    "col": 24,
+    "h": 1,
+    "row": 5,
+    "w": 1
+   }
+  },
+  "cultivo/zanahoria_1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/terrains_and_fences_0.png",
+   "rect": {
+    "col": 22,
+    "h": 1,
+    "row": 14,
+    "w": 1
+   }
+  },
+  "cultivo/zanahoria_2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/terrains_and_fences_0.png",
+   "rect": {
+    "col": 24,
+    "h": 1,
+    "row": 14,
+    "w": 1
+   }
+  },
+  "cultivo/calabaza_1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/garden_4.png",
+   "rect": {
+    "col": 26,
+    "h": 1,
+    "row": 6,
+    "w": 1
+   }
+  },
+  "cultivo/calabaza_2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/garden_4.png",
+   "rect": {
+    "col": 30,
+    "h": 1,
+    "row": 6,
+    "w": 1
+   }
+  },
+  "items/beef": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/granja_items.png",
+   "rect": {
+    "col": 0,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/pork": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/granja_items.png",
+   "rect": {
+    "col": 1,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mutton": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/granja_items.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/chicken": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 12,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/rabbit_meat": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 13,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/feather": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 14,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/wool": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 15,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/bone": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 16,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/egg": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 17,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/name_tag": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/granja.png",
+   "rect": {
+    "col": 18,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   }
  }

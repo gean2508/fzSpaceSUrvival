@@ -161,7 +161,7 @@ pub struct StructuresPlugin;
 impl Plugin for StructuresPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BuiltStructures>()
-            .add_systems(Startup, load_structures_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_structures_on_startup)
             .add_systems(
                 Update,
                 (stream_structures, debounced_structures_save, pick_up_structure),
@@ -357,6 +357,11 @@ fn structures_path() -> std::path::PathBuf {
 }
 
 fn load_structures_on_startup(mut built: ResMut<BuiltStructures>, art: Res<ArtLibrary>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *built = BuiltStructures::default();
     let Ok(raw) = std::fs::read_to_string(structures_path()) else {
         return;
     };

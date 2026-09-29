@@ -68,6 +68,13 @@ export const FOOD_RESTORE: Record<string, FoodRestore> = {
   pie: { hunger: 60, thirst: 5 },
   meat: { hunger: 55, thirst: 0 },
   soup: { hunger: 40, thirst: 35 },
+  carrot: { hunger: 20, thirst: 6 },
+  beef: { hunger: 30, thirst: 0 },
+  pork: { hunger: 30, thirst: 0 },
+  mutton: { hunger: 25, thirst: 0 },
+  chicken: { hunger: 20, thirst: 0 },
+  rabbit_meat: { hunger: 18, thirst: 0 },
+  egg: { hunger: 12, thirst: 4 },
 };
 
 export function foodRestore(itemId: string): FoodRestore | undefined {

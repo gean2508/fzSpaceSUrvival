@@ -28,6 +28,10 @@ mod world_edits;
 mod companion;
 mod dialog;
 mod fauna;
+mod granja;
+mod textos_mundo;
+mod tirados;
+mod bautizo;
 mod ambient;
 mod consola;
 mod marca;
@@ -321,6 +325,9 @@ fn run_app_inner() {
         .add_plugins(torches::TorchesPlugin)
         .add_plugins(map_item::MapItemPlugin)
         .add_plugins(weather::WeatherPlugin)
+        .add_plugins(granja::GranjaPlugin)
+        .add_plugins(textos_mundo::TextosMundoPlugin)
+        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)

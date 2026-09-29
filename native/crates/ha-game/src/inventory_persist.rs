@@ -15,7 +15,7 @@ impl Plugin for InventoryPersistPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerInventory>()
             .init_resource::<InventoryPersistState>()
-            .add_systems(Startup, load_inventory_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_inventory_on_startup)
             .add_systems(Update, debounced_inventory_save);
     }
 }
@@ -72,7 +72,12 @@ impl InventoryPersistState {
 fn load_inventory_on_startup(
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
+    mut ui: ResMut<crate::hud::inventory_ui::InventoryUiState>,
 ) {
+    // Corre al ENTRAR a la partida (no en `Startup`, que es antes de elegirla):
+    // si no, una partida nueva heredaba la mochila de la carpeta base. La grilla
+    // de la mochila se rearma desde este inventario.
+    ui.loaded_from_disk = false;
     match load_inventory_from_disk() {
         Some(loaded) => inv.0 = loaded,
         None => inv.0 = PlayerInventoryInner::starter(),

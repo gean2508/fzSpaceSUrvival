@@ -71,6 +71,15 @@ pub fn food_restore(item_id: &str) -> Option<(f32, f32)> {
         "pie" => (60.0, 5.0),
         "meat" => (55.0, 0.0),
         "soup" => (40.0, 35.0),
+        "carrot" => (20.0, 6.0),
+        // Carne cruda de la granja (Minecraft: la cruda llena poco; la res y el
+        // cerdo más que el pollo). El huevo, un bocado.
+        "beef" => (30.0, 0.0),
+        "pork" => (30.0, 0.0),
+        "mutton" => (25.0, 0.0),
+        "chicken" => (20.0, 0.0),
+        "rabbit_meat" => (18.0, 0.0),
+        "egg" => (12.0, 4.0),
         _ => return None,
     })
 }

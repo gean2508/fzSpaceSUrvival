@@ -1548,6 +1548,7 @@ fn update_survival_hud(
     editor: Res<crate::ui_editor::UiEditorState>,
     names: Query<&crate::structures::StructureName>,
     props: Query<&crate::harvest::PropArt>,
+    ayuda_animal: Res<crate::fauna::AyudaAnimal>,
     mut cache: ResMut<HudDisplayCache>,
     mut prompts: Query<(&mut Text, &mut TextColor), With<InteractPromptText>>,
     mut prompt_roots: Query<(&mut Node, &mut BackgroundColor, &mut BorderColor), With<StatusPromptRoot>>,
@@ -1573,6 +1574,7 @@ fn update_survival_hud(
         &flight,
         editor.creative,
         target_name,
+        ayuda_animal.0.as_deref(),
     );
     let visible = prompt.is_some();
     let prompt_line = prompt.unwrap_or_default();
@@ -1871,6 +1873,8 @@ fn build_interact_prompt(
     creative: bool,
     // Nombre del objeto colocado bajo el dedo, si lo hay.
     target_name: Option<&str>,
+    // Qué se puede hacer con el animal apuntado (`fauna::rotular_animal_apuntado`).
+    ayuda_animal: Option<&str>,
 ) -> Option<String> {
     if flight.active {
         let alt = flight.altitude_m();
@@ -1920,6 +1924,29 @@ fn build_interact_prompt(
             "Manten para comer {}",
             ha_shared::item_display_name(&equipped.item_id)
         ));
+    }
+
+    // — Granja —
+    if hold.active && hold.placing_crop {
+        return Some("Sembrando…".to_string());
+    }
+    if target.kind.is_none() && target.place_cell.is_some() {
+        if let Some(p) = crate::granja::Planta::de_semilla(&equipped.item_id) {
+            return Some(format!("Mantené para sembrar {}", p.nombre()));
+        }
+    }
+    if target.kind == Some(InteractTargetKind::Crop) {
+        let nombre = target_name.unwrap_or("el cultivo");
+        return Some(if nombre.contains("listo") {
+            format!("Mantené para cosechar — {nombre}")
+        } else {
+            format!("{nombre} — mantené para arrancarlo")
+        });
+    }
+    if target.kind == Some(InteractTargetKind::Animal) {
+        if let Some(a) = ayuda_animal {
+            return Some(a.to_string());
+        }
     }
 
     if let Some(kind) = target.kind {
@@ -4433,6 +4460,9 @@ fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
             // que es quien sabe qué material devolver (sale del catálogo del
             // propio objeto, no de la tabla estática de reglas).
             | InteractTargetKind::Prop
+            // Granja: los resuelven `granja.rs` (cultivo) y `fauna.rs` (animal).
+            | InteractTargetKind::Crop
+            | InteractTargetKind::Animal
             | InteractTargetKind::LaunchModule
             | InteractTargetKind::LaunchIgnition
             | InteractTargetKind::SpaceReentry
@@ -4447,6 +4477,7 @@ fn sync_ui_gameplay_block(
     chest: Res<crate::chests::ChestPanelState>,
     editor: Res<crate::ui_editor::UiEditorState>,
     phase: Res<State<crate::game_phase::GamePhase>>,
+    bautizo: Res<crate::bautizo::Bautizo>,
     mut block: ResMut<UiGameplayBlock>,
 ) {
     // Only REAL UI blocks gameplay input. Flight must NOT block (B8): Ki thrust
@@ -4456,7 +4487,12 @@ fn sync_ui_gameplay_block(
     // cortina, así que sin esto una tecla apoyada lo hacía caminar a ciegas
     // mientras se armaba el mundo, y aparecías en otro lado del que te dejaron.
     let loading = *phase.get() == crate::game_phase::GamePhase::Loading;
-    block.blocked = loading || bag.open || chest.is_open() || editor.menu_open || editor.enabled;
+    block.blocked = loading
+        || bag.open
+        || chest.is_open()
+        || editor.menu_open
+        || editor.enabled
+        || bautizo.abierto();
 }
 
 /// Public so the touch-stick systems can order themselves AFTER it - otherwise

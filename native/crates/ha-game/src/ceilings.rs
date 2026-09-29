@@ -141,7 +141,7 @@ pub struct CeilingsPlugin;
 impl Plugin for CeilingsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BuiltCeilings>()
-            .add_systems(Startup, load_ceilings_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_ceilings_on_startup)
             .add_systems(
                 Update,
                 (stream_ceilings, fade_ceilings, debounced_ceilings_save),
@@ -377,6 +377,13 @@ fn ceilings_path() -> std::path::PathBuf {
 }
 
 fn load_ceilings_on_startup(mut built: ResMut<BuiltCeilings>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    let rev = built.rev;
+    *built = BuiltCeilings::default();
+    built.rev = rev.wrapping_add(1);
     let Ok(raw) = std::fs::read_to_string(ceilings_path()) else {
         return;
     };

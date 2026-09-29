@@ -548,6 +548,12 @@ fn tick_splash(
     // la pantalla de carga, igual que un jugador: así los drivers de QA miden un
     // mundo YA armado y no el suelo apareciendo a pedazos).
     if crate::flags::var("HA_AUTOPLAY").is_ok() {
+        // `HA_PARTIDA_NUEVA=1`: el driver juega una partida recién creada, como
+        // quien toca NUEVA PARTIDA. Es la prueba de que una partida nueva viene
+        // limpia (nada de las paredes ni los pozos de corridas anteriores).
+        if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() && crate::partida::activa().is_none() {
+            crate::partida::crear("QA", None, false);
+        }
         next.set(GamePhase::Loading);
         return;
     }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-02T05:02:42.557Z",
+  "generatedAt": "2026-09-29T05:33:08.495Z",
   "modules": [
     {
       "id": "assets",
@@ -939,6 +939,22 @@
           }
         },
         {
+          "id": "beef",
+          "fields": {
+            "assetKind": "item_food_meat",
+            "category": "consumable",
+            "maxStack": 64
+          }
+        },
+        {
+          "id": "bone",
+          "fields": {
+            "assetKind": "item_mat_sticks",
+            "category": "material",
+            "maxStack": 64
+          }
+        },
+        {
           "id": "bow",
           "fields": {
             "assetKind": "equip_bow",
@@ -955,6 +971,22 @@
           }
         },
         {
+          "id": "carrot",
+          "fields": {
+            "assetKind": "item_food_orange",
+            "category": "consumable",
+            "maxStack": 64
+          }
+        },
+        {
+          "id": "chicken",
+          "fields": {
+            "assetKind": "item_food_meat",
+            "category": "consumable",
+            "maxStack": 64
+          }
+        },
+        {
           "id": "coin",
           "fields": {
             "assetKind": "item_coin",
@@ -968,6 +1000,22 @@
             "assetKind": "terrain_dirt",
             "category": "material",
             "maxStack": 99
+          }
+        },
+        {
+          "id": "egg",
+          "fields": {
+            "assetKind": "item_food_apple",
+            "category": "consumable",
+            "maxStack": 16
+          }
+        },
+        {
+          "id": "feather",
+          "fields": {
+            "assetKind": "item_mat_sticks",
+            "category": "material",
+            "maxStack": 64
           }
         },
         {
@@ -1067,6 +1115,22 @@
           }
         },
         {
+          "id": "mutton",
+          "fields": {
+            "assetKind": "item_food_meat",
+            "category": "consumable",
+            "maxStack": 64
+          }
+        },
+        {
+          "id": "name_tag",
+          "fields": {
+            "assetKind": "item_mat_leather",
+            "category": "tool",
+            "maxStack": 16
+          }
+        },
+        {
           "id": "orange",
           "fields": {
             "assetKind": "item_food_orange",
@@ -1131,6 +1195,14 @@
           }
         },
         {
+          "id": "pork",
+          "fields": {
+            "assetKind": "item_food_meat",
+            "category": "consumable",
+            "maxStack": 64
+          }
+        },
+        {
           "id": "potion_blue",
           "fields": {
             "assetKind": "item_potion_blue",
@@ -1160,6 +1232,30 @@
             "assetKind": "item_mat_ingot_iron",
             "category": "equipment",
             "maxStack": 4
+          }
+        },
+        {
+          "id": "pumpkin",
+          "fields": {
+            "assetKind": "item_food_orange",
+            "category": "material",
+            "maxStack": 64
+          }
+        },
+        {
+          "id": "pumpkin_seeds",
+          "fields": {
+            "assetKind": "item_mat_sticks",
+            "category": "material",
+            "maxStack": 64
+          }
+        },
+        {
+          "id": "rabbit_meat",
+          "fields": {
+            "assetKind": "item_food_meat",
+            "category": "consumable",
+            "maxStack": 64
           }
         },
         {
@@ -1243,6 +1339,22 @@
           }
         },
         {
+          "id": "wheat",
+          "fields": {
+            "assetKind": "item_mat_sticks",
+            "category": "material",
+            "maxStack": 64
+          }
+        },
+        {
+          "id": "wheat_seeds",
+          "fields": {
+            "assetKind": "item_mat_sticks",
+            "category": "material",
+            "maxStack": 64
+          }
+        },
+        {
           "id": "wood",
           "fields": {
             "assetKind": "item_mat_log",
@@ -1264,6 +1376,14 @@
             "assetKind": "equip_pickaxe",
             "category": "tool",
             "maxStack": 1
+          }
+        },
+        {
+          "id": "wool",
+          "fields": {
+            "assetKind": "item_mat_leather",
+            "category": "material",
+            "maxStack": 64
           }
         }
       ]

@@ -505,6 +505,15 @@ pub(crate) fn resolve_hold(
             ..default()
         });
     }
+    // 2b. Semilla en la mano + celda sembrable → sembrar ahí (`granja.rs`).
+    if crate::granja::Planta::de_semilla(&equipped.item_id).is_some() && target.place_cell.is_some() {
+        return Some(HoldInteractState {
+            active: true,
+            duration_ms: 250,
+            placing_crop: true,
+            ..default()
+        });
+    }
     // 3. Algo tocado con regla propia → talar / picar / recoger / instalar.
     //    Arranca EN EL ACTO: el dedo ya está sobre el objeto, no hace falta
     //    ningún retardo para adivinar la intención.

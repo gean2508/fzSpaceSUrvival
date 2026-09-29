@@ -183,7 +183,7 @@ impl Plugin for EscalerasPlugin {
         app.init_resource::<Escaleras>()
             .init_resource::<Subida>()
             .init_resource::<Trepada>()
-            .add_systems(Startup, cargar)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), cargar)
             .add_systems(
                 Update,
                 (caminar_tramo, guardar).run_if(crate::game_phase::world_active),
@@ -450,6 +450,12 @@ fn escaleras_path() -> std::path::PathBuf {
 }
 
 fn cargar(mut escaleras: ResMut<Escaleras>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *escaleras = Escaleras::default();
+    escaleras.reindexar();
     let Ok(raw) = std::fs::read_to_string(escaleras_path()) else {
         return;
     };

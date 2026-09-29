@@ -33,7 +33,7 @@ impl Plugin for MachinesPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MachineWorld>()
             .init_resource::<PendingMachinePlacement>()
-            .add_systems(Startup, load_machines_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_machines_on_startup)
             .add_systems(FixedUpdate, tick_machines)
             .add_systems(
                 Update,
@@ -387,6 +387,11 @@ fn machines_path() -> std::path::PathBuf {
 }
 
 fn load_machines_on_startup(mut world: ResMut<MachineWorld>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *world = MachineWorld::default();
     let Ok(text) = std::fs::read_to_string(machines_path()) else {
         return;
     };

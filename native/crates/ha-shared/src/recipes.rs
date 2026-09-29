@@ -189,6 +189,46 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "map_large",
         output_qty: 1,
     },
+    // **Granja** (Minecraft): tres de trigo hacen un pan; una calabaza se parte
+    // en cuatro semillas; calabaza + trigo es la tarta.
+    CraftRecipe {
+        id: 25,
+        display_name: "Pan",
+        ingredients: &[("wheat", 3)],
+        output_id: "bread",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 26,
+        display_name: "Semillas de calabaza",
+        ingredients: &[("pumpkin", 1)],
+        output_id: "pumpkin_seeds",
+        output_qty: 4,
+    },
+    CraftRecipe {
+        id: 27,
+        display_name: "Tarta de calabaza",
+        ingredients: &[("pumpkin", 1), ("wheat", 1)],
+        output_id: "pie",
+        output_qty: 1,
+    },
+    // **Etiqueta** para ponerle nombre a un animal (en Minecraft no se craftea;
+    // acá sí, pedido del usuario: es la forma de "hacerlo tuyo").
+    CraftRecipe {
+        id: 28,
+        display_name: "Etiqueta",
+        ingredients: &[("leather", 1), ("sticks", 1)],
+        output_id: "name_tag",
+        output_qty: 1,
+    },
+    // La torta de la granja: trigo, huevo y la leche que no hay → pan dulce.
+    CraftRecipe {
+        id: 29,
+        display_name: "Pan dulce",
+        ingredients: &[("wheat", 2), ("egg", 1)],
+        output_id: "pie",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {

@@ -33,6 +33,10 @@ const EVAL_SECS: f32 = 6.0; // ventana de evaluación champion/trial
 const FOLLOW_MIN: f32 = 2.0; // no se te encima
 const LEASH: f32 = 55.0; // si te alejás más (volaste/teleport), reaparece a tu lado
 const BASE_MUT: f32 = 0.05;
+/// Hoja del Character Generator que viste al compañero (ver `society::spawn_npc`).
+const COMPANION_SKIN: &str = "npc/char_7";
+/// Medida humana: la misma que el jugador y los aldeanos (el cuadro es 1:2).
+const COMPANION_SIZE: Vec2 = Vec2::new(0.95, 1.9);
 
 fn companion_adn() -> PathBuf {
     crate::inventory_persist::persist_dir().join("vivarium").join("companion.adn")
@@ -116,8 +120,12 @@ fn spawn_companion(
     iafz_sys::reset_echo(TRIAL_ID);
 
     let (cx, cz) = (px + 1.5, pz + 1.5);
-    // Skin LimeZu del compañero (slot npc/companion); fallback a quad azul.
-    let sprite = art.sprite_or_color("npc/companion", Color::srgb(0.35, 0.7, 1.0), Vec2::splat(1.7));
+    // **Cuerpo entero, como un aldeano.** El slot `npc/companion` apuntaba a un PNG
+    // de 39×39 que es SÓLO UNA CABEZA (resto del arte 3D horneado, `e4d9595`), y
+    // estirado a 1,7 m cuadrado el compañero era una cabeza flotante (lo reportó
+    // el usuario el 28 sep 2026). Se viste con una hoja del Character Generator,
+    // la misma familia y la misma medida humana que los aldeanos y el jugador.
+    let sprite = art.sprite_or_color(COMPANION_SKIN, Color::srgb(0.35, 0.7, 1.0), COMPANION_SIZE);
     let mut ent = commands.spawn((
         sprite,
         Transform::from_xyz(cx, -cz, sort_z(cz)),
@@ -139,7 +147,7 @@ fn spawn_companion(
         },
         Name::new("Companion"),
     ));
-    crate::light2d::attach(&mut ent, &art, &["npc/companion"], Vec2::splat(1.7));
+    crate::light2d::attach(&mut ent, &art, &[COMPANION_SKIN], COMPANION_SIZE);
     eprintln!(
         "ha-companion: spawn (genoma {})",
         if loaded { "persistido" } else { "base FAUNA.adn" }

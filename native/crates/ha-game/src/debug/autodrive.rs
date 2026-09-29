@@ -254,6 +254,13 @@ impl Plugin for AutoDrivePlugin {
         // teletransporta a nadie) y que el afuera se apaga en GRADIENTE, no de
         // golpe. HA_CUEVATEST=1.
         // **¿Se deja tocar todo?** HA_PROPTEST=1 — ver `prop_test_drive`.
+        // **La granja entera, de punta a punta.** HA_GRANJATEST=1 — ver
+        // `granja_test_drive`.
+        if crate::flags::var("HA_GRANJATEST").is_ok() {
+            app.init_resource::<GranjaTestState>();
+            app.add_systems(Update, granja_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         if crate::flags::var("HA_PROPTEST").is_ok() {
             app.init_resource::<PropTestState>();
             app.add_systems(Update, prop_test_drive.before(aplicar_actuacion_del_driver));
@@ -5583,5 +5590,650 @@ fn vista_drive(world: &mut World) {
     if now - entered > at && mundo_listo(world) {
         shot(world, &format!("{}/{name}.png", flytest_dir()));
         world.resource_mut::<FlyTestState>().shots += 1;
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_GRANJATEST — sembrar, crecer con el reloj, cosechar, criar
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct GranjaTestState {
+    step: u32,
+    next_t: f32,
+    fallo: bool,
+    /// Las celdas donde se siembra (trigo, zanahoria, calabaza).
+    celdas: Vec<(i64, i64)>,
+    /// Entidad a la que se le apuntó el dedo el frame anterior + qué hacer si el
+    /// objetivo la resolvió.
+    apuntando: Option<(Entity, ha_shared::InteractTargetKind)>,
+    /// Pasos de adelantar el reloj que van.
+    reloj: u32,
+    vacas: Vec<Entity>,
+    espera: u32,
+    /// Etapas del trigo ya fotografiadas (bit por etapa).
+    fotos: u8,
+    /// Se arrimó al animal este frame; el dedo va el frame siguiente (con el
+    /// jugador ya movido, si no el alcance se mide desde donde estaba).
+    arrimado: Option<(Entity, f32)>,
+}
+
+fn gt_falla(world: &mut World, invariante: &str, detalle: &str) {
+    report_bug("granja", invariante, detalle);
+    world.resource_mut::<GranjaTestState>().fallo = true;
+}
+
+/// Da ítems como los da el juego: a la grilla de la mochila y de ahí al inventario.
+fn gt_dar(world: &mut World, item: &str, n: u32) {
+    world.resource_scope(|world, mut ui: Mut<crate::hud::inventory_ui::InventoryUiState>| {
+        if n > 0 {
+            crate::hud::inventory_ui::add_item_to_slots(&mut ui, item, n);
+        }
+        let mut inv = world.resource_mut::<PlayerInventory>();
+        crate::hud::inventory_ui::flush_slots_to_inventory(&ui, &mut inv);
+    });
+}
+
+/// El dedo sobre un punto de suelo `(x, z)`.
+fn gt_dedo(world: &mut World, x: f32, z: f32) {
+    let mut c = world.resource_mut::<crate::input::AimCursor>();
+    c.world = Vec2::new(x, z);
+    c.initialized = true;
+    c.active = true;
+    c.locked = true;
+}
+
+/// Soltar el mantenido "completo": lo mismo que deja `tick_hold_interact` al
+/// llenarse la barra.
+fn gt_completar(world: &mut World, sembrar: bool) {
+    let mut h = world.resource_mut::<HoldInteractState>();
+    *h = HoldInteractState::default();
+    h.completed = true;
+    h.placing_crop = sembrar;
+}
+
+/// **El driver de la granja.** Corre el ciclo completo que pidió el usuario por
+/// los sistemas de verdad —targeting, gesto, huerta, fauna—, no por atajos:
+///
+/// 1. Siembra trigo, zanahoria y calabaza apuntando el dedo al pasto.
+/// 2. Adelanta el RELOJ del juego (no el cultivo) y comprueba que cada planta
+///    pasa por las cuatro etapas y queda lista en menos de dos días.
+/// 3. Cosecha y comprueba el botín (trigo + semillas).
+/// 4. Planta dos vacas, les da trigo, espera que se busquen y nazca la cría;
+///    después alimenta a la cría y comprueba que crece.
+///
+/// Deja capturas de cada etapa en `HA_SHOTDIR` (`granja-*.png`).
+fn granja_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+    // ── Arrimado al animal el frame anterior: ahora sí, el dedo sobre él.
+    if let Some((e, dz)) = world.resource::<GranjaTestState>().arrimado {
+        world.resource_mut::<GranjaTestState>().arrimado = None;
+        if let Some(a) = crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == e) {
+            gt_dedo(world, a.x, a.z - dz);
+            world.resource_mut::<GranjaTestState>().apuntando =
+                Some((e, ha_shared::InteractTargetKind::Animal));
+        }
+        return;
+    }
+    // ── Un dedo apuntado el frame anterior: si el targeting lo resolvió, se
+    // completa el mantenido sobre ESE objetivo.
+    if let Some((esperada, kind)) = world.resource::<GranjaTestState>().apuntando {
+        let t = *world.resource::<crate::targeting::LookTarget>();
+        world.resource_mut::<GranjaTestState>().apuntando = None;
+        if t.entity == Some(esperada) && t.kind == Some(kind) {
+            gt_completar(world, false);
+        } else {
+            gt_falla(
+                world,
+                "el_dedo_resuelve_granja",
+                &format!("apunté a {kind:?} y el objetivo fue {:?}/{:?}", t.kind, t.entity),
+            );
+        }
+        return;
+    }
+    if now < world.resource::<GranjaTestState>().next_t {
+        return;
+    }
+    let step = world.resource::<GranjaTestState>().step;
+    {
+        let mut st = world.resource_mut::<GranjaTestState>();
+        st.step += 1;
+        st.next_t = now + 0.5;
+    }
+    let body = ha_shared::CelestialBody::Earth;
+    match step {
+        // Esperar el mundo, con tope: una semilla nueva puede dejar la cola de
+        // chunks goteando un rato largo y el driver no puede quedarse ahí.
+        0..=2 => {
+            if !mundo_listo(world) && now < 90.0 {
+                world.resource_mut::<GranjaTestState>().step = step;
+            }
+        }
+        // **Un claro de verdad.** La partida de trabajo tiene paredes de corridas
+        // viejas alrededor del punto de aparición (el tester construye), y un
+        // corral accidental no deja que las vacas se junten. Se busca un 11×11 de
+        // pasto sin paredes ni agua y se va ahí.
+        3 => {
+            // **Partida nueva = mundo limpio** (pedido del usuario, 28 sep 2026).
+            if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() {
+                let paredes = world.resource::<crate::walls::BuiltWalls>().list.len();
+                let obras = world.resource::<crate::structures::BuiltStructures>().list.len();
+                let pozos = world.resource::<TileWorld>().edit_count();
+                let cultivos = world.resource::<crate::granja::Huerta>().cultivos.len();
+                eprintln!(
+                    "ha-granja: partida nueva — {paredes} paredes, {obras} objetos, {pozos} celdas editadas, {cultivos} cultivos"
+                );
+                if paredes + obras + pozos + cultivos > 0 {
+                    gt_falla(
+                        world,
+                        "partida_nueva_viene_limpia",
+                        &format!("{paredes} paredes, {obras} objetos, {pozos} celdas, {cultivos} cultivos"),
+                    );
+                }
+            }
+            let (px, pz) = player_cell(world);
+            // Troncos, rocas y objetos: un claro no tiene copas encima.
+            let obstaculos: Vec<Vec2> = {
+                let mut q = world.query::<(&GlobalTransform, &crate::targeting::InteractTarget)>();
+                q.iter(world)
+                    .filter(|(_, t)| {
+                        !matches!(
+                            t.kind,
+                            ha_shared::InteractTargetKind::Prop
+                                | ha_shared::InteractTargetKind::Animal
+                                | ha_shared::InteractTargetKind::Crop
+                        )
+                    })
+                    .map(|(g, _)| Vec2::new(g.translation().x, -g.translation().y))
+                    .collect()
+            };
+            let claro = {
+                let tiles = world.resource::<TileWorld>();
+                let walls = world.resource::<crate::walls::BuiltWalls>();
+                let libre = |cx: i64, cz: i64| {
+                    (-5..=5).all(|dz| {
+                        (-5..=5).all(|dx| {
+                            let (x, z) = (cx + dx, cz + dz);
+                            crate::granja::suelo_sembrable(tiles.tile_at(body, x, z))
+                                && !tiles.solid_at(body, x, z)
+                                && !walls.blocks(body, 0, x, z, ha_shared::build_grid::WallAxis::H)
+                                && !walls.blocks(body, 0, x, z, ha_shared::build_grid::WallAxis::V)
+                        })
+                    })
+                };
+                let sin_copas = |cx: i64, cz: i64| {
+                    let c = Vec2::new(cx as f32 + 0.5, cz as f32 + 0.5);
+                    obstaculos.iter().all(|o| o.distance(c) > 8.0)
+                };
+                let mut hallado = None;
+                'r: for r in 8..60i64 {
+                    for k in -r..=r {
+                        for (cx, cz) in [(px + k, pz - r), (px + k, pz + r), (px - r, pz + k), (px + r, pz + k)] {
+                            if sin_copas(cx, cz) && libre(cx, cz) {
+                                hallado = Some((cx, cz));
+                                break 'r;
+                            }
+                        }
+                    }
+                }
+                hallado
+            };
+            match claro {
+                Some((cx, cz)) => {
+                    eprintln!("ha-granja: claro en ({cx},{cz})");
+                    teleport_a_celda(world, cx as f32 + 0.5, cz as f32 + 0.5);
+                }
+                None => eprintln!("ha-granja: sin claro cerca; se prueba donde está"),
+            }
+            world.resource_mut::<crate::camera::CameraZoom>().pedir_encuadre(12.0);
+        }
+        4 | 5 => {
+            if !mundo_listo(world) && now < 150.0 {
+                world.resource_mut::<GranjaTestState>().step = step;
+            }
+        }
+        // Celdas sembrables alrededor del jugador (a 2 tiles: al alcance y sin
+        // pisarlo). Mediodía para que las fotos se vean.
+        6 => {
+            world.resource_mut::<crate::sky2d::DayClock>().t = crate::sky2d::DAY_SECS * 0.45;
+            let (px, pz) = player_cell(world);
+            let tiles = world.resource::<TileWorld>();
+            let mut celdas = Vec::new();
+            for (dx, dz) in [(2, 0), (2, 1), (2, -1), (-2, 0), (-2, 1), (-2, -1), (0, 2), (1, 2), (-1, 2)] {
+                let (x, z) = (px + dx, pz + dz);
+                if crate::granja::suelo_sembrable(tiles.tile_at(body, x, z)) && !tiles.solid_at(body, x, z) {
+                    celdas.push((x, z));
+                }
+            }
+            celdas.truncate(3);
+            eprintln!("ha-granja: celdas sembrables {celdas:?} junto a ({px},{pz})");
+            if celdas.len() < 3 {
+                gt_falla(world, "hay_pasto_para_sembrar", &format!("sólo {} celdas", celdas.len()));
+            }
+            world.resource_mut::<GranjaTestState>().celdas = celdas;
+            for (it, n) in [("wheat_seeds", 4), ("carrot", 4), ("pumpkin_seeds", 4), ("wheat", 12)] {
+                gt_dar(world, it, n);
+            }
+        }
+        // Sembrar: la semilla en la mano, el dedo en la celda, el targeting tiene
+        // que ofrecer la celda como surco (`place_cell`) y el mantenido la siembra.
+        7 | 9 | 11 => {
+            let i = ((step - 7) / 2) as usize;
+            let Some(&(x, z)) = world.resource::<GranjaTestState>().celdas.get(i) else { return };
+            let semilla = crate::granja::Planta::TODAS[i].semilla();
+            equip(world, semilla);
+            gt_dedo(world, x as f32 + 0.5, z as f32 + 0.5);
+        }
+        8 | 10 | 12 => {
+            let i = ((step - 8) / 2) as usize;
+            let Some(&(x, z)) = world.resource::<GranjaTestState>().celdas.get(i) else { return };
+            let t = *world.resource::<crate::targeting::LookTarget>();
+            if t.place_cell != Some((x as i32, z as i32, 0)) {
+                let arte = t
+                    .entity
+                    .and_then(|e| world.get::<crate::harvest::PropArt>(e).map(|p| p.0.to_string()));
+                gt_falla(
+                    world,
+                    "la_semilla_apunta_un_surco",
+                    &format!("celda ({x},{z}): el objetivo fue {:?} / {:?} {arte:?}", t.place_cell, t.kind),
+                );
+            }
+            gt_completar(world, true);
+        }
+        13 => {
+            let n = world.resource::<crate::granja::Huerta>().cultivos.len();
+            eprintln!("ha-granja: {n} cultivos sembrados");
+            if n < 3 {
+                gt_falla(world, "se_siembran_las_tres", &format!("hay {n} cultivos"));
+            }
+            world.resource_mut::<crate::input::AimCursor>().locked = false;
+            world.resource_mut::<crate::input::AimCursor>().active = false;
+            foto(world, "granja-1-sembrado.png");
+        }
+        // Adelantar el reloj de a 2 minutos de juego por paso — el cultivo lo
+        // lee `crecer_con_el_reloj` como cualquier otro tiempo que pasa. Fotos
+        // en cada etapa nueva del trigo.
+        14 => {
+            let (listo, etapa) = {
+                let h = world.resource::<crate::granja::Huerta>();
+                (
+                    h.cultivos.iter().all(|c| c.crecimiento >= 1.0),
+                    h.cultivos.first().map(|c| crate::granja::etapa(c.crecimiento)).unwrap_or(3),
+                )
+            };
+            let reloj = world.resource::<GranjaTestState>().reloj;
+            if !listo {
+                world.resource_mut::<crate::sky2d::DayClock>().t += 120.0;
+                {
+                    let mut st = world.resource_mut::<GranjaTestState>();
+                    st.reloj += 1;
+                    st.step = 14;
+                    st.next_t = now + 0.05;
+                }
+                if reloj as f32 * 120.0 > crate::sky2d::DAY_SECS * 2.0 {
+                    gt_falla(world, "madura_en_dos_dias", "pasaron dos días de juego y no maduró");
+                    world.resource_mut::<GranjaTestState>().step = 15;
+                }
+                // Una foto por etapa (la 1 y la 2; la 0 y la 3 tienen la suya).
+                let foto_en = [(1u8, "granja-2-brote.png"), (2, "granja-3-creciendo.png")];
+                if let Some((_, nombre)) = foto_en.iter().find(|(e, _)| *e == etapa) {
+                    let bit = 1u8 << etapa;
+                    if world.resource::<GranjaTestState>().fotos & bit == 0 {
+                        world.resource_mut::<GranjaTestState>().fotos |= bit;
+                        // Que la foto sea de día aunque el reloj haya corrido.
+                        let t = world.resource::<crate::sky2d::DayClock>().t;
+                        let dia = (t / crate::sky2d::DAY_SECS).floor();
+                        world.resource_mut::<crate::sky2d::DayClock>().t = (dia + 0.45) * crate::sky2d::DAY_SECS;
+                        foto(world, nombre);
+                        world.resource_mut::<GranjaTestState>().next_t = now + 0.5;
+                    }
+                }
+            } else {
+                eprintln!(
+                    "ha-granja: maduró en {:.0} min de juego ({:.2} días)",
+                    reloj as f32 * 2.0,
+                    reloj as f32 * 120.0 / crate::sky2d::DAY_SECS
+                );
+            }
+        }
+        15 => {
+            let t = world.resource::<crate::sky2d::DayClock>().t;
+            let dia = (t / crate::sky2d::DAY_SECS).floor();
+            world.resource_mut::<crate::sky2d::DayClock>().t = (dia + 1.45) * crate::sky2d::DAY_SECS;
+        }
+        16 => foto(world, "granja-4-listo.png"),
+        // Cosechar el trigo: dedo sobre la planta → objetivo `Crop` → mantenido.
+        17 => {
+            equip(world, "hand");
+            let Some(&(x, z)) = world.resource::<GranjaTestState>().celdas.first() else { return };
+            let ent = {
+                let mut q = world.query::<(Entity, &crate::granja::CultivoEnt)>();
+                q.iter(world).find(|(_, c)| c.x == x && c.z == z).map(|(e, _)| e)
+            };
+            let Some(e) = ent else {
+                gt_falla(world, "el_cultivo_se_ve", "no hay entidad del trigo");
+                return;
+            };
+            gt_dar(world, "wheat", 0);
+            let antes = world.resource::<PlayerInventory>().qty("wheat");
+            world.resource_mut::<GranjaTestState>().espera = antes;
+            gt_dedo(world, x as f32 + 0.5, z as f32 + 0.5);
+            world.resource_mut::<GranjaTestState>().apuntando = Some((e, ha_shared::InteractTargetKind::Crop));
+        }
+        18 => {
+            let antes = world.resource::<GranjaTestState>().espera;
+            let (trigo, semillas, quedan) = {
+                let inv = world.resource::<PlayerInventory>();
+                let h = world.resource::<crate::granja::Huerta>();
+                (inv.qty("wheat"), inv.qty("wheat_seeds"), h.cultivos.len())
+            };
+            eprintln!("ha-granja: cosecha → trigo {antes}→{trigo}, semillas {semillas}, quedan {quedan} cultivos");
+            if trigo != antes + 1 || quedan != 2 {
+                gt_falla(world, "cosechar_da_trigo", &format!("trigo {antes}→{trigo}, quedan {quedan}"));
+            }
+            world.resource_mut::<crate::input::AimCursor>().locked = false;
+            world.resource_mut::<crate::input::AimCursor>().active = false;
+        }
+        // Dos vacas a la granja.
+        19 => {
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            for dx in [1.5f32, 3.0] {
+                world.send_event(crate::fauna::SpawnResidentEvent {
+                    x: px + dx,
+                    z: pz - 1.5,
+                    species: 0,
+                    hostile: false,
+                });
+            }
+        }
+        20 => {
+            // Las dos recién plantadas: las más cercanas al punto de aparición (la
+            // partida de trabajo puede traer vacas de corridas anteriores).
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            let mut cand: Vec<(f32, Entity)> = crate::fauna::probe_animales(world)
+                .into_iter()
+                .filter(|a| a.residente && a.especie == 0 && a.edad >= 1.0 && !a.granja)
+                .map(|a| (((a.x - px - 2.2).powi(2) + (a.z - pz + 1.5).powi(2)), a.entity))
+                .collect();
+            cand.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let vacas: Vec<Entity> = cand.into_iter().take(2).map(|(_, e)| e).collect();
+            eprintln!("ha-granja: {} vacas residentes", vacas.len());
+            if vacas.len() < 2 {
+                gt_falla(world, "hay_dos_vacas", &format!("{}", vacas.len()));
+            }
+            world.resource_mut::<GranjaTestState>().vacas = vacas;
+            equip(world, "wheat");
+        }
+        // Darle trigo a cada una: el dedo sigue al animal (camina).
+        21 | 22 => {
+            let i = (step - 21) as usize;
+            let Some(&e) = world.resource::<GranjaTestState>().vacas.get(i) else { return };
+            let Some(a) = crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == e) else {
+                return;
+            };
+            // Como un jugador: se arrima a la vaca y (el frame siguiente) la toca.
+            teleport_a_celda(world, a.x - 1.6, a.z);
+            world.resource_mut::<GranjaTestState>().arrimado = Some((e, 0.4));
+        }
+        23 => {
+            let vacas = world.resource::<GranjaTestState>().vacas.clone();
+            let en_celo = crate::fauna::probe_animales(world)
+                .iter()
+                // En celo, o ya criaron (si estaban pegadas la cría nace enseguida
+                // y el celo se consume antes de este chequeo).
+                .filter(|a| vacas.contains(&a.entity) && (a.celo > 0.0 || a.cria_cd > 0.0))
+                .count();
+            eprintln!("ha-granja: {en_celo} vacas en celo (o ya criaron)");
+            if en_celo < 2 {
+                gt_falla(world, "el_trigo_pone_en_celo", &format!("{en_celo}/2"));
+            }
+            world.resource_mut::<crate::input::AimCursor>().locked = false;
+            world.resource_mut::<crate::input::AimCursor>().active = false;
+        }
+        24 => foto(world, "granja-5-celo.png"),
+        // Esperar la cría (se buscan caminando; celo dura 30 s).
+        25 => {
+            let crias = crate::fauna::probe_animales(world)
+                .iter()
+                .filter(|a| a.granja && a.especie == 0 && a.edad < 1.0)
+                .count();
+            let espera = world.resource::<GranjaTestState>().espera;
+            if espera % 6 == 0 {
+                let vacas = world.resource::<GranjaTestState>().vacas.clone();
+                for a in crate::fauna::probe_animales(world).iter().filter(|a| vacas.contains(&a.entity) || a.edad < 1.0) {
+                    eprintln!(
+                        "ha-granja:   res sp{} ({:.1},{:.1}) edad {:.2} celo {:.0} cd {:.0}",
+                        a.especie, a.x, a.z, a.edad, a.celo, a.cria_cd
+                    );
+                }
+            }
+            if crias == 0 && espera < 70 {
+                let mut st = world.resource_mut::<GranjaTestState>();
+                st.espera += 1;
+                st.step = 25;
+                return;
+            }
+            eprintln!("ha-granja: {crias} crías tras {:.1} s", espera as f32 * 0.5);
+            if crias == 0 {
+                gt_falla(world, "nace_una_cria", "pasaron 35 s y no nació nada");
+            }
+            let padres_descansan = crate::fauna::probe_animales(world)
+                .iter()
+                .filter(|a| a.granja && a.especie == 0 && a.edad >= 1.0 && a.cria_cd > 0.0)
+                .count();
+            if crias > 0 && padres_descansan < 2 {
+                gt_falla(world, "los_padres_descansan", &format!("{padres_descansan}/2"));
+            }
+        }
+        26 => foto(world, "granja-6-cria.png"),
+        // Alimentar a la cría: +10 %.
+        27 => {
+            let Some(cria) = crate::fauna::probe_animales(world)
+                .into_iter()
+                .find(|a| a.granja && a.especie == 0 && a.edad < 1.0)
+            else {
+                return;
+            };
+            teleport_a_celda(world, cria.x - 1.4, cria.z);
+            world.resource_mut::<GranjaTestState>().espera = (cria.edad * 1000.0) as u32;
+            world.resource_mut::<GranjaTestState>().vacas = vec![cria.entity];
+            eprintln!("ha-granja: alimento la cría {:?} (edad {:.2})", cria.entity, cria.edad);
+            world.resource_mut::<GranjaTestState>().arrimado = Some((cria.entity, 0.2));
+        }
+        28 => {
+            let Some(&e) = world.resource::<GranjaTestState>().vacas.first() else { return };
+            let antes = world.resource::<GranjaTestState>().espera as f32 / 1000.0;
+            let ahora = crate::fauna::probe_animales(world)
+                .into_iter()
+                .find(|a| a.entity == e)
+                .map(|a| a.edad)
+                .unwrap_or(0.0);
+            eprintln!("ha-granja: cría {:.0} % → {:.0} %", antes * 100.0, ahora * 100.0);
+            if ahora < antes + 0.09 {
+                gt_falla(world, "comer_hace_crecer_la_cria", &format!("{antes} → {ahora}"));
+            }
+        }
+        // ── Golpear, botín, perro, doma y nombre ─────────────────────────────
+        29 => {
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            for (sp, dx) in [(0usize, 2.5f32), (4, -2.5)] {
+                world.send_event(crate::fauna::SpawnResidentEvent { x: px + dx, z: pz + 2.0, species: sp, hostile: false });
+            }
+            for (it, n) in [("sword_steel", 1), ("bone", 12), ("name_tag", 2)] {
+                gt_dar(world, it, n);
+            }
+            world.resource_mut::<GranjaTestState>().espera = world.resource::<PlayerInventory>().qty("beef");
+        }
+        30 => {
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            let cerca = |a: &crate::fauna::AnimalProbe, dx: f32| (a.x - px - dx).powi(2) + (a.z - pz - 2.0).powi(2);
+            let todos = crate::fauna::probe_animales(world);
+            let vaca = todos
+                .iter()
+                .filter(|a| a.clave == "npc/fauna_cow" && !a.granja && a.edad >= 1.0)
+                .min_by(|a, b| cerca(a, 2.5).total_cmp(&cerca(b, 2.5)))
+                .map(|a| a.entity);
+            let perro = todos
+                .iter()
+                .filter(|a| a.clave == "npc/fauna_dog" && !a.domado)
+                .min_by(|a, b| cerca(a, -2.5).total_cmp(&cerca(b, -2.5)))
+                .map(|a| a.entity);
+            let (Some(v), Some(p)) = (vaca, perro) else {
+                gt_falla(world, "hay_vaca_y_perro", "no aparecieron");
+                world.resource_mut::<GranjaTestState>().step = 99;
+                return;
+            };
+            world.resource_mut::<GranjaTestState>().vacas = vec![v, p];
+            world.resource_mut::<GranjaTestState>().reloj = 0;
+            equip(world, "sword_steel");
+        }
+        // Espadazos hasta que muera (dos, con acero).
+        31 => {
+            let v = world.resource::<GranjaTestState>().vacas[0];
+            match crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == v) {
+                Some(a) => {
+                    let mut st = world.resource_mut::<GranjaTestState>();
+                    st.reloj += 1;
+                    st.step = if st.reloj > 6 { 32 } else { 31 };
+                    drop(st);
+                    teleport_a_celda(world, a.x - 1.6, a.z);
+                    world.resource_mut::<GranjaTestState>().arrimado = Some((v, 0.4));
+                    eprintln!("ha-granja: espadazo a la vaca (vida {:.1})", a.vida);
+                }
+                None => eprintln!("ha-granja: la vaca murió"),
+            }
+        }
+        32 => {
+            let v = world.resource::<GranjaTestState>().vacas[0];
+            if crate::fauna::probe_animales(world).iter().any(|a| a.entity == v) {
+                gt_falla(world, "dos_espadazos_matan_una_vaca", "sigue viva");
+            }
+            foto(world, "granja-7-botin.png");
+        }
+        // Parado sobre el botín: el imán lo junta.
+        33 | 34 | 35 => {
+            let tirados: Vec<Vec2> = {
+                let mut q = world.query::<(&GlobalTransform, &crate::tirados::Tirado)>();
+                q.iter(world).map(|(g, _)| Vec2::new(g.translation().x, -g.translation().y)).collect()
+            };
+            if let Some(t) = tirados.first() {
+                teleport_a_celda(world, t.x, t.y);
+            }
+        }
+        36 => {
+            let antes = world.resource::<GranjaTestState>().espera;
+            let ahora = world.resource::<PlayerInventory>().qty("beef");
+            eprintln!("ha-granja: carne de res {antes} → {ahora}");
+            if ahora <= antes {
+                gt_falla(world, "la_vaca_suelta_carne_de_res", &format!("{antes} → {ahora}"));
+            }
+            equip(world, "hand");
+        }
+        // Golpe al perro: se enoja y muerde.
+        37 => {
+            let p = world.resource::<GranjaTestState>().vacas[1];
+            if let Some(a) = crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == p) {
+                teleport_a_celda(world, a.x - 1.2, a.z);
+                world.resource_mut::<GranjaTestState>().arrimado = Some((p, 0.3));
+            }
+            let hp = {
+                let mut q = world.query_filtered::<&SimState, With<Player>>();
+                q.single(world).hp
+            };
+            world.resource_mut::<GranjaTestState>().espera = hp as u32;
+        }
+        38..=41 => {}
+        42 => {
+            let p = world.resource::<GranjaTestState>().vacas[1];
+            let enojado = crate::fauna::probe_animales(world).iter().any(|a| a.entity == p && a.enojado);
+            let hp = {
+                let mut q = world.query_filtered::<&SimState, With<Player>>();
+                q.single(world).hp
+            };
+            let antes = world.resource::<GranjaTestState>().espera as f32;
+            eprintln!("ha-granja: perro enojado={enojado}, vida del jugador {antes} → {hp}");
+            if !enojado {
+                gt_falla(world, "golpear_un_perro_lo_enoja", "no se enojó");
+            }
+            if hp >= antes {
+                gt_falla(world, "el_perro_enojado_muerde", &format!("{antes} → {hp}"));
+            }
+            foto(world, "granja-8-perro-enojado.png");
+            equip(world, "bone");
+            world.resource_mut::<GranjaTestState>().reloj = 0;
+        }
+        // Huesos hasta domarlo (uno de cada tres).
+        43 => {
+            let p = world.resource::<GranjaTestState>().vacas[1];
+            let Some(a) = crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == p) else {
+                gt_falla(world, "el_perro_sigue_vivo", "desapareció");
+                return;
+            };
+            if !a.domado && world.resource::<GranjaTestState>().reloj < 12 {
+                world.resource_mut::<GranjaTestState>().reloj += 1;
+                world.resource_mut::<GranjaTestState>().step = 43;
+                equip(world, "bone");
+                teleport_a_celda(world, a.x - 1.2, a.z);
+                world.resource_mut::<GranjaTestState>().arrimado = Some((p, 0.3));
+                return;
+            }
+            let huesos = world.resource::<GranjaTestState>().reloj;
+            eprintln!("ha-granja: perro domado={} tras {huesos} huesos (enojado={})", a.domado, a.enojado);
+            if !a.domado || a.enojado {
+                gt_falla(world, "el_hueso_doma_al_perro", &format!("domado={} enojado={}", a.domado, a.enojado));
+            }
+        }
+        // La etiqueta: abre el panel; el nombre queda puesto.
+        44 => {
+            equip(world, "name_tag");
+            let p = world.resource::<GranjaTestState>().vacas[1];
+            if let Some(a) = crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == p) {
+                teleport_a_celda(world, a.x - 1.2, a.z);
+                world.resource_mut::<GranjaTestState>().arrimado = Some((p, 0.3));
+            }
+        }
+        45 => {
+            let abierto = world.resource::<crate::bautizo::Bautizo>().abierto();
+            if !abierto {
+                gt_falla(world, "la_etiqueta_abre_el_panel", "no se abrió");
+                return;
+            }
+            foto(world, "granja-9-panel-nombre.png");
+        }
+        46 => {
+            let objetivo = world.resource::<crate::bautizo::Bautizo>().objetivo;
+            if let Some(animal) = objetivo {
+                world.send_event(crate::bautizo::NombreElegido { animal, nombre: "Firulais".into() });
+                let mut b = world.resource_mut::<crate::bautizo::Bautizo>();
+                b.objetivo = None;
+                b.texto.clear();
+            }
+        }
+        47 => {
+            let p = world.resource::<GranjaTestState>().vacas[1];
+            let nombre = crate::fauna::probe_animales(world).into_iter().find(|a| a.entity == p).and_then(|a| a.nombre);
+            eprintln!("ha-granja: el perro se llama {nombre:?}");
+            if nombre.as_deref() != Some("Firulais") {
+                gt_falla(world, "la_etiqueta_pone_nombre", &format!("{nombre:?}"));
+            }
+            world.resource_mut::<crate::input::AimCursor>().locked = false;
+            world.resource_mut::<crate::input::AimCursor>().active = false;
+        }
+        48 => foto(world, "granja-10-firulais.png"),
+        _ => {
+            let fallo = world.resource::<GranjaTestState>().fallo;
+            // La partida de QA no se queda tirada en la lista de partidas.
+            if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() {
+                if let Some(id) = crate::partida::activa() {
+                    crate::partida::borrar(&id);
+                }
+            }
+            eprintln!("ha-verify: GRANJATEST {}", if fallo { "FAIL" } else { "DONE" });
+            std::process::exit(i32::from(fallo));
+        }
     }
 }

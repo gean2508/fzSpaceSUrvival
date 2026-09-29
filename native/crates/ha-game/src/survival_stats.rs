@@ -33,7 +33,7 @@ pub struct SurvivalStatsPlugin;
 impl Plugin for SurvivalStatsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SurvivalPersist>()
-            .add_systems(Startup, load_survival_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_survival_on_startup)
             .add_systems(FixedUpdate, tick_survival)
             .add_systems(
                 Update,
@@ -209,6 +209,11 @@ fn survival_path() -> std::path::PathBuf {
 }
 
 fn load_survival_on_startup(mut persist: ResMut<SurvivalPersist>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *persist = SurvivalPersist::default();
     let Ok(text) = std::fs::read_to_string(survival_path()) else {
         return;
     };

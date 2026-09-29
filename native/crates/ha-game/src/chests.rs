@@ -58,7 +58,7 @@ impl Plugin for ChestsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ChestWorld>()
             .init_resource::<ChestPanelState>()
-            .add_systems(Startup, load_chests_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_chests_on_startup)
             .add_systems(
                 Update,
                 (
@@ -1205,6 +1205,11 @@ fn chests_path() -> std::path::PathBuf {
 }
 
 fn load_chests_on_startup(mut world: ResMut<ChestWorld>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *world = ChestWorld::default();
     let Ok(text) = std::fs::read_to_string(chests_path()) else {
         return;
     };

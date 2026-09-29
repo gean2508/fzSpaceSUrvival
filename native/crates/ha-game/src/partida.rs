@@ -51,6 +51,7 @@ const ARCHIVOS: &[&str] = &[
     "cameras.json",
     "ceilings.json",
     "chests.json",
+    "cultivos.json",
     "colony.json",
     "edificios.json",
     "escaleras.json",
@@ -453,6 +454,60 @@ mod tests {
             "estos archivos se persisten y NO están en la lista de la partida: {faltan:?} \
              — agregalos a partida::ARCHIVOS o a CARPETAS"
         );
+    }
+
+    /// **Ningún estado de partida se carga en `Startup`.** `Startup` corre antes
+    /// del menú, cuando todavía no hay partida elegida y `persist_dir()` es la
+    /// carpeta base: todo lo que se leía ahí (paredes, pozos, casas, mochila) se
+    /// colaba en cualquier partida NUEVA. Lo reportó el usuario el 28 sep 2026
+    /// ("el juego debe venir limpio"). Las cargas van en
+    /// `OnEnter(GamePhase::Loading)`.
+    #[test]
+    fn ninguna_carga_de_partida_corre_en_startup() {
+        let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut malos = Vec::new();
+        let mut pendientes = vec![raiz];
+        while let Some(p) = pendientes.pop() {
+            let Ok(rd) = std::fs::read_dir(&p) else { continue };
+            for e in rd.flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    pendientes.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|x| x != "rs") {
+                    continue;
+                }
+                let Ok(txt) = std::fs::read_to_string(&path) else { continue };
+                if !txt.contains("persist_dir()") || path.ends_with("partida.rs") {
+                    continue;
+                }
+                for (i, _) in txt.match_indices("add_systems(Startup") {
+                    // lo registrado: hasta cerrar el paréntesis de `add_systems(`
+                    let resto = &txt[i + "add_systems".len()..];
+                    let mut hondo = 0i32;
+                    let mut fin = resto.len();
+                    for (k, ch) in resto.char_indices() {
+                        match ch {
+                            '(' => hondo += 1,
+                            ')' => {
+                                hondo -= 1;
+                                if hondo == 0 {
+                                    fin = k;
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    let tramo = &resto[..fin];
+                    if tramo.contains("load") || tramo.contains("cargar") {
+                        malos.push(format!("{}: {}", path.display(), tramo.lines().next().unwrap_or("")));
+                    }
+                }
+            }
+        }
+        assert!(malos.is_empty(), "cargas de partida en Startup: {malos:#?}");
     }
 
     /// **Borrar sólo borra adentro de `partidas/`.** El cinturón de [`borrar`] es

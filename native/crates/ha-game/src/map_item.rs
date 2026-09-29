@@ -69,7 +69,7 @@ impl Plugin for MapItemPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HeldMapUi>()
             .init_resource::<PlacedMapWorld>()
-            .add_systems(Startup, load_placed_maps)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_placed_maps)
             .add_systems(
                 Update,
                 (
@@ -478,6 +478,11 @@ fn maps_path() -> std::path::PathBuf {
 }
 
 fn load_placed_maps(mut world: ResMut<PlacedMapWorld>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *world = PlacedMapWorld::default();
     let Ok(text) = std::fs::read_to_string(maps_path()) else { return };
     let Ok(list) = serde_json::from_str::<Vec<PlacedMap>>(&text) else { return };
     world.next_uid = list.iter().map(|m| m.uid + 1).max().unwrap_or(0);

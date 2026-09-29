@@ -79,7 +79,9 @@ fn crear(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let nombre = commands
         .spawn((
             Text2d::new(""),
-            TextFont { font_size: 15.0, ..default() },
+            TextFont { font_size: 22.0, ..default() },
+            // Sin esto medía 15 METROS de letra (ver `textos_mundo`).
+            crate::textos_mundo::TextoEnMundo { px: 15.0, font_size: 22.0 },
             TextColor(Color::srgb(1.0, 0.97, 0.85)),
             Transform::from_xyz(0.0, 0.0, crate::layers::GLOBO),
             Visibility::Hidden,
@@ -106,6 +108,8 @@ fn nombre_de(kind: InteractTargetKind) -> &'static str {
         InteractTargetKind::GemRed => "Gema roja",
         InteractTargetKind::Block => "Suelo",
         InteractTargetKind::Prop => "Objeto",
+        InteractTargetKind::Crop => "Cultivo",
+        InteractTargetKind::Animal => "Animal",
         InteractTargetKind::LaunchModule => "Módulo de lanzamiento",
         InteractTargetKind::LaunchIgnition => "Encendido",
         InteractTargetKind::SpaceReentry => "Reentrada",
@@ -118,7 +122,7 @@ fn nombre_de(kind: InteractTargetKind) -> &'static str {
 fn seguir(
     objetivo: Res<LookTarget>,
     marca: Option<Res<Marca>>,
-    objetos: Query<(&Transform, Option<&Sprite>), Without<Marcador>>,
+    objetos: Query<(&Transform, Option<&Sprite>, Option<&crate::structures::StructureName>), Without<Marcador>>,
     mut piezas: ParamSet<(
         Query<(&mut Transform, &mut Visibility), With<Marcador>>,
         Query<&mut Text2d, With<Marcador>>,
@@ -131,8 +135,17 @@ fn seguir(
     };
     // El pie y el ancho salen del sprite del objeto cuando hay entidad; si el
     // objetivo es un tile (el suelo) no hay sprite y se usa el punto tocado.
+    // Cultivos y animales tienen cartel propio ("Trigo · creciendo 62 %",
+    // "Vaca · cría 40 %"): dice más que el tipo pelado.
+    let rotulo = match kind {
+        InteractTargetKind::Crop | InteractTargetKind::Animal => objetivo
+            .entity
+            .and_then(|e| objetos.get(e).ok())
+            .and_then(|(_, _, n)| n.map(|n| n.0.clone())),
+        _ => None,
+    };
     let (centro, ancho, alto) = match objetivo.entity.and_then(|e| objetos.get(e).ok()) {
-        Some((tf, sprite)) => {
+        Some((tf, sprite, _)) => {
             let medida = sprite
                 .and_then(|s| s.custom_size)
                 .unwrap_or(Vec2::new(1.0, 1.0));
@@ -157,7 +170,7 @@ fn seguir(
         }
     }
     if let Ok(mut t) = piezas.p1().get_mut(marca.nombre) {
-        let quiero = nombre_de(kind);
+        let quiero = rotulo.as_deref().unwrap_or(nombre_de(kind));
         // Sólo se escribe cuando cambia: tocar un `Text2d` cada cuadro lo
         // remaquetea aunque diga lo mismo.
         if t.0 != quiero {

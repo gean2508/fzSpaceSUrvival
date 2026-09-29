@@ -108,6 +108,7 @@ pub fn category_label(category: &str) -> &'static str {
         "modular" => "EDIFICIO MODULAR — azotea, pisos, planta baja, tiendas",
         "vehicle" => "VEHÍCULOS",
         "nature" => "PLANTAS Y FLORES",
+        "cultivo" => "HUERTA — tierra arada y cultivos por etapa",
         "props" => "COFRES Y CONTENEDORES",
         "tiles" => "SUELO DEL MUNDO — pasto, arena, agua, roca",
         "relieve" => "RELIEVE — acantilados y rampas",
@@ -138,6 +139,21 @@ const ITEM_IDS: &[(&str, &str)] = &[
     ("lantern", "Farol"),
     ("leather", "Cuero"),
     ("meat", "Carne"),
+    ("wheat_seeds", "Semillas de trigo"),
+    ("wheat", "Trigo"),
+    ("carrot", "Zanahoria"),
+    ("pumpkin_seeds", "Semillas de calabaza"),
+    ("pumpkin", "Calabaza"),
+    ("beef", "Carne de res"),
+    ("pork", "Carne de cerdo"),
+    ("chicken", "Pollo crudo"),
+    ("mutton", "Carne de cordero"),
+    ("rabbit_meat", "Carne de conejo"),
+    ("feather", "Pluma"),
+    ("wool", "Lana"),
+    ("bone", "Hueso"),
+    ("egg", "Huevo"),
+    ("name_tag", "Etiqueta"),
     ("orange", "Naranja"),
     ("part_engine", "Pieza: motor"),
     ("part_fin", "Pieza: aleta"),
@@ -1580,6 +1596,26 @@ const VEHICLE_KEYS: &[(&str, &str)] = &[
 
 /// Flora/decoración natural extra (LimeZu `17_Garden`). Complementa los
 /// `decor/tree_*` existentes — no los duplica.
+/// **La huerta** (`ha-game/src/granja.rs`). La tierra arada va debajo de toda
+/// etapa; cada cultivo tiene tres etapas visibles sobre ella (`_1` brote, `_2`
+/// creciendo, `_3` listo) más el recién sembrado, que es común a todos. Las
+/// `_1/_2` apuntan a brotes del pack; lo maduro se dibujó
+/// (`scripts/dibujar-granja.py`).
+const CULTIVO_KEYS: &[(&str, &str)] = &[
+    ("cultivo/tierra_arada", "Tierra arada"),
+    ("cultivo/tierra_regada", "Tierra arada (húmeda)"),
+    ("cultivo/sembrado", "Semillas sembradas"),
+    ("cultivo/trigo_1", "Trigo (brote)"),
+    ("cultivo/trigo_2", "Trigo (creciendo)"),
+    ("cultivo/trigo_3", "Trigo maduro"),
+    ("cultivo/zanahoria_1", "Zanahoria (brote)"),
+    ("cultivo/zanahoria_2", "Zanahoria (creciendo)"),
+    ("cultivo/zanahoria_3", "Zanahorias listas"),
+    ("cultivo/calabaza_1", "Calabaza (brote)"),
+    ("cultivo/calabaza_2", "Calabaza (creciendo)"),
+    ("cultivo/calabaza_3", "Calabaza madura"),
+];
+
 const NATURE_KEYS: &[(&str, &str)] = &[
     ("nature/arbusto", "Arbusto"),
     ("nature/flores_rojas", "Flores rojas"),
@@ -1598,6 +1634,7 @@ const NATURE_KEYS: &[(&str, &str)] = &[
 const UI_KEYS: &[(&str, &str)] = &[
     // Paneles / botones base.
     ("ui/panel", "Panel de fondo"),
+    ("ui/corazon_celo", "Corazón (animal en celo)"),
     ("ui/button", "Botón"),
     ("ui/button_pressed", "Botón apretado"),
     ("ui/hotbar_slot", "Casilla de la barra rápida"),
@@ -10227,6 +10264,9 @@ pub fn game_slots() -> Vec<SlotDef> {
     }
     for &(k, l) in NATURE_KEYS {
         out.push(s(k, l, "nature"));
+    }
+    for &(k, l) in CULTIVO_KEYS {
+        out.push(s(k, l, "cultivo"));
     }
     // Contenedores con estado: el juego conmuta las poses `closed`/`open` y las
     // reproduce una sola vez (queda abierto mientras lo usás). Ver `chests.rs`.

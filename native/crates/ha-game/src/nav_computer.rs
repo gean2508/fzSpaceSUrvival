@@ -26,7 +26,7 @@ impl Plugin for NavComputerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NavComputer>()
             .init_resource::<NavPersistState>()
-            .add_systems(Startup, load_nav_on_startup)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_nav_on_startup)
             .add_systems(
                 Update,
                 (

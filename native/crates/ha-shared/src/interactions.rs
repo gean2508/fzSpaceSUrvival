@@ -23,6 +23,12 @@ pub enum InteractTargetKind {
     /// Se levanta con el mismo gesto que todo lo demás y lo resuelve
     /// `harvest::pick_up_prop`.
     Prop,
+    /// **Un cultivo sembrado** (`ha-game/src/granja.rs`): mantener lo cosecha si
+    /// está maduro, y si no lo arranca y devuelve la semilla — como en Minecraft.
+    Crop,
+    /// **Un animal vivo** (`ha-game/src/fauna.rs`): con su comida en la mano se
+    /// lo alimenta (cría), con una espada se lo faena.
+    Animal,
     LaunchModule,
     LaunchIgnition,
     SpaceReentry,
@@ -138,6 +144,12 @@ pub static INTERACTION_RULES: &[InteractionRule] = &[
     // esta tabla estática. 550 ms es corto porque es lo que más se va a hacer:
     // el mundo está lleno de props y pelear medio segundo con cada uno cansa.
     rule("hand", InteractTargetKind::Prop, InteractActionKind::Gather, 550, None, None),
+    // Granja (`granja.rs` / `fauna.rs` resuelven qué pasa: dependen del estado
+    // del cultivo y de lo que llevás en la mano, no de esta tabla).
+    rule("hand", InteractTargetKind::Crop, InteractActionKind::Gather, 350, None, None),
+    rule("hand", InteractTargetKind::Animal, InteractActionKind::Gather, 300, None, None),
+    rule("sword_iron", InteractTargetKind::Animal, InteractActionKind::Attack, 500, None, Some(18.0)),
+    rule("sword_steel", InteractTargetKind::Animal, InteractActionKind::Attack, 420, None, Some(26.0)),
     rule("hand", InteractTargetKind::Rock, InteractActionKind::None, 0, None, None),
     rule("hand", InteractTargetKind::OreIron, InteractActionKind::None, 0, None, None),
     rule("hand", InteractTargetKind::OreGold, InteractActionKind::None, 0, None, None),
@@ -368,8 +380,21 @@ mod tests {
     fn rule_count_stable() {
         // 28 base + 10 tiered tool rules (wood/stone axe + pickaxe, jul 2026)
         // + 1 abrir cofre (`InteractTargetKind::Chest`)
-        // + 1 levantar prop del mundo (`InteractTargetKind::Prop`, 15 ago 2026).
-        assert_eq!(INTERACTION_RULES.len(), 40);
+        // + 1 levantar prop del mundo (`InteractTargetKind::Prop`, 15 ago 2026)
+        // + 4 de granja: cosechar, alimentar, faenar con dos espadas (28 sep 2026).
+        assert_eq!(INTERACTION_RULES.len(), 44);
+    }
+
+    /// La granja: con la mano (o con comida, que cae a la mano) se cosecha y se
+    /// alimenta; con espada se faena.
+    #[test]
+    fn granja_resuelve_cultivos_y_animales() {
+        let c = resolve_interaction(Some("wheat_seeds"), InteractTargetKind::Crop).unwrap();
+        assert_eq!(c.kind, InteractActionKind::Gather);
+        let a = resolve_interaction(Some("wheat"), InteractTargetKind::Animal).unwrap();
+        assert_eq!(a.kind, InteractActionKind::Gather);
+        let f = resolve_interaction(Some("sword_iron"), InteractTargetKind::Animal).unwrap();
+        assert_eq!(f.kind, InteractActionKind::Attack);
     }
 
     #[test]

@@ -2662,6 +2662,17 @@ rellena.
 > `cuevas`) llevan la **época** de la semilla en su clave (`ha_shared::partida`):
 > sin eso, la primera partida nueva salía con parches del mundo anterior donde la
 > caché seguía caliente.
+>
+> **Y NINGUNA CARGA EN `Startup`** (28 sep 2026). Paredes, tiles/pozos, objetos,
+> techos, cofres, antorchas, cosecha, colonia, mochila, supervivencia… se cargaban
+> en `Startup`, que corre ANTES del menú: sin partida elegida `persist_dir()` es la
+> carpeta base, y lo de las pruebas viejas se colaba en toda partida nueva (y se
+> guardaba adentro). Ahora cada carga corre en `OnEnter(GamePhase::Loading)` y
+> **parte de cero** (resetea el recurso antes de leer). Lo clavan el test
+> `ninguna_carga_de_partida_corre_en_startup` y el driver
+> `HA_PARTIDA_NUEVA=1` (verifica 0 paredes, 0 objetos, 0 celdas editadas). Las
+> partidas creadas antes del arreglo pueden traer esa basura adentro: se borran
+> desde PARTIDAS y se crea una nueva.
 
 ### EL AGUA DE MAR NO ES EL AGUA DE ADENTRO (14 ago 2026)
 
@@ -3356,6 +3367,11 @@ Hay **religión fundable**, memoria de hechos (si le matás el padre a alguien, 
 familia te recuerda), reputación por cuerpo (`body_rep`) y chat por contexto.
 Tocar un NPC abre un panel con los últimos mensajes y botones por rol; las
 burbujas tienen presupuesto (`MAX_BUBBLES=3`), dueño y prioridad.
+**Los textos del mundo miden lo mismo en pantalla** (`textos_mundo.rs`, 28 sep
+2026): burbujas, cartel del objetivo y globitos de la granja llevan
+`TextoEnMundo { px }` y su escala se recalcula cada cuadro contra el encuadre vivo
+de la cámara. Antes eran "un metro de letra" fijo y al acercar la cámara cruzaban
+la pantalla enormes; el cartel del objetivo no tenía escala (15 m de letra).
 
 **La secta es del pueblo, no tuya — ningún NPC te sigue.** Esto es un pedido
 explícito y ya se rompió una vez, así que está clavado con un test
@@ -3400,7 +3416,56 @@ con percepción social ✓ · **estigmergia** (campo de feromonas `SignalField` 
 decae: alarma/comida/territorio/apareamiento) ✓ · gym multiagente (K=5) ✓.
 
 **Compañero-IA** (`companion.rs`): la "mano derecha" del jugador, controlada por la
-misma IA frugal, que lo sigue y evoluciona sola (hill-climb + persistencia).
+misma IA frugal, que lo sigue y evoluciona sola (hill-climb + persistencia). Se
+viste con una hoja del Character Generator (`npc/char_7`, 0,95×1,9 m, como los
+aldeanos): el slot `npc/companion` apuntaba a un PNG de 39×39 que era sólo una
+cabeza (resto del arte 3D) y el compañero salía como una cabeza flotante.
+
+### Granja: huerta y cría (`granja.rs`, `fauna.rs` §GRANJA) — 28 sep 2026
+
+Modelo Minecraft, adaptado al toque. **Driver:** `HA_GRANJATEST=1
+HA_PARTIDA_NUEVA=1 HA_AUTOPLAY=1 HA_SHOTDIR=… ./target/qa/ha-game` corre el ciclo
+entero por los sistemas reales (targeting → gesto → huerta/fauna) y deja
+`granja-1..6.png`.
+
+**Huerta.**
+- **Semillas**: arrancar una planta silvestre del mundo (`nature/*pasto*`,
+  `*arbusto*`, `*brote*`, `*flor*`…, no macetas) suelta semillas con azar
+  determinista por celda: 55 % trigo, 8 % zanahoria, 6 % calabaza
+  (`granja::semillas_de_planta`). La zanahoria se planta entera; la calabaza se
+  parte en 4 semillas en la mesa (receta 26).
+- **Sembrar**: semilla en la mano + mantener sobre pasto o tierra (no arena, no tu
+  propia celda — tocarte con una zanahoria es comerla). No hace falta azada. Con
+  semilla en la mano las matas silvestres no son objetivo y se **desmalezan** al
+  sembrar (quedan anotadas como cosechadas). El margen de perdón del dedo NO agarra
+  cultivos vecinos mientras sembrás (si no, la hilera de al lado no salía).
+- **Crecer**: 4 etapas a la vista — `cultivo/sembrado`, `<planta>_1` brote,
+  `_2` creciendo, `_3` listo — sobre `cultivo/tierra_arada` (o `_regada`). Corre con
+  el **reloj del juego** (`sky2d::DayClock`): `MADURAR_SECS` = 0,8 día a pleno sol;
+  de noche ×0,25; con agua a ≤4 celdas ×1,6. Medido: ~1,2 días de juego con noche
+  incluida. Crece en todos los cuerpos a la vez.
+- **Cosechar**: mantener sobre la planta. Lista: trigo 1 + 1-3 semillas, zanahoria
+  2-4, calabaza 1. Verde: devuelve la semilla. Recetas: pan (3 trigo), tarta
+  (calabaza + trigo).
+- Persiste en `cultivos.json` (por partida). Arte: brotes del pack + lo maduro
+  dibujado en `scripts/dibujar-granja.py` (slots `cultivo/*`, `items/wheat*`,
+  `items/carrot`, `items/pumpkin*`, `ui/corazon_celo`).
+
+**Cría.**
+- Comida por especie (`fauna::comida_de_cria`): vaca/oveja/cabra trigo; gallina y
+  pato semillas; cerdo y conejo zanahoria; burro manzana o zanahoria; perro carne.
+- Darle su comida a un adulto → **celo 30 s** (corazones). Dos en celo de la misma
+  especie se buscan caminando y al tocarse nace una **cría** (media escala) con el
+  genoma **cruzado** de los dos padres. Padres descansan 5 min. La cría tarda 20 min
+  en crecer; cada comida le suma 10 %.
+- **Alimentado = tuyo**: el animal salvaje pasa al vivario (cerebro del rango de
+  residentes 200..264, baja del censo de su región) y persiste. Lleva la marca
+  `DeGranja`: **no se reproduce solo** (la reproducción emergente del vivario
+  convertía 2 vacas en 32 en un minuto). La fauna salvaje y el vivario creativo
+  siguen igual — no se podó nada emergente.
+- Espada sobre un animal adulto: carne (+ cuero vaca/cabra/burro/conejo).
+- El dedo mide lo que SE VE (custom_size × escala): antes una cría se medía como
+  adulta y tocarla agarraba al padre.
 
 ---
 
@@ -7459,11 +7524,11 @@ vos.
 - Generalizar el genoma a colonos/enemigos (uno por rol).
 
 ### Arte y 3D (27 sep 2026)
-- **Cultivos por etapas** (plantita → cosecha), como la lámina de referencia que
-  pasó el usuario. No hay sistema de cultivo: es mecánica nueva (sembrar,
-  crecer, cosechar) más el arte de cada etapa.
-- **Más fauna**: variantes de color (vaca overa colorada, cerdo manchado), crías,
-  gallo, y la fauna de los otros planetas, que sigue siendo quad de color.
+- ~~Cultivos por etapas~~ y ~~crías~~: hechos el 28 sep 2026 (§6 Granja). Queda:
+  regadera/azada opcionales, más cultivos (papa, tomate) y que las crías sigan a
+  la madre.
+- **Más fauna**: variantes de color (vaca overa colorada, cerdo manchado), gallo,
+  y la fauna de los otros planetas, que sigue siendo quad de color.
 
 ### Perf / render
 - **Componer también el cuerpo de los aldeanos** (hoy sólo el jugador y los

@@ -155,7 +155,7 @@ pub struct TorchesPlugin;
 impl Plugin for TorchesPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlacedTorches>()
-            .add_systems(Startup, load_torches)
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_torches)
             .add_systems(Update, (place_torch_on_hold, stream_torches, save_torches));
     }
 }
@@ -351,6 +351,11 @@ fn torches_path() -> std::path::PathBuf {
 }
 
 fn load_torches(mut torches: ResMut<PlacedTorches>) {
+    // **Cada partida arranca con lo SUYO.** Esto corría en `Startup`, antes de
+    // elegir partida: leía la carpeta base y lo de las pruebas viejas aparecía en
+    // cualquier partida nueva. Ahora corre al entrar a la partida (`Loading`) y
+    // parte de cero; ver `partida.rs`.
+    *torches = PlacedTorches::default();
     let Ok(raw) = std::fs::read_to_string(torches_path()) else {
         return;
     };
