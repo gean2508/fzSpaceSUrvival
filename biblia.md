@@ -3328,7 +3328,7 @@ Si algo tiene que estar cerca, que lo esté porque el mundo lo puso ahí.
 La gente vive en los **asentamientos de `geography`** (aldea / pueblo / ciudad, con
 sitio fijo en el planeta) y se siembra al **entrar** en uno (`discover_settlements`).
 Fuera de ellos no hay un alma: encontrar gente es explorar. El pueblo no se congela
-cuando te vas — los NPCs lejos siguen su horario en LOD barato (`advance_far`),
+cuando te vas — los NPCs lejos siguen viviendo en LOD barato (`avanzar_lejos`, 1 Hz),
 también en otros cuerpos, y la economía corre para todos (`colony_step`, roles,
 `Stock`, `try_trade`).
 
@@ -3350,7 +3350,7 @@ en el medio de una ciudad:
    valía sólo mientras "en el cuerpo activo todos están vivos".
 
 Ahora hay **streaming de gente** (`stream_npcs`): quien queda a más de `VIRT_OUT_R`
-vuelve a ser `NpcRecord` —sigue su rutina en `advance_far`, sin entidad ni cerebro— y
+vuelve a ser `NpcRecord` —sigue su vida en `avanzar_lejos`, sin entidad ni cerebro— y
 se materializa de nuevo bajo `VIRT_IN_R`. Con histéresis, para que caminar sobre el
 borde no haga spawn/despawn cada frame.
 
@@ -3391,6 +3391,46 @@ explícito y ya se rompió una vez, así que está clavado con un test
 - Lo único que todavía camina hacia el jugador es quien te **odia**, y eso es
   consecuencia de matarle la familia, no de fe.
 
+### Simulación tipo Sims + sociedad (`sims.rs`, `credos.rs`, `sociedad.rs`) — 29 sep 2026
+
+Un solo motor puro en `ha-shared` (sin Bevy, testeable headless) decide **qué hace**
+cada aldeano, herbívoro, carnívoro y el compañero. `society.rs`, `fauna.rs` y
+`companion.rs` sólo le pasan el mundo y ejecutan la meta que devuelve.
+
+**Motor (`sims.rs`).** Motivos que decaen (hambre, sed, sueño, social, ocio,
+seguridad, ...) → **objetos inteligentes** que *anuncian* qué satisfacen
+(`Anuncio`) → puntaje = `min(ganancia, faltante) × urgencia × personalidad ×
+cercanía`, con compuerta Maslow (no busca ocio con hambre crítica), elección
+Boltzmann (no siempre el máximo: da variedad), **compromiso** con el plan
+(histéresis: no oscila entre dos anuncios) y anulación por necesidad crítica.
+El motor es agnóstico del planeta: usa `fase` del `DayClock` (0 = medianoche,
+0,5 = mediodía) y `Anuncio`s que arma el mundo; el temperamento moral del planeta
+entra por `planet_temperament_disposition`.
+`Clase` = Aldeano / Herbívoro / Carnívoro / Compañero, cada una con su perfil de
+motivos (el compañero sólo tiene Sueño, Social, Ocio, Seguridad; el hambre y la
+sed de la fauna las maneja el metabolismo de `fauna.rs`).
+
+**Sociedad (`sociedad.rs`, `credos.rs`).** Vínculos (`Lazos`) por par, credos
+fundables (hasta `MAX_CREDOS=6`; el "Ki" es `CREDO_KI`) con dogma, líder,
+sucesión y rivales; trato entre vecinos a `RADIO_TRATO=30` m, testigos de un
+delito a `RADIO_TESTIGO=14` m. Hay **buenos y malos**: la disposición sale de la
+personalidad + planeta; el malo roba/agrede, los testigos lo recuerdan
+(reputación, "malhechor conocido"), los buenos lo denuncian/ayudan a la víctima,
+la secta rival se enfrenta al dogma contrario. Todo lo resuelve
+`sociedad::resolver` (eventos → efectos) y `society.rs` los aplica. Panel de
+NPC: actividad, secta o "fiel del Ki", "malhechor conocido"/"buena persona".
+
+**Veredicto sobre IAFZ (honesto).** Es un controlador **reactivo** (32 bits de
+sensor, una salida de rumbo): sirve para la *textura* del movimiento animal
+(steering, evasión, persecución) y sólo para eso. Como decisor de NPCs y del
+compañero no aportaba: no tiene metas ni memoria, y el "hill-climb + persistencia"
+del compañero era ruido. Se sacó de ambos. El `brain` del NPC quedó como puro id
+de presupuesto (`free_ids`). En fauna, Vida decide *qué* (comer, beber, dormir,
+cazar, huir) y el genoma IAFZ sólo *cómo* se mueve hacia ello.
+**Invariantes:** ningún NPC sigue al jugador (test `ningun_fiel_apunta_al_jugador`);
+no se poda conducta emergente; `Vida` lleva `#[serde(default)]` (guardados viejos
+cargan).
+
 ### IA frugal (IAFZ-64) y evolución
 
 La IA frugal del usuario (HIVE_OS / IAFZ-64) es una **Deep Binary Neural Network**
@@ -3415,9 +3455,10 @@ selección natural in-game) ✓ · sensor compartido gym↔juego (`ha_shared::fa
 con percepción social ✓ · **estigmergia** (campo de feromonas `SignalField` que
 decae: alarma/comida/territorio/apareamiento) ✓ · gym multiagente (K=5) ✓.
 
-**Compañero-IA** (`companion.rs`): la "mano derecha" del jugador, controlada por la
-misma IA frugal, que lo sigue y evoluciona sola (hill-climb + persistencia). Se
-viste con una hoja del Character Generator (`npc/char_7`, 0,95×1,9 m, como los
+**Compañero** (`companion.rs`): la "mano derecha" del jugador. Ya **no** lo maneja
+IAFZ: es una `Vida` de clase Compañero con anuncios Seguir / Charlar / Jugar /
+Descansar / Rezar (más las órdenes `CompanionTask`/`CompanionOrder`, intactas).
+Se viste con una hoja del Character Generator (`npc/char_7`, 0,95×1,9 m, como los
 aldeanos): el slot `npc/companion` apuntaba a un PNG de 39×39 que era sólo una
 cabeza (resto del arte 3D) y el compañero salía como una cabeza flotante.
 

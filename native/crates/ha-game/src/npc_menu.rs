@@ -273,6 +273,21 @@ fn sync_menu(
     let role = npc_role(npc.faith, npc.converted, rep);
     let job = crate::society::role_label(npc.role);
     let name = npc_name(uid, npc.family);
+    // Qué está haciendo, de qué credo es y qué fama tiene: la vida interior a la vista.
+    let estado = {
+        let mut t = npc.vida.actividad().verbo(ha_shared::sims::Clase::Aldeano).to_string();
+        if npc.vida.credo == ha_shared::credos::CREDO_KI {
+            t.push_str("  |  fiel del Ki");
+        } else if let Some(c) = soc.credos.get(npc.vida.credo) {
+            t.push_str(&format!("  |  {} ({} miembros)", c.nombre, c.miembros));
+        }
+        if npc.vida.mala_fama > 0.5 {
+            t.push_str("  |  malhechor conocido");
+        } else if npc.vida.pers.moral > 0.6 {
+            t.push_str("  |  buena persona");
+        }
+        t
+    };
     let history: Vec<String> = npc.history.clone();
     let founded = religion.founded;
     let converted = npc.converted;
@@ -281,7 +296,11 @@ fn sync_menu(
     // con qué capas se horneó cada hoja `npc/char_XX`), con la expresión que le
     // toca por cómo te trata y cómo está. Se compone una vez y queda cacheado.
     let expression =
-        crate::chargen::Expression::for_npc(role, npc.needs.food, npc.needs.rest);
+        crate::chargen::Expression::for_npc(
+            role,
+            npc.vida.m.get(ha_shared::sims::Motivo::Hambre),
+            npc.vida.m.get(ha_shared::sims::Motivo::Sueno),
+        );
     let portrait = crate::chargen::portrait_for(
         cg.look_for_uid(uid),
         &cg,
@@ -359,6 +378,11 @@ fn sync_menu(
                         Text::new(format!("[{role}]  {job}")),
                         TextFont { font_size: 13.0, ..default() },
                         TextColor(Color::srgb(0.7, 0.75, 0.85)),
+                    ));
+                    col.spawn((
+                        Text::new(estado.clone()),
+                        TextFont { font_size: 12.0, ..default() },
+                        TextColor(Color::srgb(0.95, 0.85, 0.55)),
                     ));
                 });
             });

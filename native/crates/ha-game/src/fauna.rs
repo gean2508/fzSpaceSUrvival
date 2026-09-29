@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 
 use ha_shared::ecology::{self, Capacity, Population, Trophic};
 use ha_shared::fauna_brain::sense;
+use ha_shared::sims::{self, Actividad, Anuncio, Clase, Motivo, Vida};
 use ha_shared::CelestialBody;
 
 use crate::platform::is_app_paused;
@@ -503,6 +504,19 @@ struct Needs {
     hunger: f32,
     thirst: f32,
     energy: f32,
+    /// La cabeza tipo Sims: decide QUÉ hacer (comer, beber, dormir, manada, explorar) entre lo
+    /// que el mundo ofrece según cuál barra aprieta. El IAFZ sólo le da textura al andar.
+    vida: Vida,
+    /// Último charco visto y cuándo se lo volvió a buscar (buscar agua no es gratis).
+    agua: Option<(f32, f32)>,
+    agua_cd: f32,
+    bump: f32,
+}
+
+impl Needs {
+    fn nuevo(hunger: f32, thirst: f32, energy: f32, semilla: u64) -> Self {
+        Self { hunger, thirst, energy, vida: Vida::nueva(semilla), agua: None, agua_cd: 0.0, bump: 0.0 }
+    }
 }
 
 /// Caché de la pose aplicada (evita reconstruir el sprite cada frame).
@@ -1416,7 +1430,7 @@ fn spawn_animal(
                 // Desfasado por cerebro: no ponen todas a la vez.
                 huevo_t: HUEVO_MIN + (brain as f32 * 37.0) % (HUEVO_MAX - HUEVO_MIN),
             },
-            Needs { hunger: 0.3, thirst: 0.3, energy },
+            Needs::nuevo(0.3, 0.3, energy, brain as u64 ^ (x.to_bits() as u64) << 20),
             FaunaPose::default(),
             sprite,
             Transform::from_xyz(x, -z, sort_z(z)).with_scale(Vec3::splat(escala_de_edad(edad))),
@@ -1448,10 +1462,12 @@ fn tick_fauna(
     player: Query<&Transform, (With<Player>, Without<Animal>, Without<FoodDot>)>,
     mut animals: Query<(Entity, &mut Animal, &mut Needs, &mut Transform, &mut Sprite, &mut FaunaPose, Option<&Resident>, Has<DeGranja>), (Without<FoodDot>, Without<Player>)>,
     foods: Query<(Entity, &FoodDot, Option<&PlacedFood>), (Without<Animal>, Without<Player>)>,
-    (mut tirados, mut jugador_sim, mut acc): (
+    (mut tirados, mut jugador_sim, mut acc, day, mut ads): (
         ResMut<crate::tirados::Tirados>,
         Query<&mut crate::sim::SimState, With<Player>>,
         Local<f32>,
+        Res<crate::sky2d::DayClock>,
+        Local<Vec<Anuncio>>,
     ),
 ) {
     let _probe = crate::debug::probe("tick_fauna");
@@ -1474,6 +1490,8 @@ fn tick_fauna(
         .get_single()
         .map(|t| (t.translation.x, -t.translation.y))
         .unwrap_or((0.0, 0.0));
+    let fase = day.phase();
+    let ahora = time.elapsed_secs_f64();
     let food_pos: Vec<(f32, f32)> = foods.iter().map(|(_, f, _)| (f.x, f.z)).collect();
     let neigh: Vec<(f32, f32)> = animals.iter().map(|(_, a, ..)| (a.x, a.z)).collect();
     // Presas (no hostiles) y depredadores (hostiles) para caza/predación.
@@ -1507,6 +1525,7 @@ fn tick_fauna(
         .collect();
 
     for (e, mut a, mut n, mut tf, mut sprite, mut pose, resident, de_granja) in &mut animals {
+        let n = &mut *n;
         let is_res = resident.is_some();
         // F2: un residente LEJOS del jugador queda CONGELADO (no piensa/mueve/gasta) — sigue
         // como dato en su lugar y `cull_fauna` lo oculta; revive al acercarte. Así "no
@@ -1532,6 +1551,112 @@ fn tick_fauna(
         a.celo = (a.celo - dt).max(0.0);
         a.cria_cd = (a.cria_cd - dt).max(0.0);
 
+        // LA CABEZA: las barras que el metabolismo ya lleva se copian, el resto decae solo, y
+        // cuando toca elegir se decide entre lo que el mundo ofrece (comida, agua, cama,
+        // manada, un rincón por explorar). Una necesidad crítica manda sobre el gusto.
+        let clase = if a.hostile { Clase::Carnivoro } else { Clase::Herbivoro };
+        let pos = (a.x, a.z);
+        n.vida.m.set(Motivo::Hambre, 1.0 - n.hunger);
+        n.vida.m.set(Motivo::Sed, 1.0 - n.thirst);
+        n.vida.tick(clase, fase, dt, pos);
+        n.bump = (n.bump - dt).max(0.0);
+        n.agua_cd -= dt;
+        // Si el bocado al que iba ya no está (otro se lo comió), se replantea.
+        if n.vida.actividad() == Actividad::Comer {
+            if let Some((tx, tz, _)) = n.vida.destino() {
+                if !food_pos.iter().any(|f| (f.0 - tx).powi(2) + (f.1 - tz).powi(2) < 1.0) {
+                    n.vida.abandonar();
+                }
+            }
+        }
+        if n.vida.necesita_decidir(clase, fase) {
+            ads.clear();
+            let rnd = |k: u64| {
+                let h = sims::hash((ahora * 1000.0) as u64 ^ (a.brain as u64).wrapping_mul(0x9E37_79B9) ^ k);
+                (h >> 40) as f32 / (1u64 << 24) as f32
+            };
+            if n.hunger > 0.4 && !a.hostile {
+                let mut mejor = 40.0f32 * 40.0;
+                let mut donde = None;
+                for &(fx, fz) in &food_pos {
+                    let d2 = (fx - a.x).powi(2) + (fz - a.z).powi(2);
+                    if d2 < mejor {
+                        mejor = d2;
+                        donde = Some((fx, fz));
+                    }
+                }
+                if let Some((fx, fz)) = donde {
+                    ads.push(Anuncio::nuevo(Actividad::Comer, fx, fz).alcance(40.0).uso(0.5).dur(4.0).gana(Motivo::Hambre, 0.2));
+                }
+            }
+            if n.thirst > 0.25 {
+                if n.agua_cd <= 0.0 {
+                    n.agua_cd = 20.0;
+                    n.agua = None;
+                    'buscar: for r in [3.0f32, 6.0, 9.0, 13.0, 18.0] {
+                        for k in 0..8 {
+                            let ang = k as f32 * std::f32::consts::FRAC_PI_4;
+                            let (wx, wz) = (a.x + ang.cos() * r, a.z + ang.sin() * r);
+                            if tiles.tile_at(body, wx.floor() as i64, wz.floor() as i64) == ha_shared::topdown::Tile::Water {
+                                n.agua = Some((wx, wz));
+                                break 'buscar;
+                            }
+                        }
+                    }
+                }
+                if let Some((wx, wz)) = n.agua {
+                    ads.push(Anuncio::nuevo(Actividad::Beber, wx, wz).alcance(40.0).uso(2.2).dur(4.0).gana(Motivo::Sed, 0.25));
+                }
+            }
+            if sims::noche(fase) > 0.5 {
+                ads.push(Anuncio::nuevo(Actividad::Dormir, pos.0, pos.1).uso(3.0).dur(1800.0).hasta_dia().gana(Motivo::Sueno, 0.02));
+            } else {
+                ads.push(Anuncio::nuevo(Actividad::Descansar, pos.0, pos.1).uso(3.0).dur(12.0).gana(Motivo::Sueno, 0.03));
+            }
+            if !a.hostile {
+                let mut mejor = 30.0f32 * 30.0;
+                let mut donde = None;
+                for &(qx, qz) in &neigh {
+                    let d2 = (qx - a.x).powi(2) + (qz - a.z).powi(2);
+                    if d2 > 9.0 && d2 < mejor {
+                        mejor = d2;
+                        donde = Some((qx, qz));
+                    }
+                }
+                if let Some((qx, qz)) = donde {
+                    ads.push(Anuncio::nuevo(Actividad::Charlar, qx, qz).alcance(30.0).uso(3.0).dur(10.0).gana(Motivo::Social, 0.05));
+                }
+            }
+            let ang = a.heading + (rnd(7) - 0.5) * 2.4;
+            let dist = 8.0 + 10.0 * rnd(11);
+            ads.push(
+                Anuncio::nuevo(Actividad::Jugar, a.x + ang.cos() * dist, a.z + ang.sin() * dist)
+                    .uso(1.5)
+                    .dur(8.0)
+                    .gana(Motivo::Ocio, 0.05),
+            );
+            n.vida.decidir(clase, pos, fase, &ads);
+        }
+        let act_vida = n.vida.actividad();
+        // El depredador sólo persigue con hambre: saciado, deja pasar (antes cazaba por cazar).
+        let cazando = a.hostile && n.hunger > 0.45;
+        let mut vida_parado = false;
+        let mut vida_lento = 1.0f32;
+        let mut amplitud = 2.1f32;
+        let mut destino_rumbo: Option<f32> = None;
+        match n.vida.destino() {
+            Some((tx, tz, false)) => {
+                destino_rumbo = Some((tz - a.z).atan2(tx - a.x));
+                amplitud = 0.6; // el IAFZ deja de mandar: sólo queda su textura
+            }
+            Some((_, _, true)) => match act_vida {
+                Actividad::Comer | Actividad::Beber | Actividad::Dormir | Actividad::Descansar => vida_parado = true,
+                Actividad::Charlar | Actividad::Jugar => vida_lento = 0.5,
+                _ => {}
+            },
+            None => {}
+        }
+
         // Sensor compartido (bioma + comida + social) + ESTIGMERGIA (bits 14-18:
         // gradiente de alarma/aglomeración del campo de feromonas) → IAFZ → giro.
         let s = sense(body, a.x, a.z, a.heading, n.energy, &food_pos, &neigh)
@@ -1555,19 +1680,19 @@ fn tick_fauna(
         let referencia = {
             let mut mejor = f32::MAX;
             let mut rumbo = a.heading; // sin comida a la vista, sigue derecho
-            for &(fx, fz) in &food_pos {
+            for &(fx, fz) in food_pos.iter().filter(|_| destino_rumbo.is_none() && (n.hunger > 0.3 || a.hostile)) {
                 let d2 = (fx - a.x) * (fx - a.x) + (fz - a.z) * (fz - a.z);
                 if d2 < mejor {
                     mejor = d2;
                     rumbo = (fz - a.z).atan2(fx - a.x);
                 }
             }
-            rumbo
+            destino_rumbo.unwrap_or(rumbo)
         };
         // El cerebro abre hasta +-120 grados respecto de esa referencia: puede
         // ir derecho a la comida, rodearla, o darle la espalda para explorar.
         // La decisión sigue siendo suya; lo que ya no puede es girar sin parar.
-        let deseado = referencia + steer * 2.1;
+        let deseado = referencia + steer * amplitud;
         let diff = (deseado - a.heading + std::f32::consts::PI)
             .rem_euclid(std::f32::consts::TAU)
             - std::f32::consts::PI;
@@ -1576,7 +1701,7 @@ fn tick_fauna(
         // DEPREDADOR (hostil): CAZA. Persigue a la presa más cercana si hay una a la vista;
         // si no, acecha al jugador (F5). La caza es la fuente de muerte VISIBLE del
         // ecosistema (reemplaza a la inanición) → selección para evolucionar + gameplay.
-        if a.hostile {
+        if cazando {
             let mut target: Option<(f32, f32)> = None;
             let mut best = HUNT_RANGE * HUNT_RANGE;
             for &(qx, qz) in &prey_pos {
@@ -1642,7 +1767,8 @@ fn tick_fauna(
                 a.huevo_t = HUEVO_MIN + (HUEVO_MAX - HUEVO_MIN) * r as f32 / 1000.0;
             }
         }
-        let speed = if conducta.quieto {
+        let vida_parado = vida_parado && !cazando && !a.running && conducta.prisa <= 1.0;
+        let speed = if conducta.quieto || vida_parado {
             0.0
         } else if conducta.prisa > 1.0 {
             VEL * conducta.prisa
@@ -1656,6 +1782,7 @@ fn tick_fauna(
                 } else {
                     1.0
                 }
+                * vida_lento
         };
         let (nx, nz) = (a.x + a.heading.cos() * speed * dt, a.z + a.heading.sin() * speed * dt);
         // Las paredes construidas (bordes) también las encierran — es lo que
@@ -1665,6 +1792,10 @@ fn tick_fauna(
         });
         if hits_wall || tiles.solid_at(body, nx.floor() as i64, nz.floor() as i64) {
             a.heading += 1.3;
+            if n.bump <= 0.0 {
+                n.vida.trabar();
+                n.bump = 2.5;
+            }
         } else {
             a.x = nx;
             a.z = nz;
@@ -1699,6 +1830,11 @@ fn tick_fauna(
             }
         }
 
+        // Llegó al charco que había elegido: bebe aunque la orilla le quede a un par de pasos.
+        if act_vida == Actividad::Beber && n.vida.usando() && a.drink_t <= 0.0 && n.thirst > 0.05 {
+            n.thirst = (n.thirst - 0.5).max(0.0);
+            a.drink_t = 0.5;
+        }
         // BEBER: si tiene sed y hay AGUA (Tile::Water) en una celda vecina.
         if n.thirst > 0.15 {
             let (cx, cz) = (a.x.floor() as i64, a.z.floor() as i64);
@@ -1796,6 +1932,8 @@ fn tick_fauna(
                 "eat"
             } else if a.drink_t > 0.0 {
                 "drink"
+            } else if vida_parado && !a.running {
+                "idle"
             } else if a.running {
                 // Centinela (perro terrestre) ladra ante el peligro; el resto huye.
                 if a.relays_alarm {
@@ -2078,7 +2216,7 @@ fn manage_vivarium(
             );
             commands.entity(e).try_insert((
                 Resident { uid: rec.uid },
-                Needs { hunger: rec.hunger, thirst: rec.thirst, energy: rec.energy },
+                Needs::nuevo(rec.hunger, rec.thirst, rec.energy, rec.uid),
                 Restaurar {
                     cria_cd: rec.cria_cd,
                     vida: rec.vida,
@@ -3022,18 +3160,24 @@ fn rotular_animal_apuntado(
     target: Res<crate::targeting::LookTarget>,
     equipped: Res<crate::input::EquippedItem>,
     mut ayuda: ResMut<AyudaAnimal>,
-    mut q: Query<(&Animal, Option<&Resident>, &mut crate::structures::StructureName)>,
+    mut q: Query<(&Animal, Option<&Resident>, &mut crate::structures::StructureName, Option<&Needs>)>,
 ) {
     let apuntado = target
         .entity
         .filter(|_| target.kind == Some(ha_shared::InteractTargetKind::Animal));
-    let Some((a, res, mut nombre)) = apuntado.and_then(|e| q.get_mut(e).ok()) else {
+    let Some((a, res, mut nombre, needs)) = apuntado.and_then(|e| q.get_mut(e).ok()) else {
         if ayuda.0.is_some() {
             ayuda.0 = None;
         }
         return;
     };
-    let rotulo = estado_animal(a, res.is_some());
+    let mut rotulo = estado_animal(a, res.is_some());
+    if let Some(nd) = needs {
+        let clase = if a.hostile { Clase::Carnivoro } else { Clase::Herbivoro };
+        if !a.enojado && a.celo <= 0.0 && !a.domado {
+            rotulo.push_str(&format!(" · {}", nd.vida.actividad().verbo(clase).to_lowercase()));
+        }
+    }
     if nombre.0 != rotulo {
         nombre.0 = rotulo;
     }

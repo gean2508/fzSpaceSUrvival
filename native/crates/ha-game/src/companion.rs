@@ -1,46 +1,31 @@
-//! Compañero-IA — la "mano derecha" del jugador, controlada por la IA FRUGAL del
-//! usuario (IAFZ-64, `iafz-sys`). Sigue al jugador reusando el genoma base
-//! `FAUNA.adn` (el gym ya lo entrenó para buscar la "comida" por el canal de
-//! dirección → le pasamos al JUGADOR como esa comida, y lo persigue con su
-//! conocimiento base), APRENDE del maestro (el tester-IA o el jugador) y EVOLUCIONA
-//! solo por hill-climb online + persistencia. Diseño en `PLAN_COMPANERO_IA.md`.
+//! Compañero — la "mano derecha" del jugador. Su cabeza es la MISMA de los aldeanos
+//! (`ha_shared::sims`, clase `Companero`): barras que decaen (descanso, compañía, ocio,
+//! seguridad), y en cada decisión elige entre lo que el mundo le ofrece — acompañarte,
+//! sentarse a descansar cuando parás, dar una vuelta, charlar, rezar si se lo pedís. La
+//! orden del jugador (`CompanionOrder`) inclina la balanza; no la reemplaza.
 //!
-//! AISLADO de `fauna.rs`: ids de cerebro (990/991) y archivo (`companion.adn`)
-//! propios, para no tocar el ecosistema. Barato: un `think` a ~15 Hz, quad de color
-//! (slot lógico `npc/companion` para el arte del usuario).
-
-use std::path::PathBuf;
+//! La IA frugal (IAFZ-64) se quitó de acá: era ruido de rumbo sobre un "seguir" hecho a
+//! mano, y su hill-climb aprendía a quedarse cerca — cosa que ya es un anuncio. Ver
+//! biblia §6.
 
 use bevy::prelude::*;
-use ha_shared::fauna_brain::sense;
+use ha_shared::sims::{self, Actividad, Anuncio, Clase, Motivo, Vida};
 use ha_shared::CelestialBody;
 
 use crate::scene::WorldContextRuntime;
 use crate::sim::Player;
 use crate::world2d::{active_surface_body, render_xy, sort_z, ActivePlanet, TileWorld};
 
-/// Cerebros reservados fuera del rango de la fauna (0..72) y dentro de MAX_AGENTS
-/// (1000): el genoma VIGENTE y una COPIA MUTADA en prueba (hill-climb).
-const CHAMPION_ID: i32 = 990;
-const TRIAL_ID: i32 = 991;
-/// Conocimiento BASE: el genoma que el gym ya entrenó para forrajear/esquivar.
-const GENOME: &[u8] = include_bytes!("../../iafz-sys/genomes/FAUNA.adn");
-
 const AI_HZ: f32 = 15.0;
 const TURN: f32 = 2.8;
 const VEL: f32 = 5.2; // un pelín más rápido que la fauna: te alcanza
-const EVAL_SECS: f32 = 6.0; // ventana de evaluación champion/trial
 const FOLLOW_MIN: f32 = 2.0; // no se te encima
 const LEASH: f32 = 55.0; // si te alejás más (volaste/teleport), reaparece a tu lado
-const BASE_MUT: f32 = 0.05;
 /// Hoja del Character Generator que viste al compañero (ver `society::spawn_npc`).
 const COMPANION_SKIN: &str = "npc/char_7";
 /// Medida humana: la misma que el jugador y los aldeanos (el cuadro es 1:2).
 const COMPANION_SIZE: Vec2 = Vec2::new(0.95, 1.9);
-
-fn companion_adn() -> PathBuf {
-    crate::inventory_persist::persist_dir().join("vivarium").join("companion.adn")
-}
+const COMPANION_UID: u64 = 990;
 
 #[derive(Component)]
 pub struct Companion {
@@ -48,15 +33,12 @@ pub struct Companion {
     z: f32,
     heading: f32,
     body: CelestialBody,
-    /// Fase del hill-climb: false = corriendo el CHAMPION, true = probando el TRIAL.
-    using_trial: bool,
-    champ_fit: f32,
-    trial_fit: f32,
-    phase_t: f32,
-    no_improve: u32,
-    rate: f32,
+    vida: Vida,
     prev_px: f32,
     prev_pz: f32,
+    /// Cuánto lleva el jugador quieto (s): sentarse a descansar sólo si te ve parar.
+    quieto: f32,
+    bump: f32,
     say_cd: f32,
     was_founded: bool,
 }
@@ -84,9 +66,7 @@ impl Plugin for CompanionPlugin {
     }
 }
 
-/// Spawnea al compañero UNA vez, en la superficie, junto al jugador. Carga el
-/// genoma persistido (`companion.adn`) si existe — así el conocimiento se ACUMULA
-/// entre sesiones — o el base `FAUNA.adn` la primera vez.
+/// Spawnea al compañero UNA vez, en la superficie, junto al jugador.
 fn spawn_companion(
     mut commands: Commands,
     art: Res<crate::art2d::ArtLibrary>,
@@ -108,17 +88,6 @@ fn spawn_companion(
     let (px, pz) = (pt.translation.x, -pt.translation.y);
     let body = active_surface_body(&ctx, &planet);
 
-    // Champion: genoma persistido si hay, si no el base entrenado por el gym.
-    let adn = companion_adn();
-    let loaded = adn.exists() && iafz_sys::load(CHAMPION_ID, &adn.to_string_lossy());
-    if !loaded {
-        iafz_sys::load_bytes(CHAMPION_ID, GENOME);
-    }
-    iafz_sys::reset_echo(CHAMPION_ID);
-    // Primer trial = champion + mutación.
-    iafz_sys::mutate(CHAMPION_ID, TRIAL_ID, BASE_MUT);
-    iafz_sys::reset_echo(TRIAL_ID);
-
     let (cx, cz) = (px + 1.5, pz + 1.5);
     // **Cuerpo entero, como un aldeano.** El slot `npc/companion` apuntaba a un PNG
     // de 39×39 que es SÓLO UNA CABEZA (resto del arte 3D horneado, `e4d9595`), y
@@ -134,27 +103,21 @@ fn spawn_companion(
             z: cz,
             heading: 0.0,
             body,
-            using_trial: false,
-            champ_fit: 0.0,
-            trial_fit: 0.0,
-            phase_t: 0.0,
-            no_improve: 0,
-            rate: BASE_MUT,
+            vida: Vida::nueva_con(COMPANION_UID, 0.5),
             prev_px: px,
             prev_pz: pz,
+            quieto: 0.0,
+            bump: 0.0,
             say_cd: 3.0,
             was_founded: false,
         },
         Name::new("Companion"),
     ));
     crate::light2d::attach(&mut ent, &art, &[COMPANION_SKIN], COMPANION_SIZE);
-    eprintln!(
-        "ha-companion: spawn (genoma {})",
-        if loaded { "persistido" } else { "base FAUNA.adn" }
-    );
+    eprintln!("ha-companion: spawn");
 }
 
-/// El compañero piensa con la IA frugal, sigue al jugador y evoluciona (hill-climb).
+/// El compañero decide con la misma cabeza que un aldeano y camina hacia lo que eligió.
 #[allow(clippy::type_complexity)]
 fn tick_companion(
     time: Res<Time>,
@@ -162,11 +125,13 @@ fn tick_companion(
     planet: Res<ActivePlanet>,
     tiles: Res<TileWorld>,
     order: Res<CompanionOrder>,
+    day: Res<crate::sky2d::DayClock>,
     religion: Res<crate::society::Religion>,
     mut speech: ResMut<crate::dialog::SpeechQueue>,
     player: Query<&Transform, (With<Player>, Without<Companion>)>,
     mut q: Query<(&mut Companion, &mut Transform, &mut Sprite)>,
     mut acc: Local<f32>,
+    mut ads: Local<Vec<Anuncio>>,
 ) {
     // ~15 Hz como la fauna (batería). En pausa dt=0 → no corre.
     *acc += time.delta_secs();
@@ -182,126 +147,126 @@ fn tick_companion(
     let Ok(pt) = player.get_single() else {
         return;
     };
+    let c = &mut *c;
     let (px, pz) = (pt.translation.x, -pt.translation.y);
     let body = active_surface_body(&ctx, &planet);
 
     // Si cambiaste de cuerpo o te alejaste mucho (volaste), reaparece a tu lado —
     // sigue siendo tu mano derecha.
-    let far = {
-        let dx = px - c.x;
-        let dz = pz - c.z;
-        (dx * dx + dz * dz).sqrt() > LEASH
-    };
-    if body != c.body || far {
+    let dx = px - c.x;
+    let dz = pz - c.z;
+    if body != c.body || (dx * dx + dz * dz).sqrt() > LEASH {
         c.x = px + 1.5;
         c.z = pz + 1.5;
         c.body = body;
+        c.vida.abandonar();
     }
-
-    // ── PENSAR (IA frugal) ────────────────────────────────────────────────────
-    let brain = if c.using_trial { TRIAL_ID } else { CHAMPION_ID };
     let dx = px - c.x;
     let dz = pz - c.z;
     let dist = (dx * dx + dz * dz).sqrt().max(0.001);
-    // El JUGADOR es la "comida": el genoma base ya sabe ir hacia el sector de comida.
-    let energy = (1.0 - dist / 30.0).clamp(0.0, 1.0);
-    let s = sense(body, c.x, c.z, c.heading, energy, &[(px, pz)], &[]);
-    let steer = iafz_sys::think(brain, s).tanh();
-    // La IA frugal aporta esquive/textura (autoridad reducida); la TAREA da rumbo.
-    c.heading += steer * TURN * dt * 0.4;
 
-    // ── TAREA (mano derecha): distancia y estilo según la orden del jugador ─────
-    use std::f32::consts::{FRAC_PI_2, PI, TAU};
-    let desired = match order.0 {
-        CompanionTask::Follow => FOLLOW_MIN,
-        CompanionTask::Pray => 1.3, // se pega a orar
-        CompanionTask::Gather => 7.0, // deambula amplio (reúne/explora)
-    };
-    let toward = dz.atan2(dx);
-    let goal = if dist > desired + 0.5 {
-        toward // acercate
-    } else if matches!(order.0, CompanionTask::Pray) {
-        toward + FRAC_PI_2 // orbita al ídolo
-    } else {
-        c.heading + (c.x * 0.3 + time.elapsed_secs() * 0.5).sin() * 0.3 // paseo suave
-    };
-    let diff = (goal - c.heading + PI).rem_euclid(TAU) - PI;
-    c.heading += diff.clamp(-1.0, 1.0) * TURN * dt * 0.9;
-
-    // ── MOVER ─────────────────────────────────────────────────────────────────
-    let speed = VEL * if dist > desired { 1.0 } else { 0.25 };
-    let nx = c.x + c.heading.cos() * speed * dt;
-    let nz = c.z + c.heading.sin() * speed * dt;
-    let mut hit_wall = false;
-    if tiles.solid_at(body, nx.floor() as i64, nz.floor() as i64) {
-        c.heading += 1.3; // rebota
-        hit_wall = true;
-    } else {
-        c.x = nx;
-        c.z = nz;
-    }
-
-    // ── FITNESS (qué es ser buena mano derecha) ───────────────────────────────
-    // Cercanía sostenida al jugador + IMITAR su rumbo (aprender del maestro) −
-    // chocar paredes.
-    let mut fit = (12.0 - dist).clamp(-6.0, 12.0) * dt;
-    let pvx = px - c.prev_px;
-    let pvz = pz - c.prev_pz;
-    let pspeed = (pvx * pvx + pvz * pvz).sqrt();
-    if pspeed > 0.05 {
-        let (cdx, cdz) = (c.heading.cos(), c.heading.sin());
-        let dot = (cdx * pvx + cdz * pvz) / pspeed; // −1..1: rumbo vs el del maestro
-        fit += dot * 3.0 * dt;
-    }
-    if hit_wall {
-        fit -= 2.0 * dt;
-    }
+    let pspeed = ((px - c.prev_px).powi(2) + (pz - c.prev_pz).powi(2)).sqrt() / dt.max(1e-3);
     c.prev_px = px;
     c.prev_pz = pz;
-    if c.using_trial {
-        c.trial_fit += fit;
-    } else {
-        c.champ_fit += fit;
-    }
+    c.quieto = if pspeed < 0.3 { c.quieto + dt } else { 0.0 };
+    c.bump = (c.bump - dt).max(0.0);
 
-    // ── HILL-CLIMB (evoluciona solo) ──────────────────────────────────────────
-    c.phase_t += dt;
-    if c.phase_t >= EVAL_SECS {
-        c.phase_t = 0.0;
-        if !c.using_trial {
-            // Terminó la ventana del champion → ahora probamos el trial.
-            c.using_trial = true;
-            iafz_sys::reset_echo(TRIAL_ID);
-        } else {
-            // Terminó la ventana del trial → comparamos.
-            if c.trial_fit > c.champ_fit {
-                // El trial es mejor → PROMOVER (copia sin mutar) y GUARDAR.
-                iafz_sys::mutate(TRIAL_ID, CHAMPION_ID, 0.0);
-                let adn = companion_adn();
-                if let Some(dir) = adn.parent() {
-                    let _ = std::fs::create_dir_all(dir);
-                }
-                iafz_sys::save(CHAMPION_ID, &adn.to_string_lossy());
-                c.no_improve = 0;
-                c.rate = BASE_MUT;
-                eprintln!(
-                    "ha-companion: champion MEJORADO (trial {:.1} > champ {:.1}), guardado",
-                    c.trial_fit, c.champ_fit
-                );
-            } else {
-                c.no_improve += 1;
-                // Anti-mínimo local: sin mejoras → explorar más fuerte.
-                if c.no_improve >= 3 {
-                    c.rate = (c.rate * 1.6).min(0.35);
-                    c.no_improve = 0;
-                }
+    // ── LA CABEZA ─────────────────────────────────────────────────────────────
+    use std::f32::consts::{FRAC_PI_2, PI, TAU};
+    let fase = day.phase();
+    c.vida.tick(Clase::Companero, fase, dt, (c.x, c.z));
+    if c.vida.necesita_decidir(Clase::Companero, fase) {
+        let desired = match order.0 {
+            CompanionTask::Follow => FOLLOW_MIN,
+            CompanionTask::Pray => 1.3,
+            CompanionTask::Gather => 7.0,
+        };
+        let azar = |k: u64| {
+            let h = sims::hash(time.elapsed().as_micros() as u64 ^ k.wrapping_mul(0x9E37_79B9));
+            (h >> 40) as f32 / (1u64 << 24) as f32
+        };
+        ads.clear();
+        // Acompañarte: siempre se ofrece, y la orden lo empuja más o menos.
+        let bono_seguir = match order.0 {
+            CompanionTask::Follow => 0.9,
+            CompanionTask::Pray => 0.3,
+            CompanionTask::Gather => 0.2,
+        };
+        ads.push(Anuncio::nuevo(Actividad::Seguir, px, pz).alcance(1e4).uso(desired).dur(6.0).bono(bono_seguir));
+        // Charlar con vos (compañía).
+        ads.push(
+            Anuncio::nuevo(Actividad::Charlar, px, pz).alcance(1e4).uso(2.5).dur(8.0).gana(Motivo::Social, 0.05),
+        );
+        // Dar una vuelta cerca (ocio): más lejos si le pediste que reúna/explore.
+        let radio = if order.0 == CompanionTask::Gather { 8.0 } else { 4.0 };
+        let ang = azar(1) * TAU;
+        ads.push(
+            Anuncio::nuevo(Actividad::Jugar, px + ang.cos() * radio, pz + ang.sin() * radio)
+                .alcance(1e4)
+                .uso(1.5)
+                .dur(9.0)
+                .gana(Motivo::Ocio, 0.05)
+                .bono(if order.0 == CompanionTask::Gather { 0.9 } else { 0.0 }),
+        );
+        // Descansar: se sienta a tu lado, pero sólo si vos también parás.
+        if c.quieto > 2.0 {
+            ads.push(
+                Anuncio::nuevo(Actividad::Descansar, px + 1.0, pz + 1.0)
+                    .alcance(1e4)
+                    .uso(1.5)
+                    .dur(14.0)
+                    .gana(Motivo::Sueno, 0.03),
+            );
+        }
+        // Rezar cerca tuyo cuando se lo pedís.
+        if order.0 == CompanionTask::Pray {
+            ads.push(Anuncio::nuevo(Actividad::Rezar, px, pz).alcance(1e4).uso(1.3).dur(12.0).bono(1.2));
+        }
+        c.vida.decidir(Clase::Companero, (c.x, c.z), fase, &ads);
+    }
+    // Lo que persigue se mueve con vos.
+    if let Some((_, _, _)) = c.vida.destino() {
+        match c.vida.actividad() {
+            Actividad::Seguir | Actividad::Charlar | Actividad::Rezar | Actividad::Descansar => {
+                let (ox, oz) = if c.vida.actividad() == Actividad::Descansar { (1.0, 1.0) } else { (0.0, 0.0) };
+                c.vida.apuntar(px + ox, pz + oz);
             }
-            // Nuevo trial = champion + mutación; volvemos a correr el champion.
-            iafz_sys::mutate(CHAMPION_ID, TRIAL_ID, c.rate);
-            iafz_sys::reset_echo(TRIAL_ID);
-            c.using_trial = false;
-            c.champ_fit = 0.0;
-            c.trial_fit = 0.0;
+            _ => {}
+        }
+    }
+    c.vida.por_resolver();
+
+    // ── MOVER ─────────────────────────────────────────────────────────────────
+    let toward = dz.atan2(dx);
+    let act = c.vida.actividad();
+    let (goal, speed): (Option<f32>, f32) = match c.vida.destino() {
+        Some((tx, tz, false)) => (Some((tz - c.z).atan2(tx - c.x)), if dist > 6.0 { VEL } else { VEL * 0.85 }),
+        Some((_, _, true)) => match act {
+            // Rezando orbita; jugando o siguiendo se mueve un poco en el lugar.
+            Actividad::Rezar => (Some(toward + FRAC_PI_2), VEL * 0.25),
+            Actividad::Seguir | Actividad::Jugar => {
+                (Some(c.heading + (c.x * 0.3 + time.elapsed_secs() * 0.5).sin() * 0.3), VEL * 0.2)
+            }
+            _ => (None, 0.0),
+        },
+        None => (Some(c.heading + (c.x * 0.3 + time.elapsed_secs() * 0.5).sin() * 0.3), VEL * 0.15),
+    };
+    if let Some(g) = goal {
+        let diff = (g - c.heading + PI).rem_euclid(TAU) - PI;
+        c.heading += diff.clamp(-1.0, 1.0) * TURN * dt * 0.9;
+    }
+    if speed > 0.0 {
+        let nx = c.x + c.heading.cos() * speed * dt;
+        let nz = c.z + c.heading.sin() * speed * dt;
+        if tiles.solid_at(body, nx.floor() as i64, nz.floor() as i64) {
+            c.heading += 1.3; // rebota
+            if c.bump <= 0.0 {
+                c.vida.trabar();
+                c.bump = 2.5;
+            }
+        } else {
+            c.x = nx;
+            c.z = nz;
         }
     }
 
@@ -315,7 +280,7 @@ fn tick_companion(
         Color::WHITE
     };
 
-    // ── CHAT (mano derecha): reacciona al culto y a la tarea; conversa ─────────
+    // ── CHAT (mano derecha): reacciona al culto y a cómo está; conversa ────────
     c.say_cd -= dt;
     let just_founded = religion.founded && !c.was_founded;
     c.was_founded = religion.founded;
@@ -330,11 +295,17 @@ fn tick_companion(
         c.say_cd = 6.0;
     } else if c.say_cd <= 0.0 {
         c.say_cd = 9.0;
-        let line = match order.0 {
-            CompanionTask::Follow if religion.founded => "Los fieles crecen, jefe.",
-            CompanionTask::Follow => "A tus ordenes.",
-            CompanionTask::Gather => "Reuniendo al rebano.",
-            CompanionTask::Pray => "Que el Ki nos guie.",
+        let line: String = if let Some(q) = c.vida.queja(Clase::Companero) {
+            q.to_string()
+        } else {
+            match (act, order.0) {
+                (Actividad::Descansar, _) => "Un ratito de descanso, jefe.".into(),
+                (Actividad::Jugar, _) => "Voy a echar un vistazo.".into(),
+                (_, CompanionTask::Follow) if religion.founded => "Los fieles crecen, jefe.".into(),
+                (_, CompanionTask::Follow) => "A tus ordenes.".into(),
+                (_, CompanionTask::Gather) => "Reuniendo al rebano.".into(),
+                (_, CompanionTask::Pray) => "Que el Ki nos guie.".into(),
+            }
         };
         crate::dialog::say(&mut speech, c.x, c.z, line, Color::srgb(0.6, 0.9, 1.0));
     }
