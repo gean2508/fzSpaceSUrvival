@@ -289,7 +289,7 @@ mod tests {
 
         // Las orillas + la hondura + las cascadas, que son lo que dibuja el agua
         // en sí: sin ellas el lago vuelve a ser la plancha azul.
-        for clave in ["tiles/water", "tiles/water_arena", "tiles/water_deep", "agua/cascada"] {
+        for clave in ["tiles/water", "tiles/water_arena", "tiles/water_nieve", "tiles/water_deep", "agua/cascada"] {
             assert!(
                 sprites.contains_key(clave),
                 "falta `{clave}` en el manifest: corré `python3 scripts/import-agua.py`"

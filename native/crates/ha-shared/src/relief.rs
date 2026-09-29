@@ -967,9 +967,32 @@ fn es_canto(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
     // sur por un llano cumple siempre —cada celda del cauce tiene agua a los dos
     // lados— y la excepción se tragaba el retiro entero: medido, el cauce seguía
     // cortado en el 7,4 % de la sierra. Un salto sin desnivel no es un salto.
+    //
+    // **Y ADEMÁS QUE AHÍ SE DIBUJE UNA CASCADA** (28 sep 2026). Las tres de
+    // arriba también las cumple el río que corre de lado con el escalón a lo
+    // largo, el que sube hacia el norte, la confluencia de dos cauces a distinta
+    // cota y el que cruza en diagonal sin tres columnas al ras; en ninguno cabe
+    // el recorte de frente del pack, y la roca quedaba atravesada partiendo el
+    // río en charcos (`agua-4-sierra.png`). Dentro de un río la única roca es la
+    // garganta de un salto que se ancla: `agua::garganta_por_niveles` lo
+    // contesta con niveles y trazado, sin volver a preguntarnos a nosotros.
+    //
+    // **Y EL ACANTILADO SIGUE DE CORRIDO AL LADO DEL SALTO** (28 sep 2026,
+    // pedido del usuario: *"que no rompa la estética de los acantilados, sino
+    // que le dé continuidad"*). El río suele ser más ancho que el tramo que
+    // ancla: las columnas de agua que quedaban a los costados de la cascada
+    // bajaban como tiras que partían la pared de arriba abajo. Si a menos de
+    // [`COSTADO_DE_SALTO`] celdas, sobre el mismo borde, hay una garganta, esta
+    // celda es pared: el agua de arriba se junta y cae por la cascada.
     let cruza = s < l
-        && crate::geography::hay_rio(body, tx, tz - 1)
-        && crate::geography::hay_rio(body, tx, tz + 1);
+        && (crate::geography::hay_rio(body, tx, tz - 1) || crate::geography::hay_rio(body, tx, tz))
+        && (crate::agua::garganta_por_niveles(body, tx, tz)
+            || (1..=COSTADO_DE_SALTO).any(|d| {
+                (-1..=1).any(|dz| {
+                    crate::agua::garganta_por_niveles(body, tx - d, tz + dz)
+                        || crate::agua::garganta_por_niveles(body, tx + d, tz + dz)
+                })
+            }));
     if !cruza {
         let filas = if s < l { alto_entre(l, s) + 1 } else { 0 };
         for k in 0..=filas {
@@ -980,6 +1003,11 @@ fn es_canto(body: CelestialBody, tx: i64, tz: i64, l: i8) -> bool {
     }
     true
 }
+
+/// Hasta cuántas celdas a los costados de una garganta el borde de terraza que
+/// cruza el río sigue siendo pared (ver `es_canto`). Es el ancho de un cauce
+/// grande: más lejos ya es otro río.
+const COSTADO_DE_SALTO: i64 = 8;
 
 /// **¿ES ESTA CELDA EL CANTO DE UNA TERRAZA?** La versión pública de [`es_canto`],
 /// para quien tiene la celda y no su nivel.
@@ -1119,7 +1147,13 @@ fn relief_cell_sin_memo(body: CelestialBody, tx: i64, tz: i64, h: f32, l: i8) ->
     // Descarte barato: en el medio de una terraza no puede haber ningún canto.
     // Ojo — descarta el CANTO, no el pie: una celda bien plantada en su terraza
     // puede estar igual debajo del farallón de la terraza de arriba.
-    if near_step_boundary(body, h) && es_canto(body, tx, tz, l) {
+    // **Salvo en el valle de un río** (28 sep 2026): ahí el campo lo impone la
+    // cota del cauce (`rios::perfil_del_cauce`), que se toma por fila y puede
+    // saltar más que `MAX_FIELD_STEP_PER_TILE` entre dos celdas. El descarte
+    // escondía el canto que cierra el costado de una garganta y el río bajaba
+    // en una tira de agua al lado de la cascada.
+    let cerca = near_step_boundary(body, h) || crate::rios::perfil_del_cauce(body, tx, tz).is_some();
+    if cerca && es_canto(body, tx, tz, l) {
         return if es_paso(body, tx, tz, l) {
             ReliefCell::Ramp
         } else {

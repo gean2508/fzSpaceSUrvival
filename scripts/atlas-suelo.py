@@ -826,6 +826,12 @@ def main():
     with open(INDEX, "w") as fh:
         json.dump({"sprites": nuevos, "variantes": variantes, "pagina": PAGINA_REL}, fh, indent=1)
     print(f"manifest: {len(nuevos)} celdas de suelo apuntando a {PAGINA_REL}")
+    # La hoja se acaba de reescribir: las marcas dibujadas de la nieve (el pack
+    # no trae nieve) se vuelven a pegar en sus celdas libres.
+    if not args.dry_run:
+        import subprocess, sys
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                     "dibujar-marcas-de-suelo.py")], check=True)
 
 
 if __name__ == "__main__":

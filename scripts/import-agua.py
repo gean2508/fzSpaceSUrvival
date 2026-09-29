@@ -515,6 +515,55 @@ def clasificar_garganta(hojas):
     return agua, roca, cesped
 
 
+#: **Qué pieza de la pared viste cada fila de celdas de un recorte de cascada.**
+#: `None` = esa fila no es pared (la segunda fila de la poza es el suelo de
+#: abajo y se queda con su tinte).
+FILAS_DE_PARED = {
+    "boca": ("labio",),
+    "tramo": ("cuerpo",),
+    "poza": ("pie", None),
+    "alta": ("labio", "cuerpo", "pie", None),
+}
+
+
+def vestir_con_la_pared(original, tenida, material, man, filas, agua):
+    """**LOS COSTADOS DE LA CASCADA SON LA PARED DEL ACANTILADO, NO OTRA ROCA.**
+
+    Reclamo del usuario (28 sep 2026): *"las cascadas deben ser del mismo
+    terreno que el bioma, no podés poner otro color ahí"*. El tinte de la roca
+    del recorte (`tinte_del_material`) llevaba sus colores a la paleta de la
+    pared, pero el DIBUJO seguía siendo el del pack —columnas de piedra con
+    enredadera—, y en el pasto salía una franja mostaza al lado del canto rodado
+    gris del acantilado. Ahora cada píxel que en el recorte ORIGINAL no es agua
+    se reemplaza por el píxel de la pieza del kit `cliff/<material>` en la misma
+    posición dentro de su celda: labio en la boca, cuerpo en la caída, pie abajo.
+    La cascada queda hecha de la misma roca que la pared que la rodea, y el
+    chorro (que sí es agua) se queda como está.
+    """
+    piezas = {}
+    for nombre in {f for f in filas if f}:
+        im = _recorte_del_manifest(man, f"cliff/{material}", nombre)
+        if im is None:
+            return tenida
+        piezas[nombre] = im.convert("RGBA").crop((0, 0, CELL, CELL)).load()
+    fuente = original.convert("RGBA").load()
+    out = tenida.convert("RGBA").copy()
+    px = out.load()
+    for y in range(out.height):
+        pieza = filas[min(y // CELL, len(filas) - 1)]
+        if pieza is None:
+            continue
+        kit = piezas[pieza]
+        for x in range(out.width):
+            o = fuente[x, y]
+            if o[3] == 0 or o[:3] in agua:
+                continue
+            k = kit[x % CELL, y % CELL]
+            if k[3]:
+                px[x, y] = k
+    return out
+
+
 def color_del_rio():
     """El tono del agua quieta, medido del PROPIO recorte del pack.
 
@@ -817,9 +866,10 @@ def main():
                 # **La hoja ENTERA se tiñe antes de recortar**, así que los seis
                 # frames de la tira salen del mismo tinte. Teñir sólo el primero
                 # era el bug obvio: la animación parpadearía de color.
-                im = hojas_cascada[(variante, nombre)]
-                if mapa:
-                    im = tenir(im, mapa)
+                crudo = hojas_cascada[(variante, nombre)]
+                im = tenir(crudo, mapa) if mapa else crudo
+                if material is not None and nombre in FILAS_DE_PARED:
+                    im = vestir_con_la_pared(crudo, im, material, man_previo, FILAS_DE_PARED[nombre], agua_pal)
                 col, row = tira_animada(im, pagina, 0, 0, w, w, h, FRAMES_CASCADA)
                 poses[nombre] = pose(col, row, w=w, h=h, frames=FRAMES_CASCADA, fps=FPS_CASCADA)
             # **Las tres variantes tienen que ser modulares, no sólo la primera.**
@@ -827,9 +877,10 @@ def main():
             # dos hay que recortarlas de [`CASCADAS_ALTAS`], que es el mismo
             # dibujo apilado a su altura máxima (biblia: el asset se usa como está
             # dibujado, y lo que falta se deriva de lo que ya se usa).
-            im = hojas_cascada[(variante, "alta")]
-            if mapa:
-                im = tenir(im, mapa)
+            crudo = hojas_cascada[(variante, "alta")]
+            im = tenir(crudo, mapa) if mapa else crudo
+            if material is not None:
+                im = vestir_con_la_pared(crudo, im, material, man_previo, FILAS_DE_PARED["alta"], agua_pal)
             for nombre, fila, alto in PIEZAS_DE_LA_ALTA:
                 if nombre in poses:
                     continue

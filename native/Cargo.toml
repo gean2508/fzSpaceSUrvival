@@ -47,7 +47,10 @@ codegen-units = 1
 [profile.release-native]
 inherits = "release"
 opt-level = 3
-strip = true
+# "debuginfo" y no `true`: se va la información de depuración pesada pero quedan
+# los NOMBRES de función, que es lo que necesita `simpleperf` para decir en qué
+# se va el frame en el Redmi (biblia §10). Cuesta unos pocos MB del .so.
+strip = "debuginfo"
 
 # Perfil de los DRIVERS DE QA en la compu. Es `release` sin LTO ni
 # `codegen-units = 1`: el juego corre igual de rápido para mirar una captura, y

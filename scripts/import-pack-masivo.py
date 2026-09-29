@@ -1506,6 +1506,15 @@ def main():
     print("siembra: " + " · ".join(f"{k} {len(v)}" for k, v in siembra.items()))
     if args.dry_run:
         print("(dry-run: no se escribió nada)")
+    else:
+        # Las páginas se acaban de reescribir desde los PNG crudos: la mata de
+        # pasto que el pack pinta al pie de cada árbol volvió. Fuera otra vez.
+        import subprocess
+        subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                          "podar-pasto-de-arboles.py")],
+            check=True,
+        )
 
 
 if __name__ == "__main__":

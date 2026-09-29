@@ -52,6 +52,7 @@ mod loading;
 mod inventory_persist;
 mod machines;
 mod npc_menu;
+mod puertas;
 mod space_fx;
 mod universe;
 mod platform;
@@ -288,7 +289,7 @@ fn run_app_inner() {
         ))
         // El fondo parallax de las pantallas de menú. En su propia llamada
         // porque el tuple de al lado ya llegó al tope de 16 que admite `Plugins`.
-        .add_plugins((ui_pack::UiPackPlugin, marca::ParallaxPlugin, consola::ConsolaPlugin, menu_listas::MenuListasPlugin, objetivo::ObjetivoPlugin))
+        .add_plugins((ui_pack::UiPackPlugin, marca::ParallaxPlugin, consola::ConsolaPlugin, menu_listas::MenuListasPlugin, objetivo::ObjetivoPlugin, puertas::PuertasPlugin))
         .add_plugins((
             FollowCameraPlugin,
             TelemetryPlugin,

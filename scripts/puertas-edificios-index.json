@@ -1,0 +1,2506 @@
+{
+ "paginas": [
+  "art/pack/edificios_puertas_0.png",
+  "art/pack/edificios_puertas_1.png"
+ ],
+ "poses": {
+  "building/base_militar#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/base_militar#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/base_militar#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/base_militar#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/bunker": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/bunker_base": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/cabana_entrada_techo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/caja": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/caja#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/caja#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_chica#8": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#11": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#12": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#13": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#14": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#15": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#16": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#17": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#8": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_country#9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_de_una_planta": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_embrujada": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_embrujada_sin_farol": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_modular_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_modular_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_modular_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_modular_4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_en_terrazas_modular_6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#10": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#11": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#12": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#13": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#14": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#15": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#16": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#17": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#8": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_grande#9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_hilera#5": [
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_japonesa": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#8": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_mediana#9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_postapocaliptica_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_postapocaliptica_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_sin_adornos": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_victoriana_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casa_victoriana_con_entrada_lateral": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/casas_casa": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/comisaria": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/comisaria#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/comisaria#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/comisaria#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/comisaria_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/comisaria_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/comisaria_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite",
+   "puerta3_closed",
+   "puerta3_open",
+   "puerta3_opening",
+   "puerta3_closing",
+   "puerta3_en_sprite"
+  ],
+  "building/condominio": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio_13": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio_6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/condominio_7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/correo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/correo_edificio": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/correo_edificio#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/correo_edificio#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/correo_edificio#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/correo_edificio#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/deposito#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/deposito#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/deposito#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/deposito#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/dormitorio_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/dormitorio_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/dormitorio_4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/dormitorio_entrada_puerta_doble": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/dormitorio_entrada_puerta_simple": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/duplex": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/duplex#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/duplex#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/duplex#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/duplex#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/duplex#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/duplex#7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificio_modular_medio_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificio_puerta": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificio_puerta#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificio_puerta#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/edificios_condominio_10_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_14": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_15": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_1_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_20": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_38": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/edificios_condominio_39": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/edificios_condominio_40": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_6_4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/edificios_condominio_8_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_condominio_9_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/edificios_ferreteria_tienda": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/energia_casa": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/escuela": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/escuela_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/estacion_de_servicio_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/estacion_de_servicio_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/ferreteria_tienda": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/gasolinera": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/gasolinera#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/gasolinera#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/hospital": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/hospital#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/hospital#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/hotel": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/hotel#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/hotel#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/hotel_y_hospital_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/hotel_y_hospital_hotel_y_hospital_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/hotel_y_hospital_hotel_y_hospital_modular_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/hotel_y_hospital_modular_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/kiosco_helado_persiana_cerrado": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/kiosco_taza_de_cafe_persiana_cerrado": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/mercado": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/nave_industrial#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/nave_industrial#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/nave_industrial#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/nave_industrial#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/oficina": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/oficina#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/oficina#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/oficina#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/oficina#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/oficina_edificio_modular_medio_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/oficina_edificio_modular_medio_4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_11": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_13": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_15": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_17": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_carnada_tienda_9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_8": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_condominio_9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_gimnasio_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_gimnasio_11": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_gimnasio_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_gimnasio_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_gimnasio_7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_gimnasio_9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_helado_tienda_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_helado_tienda_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_helado_tienda_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#10": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#6": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#8": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_music_tienda#9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_panaderia_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_panaderia_11": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_panaderia_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_panaderia_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_panaderia_7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_panaderia_9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_11": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_13": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_15": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_17": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_19": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_21": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_23": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_25": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_27": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_29": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_31": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_33": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_35": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_7": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/planta_baja_tienda_9": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_puerta_1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_puerta_1#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_puerta_1#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_puerta_5": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_puerta_5#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_puerta_5#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/shopping_y_mercado_shopping": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/tienda": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/torre": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/torre#1": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/torre#2": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/torre#3": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/torre#4": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite",
+   "puerta2_closed",
+   "puerta2_open",
+   "puerta2_opening",
+   "puerta2_closing",
+   "puerta2_en_sprite"
+  ],
+  "building/torre_de_vigilancia": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/torre_de_vigilancia_vacio": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "building/universidad": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_arco": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_arco#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_arco#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_cajero": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_cajero#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_cajero#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_madera": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_madera#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_madera#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_vidrio": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_vidrio#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_vidrio#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/pb_vidrio#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_gimnasio": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_gimnasio#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_gimnasio#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_gimnasio#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_heladeria": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_heladeria#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_heladeria#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_heladeria#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_mascotas": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_mascotas#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_mascotas#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_mascotas#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_panaderia": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_panaderia#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_panaderia#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_panaderia#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_pesca": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_pesca#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_pesca#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_pesca#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_vidriera": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_vidriera#azul": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_vidriera#hormigon": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ],
+  "edificio/tienda_vidriera#ladrillo": [
+   "base",
+   "closed",
+   "open",
+   "opening",
+   "closing",
+   "puerta_en_sprite"
+  ]
+ }
+}

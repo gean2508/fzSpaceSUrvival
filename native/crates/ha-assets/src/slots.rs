@@ -10240,6 +10240,7 @@ pub fn game_slots() -> Vec<SlotDef> {
     // (`ha_shared::agua::orilla_de`); sin curar, cae a `tiles/water` y no se
     // pierde ninguna celda.
     out.push(anim("tiles/water_arena", "Agua — orilla de arena (playa)", "tiles"));
+    out.push(anim("tiles/water_nieve", "Agua — orilla de nieve", "tiles"));
     // La tercera ribera del pack —el agua pegada a la roca pelada— **ya no la
     // pide nadie**: no hay agua sin césped alrededor (regla del usuario), así
     // que la sierra y la nieve beben con ribera de pasto. El slot se queda

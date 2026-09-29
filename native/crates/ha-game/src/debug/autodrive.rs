@@ -2009,6 +2009,8 @@ struct BarrioTestState {
     /// desde su vereda, porque el defecto no es el mismo en todas — la fachada
     /// que le sobra a la casa chica es la que le falta a la villa.
     casas: Vec<(i64, i64, i64, i64, String)>,
+    /// Cuándo se pidió abrir las puertas del retrato en curso.
+    puertas_pedidas: Option<f32>,
 }
 
 fn barrio_test_drive(world: &mut World) {
@@ -2145,6 +2147,24 @@ fn barrio_test_drive(world: &mut World) {
     // plazo fijo este driver dejaba ocho PNG en negro y salía con código 0.
     // El medio segundo de más es el fundido del techo al volver de adentro.
     if now - entered > 0.5 && mundo_listo(world) {
+        // **Y con las puertas ABIERTAS.** Se abren por pedido, como las abre el
+        // jugador (`crate::puertas`), y se espera a que termine la animación:
+        // así la captura muestra si el batiente del pack calza en su fachada.
+        let pedidas = world.resource::<BarrioTestState>().puertas_pedidas;
+        let Some(t0) = pedidas else {
+            let mut q = world.query::<(&crate::building::PuertaDeFachada, &mut crate::puertas::Abrible)>();
+            for (p, mut a) in q.iter_mut(world) {
+                if !p.open {
+                    a.pedido = true;
+                }
+            }
+            world.resource_mut::<BarrioTestState>().puertas_pedidas = Some(now);
+            return;
+        };
+        if now - t0 < 1.5 {
+            return;
+        }
+        world.resource_mut::<BarrioTestState>().puertas_pedidas = None;
         shot(world, &format!("{}/{name}.png", flytest_dir()));
         world.resource_mut::<FlyTestState>().shots += 1;
         advance_stage(world, now);
@@ -4120,6 +4140,8 @@ fn release_all(world: &mut World) {
 
 #[derive(Resource, Default)]
 struct TesterState {
+    /// Ya se lo dejó en la superficie de la metrópolis (ver `tester_drive`).
+    arrancado: bool,
     phase: u8,
     entered: f32,
     last_snap: f32,
@@ -4347,6 +4369,32 @@ fn tester_drive(world: &mut World) {
     if !player_ready(world) {
         return; // aún sin jugador spawneado: reintentar el frame siguiente
     }
+    // **Arranca en la SUPERFICIE, en plena metrópolis.** El jugador guardado de
+    // corridas viejas quedaba en el subsuelo (el tester cavaba para bajar) y lo
+    // que se medía era un túnel negro, no el mundo que juega la gente. Lo que
+    // tiene que aguantar 60 fps es el overworld con la ciudad más cargada.
+    if !world.resource::<TesterState>().arrancado {
+        world.resource_mut::<TesterState>().arrancado = true;
+        world.resource_mut::<TileWorld>().z = 0;
+        tester_teleport(world, ha_shared::CelestialBody::Earth);
+        let body = ha_shared::CelestialBody::Earth;
+        let town = ha_shared::world_map::template(body).towns.first();
+        if let Some(t) = town {
+            let (cx, cz) = ha_shared::world_map::town_center(body, t);
+            let near = (cx as f32 * ha_shared::topdown::TILE_M, cz as f32 * ha_shared::topdown::TILE_M);
+            let (sx, sz) = crate::scene::walkable_spawn(body, near.0, near.1);
+            let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+            if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
+                sim.body.x = sx;
+                sim.body.z = sz;
+                vis.from_x = sx;
+                vis.to_x = sx;
+                vis.from_z = sz;
+                vis.to_z = sz;
+            }
+            eprintln!("ha-tester: arranca en {} ({cx},{cz})", t.name);
+        }
+    }
 
     // Live snapshot every ~3 s so a fresh frame is always on disk to inspect,
     // plus a heartbeat (perf logs `ha-perf fps=` on its own 5 s cadence).
@@ -4385,11 +4433,24 @@ fn tester_drive(world: &mut World) {
         0 => {
             let dir = TESTER_DIRS[(world.resource::<TesterState>().dir_idx as usize) % 4];
             actuar(world, dir);
-            if dt > 5.0 {
+            if dt > 10.0 {
                 release_all(world);
-                let (tx, tz) = player_cell(world);
-                dig_setup(world, (tx + 2, tz));
-                tester_goto_phase(world, 1, now);
+                // Cavar y construir sólo si se pide (`HA_TESTER_CAVA`): cavando
+                // terminaba en el subsuelo y medía un túnel en vez del mundo.
+                if crate::flags::var("HA_TESTER_CAVA").is_ok() {
+                    let (tx, tz) = player_cell(world);
+                    dig_setup(world, (tx + 2, tz));
+                    tester_goto_phase(world, 1, now);
+                } else if world.resource::<TesterState>().laps % 3 == 2 {
+                    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+                    tester_goto_phase(world, 3, now);
+                } else {
+                    let mut s = world.resource_mut::<TesterState>();
+                    s.dir_idx = s.dir_idx.wrapping_add(1);
+                    s.laps += 1;
+                    s.phase = 0;
+                    s.entered = now;
+                }
             }
         }
         // DIG — break the tile in front (real dig path: lock + complete hold).

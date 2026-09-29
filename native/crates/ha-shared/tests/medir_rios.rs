@@ -331,6 +331,7 @@ fn donde_termina_cada_rio() {
                     Destino::Lago => "lago",
                     Destino::SinLlegar => "sin llegar (agotó zancadas)",
                     Destino::Estancado => "estancado (dejó de bajar)",
+                    Destino::Pueblo => "entubado en un pueblo",
                 };
                 *cuenta.entry(k.to_string()).or_default() += 1;
             }
@@ -608,5 +609,34 @@ fn rumbo_del_cauce_en_los_saltos() {
             "({cx},{cz}) candidatos {cand} | sin rumbo {sin_rumbo} | al sur {sur} \
              (dentro del cono de 45°: {sur_cono}) | al norte {norte} | de lado {lado}"
         );
+    }
+}
+
+/// **¿LA ROCA PARTE EL RÍO, Y CUÁNTAS CASCADAS QUEDAN?** (28 sep 2026) — roca en
+/// el cauce fuera de una garganta, cuánta de ésa en ríos que corren de este a
+/// oeste, y cascadas ancladas. La zona "captura" es la de `agua-4-sierra.png`.
+/// Antes (28 sep 2026): 7,08 % y 30 "cascadas", casi todas bordes de zanja.
+/// Después del lecho plano, la cota por fila y la regla de la garganta: 0,06 %
+/// y 2 que de verdad caen. Ver biblia §5 "EL RÍO NO LO PARTE LA ROCA".
+#[test]
+#[ignore]
+fn cortes_y_cascadas() {
+    use ha_shared::relief::{relief_cell, ReliefCell};
+    let b = CelestialBody::Earth;
+    for (nombre, x0, z0, lado) in [("sierra", 1_400i64, -5_200i64, 1_200i64), ("captura", -6_500, -6_600, 900), ("llano", -600, -700, 900)] {
+        let (mut cauce, mut roca, mut garg, mut casc, mut a_lo_largo) = (0u32, 0u32, 0u32, 0u32, 0u32);
+        for tz in z0..z0 + lado {
+            for tx in x0..x0 + lado {
+                if ha_shared::agua::cascada_at(b, tx, tz).is_some() { casc += 1; }
+                if !hay_rio(b, tx, tz) { continue; }
+                cauce += 1;
+                if !matches!(relief_cell(b, tx, tz), ReliefCell::Cliff | ReliefCell::Pared) { continue; }
+                if ha_shared::agua::en_la_garganta(b, tx, tz) { garg += 1; } else {
+                    roca += 1;
+                    if let Some((dx, dz)) = ha_shared::rios::rumbo_del_cauce(b, tx, tz) { if dx.abs() > dz.abs() { a_lo_largo += 1; } }
+                }
+            }
+        }
+        println!("{nombre:<8} cauce {cauce:6} | roca {roca} ({:.2} %) (rio E-O {a_lo_largo}) | garganta {garg} | cascadas {casc}", 100.0 * roca as f32 / cauce.max(1) as f32);
     }
 }

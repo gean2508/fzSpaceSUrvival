@@ -119,6 +119,24 @@ pub fn pisos_modulares(key: &str, x: i64, z: i64) -> Option<u8> {
     Some(min + (h % (max - min + 1) as u64) as u8)
 }
 
+/// [`pisos_modulares`] con la ciudad en cuenta: **una metrópolis tiene torres
+/// más altas en su centro**, y el suburbio, más bajas. Es lo que se ve de lejos
+/// —el perfil de la ciudad— y lo primero que dice si es densa o no.
+pub fn pisos_modulares_en(body: CelestialBody, key: &str, x: i64, z: i64) -> Option<u8> {
+    let base = pisos_modulares(key, x, z)?;
+    let Some(s) = crate::geography::settlement_covering(body, x, z) else { return Some(base) };
+    let block = block_size(s.style, s.tier);
+    let ring = ((x - s.center.0).div_euclid(block).abs()).max((z - s.center.1).div_euclid(block).abs());
+    let extra: i32 = match densidad(body, &s) {
+        // El corazón del centro, más alto que el resto: sale el perfil en punta.
+        Densidad::Metropolis if ring <= anillos_de_zona(body, &s).0 / 2 => 3,
+        Densidad::Metropolis => 2,
+        Densidad::Suburbio => -1,
+        _ => 0,
+    };
+    Some((base as i32 + extra).max(0) as u8)
+}
+
 /// Qué fracción del lote residencial ocupa la CASA, en porcentaje de cada lado.
 /// El resto es jardín, entrada de auto y pileta. Lo usan `residential_tile`,
 /// [`roofed_rect`] y [`LotProgram::huella`], que **tienen que dar lo mismo** o el
@@ -317,6 +335,65 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
 /// haya parques y equipamiento salpicados en vez de tres coronas perfectas. La
 /// trama de la ciudad inclina el reparto: una ciudad moderna es más centro, un
 /// puerto es más industria.
+pub use crate::world_map::Densidad;
+
+/// **Cuán densa es esta ciudad** (ver [`Densidad`]).
+///
+/// La autorada lo declara en el mapa; la ciudad procedural lo sortea por su
+/// centro —mitad ciudades, mitad suburbios—, y pueblos y aldeas son `Pueblo`.
+pub fn densidad(body: CelestialBody, s: &Settlement) -> Densidad {
+    if s.tier != SettlementTier::City {
+        return Densidad::Pueblo;
+    }
+    if let Some(nombre) = s.name {
+        if let Some(t) = crate::world_map::template(body).towns.iter().find(|t| t.name == nombre) {
+            return t.densidad;
+        }
+    }
+    if hash2(body_terrain_seed(body) ^ 0xde75_0000, s.center.0, s.center.1) % 2 == 0 {
+        Densidad::Ciudad
+    } else {
+        Densidad::Suburbio
+    }
+}
+
+/// **Hasta qué anillo de manzanas llega cada zona**: `(centro, comercio,
+/// barrio_denso)`. Pasado el último es barrio de casas.
+///
+/// Antes eran números fijos (el centro = 2 a 4 anillos según la trama) sin
+/// mirar el radio, así que las cuatro ciudades de la Tierra —de 1.200 a 2.200
+/// tiles de radio, o sea 30 a 50 anillos— eran un centro chiquito rodeado de
+/// kilómetros de chalets. Una metrópolis que es 95 % suburbio no se lee como una
+/// metrópolis. Ahora las zonas son FRACCIONES del casco, y la densidad de la
+/// ciudad decide cuánto.
+fn anillos_de_zona(body: CelestialBody, s: &Settlement) -> (i64, i64, i64) {
+    let core = match s.style {
+        CityStyle::Modern => 4,
+        CityStyle::Radial => 3,
+        CityStyle::Grid => 3,
+        CityStyle::Port => 2,
+        CityStyle::Rural => 0,
+    };
+    let rb = (s.radius / block_size(s.style, s.tier)).max(1);
+    let (c, k, d) = match densidad(body, s) {
+        Densidad::Metropolis => (30, 50, 72),
+        Densidad::Ciudad => (12, 24, 40),
+        Densidad::Suburbio => (0, 10, 0),
+        Densidad::Pueblo => (0, 0, 0),
+    };
+    let centro = (rb * c / 100).max(core);
+    let comercio = (rb * k / 100).max(centro + 3);
+    let denso = (rb * d / 100).max(comercio);
+    (centro, comercio, denso)
+}
+
+/// ¿Es esta manzana de barrio DENSO? Residencial igual, pero de hileras y
+/// dúplex en vez de quintas: es lo que hace que el borde del centro de una
+/// metrópolis no salte de golpe de las torres al chalet con pileta.
+fn barrio_denso(body: CelestialBody, s: &Settlement, bx: i64, bz: i64) -> bool {
+    s.tier == SettlementTier::City && bx.abs().max(bz.abs()) <= anillos_de_zona(body, s).2
+}
+
 pub fn district_at(body: CelestialBody, s: &Settlement, bx: i64, bz: i64) -> District {
     // **Lo que pintaste manda.** Si una zona del editor de mundo cubre el centro
     // de esta manzana, su carácter reemplaza al anillo — vos repartís los
@@ -333,28 +410,29 @@ pub fn district_at(body: CelestialBody, s: &Settlement, bx: i64, bz: i64) -> Dis
     }
     let h = hash2(body_terrain_seed(body) ^ 0xd157_0000, s.center.0 + bx, s.center.1 + bz);
     let ring = bx.abs().max(bz.abs());
-    // Parques y equipamiento: repartidos por toda la ciudad, no en un anillo.
+    // Parques y equipamiento: repartidos por toda la ciudad, no en un anillo. La
+    // metrópolis gasta menos suelo en plazas; el suburbio, más.
+    let (parque, civico) = match densidad(body, s) {
+        Densidad::Metropolis => (4, 9),
+        Densidad::Suburbio => (9, 13),
+        _ => (6, 11),
+    };
     match h % 100 {
-        0..=6 => return District::Park,
-        7..=11 => return District::Civic,
+        x if x <= parque => return District::Park,
+        x if x <= civico => return District::Civic,
         _ => {}
     }
-    let core = match s.style {
-        CityStyle::Modern => 4,
-        CityStyle::Radial => 3,
-        CityStyle::Grid => 3,
-        CityStyle::Port => 2,
-        CityStyle::Rural => 0,
-    };
     if s.tier != SettlementTier::City {
         // Un pueblo no tiene centro financiero: tiene una plaza y casas.
         return if ring == 0 { District::Commercial } else { District::Residential };
     }
-    if ring <= core {
+    let (centro, comercio, _) = anillos_de_zona(body, s);
+    let rb = s.radius / block_size(s.style, s.tier);
+    if ring <= centro {
         District::Downtown
-    } else if ring <= core + 3 {
+    } else if ring <= comercio {
         District::Commercial
-    } else if ring >= core + 9 && h % 7 == 0 {
+    } else if ring >= (comercio + 6).max(rb * 80 / 100) && h % 7 == 0 {
         // La industria vive en el borde, y sólo en parte de él.
         District::Industrial
     } else {
@@ -399,9 +477,11 @@ fn blocks_needed(p: &LotProgram, block: i64, margin: i64) -> (i64, i64) {
     // interiores desaparecen bajo un edificio grande (una universidad no tiene una
     // calle cruzándola por el medio).
     let need = |want: i64| {
+        // 1, 2 o 4: la supermanzana parte de a mitades (`supermanzana`), así
+        // que un programa de tres manzanas recibe cuatro.
         let mut n = 1;
         while n * block - margin * 2 < want && n < 4 {
-            n += 1;
+            n *= 2;
         }
         n
     };
@@ -442,10 +522,12 @@ fn program_at_anchor(
     let district = district_at(body, s, ax, az);
     let h = hash2(body_terrain_seed(body) ^ 0x10c5_0000, s.center.0 + ax, s.center.1 + az);
     // Densidad: la ciudad tiene casi todo edificado; la aldea, cuatro casas.
-    let filled = match s.tier {
-        SettlementTier::City => 88,
-        SettlementTier::Town => 62,
-        SettlementTier::Hamlet => 34,
+    let filled = match (s.tier, densidad(body, s)) {
+        (SettlementTier::City, Densidad::Metropolis) => 97,
+        (SettlementTier::City, Densidad::Suburbio) => 80,
+        (SettlementTier::City, _) => 88,
+        (SettlementTier::Town, _) => 62,
+        (SettlementTier::Hamlet, _) => 34,
     };
     if h % 100 >= filled {
         if (nx, nz) == (1, 1) { diag("1a-densidad"); }
@@ -466,7 +548,23 @@ fn program_at_anchor(
     // esto corre hasta doce veces POR TILE (una por tamaño de lote candidato) y
     // una reserva de heap por llamada se notaba al pintar un chunk de ciudad.
     let cabe = |p: &LotProgram| p.district == district && blocks_needed(p, block, margin) == (nx, nz);
-    let total: u32 = LOT_PROGRAMS.iter().filter(|p| cabe(p)).map(|p| p.weight as u32).sum();
+    // **El barrio cambia con la densidad.** Mismo distrito residencial, otra
+    // mezcla: cerca del centro de una ciudad densa, hileras y dúplex; en el
+    // suburbio, quintas y villas. El peso es el de la tabla por un factor, así
+    // que la tabla sigue siendo el único lugar donde se leen las proporciones.
+    let denso = district == District::Residential && barrio_denso(body, s, ax, az);
+    let suburbio = district == District::Residential && !denso && densidad(body, s) == Densidad::Suburbio;
+    let peso = |p: &LotProgram| -> u32 {
+        let w = p.weight as u32;
+        match p.key {
+            "building/casa_hilera" | "building/duplex" if denso => w * 3,
+            "building/casa_country" | "building/villa" if denso => 0,
+            "building/casa_country" | "building/villa" if suburbio => w * 3,
+            "building/casa_hilera" if suburbio => w / 3,
+            _ => w,
+        }
+    };
+    let total: u32 = LOT_PROGRAMS.iter().filter(|p| cabe(p)).map(peso).sum();
     if total == 0 {
         // **Una manzana suelta nunca se queda estéril.** Puede no haber NINGÚN
         // programa del distrito que quepa en una manzana: el centro de un puerto
@@ -491,7 +589,7 @@ fn program_at_anchor(
         if !cabe(p) {
             continue;
         }
-        let w = p.weight as u32;
+        let w = peso(p);
         if roll < w {
             return Some(i);
         }
@@ -812,194 +910,206 @@ pub fn diag_dump() -> String {
 }
 pub fn diag_clear() { DIAG.with(|d| d.borrow_mut().clear()); }
 
+/// **La SUPERMANZANA de la manzana `(bx, bz)`: `(ax, az, nx, nz)`.**
+///
+/// Un programa más ancho que el hueco de una manzana (casa grande, dúplex, villa,
+/// hilera, country, hospital…) reserva varias, y la calle que las separaba tiene
+/// que DESAPARECER: si no, la casa queda a caballo del asfalto —la calzada se
+/// dibuja encima de lo edificado— y se ve partida al medio. Era "las casas están
+/// sobre las calles": medido el 25 ago 2026, el 14 % de las celdas edificadas de
+/// Metrópolis Norte tenía calzada encima (`ninguna_pared_de_ciudad_se_planta_en_la_calzada`).
+///
+/// La calle la pinta `geography::urban_civil`, que **no puede mirar el terreno**
+/// (el relieve la consulta a ella) y por lo tanto no puede preguntarle a
+/// [`lot_at`]. Por eso esto es una PARTICIÓN de la retícula que sale sólo de
+/// hashes: cada bloque de 4×4 manzanas alineado se parte en rectángulos de 1, 2
+/// o 4 de lado, y un rectángulo se queda entero si el sorteo de su programa
+/// (`program_at_anchor`, que tampoco mira el terreno) le da un edificio de
+/// exactamente ese tamaño. La calle vive donde dos manzanas vecinas caen en
+/// supermanzanas distintas, y como la partición es de rectángulos, nunca queda
+/// un tramo de calle colgando sin salida.
+///
+/// Si después el terreno no deja plantar el programa grande (agua, desnivel), la
+/// supermanzana se queda igual sin calle interior y se llena de parcelas sueltas
+/// ([`lot_at`]): una calle de menos no rompe nada; una casa partida, sí.
+pub fn supermanzana(body: CelestialBody, s: &Settlement, bx: i64, bz: i64) -> (i64, i64, i64, i64) {
+    const RANURAS: usize = 256;
+    type Clave = (u8, i64, i64, i64, i64, u32);
+    thread_local! {
+        static MEMO: std::cell::RefCell<[Option<(Clave, (i64, i64, i64, i64))>; RANURAS]> =
+            const { std::cell::RefCell::new([None; RANURAS]) };
+    }
+    let clave: Clave = (body as u8, s.center.0, s.center.1, bx, bz, crate::partida::epoca());
+    let ranura = (hash2(0x5ae7_0000, s.center.0 + bx, s.center.1 + bz) as usize) % RANURAS;
+    if let Some(v) = MEMO.with(|m| m.borrow()[ranura].and_then(|(c, v)| (c == clave).then_some(v))) {
+        return v;
+    }
+    let v = supermanzana_sin_memo(body, s, bx, bz);
+    if !crate::grueso::activo() {
+        MEMO.with(|m| m.borrow_mut()[ranura] = Some((clave, v)));
+    }
+    v
+}
+
+fn supermanzana_sin_memo(body: CelestialBody, s: &Settlement, bx: i64, bz: i64) -> (i64, i64, i64, i64) {
+    let block = block_size(s.style, s.tier);
+    let (cx, cz) = s.center;
+    let libre = s.radius - crate::roads::ring_class(s.tier).half_shoulder().ceil() as i64;
+    let seed = body_terrain_seed(body) ^ 0x5ae7_1000;
+    let (mut ax, mut az, mut nx, mut nz) = (bx - bx.rem_euclid(4), bz - bz.rem_euclid(4), 4i64, 4i64);
+    loop {
+        if nx * nz == 1 {
+            return (ax, az, 1, 1);
+        }
+        // Entera dentro del casco: una supermanzana que cruza la circunvalación
+        // borraría calles que el lote después no puede ocupar.
+        let dentro = [ax, ax + nx].iter().all(|&i| (i * block).abs() <= libre)
+            && [az, az + nz].iter().all(|&j| (j * block).abs() <= libre);
+        if dentro {
+            let margin = bounding_margin(s.style, ax, az, nx, nz);
+            if program_at_anchor(body, s, ax, az, nx, nz, block, margin).is_some() {
+                return (ax, az, nx, nz);
+            }
+        }
+        // Se parte por la mitad; el eje lo sortea el rectángulo, así salen tiras
+        // (4×1, 2×1) además de cuadrados.
+        let h = hash2(seed, cx + ax * 5 + nx, cz + az * 5 + nz);
+        let por_x = if nx > 1 && nz > 1 { h & 1 == 0 } else { nx > 1 };
+        if por_x {
+            nx /= 2;
+            if bx >= ax + nx {
+                ax += nx;
+            }
+        } else {
+            nz /= 2;
+            if bz >= az + nz {
+                az += nz;
+            }
+        }
+    }
+}
+
+/// El lote que ocupa esta celda, si hay alguno.
+///
+/// Primero el programa de su SUPERMANZANA ([`supermanzana`]) si abarca varias
+/// manzanas; si no se pudo plantar o no llega hasta esta celda, el de la
+/// manzana suelta, mientras no pise al grande.
+///
+/// **Reservar no es ocupar.** Un hospital reserva 2×2 manzanas y llena una
+/// parte: el resto recibe su propio lote chico, mientras no se pisen.
+///
+/// Da la misma respuesta para todas las celdas de una parcela porque todas caen
+/// en la misma supermanzana y en la misma manzana: nada de lo que se decide
+/// depende de qué celda pregunta.
 pub fn lot_at(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<Lot> {
     let block = block_size(s.style, s.tier);
     let (cx, cz) = s.center;
     let bx = (tx - cx).div_euclid(block);
     let bz = (tz - cz).div_euclid(block);
-    // Los lotes MAYORES que ya se descartaron para esta celda: siguen ocupando su
-    // rectángulo, así que ninguno más chico puede pisarlos. Array fijo y no `Vec`
-    // porque el barrido prueba doce candidatos como mucho y esto corre por tile.
-    let mut mayores = [None::<Lot>; 12];
-    let mut n_mayores = 0usize;
-    for n in [4i64, 3, 2, 1] {
-        for nx in [n, 1] {
-            for nz in [n, 1] {
-                if nx == 1 && nz == 1 && n != 1 {
-                    continue;
-                }
-                let ax = bx - bx.rem_euclid(nx);
-                let az = bz - bz.rem_euclid(nz);
-                // **El margen sale de la calle MÁS ANCHA que rodea al lote**, no
-                // sólo de la del bloque ancla. Un lote limita con cuatro calles y
-                // cualquiera de ellas puede ser una avenida: usando el margen del
-                // ancla, un lote que empezaba junto a un callejón se estiraba
-                // hasta meterse dentro de la avenida del otro lado, y salían
-                // ventanas y paredes cruzadas en mitad de la calzada.
-                let margin = bounding_margin(s.style, ax, az, nx, nz);
-                let Some(prog) = program_at_anchor(body, s, ax, az, nx, nz, block, margin) else {
-                    if (nx, nz) == (1, 1) { diag("1-sorteo-vacio-1x1"); }
-                    continue;
-                };
-                let p = &LOT_PROGRAMS[prog];
-                // **EL SITIO LLANO ES EL DE LA MANZANA, NO EL DEL PROGRAMA.**
-                //
-                // El rectángulo del lote salía clavado en la esquina noroeste de
-                // la manzana y el retiro por desnivel sólo podía ENCOGERLO desde
-                // ahí. O sea: si el borde de terraza pasaba justo por esa esquina,
-                // la parcela moría aunque el resto de la manzana fuera una
-                // explanada — que es la mitad de "hay parcelas rechazando casas
-                // por falta de espacio". Ahora se le pregunta al hueco edificable
-                // ENTERO dónde está su parte llana (`retiro_del_desnivel`, que
-                // devuelve el rectángulo llano más grande) y el programa se planta
-                // DENTRO de ella.
-                //
-                // De regalo, la memo de `retiro_del_desnivel` pasa a acertar
-                // siempre: los doce candidatos de una celda comparten manzana, así
-                // que preguntan por el mismo rectángulo en vez de por doce.
-                let ox0 = cx + ax * block + margin;
-                let oz0 = cz + az * block + margin;
-                let uw = (nx * block - margin * 2).max(4);
-                let uh = (nz * block - margin * 2).max(4);
-                let (ox, oz, sw, sh) = match retiro_del_desnivel(body, ox0, oz0, uw, uh) {
-                    Retiro::Mojado => {
-                        diag("4-mojado");
-                        continue;
-                    }
-                    Retiro::SinSitio => {
-                        diag("5-sin-sitio-desnivel");
-                        continue;
-                    }
-                    Retiro::Sitio(r) => r,
-                };
-                let w = p.cells.0.min(sw).max(4);
-                let hgt = p.cells.1.min(sh).max(4);
-                // **Y la parcela se apoya en SU CALLE.** El rectángulo salía
-                // clavado en la esquina noroeste del sitio, así que entre el
-                // frente del lote y la vereda de enfrente quedaba una franja de
-                // pasto de hasta veinte tiles: la casa se veía al fondo de un
-                // prado, sin acera, sin cerca contra la calle y sin nada que
-                // llegara hasta ella —no hay camino que dibujar cuando la parcela
-                // no toca la calle—. Un terreno urbano da a la calle por
-                // definición: se apoya contra el borde sur, que es la cara que
-                // `residential_tile` trata como frente, y se centra a lo ancho.
-                let ox = ox + (sw - w) / 2;
-                let oz = oz + (sh - hgt);
-                // Fuera del casco no hay ciudad — y el lote ENTERO tiene que
-                // caber, con su retiro de la circunvalación. Comprobando sólo la
-                // esquina, la última fila de manzanas se plantaba encima del
-                // anillo y quedaban medias casas cruzadas en la calzada del borde.
-                let libre = s.radius - crate::roads::ring_class(s.tier).half_shoulder() as i64;
-                if (ox - cx).abs() > libre
-                    || (oz - cz).abs() > libre
-                    || (ox + w - cx).abs() > libre
-                    || (oz + hgt - cz).abs() > libre
-                {
-                    diag("2-fuera-del-casco");
-                    continue;
-                }
-                let bruto = Lot { min: (ox, oz), w, h: hgt, program: prog };
-                if mayores.iter().flatten().any(|m| bruto.overlaps(m)) {
-                    diag("3-pisa-mayor");
-                    continue;
-                }
-                // **LO QUE RESERVA ES EL RECTÁNGULO QUE DE VERDAD EXISTE.**
-                //
-                // `lot_at` corre por TILE y tiene que dar la misma respuesta para
-                // todas las celdas de una parcela; si no, media casa sale dibujada
-                // y la otra media es pasto. Lo que rompe esa promesa es decidir la
-                // reserva mirando a la celda que pregunta — y eso es exactamente lo
-                // que pasaba con el atajo de "si el candidato no me contiene, lo
-                // apunto y sigo": para las celdas de dentro el candidato podía no
-                // existir (agua, o un desnivel que no deja sitio) y el hueco quedar
-                // libre, mientras que para las de fuera figuraba ocupado. La
-                // parcela chica que se metía en el hueco salía dibujada a trozos y
-                // sin puerta, y lo cazó `toda_casa_generada_tiene_por_donde_entrar`.
-                //
-                // Por eso el terreno se mira SIEMPRE, contenga o no a la celda: es
-                // lo único que hace que las doce celdas de una manzana cuenten la
-                // misma historia. Sale barato porque `relief_level` va por caché y
-                // los candidatos de las celdas vecinas son los mismos.
-                let mut reservar = |mayores: &mut [Option<Lot>; 12], n: &mut usize, l: Lot| {
-                    if *n < mayores.len() {
-                        mayores[*n] = Some(l);
-                        *n += 1;
-                    }
-                };
-                // El lote YA está retirado (el rectángulo salió del sitio llano de
-                // la manzana), así que acá sólo se le pone nombre.
-                //
-                // Que el terreno se mire SIEMPRE —contenga o no a la celda que
-                // pregunta— es lo que hace que las doce celdas de una manzana
-                // cuenten la misma historia. Decidir la reserva mirando a quien
-                // pregunta era lo que dejaba **casas con la fachada partida y sin
-                // puerta**: para unas celdas el candidato grande existía y para
-                // otras no. Lo caza `toda_casa_generada_tiene_por_donde_entrar`.
-                let lot = bruto;
-                // Esta celda puede caer fuera de la parcela: porque el candidato
-                // no la contenía, o porque el retiro por desnivel la dejó en el
-                // jardín. En los dos casos el rectángulo BRUTO queda reservado —el
-                // retiro es franja verde de esta manzana, no sitio libre para
-                // otro programa— y la celda sigue buscando uno más chico fuera.
-                if !lot.contains(tx, tz) {
-                    diag("6-no-contiene-la-celda");
-                    reservar(&mut mayores, &mut n_mayores, bruto);
-                    continue;
-                }
-                // **La carretera pasa antes que la parcela.** El enlace
-                // interurbano entra al casco (si no, moría contra un jardín) y se
-                // dibuja DESPUÉS de lo edificado, así que partiría la casa al
-                // medio. El lote se aparta.
-                //
-                // El círculo que envuelve al lote sirve de PRIMER filtro y nada
-                // más: es una llamada y descarta de un plumazo a las parcelas que
-                // no tienen ninguna carretera cerca. Decidir con él era el error —
-                // un lote de 44×24 tiene 25 tiles de radio, así que la autopista
-                // barría una franja de 60 tiles a cada lado y se llevaba puestas
-                // manzanas enteras que no tocaba ni de lejos (medido: 8 de las 72
-                // vacías de Ciudad Central y 14 de las de Puerto Oeste). Cuando el
-                // círculo avisa, se mira el RECTÁNGULO de verdad
-                // ([`enlace_cruza`]).
-                let (w, hgt) = (lot.w, lot.h);
-                let (ox, oz) = lot.min;
-                let radio = (((w * w + hgt * hgt) as f32).sqrt()) * 0.5;
-                let (mx, mz) = (ox as f32 + w as f32 * 0.5, oz as f32 + hgt as f32 * 0.5);
-                if let Some(margen) = crate::geography::link_clearance(body, mx, mz) {
-                    if margen + radio >= 0.0 && enlace_cruza(body, ox, oz, w, hgt) {
-                        diag("7-carretera-interurbana");
-                        // `continue` y no `return None`: que la autopista pase por
-                        // esta manzana no es motivo para dejarla estéril, sólo para
-                        // que no sea ESTA parcela. La siguiente candidata, más
-                        // chica, puede caber al lado del asfalto.
-                        reservar(&mut mayores, &mut n_mayores, bruto);
-                        continue;
-                    }
-                }
-                // **Y la CASA no se planta dentro del río.**
-                //
-                // El retiro por desnivel mira `relief_level < 0`, que es el mar y
-                // los lagos del relieve — pero el río no está ahí: lo traza
-                // `crate::rios` y llega al tile por `geography::natural_tile`. Una
-                // parcela con el cauce cruzándola contaba como seca, y la casa
-                // salía con medio frente bajo el agua y sus dos puertas ahogadas,
-                // o sea **sellada** (lo cazó `toda_casa_generada_tiene_por_donde_entrar`
-                // en cuanto las parcelas se agrandaron al talle del pack).
-                //
-                // Se mira la HUELLA DE LA CASA y no el lote entero, y ésa es toda
-                // la diferencia: rechazando la parcela porque el río le roza una
-                // esquina, la ciudad perdía 95 de sus 215 manzanas y se volvía un
-                // descampado (`la_ciudad_no_esta_llena_de_baldios`). Un jardín
-                // puede dar al río; una casa, no.
-                if lot.program().district == District::Residential && casa_mojada(body, &lot) {
-                    diag("8-casa-mojada");
-                    reservar(&mut mayores, &mut n_mayores, bruto);
-                    continue;
-                }
-                return Some(lot);
+    let (ax, az, nx, nz) = supermanzana(body, s, bx, bz);
+    let mut mayor = None;
+    if nx * nz > 1 {
+        if let Some(l) = candidato(body, s, ax, az, nx, nz, block) {
+            if l.contains(tx, tz) {
+                return Some(l);
             }
+            diag("6-no-contiene-la-celda");
+            mayor = Some(l);
         }
     }
-    None
+    let l = candidato(body, s, bx, bz, 1, 1, block)?;
+    if mayor.is_some_and(|m| l.overlaps(&m)) {
+        diag("3-pisa-mayor");
+        return None;
+    }
+    l.contains(tx, tz).then_some(l)
+}
+
+/// El lote que el programa del ancla `(ax, az)` planta en sus `nx × nz`
+/// manzanas, con todas las pruebas de terreno hechas. No mira qué celda
+/// pregunta: depende sólo del rectángulo.
+fn candidato(
+    body: CelestialBody,
+    s: &Settlement,
+    ax: i64,
+    az: i64,
+    nx: i64,
+    nz: i64,
+    block: i64,
+) -> Option<Lot> {
+    let (cx, cz) = s.center;
+    // **El margen sale de la calle MÁS ANCHA que rodea al lote**, no sólo de la
+    // del bloque ancla: un lote limita con cuatro calles y cualquiera puede ser
+    // una avenida.
+    let margin = bounding_margin(s.style, ax, az, nx, nz);
+    let Some(prog) = program_at_anchor(body, s, ax, az, nx, nz, block, margin) else {
+        if (nx, nz) == (1, 1) {
+            diag("1-sorteo-vacio-1x1");
+        }
+        return None;
+    };
+    let p = &LOT_PROGRAMS[prog];
+    // **EL SITIO LLANO ES EL DE LA MANZANA, NO EL DEL PROGRAMA.** Se le pregunta
+    // al hueco edificable ENTERO dónde está su parte llana
+    // (`retiro_del_desnivel`, el rectángulo llano más grande) y el programa se
+    // planta DENTRO de ella: si el borde de terraza pasaba por la esquina
+    // noroeste, la parcela moría aunque el resto fuera una explanada.
+    let ox0 = cx + ax * block + margin;
+    let oz0 = cz + az * block + margin;
+    let uw = (nx * block - margin * 2).max(4);
+    let uh = (nz * block - margin * 2).max(4);
+    let (ox, oz, sw, sh) = match retiro_del_desnivel(body, ox0, oz0, uw, uh) {
+        Retiro::Mojado => {
+            diag("4-mojado");
+            return None;
+        }
+        Retiro::SinSitio => {
+            diag("5-sin-sitio-desnivel");
+            return None;
+        }
+        Retiro::Sitio(r) => r,
+    };
+    let w = p.cells.0.min(sw).max(4);
+    let hgt = p.cells.1.min(sh).max(4);
+    // **Y la parcela se apoya en SU CALLE**: contra el borde sur, que es la cara
+    // que `residential_tile` trata como frente, y centrada a lo ancho. Clavada en
+    // la esquina noroeste quedaba una franja de pasto de hasta veinte tiles entre
+    // la casa y la vereda.
+    let ox = ox + (sw - w) / 2;
+    let oz = oz + (sh - hgt);
+    // Fuera del casco no hay ciudad — y el lote ENTERO tiene que caber, con su
+    // retiro de la circunvalación.
+    let libre = s.radius - crate::roads::ring_class(s.tier).half_shoulder() as i64;
+    if (ox - cx).abs() > libre
+        || (oz - cz).abs() > libre
+        || (ox + w - cx).abs() > libre
+        || (oz + hgt - cz).abs() > libre
+    {
+        diag("2-fuera-del-casco");
+        return None;
+    }
+    let lot = Lot { min: (ox, oz), w, h: hgt, program: prog };
+    // **La carretera pasa antes que la parcela.** El enlace interurbano entra al
+    // casco y se dibuja DESPUÉS de lo edificado, así que partiría la casa. El
+    // círculo que envuelve al lote es sólo el primer filtro (una consulta);
+    // cuando avisa, se mira el RECTÁNGULO de verdad ([`enlace_cruza`]).
+    let radio = (((w * w + hgt * hgt) as f32).sqrt()) * 0.5;
+    let (mx, mz) = (ox as f32 + w as f32 * 0.5, oz as f32 + hgt as f32 * 0.5);
+    if let Some(margen) = crate::geography::link_clearance(body, mx, mz) {
+        if margen + radio >= 0.0 && enlace_cruza(body, ox, oz, w, hgt) {
+            diag("7-carretera-interurbana");
+            return None;
+        }
+    }
+    // **Y la CASA no se planta dentro del río.** El retiro mira el mar y los
+    // lagos del relieve; el río lo traza `crate::rios` y sólo lo ve el tile
+    // natural. Se mira la huella de la CASA y no el lote: un jardín puede dar al
+    // río; una casa, no.
+    if p.district == District::Residential && casa_mojada(body, &lot) {
+        diag("8-casa-mojada");
+        return None;
+    }
+    Some(lot)
 }
 
 // ---------------------------------------------------------------------------
@@ -2092,8 +2202,10 @@ mod tests {
         // barría 90 tiles alrededor del centro y encontró CERO: ahí todo es
         // Downtown, y una torre no tiene cerca de parcela. El residencial empieza
         // pasado el anillo comercial, o sea a unas ocho manzanas — por eso el
-        // barrido arranca lejos y es ancho.
-        let lejos = block_size(s.style, s.tier) * 10;
+        // barrido arranca lejos y es ancho. Cuán lejos lo dice la densidad de la
+        // ciudad (`anillos_de_zona`): en una metrópolis el comercio llega a la
+        // mitad del casco.
+        let lejos = block_size(s.style, s.tier) * (anillos_de_zona(body, &s).2 + 2);
         for tz in s.center.1 + lejos..s.center.1 + lejos + 140 {
             for tx in s.center.0 + lejos..s.center.0 + lejos + 140 {
                 if lot_tile(body, &s, tx, tz) != Some(Tile::Fence) {
@@ -2293,23 +2405,13 @@ mod tests {
     /// molesta a nadie, y el retiro de la parcela ya deja esa franja verde a
     /// propósito.
     ///
-    /// **HOY FALLA A PROPÓSITO y por eso está marcado `#[ignore]`.** Medido el
-    /// 25 ago 2026: 7.611 celdas de casa con calzada encima de 53.333 edificadas
-    /// en Metrópolis Norte (el 14 %). La causa está localizada: un programa más
-    /// ancho que el hueco de una manzana reserva DOS (`blocks_needed`) y se
-    /// planta a caballo de la calle interior, que nunca desaparece —el comentario
-    /// de `blocks_needed` que dice que sí es falso, `urban_civil` la pinta igual
-    /// y no puede consultar a `lot_at` sin recursión (relieve ↔ obra civil)—. Con
-    /// manzanas de 40 tiles y margen 7 el hueco es de 26, así que **casi toda la
-    /// tabla residencial** (casa_grande 31, duplex 33, villa 35, country 42,
-    /// hilera 46) pide dos manzanas: por eso son miles de celdas y no un caso
-    /// raro.
-    ///
-    /// El arreglo es partir la manzana en VARIAS parcelas en vez de una sola
-    /// —ninguna cruza una calle porque ninguna sale del hueco— y está pendiente.
-    /// Corrélo con `cargo test -p ha-shared -- --ignored` para ver el número.
+    /// Medido el 25 ago 2026: 7.611 celdas de casa con calzada encima de 53.333
+    /// edificadas en Metrópolis Norte (el 14 %). Un programa más ancho que el
+    /// hueco de una manzana reservaba dos y se plantaba a caballo de la calle
+    /// interior, que nunca desaparecía. Desde el 28 sep 2026 la calle interior de
+    /// una supermanzana no se pinta (`supermanzana` + `geography::urban_civil`) y
+    /// esto da cero.
     #[test]
-    #[ignore = "bug conocido y medido: falta partir la manzana en parcelas"]
     fn ninguna_pared_de_ciudad_se_planta_en_la_calzada() {
         let body = CelestialBody::Earth;
         for t in crate::world_map::template(body).towns {

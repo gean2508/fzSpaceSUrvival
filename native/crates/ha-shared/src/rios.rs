@@ -213,7 +213,37 @@ const VALLE_MINIMO: f32 = 8.0;
 /// rugoso, y esa costura es un escalón. Dejando pasar un cuarto, el fondo del río
 /// sigue ondulando con el terreno —que es lo que hace un río de verdad— y lo que
 /// el río impone es su HONDURA relativa, no una cota plana de hormigón.
-pub(crate) const RUIDO_EN_EL_CAUCE: f32 = 0.25;
+///
+/// **Y bajó de 0,25 a 0,10 el 28 sep 2026.** Un cuarto del ruido es del tamaño
+/// de un escalón de terraza, y el fondo del río salía lleno de zanjas y diques
+/// de una celda a lo largo de la corriente: cada uno plantaba roca atravesada en
+/// el agua, y casi todas las "cascadas" del planeta eran el borde de una zanja
+/// (§5 "EL RÍO NO LO PARTE LA ROCA"). Con 0 el fondo ondula demasiado poco y se
+/// pierden saltos encadenados; 0,10 es lo que midió mejor.
+pub(crate) const RUIDO_EN_EL_CAUCE: f32 = 0.10;
+
+/// **El lecho es plano hasta esta distancia MÁS ALLÁ de la orilla**, en tiles.
+/// Antes el peso valía 1 sólo en el eje y ~0,74 en la orilla, y el cuarto de
+/// montaña que sobrevivía bajo el agua ponía el borde de terraza a lo largo del
+/// río. El apagado del valle empieza recién afuera.
+const LECHO_PLANO: f32 = 1.0;
+
+/// **Largo mínimo del empalme** entre el lecho y el terreno, en tiles, medido
+/// desde el borde del lecho plano. El terreno recupera casi todo su ruido en
+/// este tramo: `0,9 × 0,21 / 12 ≈ 0,016` por tile, dentro de
+/// `relief::MAX_FIELD_STEP_PER_TILE`.
+const EMPALME_MIN: f32 = 12.0;
+
+/// **Desde qué pendiente hacia el sur (o el norte) un tramo toma su cota POR
+/// FILA.** El pack dibujó la cascada sólo de frente, así que el salto necesita
+/// el escalón en una fila horizontal; con la cota del pie de la perpendicular el
+/// escalón sale perpendicular al río, que casi siempre baja en diagonal, y no
+/// había tres columnas al ras en ningún lado. Un tramo cuyo avance en z es al
+/// menos esta fracción de su largo toma la cota en la fila de la celda: el
+/// escalón cruza el cauce de orilla a orilla, horizontal. Los que corren casi de
+/// este a oeste siguen con la perpendicular (su escalón es vertical, no se
+/// dibuja, y el agua pasa).
+const COTA_POR_FILA: f32 = 0.35;
 
 /// El valle de un cauce de ancho `a`, en tiles. Ver [`VALLE_MINIMO`].
 fn valle_de(a: f32) -> f32 {
@@ -232,6 +262,23 @@ pub enum Destino {
     SinLlegar,
     /// El terreno dejó de bajar y no había collado que cruzar.
     Estancado,
+    /// Llegó al casco de un pueblo o una ciudad y ahí se entuba: ver
+    /// [`entra_a_un_pueblo`].
+    Pueblo,
+}
+
+/// **UN RÍO NO ATRAVIESA LA CIUDAD: SE ENTUBA EN SU BORDE** (28 sep 2026).
+///
+/// Las ciudades se fundan en el llano bajo, que es justo adonde bajan todos los
+/// cauces, y con cuatro nacientes por cuenca Ciudad Central quedaba cruzada por
+/// un río cada ~100 m: medido en tres ventanas de 300×300 del casco, entre el 4 y
+/// el 17 % de las celdas era cauce —lagos irregulares entre las manzanas, con la
+/// calle y las casas recortadas contra ellos—. Una ciudad de verdad tiene, como
+/// mucho, un río, y los arroyos que le llegan van por debajo del asfalto. El
+/// tramo que entraría al casco no se traza: el cauce termina en el campo, a las
+/// puertas del pueblo. Tampoco nace ninguno adentro.
+fn entra_a_un_pueblo(body: CelestialBody, x: f32, z: f32) -> bool {
+    crate::geography::settlement_covering(body, x as i64, z as i64).is_some()
 }
 
 /// Un tramo de cauce: dos puntos y el ancho en cada uno.
@@ -477,7 +524,7 @@ fn nacientes(body: CelestialBody, cx: i64, cz: i64) -> Vec<(f32, f32)> {
         let z = cz * CUENCA + margen + ((h >> 17) as i64).rem_euclid(span);
         let p = crate::world_map::platform(body, x, z);
         let alt = ((p - sea) / (1.0 - sea)).clamp(0.0, 1.0);
-        if (NACE_DESDE..=NACE_HASTA).contains(&alt) {
+        if (NACE_DESDE..=NACE_HASTA).contains(&alt) && !entra_a_un_pueblo(body, x as f32, z as f32) {
             out.push((x as f32, z as f32));
         }
     }
@@ -605,6 +652,12 @@ fn trazar_brazo(
         // puede dejar el punto siguiente en terreno más alto; el agua, no. La
         // cota se queda en la que traía, y por eso seguir el cauce aguas abajo es
         // siempre bajar — que es la propiedad entera de este módulo.
+        // Ni el punto siguiente ni la mitad del tramo pueden caer en un casco:
+        // la zancada mide 48 tiles y el valle se abre a los costados.
+        if entra_a_un_pueblo(body, nx, nz) || entra_a_un_pueblo(body, (x + nx) * 0.5, (z + nz) * 0.5) {
+            *fin = Destino::Pueblo;
+            break;
+        }
         let alla = crate::world_map::platform(body, nx as i64, nz as i64).min(cota);
         let a1 = ANCHO_NACIENTE
             + (ANCHO_BOCA - ANCHO_NACIENTE)
@@ -829,21 +882,32 @@ pub fn perfil_del_cauce(body: CelestialBody, tx: i64, tz: i64) -> Option<(f32, f
         return None;
     }
     let (x, z) = (tx as f32 + 0.5, tz as f32 + 0.5);
-    let mut mejor: Option<(f32, f32, f32)> = None;
+    let mut mejor: Option<(f32, f32, f32, &Tramo)> = None;
     for t in bloque.candidatos(x, z) {
         let (d, a, h) = distancia(t, x, z);
-        if mejor.is_none_or(|(md, _, _)| d < md) {
-            mejor = Some((d, a, h));
+        if mejor.is_none_or(|(md, _, _, _)| d < md) {
+            mejor = Some((d, a, h, t));
         }
     }
-    let (d, a, h) = mejor?;
-    let valle = valle_de(a);
+    let (d, a, mut h, t) = mejor?;
+    {
+        let (dx, dz) = (t.x1 - t.x0, t.z1 - t.z0);
+        if dz.abs() >= COTA_POR_FILA * (dx * dx + dz * dz).sqrt() {
+            let u = ((z - t.z0) / dz).clamp(0.0, 1.0);
+            h = t.h0 + (t.h1 - t.h0) * u;
+        }
+    }
+    let seco = a + LECHO_PLANO;
+    let valle = seco + valle_de(a).max(EMPALME_MIN);
     if d >= valle {
         return None;
     }
+    if d <= seco {
+        return Some((h - hondura(body), 1.0));
+    }
     // El peso cae como un coseno alzado: 1 en el eje, 0 y con derivada 0 en el
     // borde del valle. Un apagado lineal deja una arista visible en la orilla.
-    let t = 1.0 - d / valle;
+    let t = 1.0 - (d - seco) / (valle - seco);
     let peso = t * t * (3.0 - 2.0 * t);
     Some((h - hondura(body), peso))
 }

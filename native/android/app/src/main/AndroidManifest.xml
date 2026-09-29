@@ -11,6 +11,9 @@
         android:largeHeap="true"
         android:theme="@style/Theme.Starship"
         tools:targetApi="34">
+        <!-- Deja perfilar el proceso con `simpleperf` desde adb sin root ni APK
+             debuggable (biblia §10). No cambia nada del juego. -->
+        <profileable android:shell="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

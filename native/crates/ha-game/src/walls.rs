@@ -36,8 +36,6 @@ use crate::world2d::{
 const WALL_STREAM_RADIUS: i64 = 48;
 /// Refresco del streaming (s). Colocar/quitar refresca al instante igual.
 const WALL_STREAM_PERIOD: f32 = 0.2;
-/// Distancia (tiles) a la que una puerta se abre.
-const DOOR_OPEN_DIST: f32 = 1.7;
 
 /// Una pared colocada. `(tx, tz, axis)` es el BORDE (ver `build_grid`), no la
 /// celda; `piece` es el índice en `EDGE_PIECES` (se persiste por id, no por
@@ -179,8 +177,10 @@ pub(crate) struct WallSprite {
     piece: usize,
 }
 
-/// Puerta de borde: alterna `open`/`closed` por proximidad del jugador.
+/// Puerta de borde: alterna `open`/`closed` cuando el jugador interactúa con
+/// ella (`crate::puertas`), y queda como la dejó.
 #[derive(Component)]
+#[require(crate::puertas::Abrible)]
 struct WallDoor {
     /// Segundos que le quedan a la transición `opening`/`closing` en curso.
     t: f32,
@@ -693,26 +693,21 @@ fn stream_walls(
     }
 }
 
-/// Puertas de borde: cerca del jugador → pose `open`, lejos → `closed`. Sólo
-/// toca el sprite cuando el estado cambia (cero costo en reposo).
+/// Puertas de borde: cada pedido del jugador (`crate::puertas`) las abre o las
+/// cierra. Sólo toca el sprite cuando el estado cambia (cero costo en reposo).
 fn animate_wall_doors(
     mut commands: Commands,
     time: Res<Time>,
     art: Res<ArtLibrary>,
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
-    player: Query<&Transform, With<Player>>,
-    mut doors: Query<(Entity, &mut WallDoor, &mut Sprite)>,
+    mut doors: Query<(Entity, &mut WallDoor, &mut crate::puertas::Abrible, &mut Sprite)>,
 ) {
-    let Ok(player_tf) = player.get_single() else {
-        return;
-    };
     let dt = time.delta_secs();
-    let ptx = player_tf.translation.x / TILE_M;
-    let ptz = -player_tf.translation.y / TILE_M;
-    for (ent, mut door, mut sprite) in &mut doors {
+    for (ent, mut door, mut abrible, mut sprite) in &mut doors {
         // Misma cadena de estados que las puertas de tile (`building`): reposo →
         // transición → reposo, y la transición corre entera.
         if door.t > 0.0 {
+            abrible.pedido = false;
             door.t -= dt;
             if door.t <= 0.0 {
                 door.t = 0.0;
@@ -730,11 +725,10 @@ fn animate_wall_doors(
             }
             continue;
         }
-        let (dx, dz) = (ptx - door.cx, ptz - door.cz);
-        let near = (dx * dx + dz * dz).sqrt() < DOOR_OPEN_DIST;
-        if near == door.open {
+        if !std::mem::take(&mut abrible.pedido) {
             continue;
         }
+        let near = !door.open;
         door.open = near;
         sfx.send(crate::audio::PlaySfxAt(
             if near { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },

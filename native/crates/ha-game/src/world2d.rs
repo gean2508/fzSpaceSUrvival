@@ -4015,6 +4015,16 @@ fn spawn_chunk_tile_art(
             if let Some(a) = anim {
                 ent.insert(a);
             }
+            // **UN BORDE QUE NO CUELGA NO TIRA SOMBRA** (28 sep 2026). Las
+            // piezas que no son cara (`edge_n`, `edge_e`/`_w`, las esquinas de
+            // arriba y las de adentro) son la línea del filo dibujada sobre el
+            // suelo: no se levantan. Pero viven en la banda Y-sort y
+            // `light2d::attach_ground_shadows` les colgaba la mancha de un objeto
+            // parado: en todo borde en escalera salía una sierra de dientes
+            // grises (en la nieve, sobre blanco, era lo único que se veía).
+            if relieve && !CARAS_QUE_CUELGAN.contains(&shape) {
+                crate::light2d::sin_sombra(&mut ent);
+            }
             // Tiles que iluminan (lava, cristal, un piso de luz). Sólo pagan quad
             // los materiales que el usuario marcó como emisores.
             crate::light2d::attach(&mut ent, &art, &[&vk, key], medida);

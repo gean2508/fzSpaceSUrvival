@@ -106,6 +106,23 @@ pub enum CityStyle {
     Rural,
 }
 
+/// **Cuán apretada está una ciudad.** Lo que distingue una metrópolis de una
+/// ciudad de casas bajas no es el radio: es cuánto del casco es centro, cuánto
+/// es comercio y qué se construye en los barrios (`city::district_at`,
+/// `city::program_at_anchor`, `city::pisos_modulares_en`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Densidad {
+    /// Centro de torres que ocupa un tercio del casco, comercio hasta la mitad,
+    /// barrios de hileras y dúplex, casi sin baldíos.
+    Metropolis,
+    /// Centro y comercio medianos, barrios mezclados.
+    Ciudad,
+    /// Casas bajas: centro chico, jardines grandes, quintas y más parques.
+    Suburbio,
+    /// Aldeas y pueblos del procedural: una plaza y casas.
+    Pueblo,
+}
+
 /// Una ciudad AUTORADA: existe siempre, en ese sitio y con ese nombre.
 pub struct Town {
     pub name: &'static str,
@@ -113,6 +130,7 @@ pub struct Town {
     /// Radio del casco, en TILES (no normalizado: una metrópolis mide lo que mide).
     pub radius: i64,
     pub style: CityStyle,
+    pub densidad: Densidad,
 }
 
 /// El mapa completo de un cuerpo.
@@ -249,13 +267,13 @@ static EARTH: WorldTemplate = WorldTemplate {
     towns: &[
         // Radios en tiles = metros. Una metrópolis de 1800 mide 3.6 km de punta a
         // punta: caminarla lleva un rato, que es lo que la hace una ciudad.
-        Town { name: "Metrópolis Norte", c: (-0.50, -0.26), radius: 1800, style: CityStyle::Grid },
+        Town { name: "Metrópolis Norte", c: (-0.50, -0.26), radius: 1800, style: CityStyle::Grid, densidad: Densidad::Metropolis },
         // Al PIE de la cordillera (que corre por z≈−0.16 a esta longitud), no
         // encima: una ciudad de 4.4 km de lado en la alta montaña no tiene dónde
         // asentarse. Lo cazó `named_cities_stand_on_habitable_ground`.
-        Town { name: "Ciudad Central", c: (0.32, 0.08), radius: 2200, style: CityStyle::Radial },
-        Town { name: "Puerto Oeste", c: (-0.76, 0.22), radius: 1400, style: CityStyle::Port },
-        Town { name: "Villa Sur", c: (0.70, 0.34), radius: 1200, style: CityStyle::Modern },
+        Town { name: "Ciudad Central", c: (0.32, 0.08), radius: 2200, style: CityStyle::Radial, densidad: Densidad::Ciudad },
+        Town { name: "Puerto Oeste", c: (-0.76, 0.22), radius: 1400, style: CityStyle::Port, densidad: Densidad::Ciudad },
+        Town { name: "Villa Sur", c: (0.70, 0.34), radius: 1200, style: CityStyle::Modern, densidad: Densidad::Suburbio },
     ],
 };
 

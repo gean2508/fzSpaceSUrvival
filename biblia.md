@@ -1691,6 +1691,60 @@ de 1.977, lo cazó `toda_casa_generada_tiene_por_donde_entrar`). Ahora el terren
 se mira siempre, contenga o no a la celda, con memo por rectángulo para que no
 cueste.
 
+### EL RÍO NO LO PARTE LA ROCA (28 sep 2026)
+
+Queja del usuario: *"arreglá las cascadas"*. En `agua-4-sierra.png` el río de
+la sierra salía hecho charcos: tiras de agua separadas por paredes de roca
+atravesadas, con huecos de nieve entre medio. Medido con
+`medir_rios::cortes_y_cascadas` (zona -6500,-6600, 900×900): el **7,08 %** del
+cauce era roca fuera de toda garganta.
+
+**El diagnóstico, volcando el nivel celda a celda** (así se encontró; los
+promedios no lo mostraban): el fondo del río no era un fondo. El cuarto de ruido
+de terreno que sobrevivía bajo el agua (`RUIDO_EN_EL_CAUCE` = 0,25) y el peso
+del valle, que era 1 sólo en el eje, dejan el lecho del tamaño de un escalón de
+terraza de rugoso. Donde la cota del cauce corre cerca del borde entre dos
+niveles, eso fabrica **zanjas y diques de una celda a lo largo de la
+corriente**. Cada borde plantaba roca en el agua, secaba las filas que tapa su
+dibujo (los huecos de nieve) y, peor: **casi todas las "cascadas" del planeta
+eran el borde norte de una zanja** — volcadas las 24 anclas que muestrea
+`hay_cascadas_encadenadas`, todas lo eran.
+
+Cuatro cambios, los cuatro necesarios:
+
+1. **El lecho es plano hasta la orilla +1** y el empalme con el terreno mide al
+   menos 12 celdas (`rios::LECHO_PLANO`, `EMPALME_MIN`); el ruido en el agua
+   baja a **0,10**. Con 0 se pierden los saltos encadenados; con 0,25 vuelven las
+   zanjas.
+2. **La cota se toma POR FILA** en los tramos que bajan hacia el sur o el norte
+   (`rios::COTA_POR_FILA`). El pack sólo dibujó la cascada de frente, que
+   necesita el escalón en una fila horizontal; con la cota del pie de la
+   perpendicular el escalón salía perpendicular a un río que casi siempre baja
+   en diagonal, y nunca había tres columnas al ras.
+3. **Un salto tiene que dejar el río abajo** (`agua::salto_con`, `ZANJA`): si
+   en las 8 filas bajo el pie el cauce vuelve al nivel del labio, era una zanja.
+   Y **tiene que cruzar de orilla a orilla**: si al costado de una punta del
+   tramo sigue el agua al mismo nivel, el río pasa de largo.
+4. **Dentro de un río, la única roca es la garganta de un salto que se ancla**
+   (`relief::es_canto` + `agua::garganta_por_niveles`). Se contesta con niveles
+   y trazado (`Labio::Nivel`), sin preguntarle a `relief_cell`: no hay
+   recursión, y el dibujo (`Labio::Pared`) ve el mismo tramo. Si ancla, el tramo
+   entero conserva la roca y el río se encajona por la garganta
+   (`terrazas-y-cascadas.png`); si no, el desnivel bajo el agua se lee como agua
+   que corre.
+
+Resultado: roca en el cauce fuera de garganta **7,08 % → 0,06 %** en la zona de
+la captura (sierra de `medir_rios`: 4,12 % → 0,36 %, el resto es la pared de
+las gargantas altas). **Hay muchas menos cascadas que antes, y es correcto**:
+las de antes eran zanjas; las de ahora son ríos que de verdad caen
+(`hay_cascadas_encadenadas`: 8 anclas, 2 encadenadas). El valle no pega saltos
+(`el_campo_no_salta_en_el_valle`: 0,05 % de celdas sobre 0,02).
+
+> Probado y descartado por separado: el lecho plano SOLO (con 25 % de ruido)
+> dejaba la sierra con 7 anclas y ninguna encadenada; la regla del relieve SOLA
+> dejaba 50 "cascadas", casi todas zanjas; pedir orilla SECA en las dos puntas
+> del tramo dejaba el planeta sin una sola.
+
 ### La cascada manda en su garganta (9 ago 2026)
 
 El recorte del pack no es un chorro suelto: es una **garganta** de tres celdas,
@@ -6962,6 +7016,35 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   props repartidos al azar: sospecha de importación mal interpretada del pack
   (regla 8: pieza vs objeto). Ver §5/§8 (`pack_siembra.rs`, `roads.rs`,
   `city.rs`, `import-calles.py`, `import-marcas-calzada.py`).
+- **E1b · CASAS Y DENSIDAD** — ✅ hecho (28 sep 2026), pedido del usuario:
+  "casas sobre las calles", "el interior se sale del exterior", "ciudades más
+  densas, como una metrópolis, y otras más leves".
+  1. **Casas sobre la calle**: todo programa más ancho que el hueco de una
+     manzana (casa grande, dúplex, villa, hilera, country, cívicos) pedía dos y
+     se plantaba a caballo de la calle interior, que `urban_civil` pintaba igual
+     (14 % de lo edificado de Metrópolis Norte bajo asfalto; el test
+     `ninguna_pared_de_ciudad_se_planta_en_la_calzada` estaba `#[ignore]`).
+     Ahora hay **supermanzanas** (`city::supermanzana`): partición de la
+     retícula en rectángulos de 1/2/4 manzanas que sale sólo de hashes (la trama
+     no puede mirar el terreno), y la calle vive sólo entre supermanzanas
+     distintas. `lot_at` planta el programa grande sobre su supermanzana y, si
+     el terreno no lo deja, la llena de parcelas sueltas. El test ya no se
+     ignora y da cero.
+  2. **Interior que asoma**: la variante de fachada se sorteaba sin mirar
+     tamaños (la villa, huella 17, tiene un solo dibujo de 9 celdas; ni ×1,4
+     llega) y el tejado de un dibujo alto podía caer sobre la calle de atrás.
+     `building::elegir_fachada` sortea entre las variantes que tapan la huella
+     sin pasar de `AGRANDE_MAX` ni de la calzada de atrás (`fondo_libre`), y
+     `roof_layout(…, cubrir)` agranda la de una vivienda hasta taparla entera.
+  3. **Densidad** (`world_map::Densidad`: Metrópolis / Ciudad / Suburbio /
+     Pueblo): el centro y el comercio eran 3–4 anillos fijos en cascos de 30–50
+     anillos. Ahora son fracción del radio (`city::anillos_de_zona`), el barrio
+     denso lleva hileras y dúplex, el suburbio quintas y villas, cambian el
+     llenado y los parques, y las torres de la metrópolis suben 2–3 pisos
+     (`pisos_modulares_en`). Metrópolis Norte = Metrópolis; Ciudad Central y
+     Puerto Oeste = Ciudad; Villa Sur = Suburbio; las procedurales, mitad y mitad.
+  Pendiente de esto: la puerta dibujada en la fachada no siempre cae sobre la
+  celda `Door` (se ve en `HA_BARRIOTEST`, `barrio-6-puerta.png`).
 - **E2 · ESQUINAS DE ACANTILADO** — ✅ hecho (28 sep 2026): en una pared de más
   de un escalón `pared_apilada` armaba las esquinas con las filas de la pared
   RECTA. Ahora `corner_se/sw` usan `labio_/cuerpo_/pie_{se,sw}`, que
@@ -6999,6 +7082,68 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   `luna-pixel-art.png` (mares, cráteres, terminador), no el disco actual.
 - **E6 · FACHADATEST**: al entrar al cuarto construido se abren la cara sur pero
   no las norte/laterales (`layers::fade_overhead`, `walls::huella_que_tapa`).
+- **E10 · TODAS LAS PUERTAS ANIMADAS** — ✅ etapas 1 y 2 (28 sep 2026, pedido
+  del usuario: *"clasificá las casas con puerta incluida y las que traen el
+  espacio, y a qué casa pertenece cada puerta… para que todas queden animadas"*,
+  y *"que al interactuar haya abrir o cerrar puerta, como en Project Zomboid"*).
+  `scripts/medir-puertas.py` → `scripts/puertas-index.json` (sólo mide). 113
+  hojas animadas de puerta/portón/persiana/trampilla de edificio; 2380 dibujos
+  en uso: **283 con la puerta dibujada** (el cuadro cerrado de la hoja calza ≥ 75 %
+  de sus píxeles; se anota hoja y píxel), **78 con hueco** (muesca de aire al
+  pie, con dintel y pared de un lado; puertas del mismo tema que entran — "a
+  revisar" si ninguna), 2019 sin puerta detectada (casi todos no son edificios).
+  54 hojas tienen edificio en uso, 59 no (villas de jardín, cobertizos, cabinas,
+  casilla de vigilancia…). Sin hoja en el pack: la villa, el chalet de madera,
+  la victoriana de ladrillo grande, los portones del cuartel de bomberos y de
+  las casas modernas, mercados, granero, hangar, estación.
+  **Etapa 2** — ✅ (28 sep 2026). `scripts/import-puertas-edificios.py` lee el
+  índice y cuelga en 278 slots (333 puertas: la base militar, el hospital y
+  otros traen dos) las poses `closed/opening/open/closing` + `puerta_en_sprite`
+  (y `puerta2_*`, `puerta3_*` con prefijo) + `base`. Las tiras van a
+  `art/pack/edificios_puertas_N.png` en píxeles (`grid: [1,1]`), recortadas a la
+  caja de TODOS los cuadros (abierta se sale de la del cerrado), a lo sumo 8
+  cuadros por tramo (la embrujada trae 91), ≤ 1 s. Verificado: ninguna puerta
+  cerrada cambia más del 25 % de sus píxeles al superponerse a su fachada.
+  **Abrir/cerrar al interactuar** (`crate::puertas`): tocar/clickear la puerta o
+  la tecla **E**, con el jugador a ≤ 3,2 m. Vale para las tres clases de puerta
+  (`DoorArt`, `WallDoor`, `PuertaDeFachada`, todas `#[require(Abrible)]`), y
+  **la puerta queda como la dejaste** — ya no se cierra sola (pedido del
+  usuario). Todavía NO bloquea el paso cerrada: la celda `Door` sigue siendo
+  transitable en la sim (`ha-shared`), cambiar eso es tocar la sim determinista.
+  `HA_BARRIOTEST` abre las puertas antes de cada retrato.
+- **E6c · CONTINUIDAD, NIEVE, VUELO Y MOCHILA** — ✅ (28 sep 2026, pedidos del
+  usuario en la misma sesión):
+  1. **La cascada es parte del acantilado**: al costado del salto el borde que
+     cruza el río es pared (`relief::COSTADO_DE_SALTO`), y los costados del
+     recorte ya no son la roca amarilla del pack sino la pared del kit del
+     material (`import-agua.py::vestir_con_la_pared`: labio/cuerpo/pie píxel a
+     píxel donde el recorte no es agua). *"Las cascadas deben ser del mismo
+     terreno que el bioma"*.
+  2. **Bordes que no cuelgan sin sombra**: `edge_n/e/w` y esquinas de arriba
+     tiraban la sombra de un objeto parado → sierra de dientes grises en todo
+     borde en escalera (`world2d`, `light2d::sin_sombra`).
+  3. **Orilla de nieve**: `Orilla::Nieve` / `tiles/water_nieve`, derivada por
+     `scripts/derivar-orilla-de-nieve.py` (la ribera de pasto con los tonos del
+     kit de nieve). Reemplaza la vieja regla "toda agua lleva césped" en la nieve.
+  4. **Nieve con marcas**: `tiles/ice#m1..m4` dibujadas con `lib/pixel.py`
+     (`scripts/dibujar-marcas-de-suelo.py`, lo llama `atlas-suelo.py`), una cada
+     tres celdas (`art2d::PESO_NIEVE_LISA`). Ojo: TODOS los suelos naturales
+     quedaron en color plano desde `c531097` (27 sep) y ninguno tiene variantes;
+     el pasto también necesita sus marcas.
+  5. **Vuelo: el jugador y la cámara suben juntos**: el personaje mide en
+     pantalla lo mismo que a pie con tu pellizco (`sim.rs`, escala =
+     `live / user_mult / GROUND_VIEW_H`); la altura aleja el suelo, el pellizco
+     achica todo. Antes se medía contra 30 m fijos y se achicaba al despegar.
+  6. **Mochila**: el reskin viejo pisaba el marco del kit de las pestañas con
+     `ui/button` (oscuras, texto tachado); la bajada quedaba debajo del buscador;
+     el HUD atravesaba el modal (ahora `GlobalZIndex(50)` + fondo oscurecido).
+     `HA_BAGSHOT` captura las tres pestañas.
+- **E6b · CASCADAS Y ÁRBOLES** — ✅ hecho (28 sep 2026): el río ya no lo parte
+  la roca atravesada ni le salen cascadas en mitad de la corriente (§5 "EL RÍO NO LO PARTE LA ROCA") y los árboles no traen su mata de
+  pasto al pie (`scripts/podar-pasto-de-arboles.py`, lo llama al final
+  `import-pack-masivo.py`; la medición en `scripts/lib/pasto_al_pie.py`). Las
+  piezas `arbol_pared_modular_*` (kit) y las ramitas `arbol_palo_seco_*` no se
+  tocan.
 - **E7 · Terrazas como la referencia** (cantos rectos ≥4 celdas; hoy escaleras de
   1 celda, ver "EL PASO NO USA EL KIT" más abajo) y **agua en la nieve** (pasto
   verde en cuadros junto a cascadas nevadas).

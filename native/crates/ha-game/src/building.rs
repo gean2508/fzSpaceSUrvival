@@ -36,16 +36,10 @@ const ROOF_ALPHA_INSIDE: f32 = 0.15;
 const ROOF_FADE_RATE: f32 = 6.0;
 /// Radio (tiles) alrededor del jugador donde los techos existen como entidades.
 const ROOF_STREAM_RADIUS: i64 = 56;
-/// Distancia (tiles) a la que una puerta animada se abre.
-const DOOR_OPEN_DIST: f32 = 1.7;
-
-/// **Y a la que se abre la puerta DIBUJADA EN UNA FACHADA.** Más lejos, y no por
-/// gusto: el techo empieza a desvanecerse en cuanto pisás la huella más un tile
-/// (`fade_roofs`), así que con el alcance de una puerta de obra la única franja
-/// donde la puerta estaba abierta Y la fachada todavía opaca medía una décima de
-/// tile — o sea que el batiente no se veía abrir nunca desde la vereda. Con tres
-/// tiles se abre cuando la ves, que es de lo que se trata.
-const PUERTA_FACHADA_DIST: f32 = 3.0;
+/// Cuántas puertas animadas puede traer un mismo dibujo de fachada
+/// (`puerta_en_sprite`, `puerta2_en_sprite`, …). Las publica
+/// `scripts/import-puertas-edificios.py`; la base militar trae dos.
+const PUERTAS_POR_FACHADA: usize = 4;
 
 /// Un techo construido por el jugador (prefab F5) — persiste en `roofs.json`.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
@@ -108,8 +102,10 @@ pub struct BuildingRoof {
     z: i32,
 }
 
-/// Sprite de puerta animado por proximidad (lo spawnea `spawn_chunk_tile_art`).
+/// Sprite de puerta que se abre y se cierra al interactuar (lo spawnea
+/// `spawn_chunk_tile_art`). Ver `crate::puertas`.
 #[derive(Component)]
+#[require(crate::puertas::Abrible)]
 pub struct DoorArt {
     pub tx: i64,
     pub tz: i64,
@@ -157,11 +153,11 @@ pub(crate) fn door_render_size(art: &crate::art2d::ArtLibrary, key: &str) -> Vec
 /// pide una pose distinta según la cara en la que quedó puesta: la del frente de
 /// una casa se abre con la hoja de fachada (`back_opening`) y la de un tabique
 /// con la de interior (`opening`). Ver `walls::pose_de_puerta`.
-pub(crate) fn door_transition(
+pub(crate) fn door_transition<'a>(
     art: &ArtLibrary,
     key: &str,
-    poses: &[&'static str],
-) -> Option<(&'static str, f32)> {
+    poses: &[&'a str],
+) -> Option<(&'a str, f32)> {
     let pose = *poses.iter().find(|p| art.has_pose(key, p))?;
     // Cuánto dura: los frames de la propia animación. Así el estado del juego y
     // lo que se ve terminan a la vez, sin un número mágico que se desincronice
@@ -216,11 +212,23 @@ pub(crate) const AGRANDE_MAX: f32 = 1.4;
 /// contra la huella del suelo, que es por donde se camina.
 ///
 /// Sin arte (`None`), el respaldo ocupa la huella tal cual: un techo plano.
-fn roof_layout(art: &ArtLibrary, key: Option<&str>, huella: Vec2) -> (Vec2, f32) {
+///
+/// **`cubrir`: la fachada TAPA la huella entera**, sin tope. Es para las casas:
+/// debajo del sprite están las paredes y el piso de verdad (`city::residential_tile`),
+/// y todo lo que el dibujo no alcanza a tapar se ve como interior asomando por
+/// los costados o por el fondo —"el interior se sale del exterior"—. Una casa
+/// levemente agrandada se lee como casa; una con el piso de adentro a la vista,
+/// no. [`elegir_fachada`] ya eligió la variante que menos hay que agrandar.
+fn roof_layout(art: &ArtLibrary, key: Option<&str>, huella: Vec2, cubrir: bool) -> (Vec2, f32) {
     let Some(size) = key.and_then(|k| art.draw_tiles(k, None)) else {
         return (huella, 0.0);
     };
     let size = size * TILE_M;
+    if cubrir {
+        let k = (huella.x / size.x.max(0.001)).max(huella.y / size.y.max(0.001));
+        let size = size * k;
+        return (size, (size.y - huella.y).max(0.0));
+    }
     // El ancho se ajusta a la huella (la casa mide lo que mide el terreno) y el
     // alto acompaña, para no deformar. Que el dibujo suba por encima del lote es
     // correcto: eso es la altura del edificio, no su suelo.
@@ -233,6 +241,88 @@ fn roof_layout(art: &ArtLibrary, key: Option<&str>, huella: Vec2) -> (Vec2, f32)
     let k = (huella.x / size.x.max(0.001)).min(AGRANDE_MAX);
     let size = size * k;
     (size, (size.y - huella.y).max(0.0))
+}
+
+/// ¿Es vivienda este programa de lote? Las casas llevan interior pisable bajo
+/// la fachada, así que su dibujo tiene que taparlo entero (ver [`roof_layout`]).
+fn es_vivienda(clave: &str) -> bool {
+    ha_shared::city::LOT_PROGRAMS
+        .iter()
+        .any(|p| p.key == clave && p.district == ha_shared::city::District::Residential)
+}
+
+/// **Cuántos tiles libres hay detrás de una casa** antes de la calzada de atrás.
+///
+/// La fachada crece hacia arriba desde el frente (es techo y pared en 3/4), y un
+/// dibujo alto sobre una huella chata terminaba con el tejado encima de la calle
+/// de atrás: "casas sobre las calles". Se mide en tres columnas —las dos puntas
+/// y el medio— porque la calle puede entrar por un costado.
+fn fondo_libre(body: CelestialBody, r: &RoofRect) -> f32 {
+    const TOPE: i64 = 40;
+    let columnas = [r.min.0, r.min.0 + r.w / 2, r.min.0 + r.w - 1];
+    let mut libre = TOPE;
+    for x in columnas {
+        for d in 1..=libre {
+            if ha_shared::geography::civil_kind_at(body, x, r.min.1 - d)
+                == Some(ha_shared::geography::Civil::Road)
+            {
+                libre = d - 1;
+                break;
+            }
+        }
+    }
+    libre as f32
+}
+
+/// **La variante de fachada que le queda a ESTA huella.**
+///
+/// El pack trae casas de 9 a 23 celdas de ancho bajo una misma clave, y el
+/// sorteo por celda no miraba tamaños. Dos resultados, los dos a la vista:
+///
+/// 1. un dibujo angosto sobre una huella ancha no alcanzaba a taparla ni
+///    agrandado al tope, y **el interior asomaba por los costados**;
+/// 2. un dibujo alto sobre una huella chata subía tanto que **el tejado quedaba
+///    encima de la calle de atrás**.
+///
+/// Así que se sortea entre las variantes que tapan la huella sin agrandarse más
+/// de [`AGRANDE_MAX`] y sin que el tejado pase de la vereda de atrás. Si ninguna
+/// cumple las dos, se relaja primero el agrandado (lo cubre `roof_layout` con
+/// `cubrir`) y después el fondo: nunca se deja de dibujar la casa.
+fn elegir_fachada(art: &ArtLibrary, base: &str, r: &RoofRect, body: CelestialBody, semilla: u64) -> String {
+    let variantes = art.variantes_con_arte(base);
+    if variantes.len() <= 1 {
+        return art.variant_key_seeded(base, semilla);
+    }
+    let huella = Vec2::new(r.w as f32, r.h as f32);
+    let fondo = fondo_libre(body, r);
+    // (cuánto hay que agrandarla para tapar, cuánto sube por detrás), en tiles.
+    let medir = |k: &str| {
+        let t = art.draw_tiles(k, None)?;
+        let escala = (huella.x / t.x.max(0.001)).max(huella.y / t.y.max(0.001));
+        Some((escala, t.y * escala - huella.y))
+    };
+    let medidas: Vec<(&String, f32, f32)> =
+        variantes.iter().filter_map(|k| medir(k).map(|(e, s)| (k, e, s))).collect();
+    let cabe_atras = |s: f32| s <= fondo;
+    let pasadas: [&dyn Fn(f32, f32) -> bool; 3] = [
+        &|e, s| e <= AGRANDE_MAX && cabe_atras(s),
+        &|_, s| cabe_atras(s),
+        &|_, _| true,
+    ];
+    for ok in pasadas {
+        let buenas: Vec<&String> = medidas.iter().filter(|(_, e, s)| ok(*e, *s)).map(|m| m.0).collect();
+        if buenas.is_empty() {
+            continue;
+        }
+        // Misma mezcla que `variant_key_seeded`: la misma parcela elige siempre
+        // la misma casa, sin guardar nada.
+        let mut h = semilla.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        h ^= h >> 29;
+        h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        h ^= h >> 32;
+        return buenas[(h % buenas.len() as u64) as usize].clone();
+    }
+    art.variant_key_seeded(base, semilla)
 }
 
 /// Sprite del techo/fachada del lote, **y su animación si la tiene**.
@@ -327,7 +417,7 @@ fn spawn_fachada_apilada(
     z: i32,
 ) -> bool {
     use ha_shared::edificio::{ALTO_AZOTEA, ALTO_PISO, ALTO_PLANTA_BAJA, MODULO};
-    let Some(pisos) = ha_shared::city::pisos_modulares(art_key, r.min.0, r.min.1) else {
+    let Some(pisos) = ha_shared::city::pisos_modulares_en(body, art_key, r.min.0, r.min.1) else {
         return false;
     };
     // **Cuántos módulos entran, redondeando para ABAJO.** Las parcelas modulares
@@ -509,9 +599,13 @@ fn repartir_hilera(kit: Kit, x0: f32, x1: f32, unidad: f32) -> Vec<Pieza> {
 /// medir lo que mide en la fachada o se ve montado. Y la clave es dinámica
 /// (`building/casa_hilera#3`), no un `&'static str`.
 #[derive(Component)]
+#[require(crate::puertas::Abrible)]
 pub struct PuertaDeFachada {
     /// Slot de la fachada: de ahí salen `closed`/`opening`/`open`/`closing`.
     pub art: String,
+    /// Prefijo de las poses de ESTA puerta: `""` para la primera, `"puerta2_"`
+    /// para la segunda del mismo dibujo, etc.
+    pub prefijo: String,
     /// Celda del mundo bajo la puerta, para medirle la cercanía al jugador.
     pub tx: i64,
     pub tz: i64,
@@ -638,7 +732,14 @@ fn stream_roofs(
                 continue;
             }
         }
-        let (size, sube) = roof_layout(&art, clave.as_deref(), huella);
+        // **La fachada que CABE, no una cualquiera.** El sorteo de arriba no
+        // mira tamaños: a una huella de 17 le podía tocar un dibujo de 9, y ni
+        // agrandado al tope tapaba las paredes. Ver `elegir_fachada`.
+        let residencial = art_key.is_some_and(es_vivienda);
+        let clave = art_key.map(|k| {
+            elegir_fachada(&art, k, &r, body, crate::world2d::celda_semilla(r.min.0, r.min.1))
+        });
+        let (size, sube) = roof_layout(&art, clave.as_deref(), huella, residencial);
         let z_frente_mundo = (r.min.1 + r.h) as f32 * TILE_M;
         let cx = r.min.0 as f32 * TILE_M + huella.x * 0.5;
         let cz = r.min.1 as f32 * TILE_M + huella.y * 0.5;
@@ -691,33 +792,40 @@ fn spawn_puerta_de_fachada(
     size: Vec2,
 ) {
     let z_frente = (r.min.1 + r.h) as f32 * TILE_M;
-    let Some((puerta, _)) = art.pose(clave, "puerta_en_sprite") else { return };
     let Some(celdas) = art.celdas_de(clave, None) else { return };
     if celdas.x <= 0.0 {
         return;
     }
     // Metros de mundo por pixel del dibujo, tal como quedó dibujado este paño.
     let escala = size.x / (celdas.x * 32.0);
-    let (dx, dy) = (puerta[0] as f32 * escala, puerta[1] as f32 * escala);
-    let (pw, ph) = (puerta[2] as f32 * escala, puerta[3] as f32 * escala);
     let izq = centro.x - size.x * 0.5;
     let arriba = centro.y + size.y * 0.5;
-    let (cx, cy) = (izq + dx + pw * 0.5, arriba - dy - ph * 0.5);
-    let tam = Vec2::new(pw, ph);
-    let Some(sp) = art.pose_sprite(clave, "closed", tam) else { return };
-    commands.spawn((
-        BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
-        PuertaDeFachada {
-            art: clave.to_string(),
-            tx: (cx / TILE_M).floor() as i64,
-            tz: r.min.1 + r.h - 1,
-            open: false,
-            t: 0.0,
-            size: tam,
-        },
-        sp,
-        Transform::from_xyz(cx, cy, crate::layers::fachada(z_frente) + 1.0e-5),
-    ));
+    // **Todas las puertas del dibujo**, no sólo la primera: la base militar y el
+    // hospital traen dos. Cada una lleva sus poses con su prefijo.
+    for n in 1..=PUERTAS_POR_FACHADA {
+        let prefijo = if n == 1 { String::new() } else { format!("puerta{n}_") };
+        let sitio = if n == 1 { "puerta_en_sprite".to_string() } else { format!("puerta{n}_en_sprite") };
+        let Some((puerta, _)) = art.pose(clave, &sitio) else { break };
+        let (dx, dy) = (puerta[0] as f32 * escala, puerta[1] as f32 * escala);
+        let (pw, ph) = (puerta[2] as f32 * escala, puerta[3] as f32 * escala);
+        let (cx, cy) = (izq + dx + pw * 0.5, arriba - dy - ph * 0.5);
+        let tam = Vec2::new(pw, ph);
+        let Some(sp) = art.pose_sprite(clave, &format!("{prefijo}closed"), tam) else { continue };
+        commands.spawn((
+            BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+            PuertaDeFachada {
+                art: clave.to_string(),
+                prefijo,
+                tx: (cx / TILE_M).floor() as i64,
+                tz: r.min.1 + r.h - 1,
+                open: false,
+                t: 0.0,
+                size: tam,
+            },
+            sp,
+            Transform::from_xyz(cx, cy, crate::layers::fachada(z_frente) + 1.0e-5 * n as f32),
+        ));
+    }
 }
 
 /// **Planta la fachada de una casa en hilera**: un sprite por módulo, más su
@@ -796,6 +904,7 @@ fn spawn_fachada_modular(
             BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
             PuertaDeFachada {
                 art: clave.to_string(),
+                prefijo: String::new(),
                 tx: tx.floor() as i64,
                 tz: r.min.1 + r.h - 1,
                 open: false,
@@ -810,7 +919,8 @@ fn spawn_fachada_modular(
     }
 }
 
-/// La puerta dibujada en una fachada se abre al acercarte, como cualquier otra.
+/// La puerta dibujada en una fachada se abre y se cierra al interactuar con
+/// ella (`crate::puertas`), y queda como la dejaste.
 ///
 /// Es el gemelo de [`animate_doors`] para las puertas que viven DENTRO de un
 /// sprite de fachada: mismo ciclo de estados y misma fuente de poses, pero
@@ -820,41 +930,35 @@ fn animar_puertas_de_fachada(
     time: Res<Time>,
     art: Res<ArtLibrary>,
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
-    player: Query<&Transform, With<Player>>,
-    mut puertas: Query<(Entity, &mut PuertaDeFachada, &mut Sprite)>,
+    mut puertas: Query<(Entity, &mut PuertaDeFachada, &mut crate::puertas::Abrible, &mut Sprite)>,
 ) {
-    let Ok(player_tf) = player.get_single() else { return };
     let dt = time.delta_secs();
-    let ptx = player_tf.translation.x / TILE_M;
-    let ptz = -player_tf.translation.y / TILE_M;
-    for (ent, mut p, mut sprite) in &mut puertas {
+    for (ent, mut p, mut abrible, mut sprite) in &mut puertas {
         let size = p.size;
         let key = p.art.clone();
+        let pre = p.prefijo.clone();
         if p.t > 0.0 {
+            abrible.pedido = false;
             p.t -= dt;
             if p.t <= 0.0 {
                 p.t = 0.0;
-                let rest: &[&str] = if p.open { &["open"] } else { &["closed"] };
-                set_door_pose(&mut commands, ent, &art, &key, rest, &mut sprite, size);
+                let rest = format!("{pre}{}", if p.open { "open" } else { "closed" });
+                set_door_pose(&mut commands, ent, &art, &key, &[rest.as_str()], &mut sprite, size);
             }
             continue;
         }
-        let dx = ptx - (p.tx as f32 + 0.5);
-        let dz = ptz - (p.tz as f32 + 0.5);
-        let cerca = (dx * dx + dz * dz).sqrt() < PUERTA_FACHADA_DIST;
-        if cerca == p.open {
+        if !std::mem::take(&mut abrible.pedido) {
             continue;
         }
-        p.open = cerca;
+        let abrir = !p.open;
+        p.open = abrir;
         sfx.send(crate::audio::PlaySfxAt(
-            if cerca { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
+            if abrir { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
             render_xy((p.tx as f32 + 0.5) * TILE_M, (p.tz as f32 + 0.5) * TILE_M),
         ));
-        let transicion: &[&'static str] = if cerca { &["opening"] } else { &["closing"] };
-        let (pose, secs) = match door_transition(&art, &key, transicion) {
-            Some((po, s)) => (po, s),
-            None => (if cerca { "open" } else { "closed" }, 0.0),
-        };
+        let transicion = format!("{pre}{}", if abrir { "opening" } else { "closing" });
+        let reposo = format!("{pre}{}", if abrir { "open" } else { "closed" });
+        let (pose, secs) = door_transition(&art, &key, &[transicion.as_str()]).unwrap_or((reposo.as_str(), 0.0));
         p.t = secs;
         set_door_pose(&mut commands, ent, &art, &key, &[pose], &mut sprite, size);
     }
@@ -894,55 +998,48 @@ fn fade_roofs(
     }
 }
 
-/// Puertas animadas: cerca del jugador → pose `open`; lejos → `closed`.
-/// Sólo toca el sprite cuando el estado cambia (cero costo en reposo).
+/// Puertas animadas: cada pedido del jugador (`crate::puertas`) las cambia de
+/// estado, y quedan así hasta el próximo. Sólo toca el sprite cuando el estado
+/// cambia (cero costo en reposo).
 ///
 /// El estado (abierto/cerrado) lo decide el juego; la pose es sólo cómo se ve.
 /// Si la pose es una tira de frames se reproduce en modo `once`: la transición
-/// corre entera y se clava en el último frame, así queda abierta mientras la
-/// usás y al alejarte se ve cerrarse completa en vez de saltar de golpe.
+/// corre entera y se clava en el último frame.
 fn animate_doors(
     mut commands: Commands,
     time: Res<Time>,
     art: Res<ArtLibrary>,
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
-    player: Query<&Transform, With<Player>>,
-    mut doors: Query<(Entity, &mut DoorArt, &mut Sprite)>,
+    mut doors: Query<(Entity, &mut DoorArt, &mut crate::puertas::Abrible, &mut Sprite)>,
 ) {
-    let Ok(player_tf) = player.get_single() else {
-        return;
-    };
     let dt = time.delta_secs();
-    let ptx = player_tf.translation.x / TILE_M;
-    let ptz = -player_tf.translation.y / TILE_M;
-    for (ent, mut door, mut sprite) in &mut doors {
+    for (ent, mut door, mut abrible, mut sprite) in &mut doors {
         let key = door.art;
         // ¿Terminó la transición que estaba corriendo? → pose de reposo.
         if door.t > 0.0 {
+            abrible.pedido = false; // no se cambia de idea a mitad de camino
             door.t -= dt;
             if door.t <= 0.0 {
                 door.t = 0.0;
                 let rest: &[&str] = if door.open { &["open"] } else { &["closed"] };
                 set_door_pose(&mut commands, ent, &art, key, rest, &mut sprite, door_render_size(&art, key));
             }
-            continue; // mientras se abre/cierra no se cambia de idea a mitad
-        }
-        let dx = ptx - (door.tx as f32 + 0.5);
-        let dz = ptz - (door.tz as f32 + 0.5);
-        let near = (dx * dx + dz * dz).sqrt() < DOOR_OPEN_DIST;
-        if near == door.open {
             continue;
         }
-        door.open = near;
+        if !std::mem::take(&mut abrible.pedido) {
+            continue;
+        }
+        let abrir = !door.open;
+        door.open = abrir;
         sfx.send(crate::audio::PlaySfxAt(
-            if near { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
+            if abrir { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
             render_xy((door.tx as f32 + 0.5) * TILE_M, (door.tz as f32 + 0.5) * TILE_M),
         ));
         // Con transición autorada se reproduce entera; sin ella, salto directo.
-        let transicion: &[&'static str] = if near { &["opening"] } else { &["closing"] };
+        let transicion: &[&'static str] = if abrir { &["opening"] } else { &["closing"] };
         let (pose, secs) = match door_transition(&art, key, transicion) {
             Some((p, s)) => (p, s),
-            None => (if near { "open" } else { "closed" }, 0.0),
+            None => (if abrir { "open" } else { "closed" }, 0.0),
         };
         door.t = secs;
         set_door_pose(&mut commands, ent, &art, key, &[pose], &mut sprite, door_render_size(&art, key));

@@ -417,6 +417,11 @@ pub struct BagPanelState {
     build_dirty: bool,
     pulse: Timer,
     modal: Option<Entity>,
+    /// **Con qué pestaña se armó el panel que está abierto.** El panel del kit
+    /// (`spawn_bag_panel`) dibuja UNA pestaña; sin esto, tocar FABRICAR o
+    /// CONSTRUIR escondía la mochila y dejaba el panel vacío, con el título y el
+    /// resaltado en MOCHILA (28 sep 2026). Si la pestaña cambia, se rearma.
+    armado_con: Option<BagTab>,
     /// Cuanto recorrio el dedo en el gesto en curso. Vive aca por el mismo
     /// motivo que `build_group`: `bag_panel_system` esta en el tope de 16
     /// parametros. Con esto, arrastrar la lista para ver mas recetas ya no
@@ -479,6 +484,7 @@ impl Default for BagPanelState {
             build_dirty: false,
             pulse: Timer::from_seconds(0.15, TimerMode::Once),
             modal: None,
+            armado_con: None,
             recorrido: 0.0,
             pendiente: None,
             dedo: false,
@@ -1678,7 +1684,7 @@ fn format_inventory_line(inv: &PlayerInventory) -> String {
     }
     let parts: Vec<String> = entries
         .iter()
-        .map(|(id, qty)| format!("{}x{qty}", item_label(id)))
+        .map(|(id, qty)| format!("{} x{qty}", item_label(id)))
         .collect();
     format!("Stock: {}", parts.join(" | "))
 }
@@ -1687,26 +1693,38 @@ fn format_inventory_line(inv: &PlayerInventory) -> String {
 /// largos (`iron_ingot`, `gold_ingot`) hacían que el costo ocupara tres líneas y
 /// se derramara fuera de la tarjeta; con símbolos de una o dos letras el costo
 /// entero entra en un renglón.
+/// **El nombre corto de un ingrediente, en castellano** (28 sep 2026). Eran
+/// iniciales del inglés —`W`, `S`, `T`— y la tarjeta decía "Wx3 Tx2": la regla es
+/// que la UI habla castellano de verdad. Corto porque va al pie de la tarjeta.
 fn item_label(id: &str) -> &str {
     match id {
-        "wood" => "W",
-        "stone" => "S",
-        "sticks" => "T",
-        "iron_ingot" => "Fe",
-        "gold_ingot" => "Au",
-        "gem_blue" => "Gem",
-        "leather" => "Cue",
-        "apple" => "Man",
-        "orange" => "Nar",
-        "grape" => "Uva",
-        _ => id,
+        "wood" => "Madera",
+        "stone" => "Piedra",
+        "sticks" => "Palos",
+        "iron_ingot" => "Hierro",
+        "gold_ingot" => "Oro",
+        "gem_blue" => "Gema",
+        "leather" => "Cuero",
+        "apple" => "Manzana",
+        "orange" => "Naranja",
+        "grape" => "Uvas",
+        "map_small" => "Mapa",
+        _ => ha_assets::slots::slot_label(&format!("items/{id}")).unwrap_or(id),
     }
+}
+
+/// El nombre de lo que sale de una receta, en castellano: el del slot del ítem
+/// (`ha_assets::slots`), que es el que ya usa el resto del juego. El
+/// `display_name` de la receta es el del catálogo compartido (inglés, espejo de
+/// `packages/shared`) y no se toca desde acá.
+fn nombre_de_receta(recipe: &CraftRecipe) -> &'static str {
+    ha_assets::slots::slot_label(&format!("items/{}", recipe.output_id)).unwrap_or(recipe.display_name)
 }
 
 fn format_ingredients(ingredients: &[(&str, u32)]) -> String {
     ingredients
         .iter()
-        .map(|(id, qty)| format!("{}x{qty}", item_label(id)))
+        .map(|(id, qty)| format!("{} x{qty}", item_label(id)))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -1721,7 +1739,7 @@ fn recipe_status(inv: &PlayerInventory, recipe: &CraftRecipe) -> (bool, String) 
         .filter_map(|(id, need)| {
             let have = inv.qty(id);
             if have < *need {
-                Some(format!("{}x{}", item_label(id), need - have))
+                Some(format!("{} x{}", item_label(id), need - have))
             } else {
                 None
             }
@@ -2194,6 +2212,9 @@ fn spawn_bag_panel(
                     ..default()
                 },
                 ModalLayerRoot,
+                // **Por encima de TODO el HUD** (28 sep 2026): el reloj y el
+                // botón CAM se dibujaban encima de la mochila y la atravesaban.
+                GlobalZIndex(50),
                 Name::new("BagModalLayer"),
             ))
             .with_children(|layer| {
@@ -2208,7 +2229,9 @@ fn spawn_bag_panel(
                     // "cerrar tocando afuera". `SinMarco` porque el reskin del
                     // HUD le pintaba `ui/button` estirado a pantalla completa —
                     // una tabla de madera gigante tapando el juego y la hotbar.
-                    BackgroundColor(Color::NONE),
+                    // Oscurece el juego detrás: la mochila es un modal y el
+                    // HUD que queda debajo no tiene que competir con ella.
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
                     crate::ui_pack::SinMarco,
                     ModalBackdrop,
                     Name::new("ModalBackdrop"),
@@ -2359,7 +2382,11 @@ fn spawn_bag_panel(
                     let titulo = if creativo {
                         build_groups().get(group).map(|(_, l)| *l).unwrap_or("TODO")
                     } else {
-                        "MOCHILA"
+                        match tab {
+                            BagTab::Inventory => "MOCHILA",
+                            BagTab::Craft => "FABRICAR",
+                            BagTab::Build => "CONSTRUIR",
+                        }
                     };
                     // **El título y su bajada van en una FILA.** Calcular dónde
                     // termina el título multiplicando letras por un ancho medio
@@ -2386,16 +2413,16 @@ fn spawn_bag_panel(
                     .with_children(|t| {
                         t.spawn((
                             Text::new(titulo.to_string()),
-                            TextFont { font_size: 40.0 * k, ..default() },
-                            TextColor(Pack::TEXTO),
+                            // 32 y no 40: "CONSTRUIR" a 40 se metía debajo de la
+                            // lupa del buscador (captura `HA_BAGSHOT`).
+                            TextFont { font_size: 32.0 * k, ..default() },
+                            TextColor(Pack::TINTA),
                             TextLayout::new_with_no_wrap(),
                         ));
-                        t.spawn((
-                            Text::new(sub.to_string()),
-                            TextFont { font_size: 26.0 * k, ..default() },
-                            TextColor(Color::srgb(0.808, 0.706, 0.588)),
-                            TextLayout::new_with_no_wrap(),
-                        ));
+                        // La bajada ("lo que llevás encima") quedaba debajo
+                        // del buscador, dos textos encimados (28 sep 2026). El
+                        // título solo alcanza.
+                        let _ = sub;
                     });
                     // Las flechas de página, a la izquierda del buscador. Sólo
                     // aparecen si la categoría no entra en una página.
@@ -2601,7 +2628,21 @@ fn capturar_mochila(
                 .observe(save_to_disk(format!("{prefijo}-mochila.png")));
             eprintln!("ha-bagshot: mochila");
         }
-        200 => {
+        170 => bag.tab = BagTab::Craft,
+        210 => {
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(format!("{prefijo}-fabricar.png")));
+            eprintln!("ha-bagshot: fabricar");
+        }
+        220 => bag.tab = BagTab::Build,
+        260 => {
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(format!("{prefijo}-construir.png")));
+            eprintln!("ha-bagshot: construir");
+        }
+        300 => {
             exit.send(AppExit::Success);
         }
         _ => {}
@@ -3411,7 +3452,7 @@ fn spawn_recipe_card(panel: &mut ChildBuilder, recipe: &CraftRecipe, heart: f32,
         panel,
         heart,
         card,
-        recipe.display_name,
+        nombre_de_receta(recipe),
         format_ingredients(recipe.ingredients),
         UiIconSlot::item(recipe.output_id),
         UiButtonTone::Craft,
@@ -3538,7 +3579,7 @@ fn skin_ui_from_art(
         Entity,
         Or<(Added<BagPanelCloseButton>, Added<MachinePanelCloseButton>)>,
     >,
-    tabs: Query<(Entity, &BagTabButton), Added<BagTabButton>>,
+    tabs: Query<(Entity, &BagTabButton, Option<&bevy::ui::widget::ImageNode>), Added<BagTabButton>>,
     // **Todo el resto de los botones** (tarjetas de craftear/construir, fichas de
     // grupo, botones del menú, del cofre, del creador). El arte de `ui/button` ya
     // estaba recortado en el manifest y NO lo consumía nadie: el HUD entero se
@@ -3621,7 +3662,15 @@ fn skin_ui_from_art(
             commands.entity(e).try_insert(img);
         }
     }
-    for (e, tab) in &tabs {
+    for (e, tab, img) in &tabs {
+        // **La pestaña que ya trae el marco del kit se queda con él** (28 sep
+        // 2026). La mochila nueva (`spawn_bag_panel`) le pone `ui/marco_slot`
+        // y acá se le pisaba con la madera de `ui/button` estirada: pestañas
+        // oscuras con franjas claras tachando el texto. Sólo se viste la que
+        // llega sin imagen.
+        if img.is_some() {
+            continue;
+        }
         let key = match tab.tab {
             BagTab::Inventory => "ui/tab_inventario",
             BagTab::Craft => "ui/tab_craft",
@@ -3918,10 +3967,14 @@ fn bag_panel_system(
         return;
     }
 
+    if bag_state.modal.is_some() && bag_state.armado_con != Some(bag_state.tab) {
+        despawn_bag_panel(&mut commands, &mut bag_state);
+    }
     if bag_state.modal.is_none() {
         let Ok(root) = root.get_single() else {
             return;
         };
+        bag_state.armado_con = Some(bag_state.tab);
         bag_state.modal = Some(spawn_bag_panel(
             &mut commands,
             root,

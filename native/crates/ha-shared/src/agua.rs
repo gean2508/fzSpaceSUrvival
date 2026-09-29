@@ -54,6 +54,13 @@ pub enum Orilla {
     /// Playa de arena. **Sólo la costa y los secarrales**: es el agua de panal
     /// del pack y fuera de la playa se lee como un error.
     Arena,
+    /// **Ribera de nieve** (28 sep 2026): la del agua en la nieve y el hielo.
+    /// Pedido del usuario: *"que la orilla no se vea de llano, sino con el asset
+    /// del bioma"* — la ribera de pasto era una franja verde con barro cortando
+    /// la cumbre blanca. El pack no la trae; la deriva
+    /// `scripts/derivar-orilla-de-nieve.py` de la de pasto con los tonos del
+    /// kit de acantilado de nieve.
+    Nieve,
 }
 
 impl Orilla {
@@ -63,6 +70,7 @@ impl Orilla {
         match self {
             Orilla::Pasto => "tiles/water",
             Orilla::Arena => "tiles/water_arena",
+            Orilla::Nieve => "tiles/water_nieve",
         }
     }
 }
@@ -93,9 +101,11 @@ fn familia_de_bioma(b: Biome) -> Option<Orilla> {
         // adentro. El médano de verdad sigue teniendo su playa: `Desert` tiene
         // suelo de arena y se quedó donde estaba.
         Biome::Savanna => Orilla::Pasto,
+        // La nieve bebe con nieve: su suelo es nieve (`Nieve`, arriba).
+        Biome::Snow | Biome::Ice => Orilla::Nieve,
         // Todo lo demás bebe con pasto, incluida la piedra: el borde entre el
         // agua y la roca desnuda es el corte que se pidió sacar.
-        Biome::Highland | Biome::Mountain | Biome::Snow | Biome::Ice => Orilla::Pasto,
+        Biome::Highland | Biome::Mountain => Orilla::Pasto,
         Biome::Regolith | Biome::Basalt => Orilla::Pasto,
         Biome::Grassland | Biome::Forest => Orilla::Pasto,
         Biome::Ocean | Biome::River | Biome::Swamp => return None,
@@ -197,6 +207,11 @@ pub const PISOS_MAX: i64 = relief::MAX_PARED;
 /// para saber hasta dónde llega el dibujo sin abrir el manifiesto.
 pub const POZA_FILAS: i64 = 2;
 
+/// Cuántas filas bajo el pie de un salto se mira que el río no vuelva al nivel
+/// del labio (ver `salto_con`). Las zanjas medidas en la sierra de la captura
+/// miden de 1 a 4 filas; con 8 sobra.
+const ZANJA: i64 = 8;
+
 /// **Hasta qué fila, contando desde el canto, llega el DIBUJO de un salto de
 /// `pisos` escalones.**
 ///
@@ -258,8 +273,27 @@ fn pared(body: CelestialBody, tx: i64, tz: i64) -> bool {
 /// de 1 a 20 tiles con **8 de mediana**. Es lo que impide que el chorro se
 /// derrame sobre la tierra seca.
 fn salto_desde(body: CelestialBody, tx: i64, tz: i64) -> Option<i64> {
+    salto_con(body, tx, tz, Labio::Pared)
+}
+
+/// **Con qué se reconoce el labio de un salto.** El dibujo pregunta por la
+/// PARED (`relief_cell`); el relieve, que es quien decide si ahí hay pared, no
+/// puede hacerle esa pregunta sin morderse la cola, y pregunta por el NIVEL:
+/// ver [`garganta_por_niveles`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Labio {
+    Pared,
+    Nivel,
+}
+
+fn salto_con(body: CelestialBody, tx: i64, tz: i64, labio: Labio) -> Option<i64> {
     // El labio: el canto de una pared, con agua justo encima.
-    if !pared(body, tx, tz) || !cauce(body, tx, tz - 1) {
+    let canto = match labio {
+        Labio::Pared => pared(body, tx, tz),
+        // `alto_de_pared` (más abajo) ya exige que el terreno baje al sur.
+        Labio::Nivel => relief::relief_level(body, tx, tz) > 0,
+    };
+    if !canto || !cauce(body, tx, tz - 1) {
         return None;
     }
     // **Y tiene que BAJAR hacia el sur.** Sin esto, una pared de las que corren
@@ -315,6 +349,24 @@ fn salto_desde(body: CelestialBody, tx: i64, tz: i64) -> Option<i64> {
         // Sin poza el río se corta contra la pared: lo de arriba era un charco
         // colgado, no un salto.
         return None;
+    }
+    // **Y ABAJO EL AGUA NO VUELVE A SUBIR** (28 sep 2026). Cuando la cota del
+    // cauce corre justo por el borde entre dos niveles, bajo el agua queda una
+    // ZANJA a lo largo del río —dos o tres filas de la terraza de abajo y otra
+    // vez la de arriba— y su borde norte cumplía todo lo de arriba: se anclaba
+    // una cascada que cae a una zanja en mitad de la corriente, con su roca
+    // atravesada (`agua-4-sierra.png`, -4244,-6046). Un salto de verdad deja el
+    // río abajo; si el cauce recupera el nivel del labio en las filas que siguen,
+    // no se cayó a ningún lado.
+    let arriba = relief::relief_level(body, tx, tz);
+    for k in 0..ZANJA {
+        let z = pie + k;
+        if !cauce(body, tx, z) {
+            break;
+        }
+        if relief::relief_level(body, tx, z) >= arriba {
+            return None;
+        }
     }
     Some(pisos)
 }
@@ -406,7 +458,36 @@ struct TramoDeCaida {
 /// igualdad, la de más al oeste): un dibujo por tramo, como antes, para que un
 /// río ancho no salga con columnas de roca alineadas en mitad del agua.
 fn tramo_de_caida(body: CelestialBody, tx: i64, tz: i64) -> Option<TramoDeCaida> {
-    salto_desde(body, tx, tz)?;
+    tramo_con(body, tx, tz, Labio::Pared)
+}
+
+/// **¿ESTA CELDA ES LA BOCA DE UN SALTO QUE SE VA A DIBUJAR?** — contestado
+/// sólo con niveles y el trazado del río, sin preguntarle a `relief_cell`.
+///
+/// Lo pide `relief::es_canto` para decidir si una pared puede quedarse dentro
+/// de un río (28 sep 2026). Antes le alcanzaba con "agua arriba, agua abajo y
+/// el terreno baja", y eso lo cumplen también el río que corre de lado con el
+/// escalón a lo largo, el que sube hacia el norte y el que cruza en diagonal
+/// sin tres columnas al ras: ninguno se puede dibujar con el recorte de frente
+/// del pack, así que la roca quedaba atravesada en el agua partiendo el río en
+/// charcos (`agua-4-sierra.png`). **Dentro de un río, la única roca es la
+/// garganta de una cascada que de verdad se ancla**; cualquier otro desnivel
+/// bajo el agua se lee como agua que corre.
+///
+/// Vale para TODO el tramo del cruce, no sólo para las tres columnas del
+/// chorro: el resto del ancho del río es la roca de la garganta, y el agua se
+/// encajona por el salto (`design/referencias/terrazas-y-cascadas.png`). Si
+/// sólo quedaran las tres, el resto del río pasaría llano al lado de un
+/// farallón de diez pisos.
+pub fn garganta_por_niveles(body: CelestialBody, tx: i64, tz: i64) -> bool {
+    matches!(
+        tramo_con(body, tx, tz, Labio::Nivel),
+        Some(TramoDeCaida { ventana: Some(_) })
+    )
+}
+
+fn tramo_con(body: CelestialBody, tx: i64, tz: i64, labio: Labio) -> Option<TramoDeCaida> {
+    salto_con(body, tx, tz, labio)?;
     // **Sin reservar memoria**: esto es camino caliente —lo llaman el spawn de
     // cada chunk, `en_la_garganta`, `bajo_el_chorro` y el autotile del agua— y un
     // `Vec` por consulta se nota. El tramo no puede pasar de [`CAUCE_MAX`]
@@ -422,7 +503,7 @@ fn tramo_de_caida(body: CelestialBody, tx: i64, tz: i64) -> Option<TramoDeCaida>
     let mut izq = 0i64;
     let mut z = tz;
     while izq + 1 < CAUCE_MAX {
-        let Some((nz, _)) = salto_vecino(body, tx - izq - 1, z) else { break };
+        let Some((nz, _)) = salto_vecino(body, tx - izq - 1, z, labio) else { break };
         izq += 1;
         filas[ANCLA - izq as usize] = nz;
         z = nz;
@@ -430,7 +511,7 @@ fn tramo_de_caida(body: CelestialBody, tx: i64, tz: i64) -> Option<TramoDeCaida>
     let mut der = 0i64;
     let mut z = tz;
     while izq + der + 1 < CAUCE_MAX {
-        let Some((nz, _)) = salto_vecino(body, tx + der + 1, z) else { break };
+        let Some((nz, _)) = salto_vecino(body, tx + der + 1, z, labio) else { break };
         der += 1;
         filas[ANCLA + der as usize] = nz;
         z = nz;
@@ -439,6 +520,24 @@ fn tramo_de_caida(body: CelestialBody, tx: i64, tz: i64) -> Option<TramoDeCaida>
     // `filas[i]` es la fila de caída de la columna `x0 + i`.
     let x0 = tx - izq;
     let largo = filas.len() as i64;
+    // **UN SALTO CRUZA EL RÍO DE ORILLA A ORILLA** (28 sep 2026). Si al lado de
+    // cualquiera de las dos puntas del tramo sigue habiendo agua arriba del
+    // labio Y ese agua no baja ahí (ningún escalón en ±1 fila), el río no cae
+    // por acá: pasa de largo por el costado al mismo nivel. Es la cinta que
+    // queda cuando la cota del cauce corre justo por el borde entre dos niveles
+    // —un escalón a lo largo del río, en escalera— y cada tres columnas al ras
+    // anclaba una "cascada" en mitad de la corriente (`agua-4-sierra.png`,
+    // -6083,-6184). Un tramo así se lee como rápido. Pedir orilla seca en las
+    // dos puntas, en cambio, deja el planeta sin una sola cascada: medido, todo
+    // salto tiene al lado agua que también baja pero no ancla (sin poza, o una
+    // fila corrida de más).
+    let orilla = |x: i64, z: i64| {
+        !cauce(body, x, z - 1)
+            || (-1..=1).any(|k| relief::relief_level(body, x, z + k) > relief::relief_level(body, x, z + k + 1))
+    };
+    if !orilla(x0 - 1, filas[0]) || !orilla(x0 + largo, filas[filas.len() - 1]) {
+        return Some(TramoDeCaida { ventana: None });
+    }
     // Tres celdas de ancho para el dibujo: un cauce de una o dos celdas es un
     // chorrito, no una cascada, y se deja como está.
     if largo < ANCHO_CASCADA {
@@ -473,10 +572,10 @@ fn tramo_de_caida(body: CelestialBody, tx: i64, tz: i64) -> Option<TramoDeCaida>
 ///
 /// Un tile de diferencia sobre un chorro que ya mide varias filas no se lee como
 /// un error; lo que se lee es la cascada que antes no estaba.
-fn salto_vecino(body: CelestialBody, tx: i64, tz: i64) -> Option<(i64, i64)> {
+fn salto_vecino(body: CelestialBody, tx: i64, tz: i64, labio: Labio) -> Option<(i64, i64)> {
     [0i64, 1, -1]
         .into_iter()
-        .find_map(|dz| salto_desde(body, tx, tz + dz).map(|a| (tz + dz, a)))
+        .find_map(|dz| salto_con(body, tx, tz + dz, labio).map(|a| (tz + dz, a)))
 }
 
 /// Cuál de las tres variantes de cascada le toca a este salto. Es del SALTO, no
@@ -942,7 +1041,11 @@ mod tests {
     fn cada_bioma_su_orilla() {
         assert_eq!(Orilla::Arena.art_key(), "tiles/water_arena");
         assert_eq!(Orilla::Pasto.art_key(), "tiles/water");
-        for b in [Biome::Highland, Biome::Mountain, Biome::Snow, Biome::Ice] {
+        assert_eq!(Orilla::Nieve.art_key(), "tiles/water_nieve");
+        for b in [Biome::Snow, Biome::Ice] {
+            assert_eq!(familia_de_bioma(b), Some(Orilla::Nieve), "{b:?} bebe con pasto en la nieve");
+        }
+        for b in [Biome::Highland, Biome::Mountain] {
             assert_eq!(
                 familia_de_bioma(b),
                 Some(Orilla::Pasto),
@@ -1014,7 +1117,7 @@ mod tests {
     #[test]
     fn las_dos_orillas_aparecen_donde_corresponde() {
         let body = CelestialBody::Earth;
-        let mut vistas = [0u32; 2];
+        let mut vistas = [0u32; 3];
         let mut arena_en_la_sierra = 0u32;
         let mut arena_en_lago = 0u32;
 
@@ -1055,6 +1158,7 @@ mod tests {
                         match o {
                             Orilla::Pasto => vistas[0] += 1,
                             Orilla::Arena => vistas[1] += 1,
+                            Orilla::Nieve => vistas[2] += 1,
                         }
                         let sierra = matches!(
                             tierra_de_al_lado(body, tx, tz),
@@ -1163,6 +1267,17 @@ mod tests {
             }
             cz += 2_000;
         }
+        // **Y la sierra de `agua-4-sierra.png`, entera.** Desde el 28 sep 2026
+        // las cascadas son muchas menos —casi todas las de antes eran bordes de
+        // zanjas a lo largo del río— y los parches ralos de arriba ya no caen
+        // sobre ninguna (`medir_rios::cortes_y_cascadas`).
+        for tz in -6_600i64..-5_700 {
+            for tx in -6_500i64..-5_600 {
+                let Some(pisos) = cascada_at(body, tx, tz) else { continue };
+                assert!(pisos <= relief::alto_de_pared(body, tx, tz), "({tx},{tz})");
+                por_pisos[pisos as usize] += 1;
+            }
+        }
         eprintln!("cascadas por pisos: {por_pisos:?}");
         assert!(
             por_pisos.iter().sum::<u32>() > 0,
@@ -1185,6 +1300,10 @@ mod tests {
     /// tienen otra río abajo** a entre 8 y 40 tiles, con hasta 12 de
     /// desplazamiento lateral (el cauce serpentea mientras baja). La primera
     /// versión de este test pedía ±2 tiles y 24 de caída y por eso contó cero.
+    ///
+    /// Desde el 28 sep 2026 cuenta **8 anclas y 2 encadenadas** (eran 24 y 14):
+    /// las que se fueron eran bordes de zanjas a lo largo del río, no saltos
+    /// (biblia §5 "EL RÍO NO LO PARTE LA ROCA").
     #[test]
     fn hay_cascadas_encadenadas_bajando_la_sierra() {
         let body = CelestialBody::Earth;
@@ -1514,3 +1633,4 @@ mod tests {
         }
     }
 }
+

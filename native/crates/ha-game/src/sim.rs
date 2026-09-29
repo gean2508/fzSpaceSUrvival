@@ -248,9 +248,22 @@ fn interpolate_player_visual(
         // que `view_h` es el encuadre del JUGADOR y no el trinquete de la altura,
         // usarlo acá directamente dejaría al personaje del tamaño de a pie —o sea,
         // sub-píxel— en cuanto la altura abriera la cámara.
+        //
+        // **EL JUGADOR Y LA CÁMARA SUBEN JUNTOS** (28 sep 2026). Pedido textual:
+        // *"el jugador y la cámara se alejan por igual; lo que cambiaría sería
+        // que si el jugador pellizca para alejar más, no que se aleje solo"*. El
+        // tamaño se medía contra `GROUND_VIEW_H` fijo y no contra el encuadre que
+        // tenías a pie: con el pellizco acercado (`user_mult` < 1) el personaje
+        // se achicaba al despegar hasta que la altura llegaba a 30 m, y encima
+        // perdía otro 35 % desde los 200 m. Ahora la escala es la parte de la
+        // ALTURA del encuadre (`live / user_mult`) sobre la de a pie: en
+        // pantalla mide lo mismo que parado con ese pellizco, a cualquier
+        // altura. La altura sólo aleja el SUELO; el pellizco achica todo.
+        // Sólo en vista de sistema solar pasa a marcador (un poco más chico).
         let live = zoom.live_view_h;
-        let screen_f = 1.0 - 0.35 * crate::universe::smootherstep(200.0, 4_000.0, live);
-        let s = (live / crate::universe::GROUND_VIEW_H * screen_f).max(1.0);
+        let de_altura = live / zoom.user_mult.max(1e-3);
+        let screen_f = 1.0 - 0.35 * crate::universe::smootherstep(20_000.0, 200_000.0, de_altura);
+        let s = (de_altura / crate::universe::GROUND_VIEW_H * screen_f).max(1.0);
         for (visual, mut transform, mut vis) in &mut query {
             *vis = Visibility::Visible;
             let wx = visual.from_x.lerp(visual.to_x, t);

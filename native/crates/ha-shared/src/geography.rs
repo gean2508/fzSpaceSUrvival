@@ -803,7 +803,10 @@ fn biome_calc(body: CelestialBody, tx: i64, tz: i64, difuminar: bool) -> Biome {
         Archetype::Terran | Archetype::Oceanic => {
             // Pantano: tierra baja Y húmeda. Es el bioma que más se echa de menos
             // en un mapa grande — da variedad sin inventar tiles.
-            if sea > 0.0 && level <= 1 && m > 0.60 {
+            // **Nunca adentro de un pueblo** (28 sep 2026): una ciudad fundada en
+            // el llano húmedo salía sembrada de charcos entre las manzanas. El
+            // casco drena; el pantano queda en el campo.
+            if sea > 0.0 && level <= 1 && m > 0.60 && settlement_covering(body, tx, tz).is_none() {
                 Biome::Swamp
             } else if m > 0.64 {
                 Biome::Forest
@@ -1270,7 +1273,7 @@ pub fn civil_kind_at(body: CelestialBody, tx: i64, tz: i64) -> Option<Civil> {
         // Dentro del casco manda la trama, incluso cuando dice "acá no hay obra"
         // (el interior de la manzana): un enlace no la atraviesa. Desemboca en la
         // circunvalación, que es justo el borde por el que se entra.
-        return urban_civil(&s, tx, tz);
+        return urban_civil(body, &s, tx, tz);
     }
     // 2) ENLACES entre núcleos.
     match link_clearance(body, tx as f32, tz as f32) {
@@ -1364,7 +1367,7 @@ fn dist_caja_a_tramo(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
 ///
 /// Lo que pinta acá se recorta después contra el agua en [`civil_at`] — ver ahí
 /// por qué no puede ser en esta función.
-fn urban_civil(s: &Settlement, tx: i64, tz: i64) -> Option<Civil> {
+fn urban_civil(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option<Civil> {
     // LA CIRCUNVALACIÓN, antes que la retícula: es el borde del casco, y es donde
     // desemboca toda carretera que llega de fuera (ver `roads::ring_class`).
     let borde = s.radius as f32
@@ -1378,12 +1381,22 @@ fn urban_civil(s: &Settlement, tx: i64, tz: i64) -> Option<Civil> {
     // Ojo: acá NO se mira si hay agua debajo. No se puede (el relieve consulta a
     // esta función) y tampoco hace falta: lo recorta `civil_at`, que sí tiene el
     // terreno en la mano.
-    if borde < anillo.half_width() || dist_x < cv.half_width() || dist_z < ch.half_width() {
-        Some(Civil::Road)
-    } else if dist_x < cv.half_shoulder()
-        || dist_z < ch.half_shoulder()
-        || borde < anillo.half_shoulder()
+    // **LA CALLE NO CRUZA UNA SUPERMANZANA.** Un programa de varias manzanas
+    // ocupa el sitio donde iba la calle que las separaba; si se pintara igual,
+    // la casa quedaría partida por el asfalto (`city::supermanzana`). El tramo
+    // existe sólo si las dos manzanas que separa son de supermanzanas distintas.
+    // Se pregunta sólo cerca de una línea: el interior de la manzana no paga.
+    let sm = |bx: i64, bz: i64| crate::city::supermanzana(body, s, bx, bz);
+    let fila = (tz - s.center.1).div_euclid(b);
+    let columna = (tx - s.center.0).div_euclid(b);
+    let hay_v = dist_x < cv.half_shoulder() && sm(line_x - 1, fila) != sm(line_x, fila);
+    let hay_h = dist_z < ch.half_shoulder() && sm(columna, line_z - 1) != sm(columna, line_z);
+    if borde < anillo.half_width()
+        || (hay_v && dist_x < cv.half_width())
+        || (hay_h && dist_z < ch.half_width())
     {
+        Some(Civil::Road)
+    } else if hay_v || hay_h || borde < anillo.half_shoulder() {
         Some(Civil::Pavement)
     } else {
         // El interior de la manzana: ni calzada ni vereda. Es la mayoría de las
@@ -1821,6 +1834,8 @@ mod tests {
                     match d {
                         Destino::Mar => mar += 1,
                         Destino::Lago => lago += 1,
+                        // Entubado en el borde de un pueblo: llega a un desagüe.
+                        Destino::Pueblo => mar += 1,
                         _ => {}
                     }
                 }

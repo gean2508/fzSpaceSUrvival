@@ -230,6 +230,7 @@ fn claves_del_mundo() -> Vec<&'static str> {
         // dibuja un frame como el cuadrado azul plano de antes.
         "tiles/water",
         "tiles/water_arena",
+        "tiles/water_nieve",
         "tiles/water_deep",
         "agua/cascada",
         "agua/cascada#2",

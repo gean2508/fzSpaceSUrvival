@@ -198,11 +198,27 @@ struct FuenteArte {
     solo_gpu: bool,
 }
 
-/// **Cuántas losas LISAS de pasto por cada losa con matas.** Siete lisas y una con
-/// matas: el campo se lee como pasto sólido y la mata aparece de a una, salteada,
-/// que es para lo que está — marcar que el suelo tiene textura, no empedrarlo de
-/// puntitos. Ver el armado de `suelo_variantes`.
-const PESO_PASTO_LISO: usize = 7;
+/// **Cuántas losas LISAS por cada losa con marca, según el material.** `None` =
+/// el material no mezcla lisa (asfalto, vereda: sus variantes son la misma
+/// baldosa con otro dibujo). Ver el armado de `suelo_variantes`.
+///
+/// El suelo se pinta LISO y la marca aparece salteada: dice que el suelo tiene
+/// textura sin empedrarlo de puntitos. Historia: el 24 ago 2026 el pasto salía
+/// con matas en todas las celdas (*"forman figuritas como charquitos"*) y se le
+/// puso 7 lisas por mata; el 27 sep las variantes —que eran piezas de COSTURA
+/// del pack— se sacaron y TODO quedó liso (*"la nieve no tiene texturas… así
+/// con los suelos en general"*, 28 sep). Las marcas de hoy las dibuja
+/// `scripts/dibujar-marcas-de-suelo.py`, limpias y sin costura: una cada cuatro
+/// celdas, y una cada tres en la nieve, que no tiene el verde que le da vida al
+/// pasto.
+fn peso_liso(base: &str) -> Option<usize> {
+    match base {
+        "tiles/ice" => Some(2),
+        "tiles/grass" | "tiles/sand" | "tiles/dirt" | "tiles/regolith" | "tiles/basalt" => Some(3),
+        b if crate::world2d::PASTOS_DE_BIOMA.contains(&b) => Some(3),
+        _ => None,
+    }
+}
 
 /// Loaded drop-in sprites by logical key. Empty until the player ships art.
 #[derive(Resource, Default)]
@@ -438,6 +454,16 @@ impl ArtLibrary {
                 }
             }
             None => base.to_string(),
+        }
+    }
+
+    /// Las claves con arte de un objeto con variantes (`objeto#variante`), o la
+    /// clave base sola si no tiene. Es la lista entre la que sortea
+    /// [`Self::variant_key_seeded`], para quien necesita filtrarla antes.
+    pub fn variantes_con_arte(&self, base: &str) -> Vec<String> {
+        match self.variant_art.get(base) {
+            Some(keys) if !keys.is_empty() => keys.clone(),
+            _ => vec![base.to_string()],
         }
     }
 
@@ -1542,9 +1568,9 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
             // así que la lisa va repetida `PESO_PASTO_LISO` veces contra una sola de
             // cada variante — con la única variante de hoy, una mata cada ocho
             // celdas. No se toca ningún otro material.
-            if crate::world2d::PASTOS_DE_BIOMA.contains(&base.as_str()) {
+            if let Some(peso) = peso_liso(&base) {
                 if let Some(uv) = art.suelo_uv.get(&base) {
-                    uvs.extend(std::iter::repeat(*uv).take(PESO_PASTO_LISO * vs.len()));
+                    uvs.extend(std::iter::repeat(*uv).take(peso * vs.len()));
                 }
             }
             uvs.extend(vs.iter().filter_map(|v| art.suelo_uv.get(v).copied()));
