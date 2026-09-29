@@ -236,6 +236,13 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     ],
     output: { itemId: "pie", qty: 1 },
   },
+  {
+    id: 30,
+    key: "bucket",
+    displayName: "Cubo",
+    ingredients: [{ itemId: "iron_ingot", qty: 3 }],
+    output: { itemId: "bucket", qty: 1 },
+  },
 ];
 
 const byId = new Map<number, CraftRecipe>(CRAFT_RECIPES.map((r) => [r.id, r]));

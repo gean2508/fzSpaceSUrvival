@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-29T05:33:08.495Z",
+  "generatedAt": "2026-09-29T08:57:27.188Z",
   "modules": [
     {
       "id": "assets",
@@ -971,6 +971,14 @@
           }
         },
         {
+          "id": "bucket",
+          "fields": {
+            "assetKind": "item_mat_ingot_iron",
+            "category": "tool",
+            "maxStack": 16
+          }
+        },
+        {
           "id": "carrot",
           "fields": {
             "assetKind": "item_food_orange",
@@ -1099,6 +1107,14 @@
           }
         },
         {
+          "id": "lava_bucket",
+          "fields": {
+            "assetKind": "item_potion_red",
+            "category": "material",
+            "maxStack": 1
+          }
+        },
+        {
           "id": "leather",
           "fields": {
             "assetKind": "item_mat_leather",
@@ -1112,6 +1128,14 @@
             "assetKind": "item_food_meat",
             "category": "consumable",
             "maxStack": 20
+          }
+        },
+        {
+          "id": "milk_bucket",
+          "fields": {
+            "assetKind": "item_potion_green",
+            "category": "consumable",
+            "maxStack": 1
           }
         },
         {
@@ -1327,6 +1351,14 @@
           "fields": {
             "assetKind": "equip_sword_steel",
             "category": "weapon",
+            "maxStack": 1
+          }
+        },
+        {
+          "id": "water_bucket",
+          "fields": {
+            "assetKind": "item_potion_blue",
+            "category": "consumable",
             "maxStack": 1
           }
         },

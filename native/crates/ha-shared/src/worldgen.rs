@@ -882,6 +882,59 @@ mod tests {
         assert!(malas.is_empty(), "piezas de kit sembradas a ciegas:\n  {}", malas.join("\n  "));
     }
 
+    /// **Lo que la revisión VISUAL descartó no se siembra.**
+    ///
+    /// El 29 sep 2026 se miró el recorte de cada clave del manifest
+    /// (`scripts/revision-visual.json`), porque el nombre no alcanzaba: Modern
+    /// Interiors viene numerado y el importador bautiza por el archivo. Así
+    /// entraban espejos, termotanques y cuadros sembrados de pie en mitad del
+    /// cuarto —"muebles montados sobre las paredes"—, frazadas sin cama y
+    /// parlantes flotando en el agua. Los importadores ya filtran; esto caza que
+    /// alguien edite una tabla a mano o que un importador deje de leer la revisión.
+    ///
+    /// Afuera no entra `X`, `M` ni `P`; adentro tampoco `S` (una alfombra plantada
+    /// como mueble frena el paso).
+    #[test]
+    fn ninguna_tabla_siembra_lo_que_la_revision_visual_descarto() {
+        let rev: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../scripts/revision-visual.json")).unwrap();
+        let flags = |k: &str| rev["claves"][k]["flags"].as_str().unwrap_or("").to_string();
+        let mut malas = Vec::new();
+        for (nombre, tabla) in TABLAS_SEMBRADAS {
+            for d in *tabla {
+                let f = flags(d.key);
+                if f.contains(['X', 'M', 'P']) {
+                    malas.push(format!("{nombre}: {} [{f}]", d.key));
+                }
+            }
+        }
+        use crate::interior_siembra as i;
+        let adentro: &[(&str, &[ExtraDecor])] = &[
+            ("COCINA", i::COCINA),
+            ("DORMITORIO", i::DORMITORIO),
+            ("BANO", i::BANO),
+            ("LIVING", i::LIVING),
+            ("SALA", i::SALA),
+            ("AULA", i::AULA),
+            ("HOSPITAL", i::HOSPITAL),
+            ("CARCEL", i::CARCEL),
+            ("OFICINA", i::OFICINA),
+            ("SOTANO", i::SOTANO),
+            ("MUSEO", i::MUSEO),
+            ("GIMNASIO", i::GIMNASIO),
+            ("ESTUDIO", i::ESTUDIO),
+        ];
+        for (nombre, tabla) in adentro {
+            for d in *tabla {
+                let f = flags(d.key);
+                if !f.is_empty() {
+                    malas.push(format!("{nombre}: {} [{f}]", d.key));
+                }
+            }
+        }
+        assert!(malas.is_empty(), "sembrado lo que la revisión visual descartó:\n  {}", malas.join("\n  "));
+    }
+
     /// Sembrar la misma clave dos veces en la misma tabla es peso duplicado sin
     /// querer: el objeto sale el doble de seguido que lo que dice su `weight`.
     #[test]

@@ -32,6 +32,8 @@ mod granja;
 mod textos_mundo;
 mod tirados;
 mod bautizo;
+mod salir;
+mod cubo;
 mod ambient;
 mod consola;
 mod marca;
@@ -328,7 +330,7 @@ fn run_app_inner() {
         .add_plugins(weather::WeatherPlugin)
         .add_plugins(granja::GranjaPlugin)
         .add_plugins(textos_mundo::TextosMundoPlugin)
-        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin))
+        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)

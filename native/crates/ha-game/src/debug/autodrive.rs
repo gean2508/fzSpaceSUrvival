@@ -268,6 +268,16 @@ impl Plugin for AutoDrivePlugin {
             app.add_systems(Update, muro_test_drive.before(aplicar_actuacion_del_driver));
             return;
         }
+        // **El cubo: lago, pasto y vaca.** HA_CUBOTEST=1 — ver `cubo_test_drive`.
+        if crate::flags::var("HA_CUBOTEST").is_ok() {
+            app.add_systems(Update, cubo_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
+        // **Salir al menú y volver a entrar.** HA_SALIRTEST=1.
+        if crate::flags::var("HA_SALIRTEST").is_ok() {
+            app.add_systems(Update, salir_test_drive);
+            return;
+        }
         if crate::flags::var("HA_PROPTEST").is_ok() {
             app.init_resource::<PropTestState>();
             app.add_systems(Update, prop_test_drive.before(aplicar_actuacion_del_driver));
@@ -6511,4 +6521,285 @@ fn muro_test_drive(world: &mut World) {
     }
     let (px, pz) = piso.unwrap_or((hx + hw / 2, hz + hd / 2));
     teleport_a_celda(world, px as f32 + 0.5, pz as f32 + 0.5);
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_SALIRTEST — MENÚ PRINCIPAL desde la partida, y volver a jugar
+// ---------------------------------------------------------------------------
+
+/// Juega, pide "menú principal", comprueba que el mundo se despejó (no queda
+/// jugador) y que el menú está; vuelve a entrar a la MISMA partida y comprueba
+/// que el mundo se arma otra vez (jugador, chunks). Dos vueltas, por si la
+/// segunda salida encuentra algo que la primera dejó colgando.
+fn salir_test_drive(world: &mut World, mut paso: Local<u32>, mut t0: Local<f32>, mut vueltas: Local<u32>) {
+    use crate::game_phase::GamePhase;
+    let now = world.resource::<Time<bevy::time::Real>>().elapsed_secs();
+    let fase = world.resource::<State<GamePhase>>().get().clone();
+    let jugadores = {
+        let mut q = world.query_filtered::<Entity, With<Player>>();
+        q.iter(world).count()
+    };
+    match *paso {
+        0 => {
+            if fase == GamePhase::Playing && mundo_listo(world) {
+                *t0 = now;
+                *paso = 1;
+            }
+        }
+        1 => {
+            if now - *t0 > 3.0 {
+                eprintln!("ha-salir-test: pido MENÚ PRINCIPAL (vuelta {})", *vueltas + 1);
+                world.resource_mut::<crate::salir::SalidaAlMenu>().pedida = true;
+                *t0 = now;
+                *paso = 2;
+            }
+        }
+        2 => {
+            if fase == GamePhase::MainMenu && now - *t0 > 2.0 {
+                eprintln!("ha-salir-test: en el menú; jugadores vivos = {jugadores}");
+                if jugadores != 0 {
+                    eprintln!("ha-verify: SALIRTEST FAIL (quedó el jugador)");
+                    std::process::exit(1);
+                }
+                if let Some(id) = crate::partida::activa() {
+                    crate::partida::abrir(&id);
+                }
+                world.resource_mut::<NextState<GamePhase>>().set(GamePhase::Loading);
+                *t0 = now;
+                *paso = 3;
+            } else if now - *t0 > 20.0 {
+                eprintln!("ha-verify: SALIRTEST FAIL (no llegó al menú)");
+                std::process::exit(1);
+            }
+        }
+        3 => {
+            if fase == GamePhase::Playing && mundo_listo(world) {
+                eprintln!("ha-salir-test: de vuelta en la partida; jugadores = {jugadores}");
+                if jugadores != 1 {
+                    eprintln!("ha-verify: SALIRTEST FAIL ({jugadores} jugadores)");
+                    std::process::exit(1);
+                }
+                *vueltas += 1;
+                if *vueltas >= 2 {
+                    shot(world, &format!("{}/salir-vuelta.png", flytest_dir()));
+                    *paso = 4;
+                    *t0 = now;
+                } else {
+                    *paso = 1;
+                    *t0 = now;
+                }
+            } else if now - *t0 > 90.0 {
+                eprintln!("ha-verify: SALIRTEST FAIL (no volvió a armar el mundo)");
+                std::process::exit(1);
+            }
+        }
+        _ => {
+            if now - *t0 > 2.0 {
+                if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() {
+                    if let Some(id) = crate::partida::activa() {
+                        crate::partida::borrar(&id);
+                    }
+                }
+                eprintln!("ha-verify: SALIRTEST DONE");
+                std::process::exit(0);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HA_CUBOTEST — el cubo: llenar en el lago, volcar en el pasto, ordeñar
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct CuboTest {
+    paso: u32,
+    fallo: bool,
+    agua: (i64, i64),
+    seco: (i64, i64),
+    vaca: Option<Entity>,
+    espera: u32,
+}
+
+fn ct_falla(estado: &mut CuboTest, invariante: &str, detalle: &str) {
+    report_bug("cubo", invariante, detalle);
+    estado.fallo = true;
+}
+
+/// Completa el mantenido con el cubo, como lo deja `tick_hold_interact`.
+fn ct_completar_cubo(world: &mut World) {
+    let mut h = world.resource_mut::<HoldInteractState>();
+    *h = HoldInteractState::default();
+    h.completed = true;
+    h.usar_cubo = true;
+}
+
+/// **El cubo, por los sistemas de verdad** (targeting → mantenido → `cubo.rs` /
+/// `fauna.rs`):
+///
+/// 1. Con el cubo vacío, el dedo en el agua de un lago: sale un cubo de agua.
+/// 2. Con el cubo de agua, el dedo en el pasto: la celda pasa a ser agua y
+///    vuelve el cubo vacío.
+/// 3. Con el cubo vacío, arrimado a una vaca adulta: sale un cubo de leche.
+///
+/// Capturas en `HA_SHOTDIR` (`cubo-*.png`).
+fn cubo_test_drive(world: &mut World, mut st: Local<CuboTest>) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+    let body = ha_shared::CelestialBody::Earth;
+    let paso = st.paso;
+    st.paso += 1;
+    match paso {
+        0 => {
+            gt_dar(world, "bucket", 1);
+            equip(world, "bucket");
+            // Un lago con dos celdas de pasto en fila al lado: una para pararse,
+            // la otra para volcar.
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            let (px, pz) = (px.floor() as i64, pz.floor() as i64);
+            let tiles = world.resource::<TileWorld>();
+            let mut mejor: Option<(i64, (i64, i64), (i64, i64))> = None;
+            for dz in -220..=220i64 {
+                for dx in -220..=220i64 {
+                    let (x, z) = (px + dx, pz + dz);
+                    if tiles.tile_at(body, x, z) != ha_shared::topdown::Tile::Water {
+                        continue;
+                    }
+                    for (ox, oz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let p = (x + ox, z + oz);
+                        let q = (x + 2 * ox, z + 2 * oz);
+                        if tiles.tile_at(body, p.0, p.1).buildable_ground()
+                            && tiles.tile_at(body, q.0, q.1).buildable_ground()
+                        {
+                            let d = dx * dx + dz * dz;
+                            if mejor.is_none_or(|m| d < m.0) {
+                                mejor = Some((d, (x, z), p));
+                            }
+                        }
+                    }
+                }
+            }
+            let Some((_, agua, pie)) = mejor else {
+                ct_falla(&mut st, "hay_un_lago_cerca", "no se encontró agua con orilla de pasto");
+                st.paso = 99;
+                return;
+            };
+            st.agua = agua;
+            st.seco = (2 * pie.0 - agua.0, 2 * pie.1 - agua.1);
+            eprintln!("ha-cubo: agua {agua:?}, pie {pie:?}, seco {:?}", st.seco);
+            teleport_a_celda(world, pie.0 as f32 + 0.5, pie.1 as f32 + 0.5);
+        }
+        // El anillo de chunks tras el salto; con tope, que la partida nueva es
+        // un mundo al azar y a veces el chunk del pie tarda en decorarse.
+        1..=40 if !mundo_listo(world) && st.espera < 900 => {
+            st.espera += 1;
+            st.paso = paso;
+        }
+        1..=40 => {}
+        41 => {
+            st.espera = 0;
+            gt_dedo(world, st.agua.0 as f32 + 0.5, st.agua.1 as f32 + 0.5);
+        }
+        42 => {
+            let t = *world.resource::<crate::targeting::LookTarget>();
+            let esperada = Some((st.agua.0 as i32, st.agua.1 as i32, 0));
+            if t.place_cell != esperada {
+                ct_falla(&mut st, "el_dedo_apunta_al_agua", &format!("{:?} vs {esperada:?}", t.place_cell));
+            }
+            ct_completar_cubo(world);
+        }
+        45 => {
+            let inv = world.resource::<PlayerInventory>();
+            let (lleno, vacio) = (inv.qty("water_bucket"), inv.qty("bucket"));
+            eprintln!("ha-cubo: tras el lago: {lleno} de agua, {vacio} vacíos");
+            if lleno != 1 || vacio != 0 {
+                ct_falla(&mut st, "el_lago_llena_el_cubo", &format!("agua {lleno}, vacío {vacio}"));
+            }
+            foto(world, "cubo-1-lleno.png");
+            gt_dedo(world, st.seco.0 as f32 + 0.5, st.seco.1 as f32 + 0.5);
+        }
+        47 => {
+            let t = *world.resource::<crate::targeting::LookTarget>();
+            let esperada = Some((st.seco.0 as i32, st.seco.1 as i32, 0));
+            if t.place_cell != esperada {
+                ct_falla(&mut st, "el_dedo_apunta_al_pasto", &format!("{:?} vs {esperada:?}", t.place_cell));
+            }
+            ct_completar_cubo(world);
+        }
+        49 => {
+            let tile = world.resource::<TileWorld>().tile_at(body, st.seco.0, st.seco.1);
+            let vacio = world.resource::<PlayerInventory>().qty("bucket");
+            eprintln!("ha-cubo: volcado: la celda es {tile:?}, {vacio} vacíos");
+            if tile != ha_shared::topdown::Tile::Water || vacio != 1 {
+                ct_falla(&mut st, "volcar_deja_agua_y_devuelve_el_cubo", &format!("{tile:?}, vacío {vacio}"));
+            }
+            world.resource_mut::<crate::input::AimCursor>().locked = false;
+            world.resource_mut::<crate::input::AimCursor>().active = false;
+            foto(world, "cubo-2-volcado.png");
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            world.send_event(crate::fauna::SpawnResidentEvent { x: px, z: pz - 3.0, species: 0, hostile: false });
+        }
+        50 => {
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            st.vaca = crate::fauna::probe_animales(world)
+                .into_iter()
+                .filter(|a| a.especie == 0 && a.edad >= 1.0)
+                .min_by(|a, b| {
+                    let da = (a.x - px).powi(2) + (a.z - pz).powi(2);
+                    let db = (b.x - px).powi(2) + (b.z - pz).powi(2);
+                    da.total_cmp(&db)
+                })
+                .map(|a| a.entity);
+            if st.vaca.is_none() {
+                ct_falla(&mut st, "hay_una_vaca", "no apareció");
+                st.paso = 99;
+            }
+        }
+        // Arrimarse y, el frame siguiente, el dedo sobre la vaca (camina).
+        51 | 53 => {
+            let Some(a) = crate::fauna::probe_animales(world).into_iter().find(|a| Some(a.entity) == st.vaca) else {
+                return;
+            };
+            if paso == 51 {
+                teleport_a_celda(world, a.x - 1.6, a.z);
+            } else {
+                gt_dedo(world, a.x, a.z - 0.4);
+            }
+        }
+        52 => {}
+        54 => {
+            let t = *world.resource::<crate::targeting::LookTarget>();
+            if t.entity != st.vaca || t.kind != Some(ha_shared::InteractTargetKind::Animal) {
+                st.espera += 1;
+                if st.espera < 20 {
+                    st.paso = 51;
+                    return;
+                }
+                ct_falla(&mut st, "el_dedo_apunta_a_la_vaca", &format!("{:?} {:?}", t.entity, t.kind));
+            }
+            gt_completar(world, false);
+        }
+        56 => {
+            let leche = world.resource::<PlayerInventory>().qty("milk_bucket");
+            eprintln!("ha-cubo: ordeñe: {leche} de leche");
+            if leche != 1 {
+                ct_falla(&mut st, "la_vaca_da_leche", &format!("{leche}"));
+            }
+            foto(world, "cubo-3-leche.png");
+        }
+        43 | 44 | 46 | 48 | 55 => {}
+        57..=75 => {}
+        _ => {
+            if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() {
+                if let Some(id) = crate::partida::activa() {
+                    crate::partida::borrar(&id);
+                }
+            }
+            eprintln!("ha-verify: CUBOTEST {}", if st.fallo { "FAIL" } else { "DONE" });
+            std::process::exit(i32::from(st.fallo));
+        }
+    }
 }

@@ -138,13 +138,16 @@ impl Contenedor {
 pub fn contenedor_de(key: &str) -> Option<Contenedor> {
     let n = key.strip_prefix("furniture/")?;
     Some(match n {
+        // Mirados uno por uno en la revisión visual del 29 sep 2026
+        // (`scripts/revision-visual.json`): `dormitorio_483..503` eran bancos de
+        // trabajo con herramientas, no cómodas, y `bano_101/105` son banquetas.
         "cocina_158" | "cocina_162" => Contenedor::Heladera,
-        "cocina_121" | "cocina_124" => Contenedor::Alacena,
+        "cocina_121" | "cocina_124" | "living_42" => Contenedor::Alacena,
         "dormitorio_515" | "dormitorio_519" | "dormitorio_523" | "dormitorio_527" | "dormitorio_531"
         | "dormitorio_535" | "living_37" | "living_39" | "living_1" | "living_103" => Contenedor::Ropero,
-        "dormitorio_538" | "dormitorio_429" | "dormitorio_483" | "dormitorio_487" | "dormitorio_491"
-        | "dormitorio_495" | "dormitorio_499" | "dormitorio_503" | "living_42" => Contenedor::Comoda,
-        "bano_1" | "bano_2" | "bano_5" | "bano_9" | "bano_12" | "bano_101" | "bano_105" => Contenedor::Botiquin,
+        "dormitorio_538" | "dormitorio_429" | "living_51" | "living_53" | "living_55" | "living_57"
+        | "living_63" | "living_65" | "living_67" | "living_70" => Contenedor::Comoda,
+        "bano_1" | "bano_2" | "bano_5" | "bano_9" | "bano_12" => Contenedor::Botiquin,
         _ => return None,
     })
 }

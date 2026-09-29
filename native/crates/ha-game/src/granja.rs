@@ -335,6 +335,7 @@ pub struct GranjaPlugin;
 
 impl Plugin for GranjaPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<CultivosVivos>,));
         app.init_resource::<Huerta>()
             .init_resource::<CultivosVivos>()
             .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), cargar_huerta)

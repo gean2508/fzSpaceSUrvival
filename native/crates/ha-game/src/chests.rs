@@ -37,6 +37,9 @@ pub const CHEST_ITEM: &str = "chest";
 /// Capacidad de un cofre: 4 columnas × 5 filas.
 pub const CHEST_COLS: usize = 4;
 pub const CHEST_ROWS: usize = 5;
+/// Columnas de la mochila en el panel del cofre: las de la barra rápida, así la
+/// primera fila ES la barra de abajo y el resto entra en seis filas.
+const MOCHILA_COLS: usize = HOTBAR_ITEM_SLOTS;
 pub const CHEST_SLOTS: usize = CHEST_COLS * CHEST_ROWS;
 /// Distancia a la que el panel se cierra solo si te alejás (m).
 const CHEST_USE_RANGE: f32 = 6.0;
@@ -56,6 +59,7 @@ pub struct ChestsPlugin;
 
 impl Plugin for ChestsPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<ChestPanelState>,));
         app.init_resource::<ChestWorld>()
             .init_resource::<ChestPanelState>()
             .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_chests_on_startup)
@@ -539,6 +543,7 @@ struct ChestPickUpButton;
 
 fn chest_panel_lifecycle(
     mut commands: Commands,
+    art: Res<ArtLibrary>,
     panel: Res<ChestPanelState>,
     layout: Res<TouchLayout>,
     root: Query<Entity, With<GameUiRoot>>,
@@ -558,7 +563,7 @@ fn chest_panel_lifecycle(
     let Ok(root_e) = root.get_single() else {
         return;
     };
-    spawn_chest_panel(&mut commands, root_e, &layout);
+    spawn_chest_panel(&mut commands, root_e, &layout, &art);
 }
 
 /// **El panel del cofre: dos columnas, no una torre.**
@@ -572,17 +577,38 @@ fn chest_panel_lifecycle(
 /// acciones abajo. En vertical (celular de pie) las dos columnas se estrechan
 /// pero siguen siendo dos: es preferible una celda más chica a perder de vista
 /// la mitad del intercambio.
-fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout) {
+fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout, art: &ArtLibrary) {
+    use crate::ui_pack::{marco, Pack};
+    // **El mismo vestido que la mochila** (29 sep 2026): marco de madera del
+    // pack para el panel y marco de casilla para cada hueco. Antes era un panel
+    // azul de la paleta vieja, otro juego al lado del inventario.
+    let marco_panel = art.ui_frame_node(marco::PANEL);
+    let marco_slot = art.ui_frame_node(marco::SLOT);
     let short = layout.width.min(layout.height);
     let gap = (short * 0.012).clamp(3.0, 7.0);
     let font = (short * 0.032).clamp(10.0, 15.0);
     // El ancho manda: dos rejillas de `CHEST_COLS` más los aires tienen que
     // entrar en la pantalla. La celda se calcula para eso en vez de ser fija.
     let avail = layout.width - short * 0.10;
-    let cell = ((avail - gap * (CHEST_COLS as f32 * 2.0 + 8.0)) / (CHEST_COLS as f32 * 2.0))
-        .clamp(30.0, 62.0);
-    let col_w = cell * CHEST_COLS as f32 + gap * (CHEST_COLS as f32 + 1.0);
-    let panel_w = col_w * 2.0 + gap * 5.0;
+    // **Y el alto también manda.** La mochila tiene más filas que el cofre, y con
+    // la celda calculada sólo por el ancho la última fila se salía del marco por
+    // abajo (se vio en `muro-8-mueble-abierto.png`). Sin scroll: todo entra.
+    // El borde del marco de madera es grueso: el relleno lo respeta, si no el
+    // texto de ayuda se montaba sobre la moldura.
+    let pad = (short * 0.035).clamp(12.0, 24.0);
+    // La mochila va a lo ANCHO (las ocho de la barra rápida), no
+    // a 4: a 4 columnas eran once filas y no entraba en ninguna pantalla.
+    let cols_mochila = MOCHILA_COLS;
+    let filas = (HOTBAR_ITEM_SLOTS + GRID_LEN).div_ceil(cols_mochila).max(CHEST_ROWS) as f32;
+    let alto_libre = layout.height - layout.insets.top as f32 - short * 0.10;
+    let fijo = pad * 3.2 + font * 0.8 * 1.6 + font * 1.05 * 1.4 + font * 2.8 + gap * (filas + 7.0);
+    let por_alto = (alto_libre - fijo) / filas;
+    let n_ancho = (cols_mochila + CHEST_COLS) as f32;
+    let por_ancho = (avail - pad * 3.0 - gap * (n_ancho + 5.0)) / n_ancho;
+    let cell = por_ancho.min(por_alto).clamp(22.0, 62.0);
+    let col_w_mochila = cell * cols_mochila as f32 + gap * (cols_mochila as f32 - 1.0);
+    let col_w = cell * CHEST_COLS as f32 + gap * (CHEST_COLS as f32 - 1.0);
+    let panel_w = col_w_mochila + col_w + gap * 3.0 + pad * 3.0;
 
     let player_slots: Vec<SlotId> = (0..HOTBAR_ITEM_SLOTS)
         .map(SlotId::Hotbar)
@@ -595,21 +621,23 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(crate::game_ui::ui_center_left(layout, panel_w)),
-                top: Val::Px(layout.insets.top as f32 + short * 0.05),
+                top: Val::Px(layout.insets.top as f32 + short * 0.04),
                 width: Val::Px(panel_w),
-                max_height: Val::Px(layout.height - short * 0.16),
+                max_height: Val::Px(alto_libre),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(gap),
-                padding: UiRect::all(Val::Px(gap * 1.6)),
-                border: UiRect::all(Val::Px(ui_theme::panel_border_width())),
+                // Arriba la moldura del marco es el doble de gruesa que a los
+                // costados (el pack la dibuja así): el relleno la acompaña.
+                padding: UiRect { left: Val::Px(pad * 1.5), right: Val::Px(pad * 1.5), top: Val::Px(pad * 2.2), bottom: Val::Px(pad) },
                 overflow: Overflow::scroll_y(),
                 ..default()
             },
-            BackgroundColor(ui_theme::panel_bg(0.97)),
-            BorderColor(ui_theme::panel_bevel_hi()),
             ScrollPosition::default(),
+            GlobalZIndex(50),
             Name::new("ChestPanel"),
         ))
+        .insert_if(marco_panel.clone().unwrap_or_default(), || marco_panel.is_some())
+        .insert_if(BackgroundColor(Color::srgb(0.796, 0.706, 0.580)), || marco_panel.is_none())
         .with_children(|scroll| {
             // Un solo hijo que envuelve todo: es lo que se MIDE para saber hasta
             // dónde llega el scroll (ver `hud::ScrollContent`).
@@ -625,9 +653,9 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                 ))
                 .with_children(|panel| {
             panel.spawn((
-                Text::new("Toca una pila para moverla entera | manten pulsado para elegir cuantas"),
+                Text::new("Tocá una pila: la mueve entera | Mantené: elegís cuántas"),
                 TextFont { font_size: font * 0.8, ..default() },
-                TextColor(ui_theme::text_muted()),
+                TextColor(Pack::SUAVE),
             ));
 
             // ── Las dos columnas ──────────────────────────────────────────
@@ -640,7 +668,7 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                 .with_children(|cols| {
                     // IZQUIERDA: la mochila del jugador.
                     cols.spawn(Node {
-                        width: Val::Px(col_w),
+                        width: Val::Px(col_w_mochila),
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(gap),
                         ..default()
@@ -649,9 +677,9 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                         c.spawn((
                             Text::new("MOCHILA"),
                             TextFont { font_size: font * 1.05, ..default() },
-                            TextColor(ui_theme::text_primary()),
+                            TextColor(Pack::TINTA),
                         ));
-                        for chunk in player_slots.chunks(CHEST_COLS) {
+                        for chunk in player_slots.chunks(cols_mochila) {
                             c.spawn(Node {
                                 flex_direction: FlexDirection::Row,
                                 column_gap: Val::Px(gap),
@@ -659,7 +687,7 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                             })
                             .with_children(|r| {
                                 for slot in chunk {
-                                    spawn_cell(r, cell, font, ChestPlayerSlotButton { slot: *slot });
+                                    spawn_cell(r, cell, font, marco_slot.clone(), ChestPlayerSlotButton { slot: *slot });
                                 }
                             });
                         }
@@ -676,7 +704,7 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                         c.spawn((
                             Text::new("COFRE"),
                             TextFont { font_size: font * 1.05, ..default() },
-                            TextColor(ui_theme::text_primary()),
+                            TextColor(Pack::TINTA),
                             ChestTitulo,
                         ));
                         for row in 0..CHEST_ROWS {
@@ -688,7 +716,7 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
                             .with_children(|r| {
                                 for col in 0..CHEST_COLS {
                                     let index = row * CHEST_COLS + col;
-                                    spawn_cell(r, cell, font, ChestSlotButton { index });
+                                    spawn_cell(r, cell, font, marco_slot.clone(), ChestSlotButton { index });
                                 }
                             });
                         }
@@ -715,27 +743,38 @@ fn spawn_chest_panel(commands: &mut Commands, root: Entity, layout: &TouchLayout
     });
 }
 
-fn spawn_cell<M: Component>(parent: &mut ChildBuilder, cell: f32, font: f32, marker: M) {
-    parent
-        .spawn((
-            Button,
-            Node {
-                width: Val::Px(cell),
-                height: Val::Px(cell),
-                border: UiRect::all(Val::Px(2.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                overflow: Overflow::clip(),
-                ..default()
-            },
-            BorderColor(ui_theme::button_border(UiButtonTone::Inventory)),
-            BackgroundColor(ui_theme::button_bg(
-                UiButtonTone::Inventory,
-                UiButtonState::Normal,
-            )),
-            marker,
-        ))
-        .with_children(|slot| {
+fn spawn_cell<M: Component>(
+    parent: &mut ChildBuilder,
+    cell: f32,
+    font: f32,
+    marco: Option<ImageNode>,
+    marker: M,
+) {
+    let mut e = parent.spawn((
+        Button,
+        Node {
+            width: Val::Px(cell),
+            height: Val::Px(cell),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            overflow: Overflow::clip(),
+            ..default()
+        },
+        crate::ui_pack::SinMarco,
+        marker,
+    ));
+    match marco {
+        Some(img) => {
+            e.insert(img);
+        }
+        None => {
+            e.insert((
+                BorderColor(ui_theme::button_border(UiButtonTone::Inventory)),
+                BackgroundColor(ui_theme::button_bg(UiButtonTone::Inventory, UiButtonState::Normal)),
+            ));
+        }
+    }
+    e.with_children(|slot| {
             slot.spawn((
                 Node {
                     width: Val::Percent(80.0),

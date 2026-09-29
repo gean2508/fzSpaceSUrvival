@@ -87,6 +87,7 @@ pub struct AmbientPlugin;
 
 impl Plugin for AmbientPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<FirefliesReady>, crate::salir::reiniciar::<ButterfliesReady>,));
         app.init_resource::<FirefliesReady>()
             .init_resource::<ButterfliesReady>()
             // Sólo en partida: las luciérnagas y mariposas se creaban en el

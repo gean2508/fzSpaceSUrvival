@@ -750,6 +750,7 @@ pub struct FaunaPlugin;
 
 impl Plugin for FaunaPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<FaunaWorld>, crate::salir::reiniciar::<VivariumWorld>, crate::salir::reiniciar::<EcologyWorld>, crate::salir::reiniciar::<SignalField>));
         app.init_resource::<FaunaWorld>()
             .init_resource::<VivariumWorld>()
             .init_resource::<FaunaCatalog>()
@@ -2856,6 +2857,23 @@ fn interactuar_animal(
     let es_perro = a.art_key == "npc/fauna_dog";
     let come = comida_de_cria(&a.art_key, a.hostile);
 
+    // 0) Cubo vacío a una vaca o cabra adulta: leche (Minecraft).
+    if item == "bucket"
+        && inv.qty("bucket") > 0
+        && a.edad >= 1.0
+        && matches!(a.art_key.as_str(), "npc/fauna_cow" | "npc/fauna_goat")
+    {
+        use crate::hud::inventory_ui::add_item_to_slots;
+        consume_from_ui_slots(&mut inv_ui, &[("bucket", 1)]);
+        add_item_to_slots(&mut inv_ui, "milk_bucket", 1);
+        flush_slots_to_inventory(&inv_ui, &mut inv);
+        persist.mark_immediate();
+        if inv.qty("bucket") == 0 {
+            equipped.item_id = "milk_bucket".to_string();
+        }
+        crate::granja::globo(&mut commands, x, z, format!("Ordeñaste a {}", a.nombre_propio.clone().unwrap_or(a.nombre.to_lowercase())));
+        return;
+    }
     // 1) Etiqueta: abrir el panel del nombre (la etiqueta se gasta al confirmar).
     if item == "name_tag" && inv.qty("name_tag") > 0 {
         bautizo.abrir(entity, a.nombre_propio.as_deref());
@@ -3023,7 +3041,9 @@ fn rotular_animal_apuntado(
     let come = comida_de_cria(&a.art_key, a.hostile);
     let quien = a.nombre_propio.clone().unwrap_or_else(|| a.nombre.to_lowercase());
     let pide = come.iter().map(|i| crate::granja::nombre_item(i)).collect::<Vec<_>>().join(" o ");
-    let texto = if item == "name_tag" {
+    let texto = if item == "bucket" && matches!(a.art_key.as_str(), "npc/fauna_cow" | "npc/fauna_goat") && a.edad >= 1.0 {
+        format!("Tocá para ordeñar a {quien}")
+    } else if item == "name_tag" {
         format!("Mantené para ponerle nombre a {quien}")
     } else if a.art_key == "npc/fauna_dog" && !a.domado && item == "bone" {
         "Mantené para darle el hueso (domarlo)".to_string()

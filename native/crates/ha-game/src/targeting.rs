@@ -67,6 +67,7 @@ pub struct TargetingPlugin;
 
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<LookTarget>,));
         app.init_resource::<LookTarget>().add_systems(
             Update,
             update_look_target
@@ -275,7 +276,19 @@ fn update_look_target(
     // son objetivo: el pasto del mundo está sembrado de ellas y bloqueaban el
     // surco. Sembrar encima las desmaleza (`granja::sembrar_al_completar`).
     let sembrando = crate::granja::Planta::de_semilla(&equipped.item_id).is_some();
+    // **Con el cubo, manda el líquido (o el suelo donde volcarlo).** La orilla
+    // está llena de rocas flotantes, nenúfares y matas que caen sobre el agua, y
+    // cualquiera le robaba el toque: el cubo nunca se llenaba (lo cazó
+    // `HA_CUBOTEST`). Si la celda bajo el dedo sirve para el cubo, sólo un animal
+    // (ordeñar) le gana.
+    let celda_para_el_cubo = crate::cubo::es_cubo(&equipped.item_id) && tiles.z == 0 && {
+        let (tx, tz) = ((cursor_world.x / TILE_M).floor() as i64, (cursor_world.y / TILE_M).floor() as i64);
+        crate::cubo::celda_valida(&equipped.item_id, tiles.tile_at(body, tx, tz))
+    };
     for (entity, gtf, target, sprite, prop) in &targets {
+        if celda_para_el_cubo && target.kind != InteractTargetKind::Animal {
+            continue;
+        }
         if sembrando
             && target.kind == InteractTargetKind::Prop
             && prop.is_some_and(|p| crate::granja::es_planta_silvestre(&p.0))
@@ -361,6 +374,28 @@ fn update_look_target(
     if origin.distance(aim) <= TILE_REACH {
         let tx = (cursor_world.x / TILE_M).floor() as i64;
         let tz = (cursor_world.y / TILE_M).floor() as i64;
+        // **El cubo apunta a la celda**: al líquido para llenarse, al suelo seco
+        // para volcarse. Va antes que todo lo demás porque el agua honda es
+        // "sólida" y con cualquier otra herramienta sería un bloque a picar. Tu
+        // propia celda no: tocarte con un cubo lleno es beberlo.
+        let propia = ((sim.body.x / TILE_M).floor() as i64, (sim.body.z / TILE_M).floor() as i64) == (tx, tz);
+        if !propia
+            && tiles.z == 0
+            && crate::cubo::celda_valida(&equipped.item_id, tiles.tile_at(body, tx, tz))
+        {
+            *current = LookTarget {
+                entity: None,
+                kind: None,
+                distance: origin.distance(aim),
+                hit_point: aim.extend(0.0),
+                block_cell: None,
+                place_cell: Some((tx as i32, tz as i32, 0)),
+                dig_down: false,
+                flora_cell: None,
+                locked: false,
+            };
+            return;
+        }
         if tiles.solid_at(body, tx, tz) {
             let t = tiles.tile_at(body, tx, tz);
             if t != ha_shared::topdown::Tile::Bedrock

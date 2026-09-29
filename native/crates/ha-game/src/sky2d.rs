@@ -298,6 +298,7 @@ pub struct Sky2dPlugin;
 
 impl Plugin for Sky2dPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<SkyAttached>,));
         app.init_resource::<DayClock>()
             .init_resource::<PlayerLanternControl>()
             .init_resource::<SkyLight>()

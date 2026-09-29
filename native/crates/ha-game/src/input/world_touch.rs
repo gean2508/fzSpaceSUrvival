@@ -505,6 +505,15 @@ pub(crate) fn resolve_hold(
             ..default()
         });
     }
+    // 2a. Cubo en la mano + líquido o suelo seco → llenar o volcar (`cubo.rs`).
+    if crate::cubo::es_cubo(&equipped.item_id) && target.place_cell.is_some() && target.kind.is_none() {
+        return Some(HoldInteractState {
+            active: true,
+            duration_ms: 300,
+            usar_cubo: true,
+            ..default()
+        });
+    }
     // 2b. Semilla en la mano + celda sembrable → sembrar ahí (`granja.rs`).
     if crate::granja::Planta::de_semilla(&equipped.item_id).is_some() && target.place_cell.is_some() {
         return Some(HoldInteractState {

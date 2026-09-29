@@ -3466,6 +3466,13 @@ entero por los sistemas reales (targeting → gesto → huerta/fauna) y deja
 - Espada sobre un animal adulto: carne (+ cuero vaca/cabra/burro/conejo).
 - El dedo mide lo que SE VE (custom_size × escala): antes una cría se medía como
   adulta y tocarla agarraba al padre.
+- **Cubo** (`cubo.rs`, receta 30: tres lingotes de hierro): vacío sobre una
+  vaca o cabra adulta da leche; sobre agua, agua (lava en mundos volcánicos);
+  lleno sobre suelo seco se vuelca (el agua deja charco que riega la huerta, la
+  lava fuera de un mundo volcánico se enfría en roca). Leche y agua se beben y
+  devuelven el cubo. Con el cubo en la mano el dedo prefiere la CELDA: la roca
+  flotante o el nenúfar de la orilla le robaban el toque al agua. Driver
+  `HA_CUBOTEST`.
 
 ---
 
@@ -4208,6 +4215,50 @@ la compu, no en el teléfono.
 > de dibujar— son `scripts/ver-claves.py` (lo ya importado) y
 > `scripts/ver-pack.py` (los PNG crudos).
 
+> ⚠ **Y las copias se pudren (29 sep 2026).** Esos slots son una COPIA de la
+> entrada del pack; `import-pack-masivo.py` reempaqueta las páginas y nadie
+> volvía a copiar. Media lista apuntaba a otra cosa: la boya era un tacho, la
+> manzana una máquina expendedora, las cercas y el escritorio celdas vacías.
+> Ahora el importador masivo corre `asignar-del-pack.py` al terminar, el script
+> se planta si el recorte de origen está vacío, y `npm run validate:arte` (=
+> `--verificar`) caza el desfase. También se corrigieron orígenes mal elegidos:
+> `prop/cantero` era un equipo de techo, `nature/pasto` una costura de blob,
+> `vehicle/tanque` sólo la torreta, `furniture/ropero` una vitrina de costado.
+
+### Revisión VISUAL de todo lo importado — 29 sep 2026
+
+El nombre del archivo no alcanza: Modern Interiors viene NUMERADO (`bano_121`,
+`gimnasio_117`) y el importador bautiza por el archivo. Se miraron **las 9.799
+claves base del manifest, una por una**, en láminas de 100, y el resultado está
+en `scripts/revision-visual.json` (clave → nombre corregido + marcas):
+
+| marca | quiere decir | afuera | adentro |
+|---|---|---|---|
+| `X` | suelta, rara, fuera de lugar, o no es lo que dice | no se siembra | no |
+| `P` | cuelga de una PARED (cuadro, espejo, termotanque, cartel) | no | no |
+| `S` | plana en el SUELO (alfombra, charco, rejilla) | sí, en la banda del piso | no |
+| `M` | PIEZA de un kit (frazada sin cama, tramo de mesada, módulo de sofá) | no | no |
+
+Lo que apareció: espejos del gimnasio, termotanques del baño, cuadros del museo
+y pantallas del estudio **sembrados de pie en mitad del cuarto** (el "muebles
+montados sobre las paredes" del usuario); `balde_chico_*` son salvavidas;
+`bano_120..136` pares son heladeras; media carpeta `vehicle/` son mesas, sillas,
+teléfonos públicos y paradas de colectivo; `sombra/int_1..19` son LETRAS de un
+cartel; `dormitorio_483..503` bancos de trabajo (estaban como cómodas
+saqueables).
+
+- `scripts/aplicar-revision-visual.py` pone los nombres (manifest, `slots.rs`,
+  `placeables.rs`), la capa `Floor` a lo `S` y saca de `pack_siembra.rs` lo
+  `X/M/P`. Lo corre el importador masivo al terminar.
+- `import-interiores.py` y `import-pack-masivo.py` leen la revisión y no siembran
+  lo marcado; el test `ninguna_tabla_siembra_lo_que_la_revision_visual_descarto`
+  (ha-shared) es el alambre de púa.
+- **Para agregar una corrección**: se edita la clave en `revision-visual.json`
+  (mirando el recorte con `scripts/ver-claves.py`), se corre
+  `aplicar-revision-visual.py` e `import-interiores.py`.
+- Pendiente: lo `P` se podría colgar de verdad en las paredes (hoy sólo se deja
+  de sembrar en el piso).
+
 **El orden con el que se cerraron es el de la skill `pixel-art`**, y vale para
 todo lo que venga:
 
@@ -4735,6 +4786,16 @@ mueble). Lo que salió, y cómo quedó:
   cortinas que se sembraban de pie.
 - **Desatasco**: si el jugador ya está encimado con algo (partida vieja con
   muebles nuevos), puede salir caminando (`sim::tick_sim`).
+- **Panel de saqueo** con el vestido de la mochila (marco `PANEL` + casillas
+  `SLOT` del pack de UI). La mochila va a 8 columnas (la primera fila es la
+  barra rápida) y la celda se calcula por ancho Y por alto: todo entra sin
+  scroll. Verificado en `muro-8-mueble-abierto.png` de `HA_MUROTEST`.
+- **Puertas sólo al frente** (`city.rs`): las laterales y traseras se dibujaban
+  horizontales sobre un muro vertical. La fachada frena por los costados
+  (`SolidoDeFachada`).
+- **MENÚ PRINCIPAL** en el menú de pausa (`salir.rs`): guarda todo como una
+  pausa de la app, despeja el mundo en `OnExit(Playing)` y reinicia los
+  recursos de partida. Driver `HA_SALIRTEST` (dos vueltas).
 
 ### Desde la vereda no se ve el interior — 23 ago 2026
 
@@ -6179,6 +6240,7 @@ npm run dev:client        # landing :5173
 npm run test              # vitest de packages/shared
 npm run test:native       # cargo test (ha-shared, ha-assets, ha-game)
 npm run validate:arch     # límites de arquitectura
+npm run validate:arte     # revisión visual + slots canónicos al día
 npm run qa:suite          # corre todos los drivers de QA y agrega bugreport.jsonl
 cd native && make run     # cliente desktop
 cd native && cargo check -p ha-game
@@ -6745,6 +6807,7 @@ reporte ya se escribe (`debug/crash.rs`).
 npm test                                  # TS (packages/shared) — 101 al 31 jul 2026
 npm run test:native                       # ha-shared + ha-assets + ha-game — 423 al 8 ago 2026
 npm run validate:arch                     # límites de arquitectura
+npm run validate:arte                     # revisión visual de assets + slots canónicos
 UPDATE_CATALOG_PARITY=1 npm test          # tras tocar catálogos
 
 # Los DOS builds, siempre: hay código gateado por cfg y uno solo no alcanza.

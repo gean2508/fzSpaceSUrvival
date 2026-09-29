@@ -179,10 +179,15 @@ fn consume_eat_hold(
         return;
     }
     consume_from_ui_slots(&mut inv_ui, &[(item_id.as_str(), 1)]);
+    // Beber un cubo devuelve el cubo vacío (Minecraft).
+    let devuelve_cubo = item_id.ends_with("_bucket");
+    if devuelve_cubo {
+        crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, "bucket", 1);
+    }
     flush_slots_to_inventory(&inv_ui, &mut inv);
     inv_persist.mark_immediate();
     if inv.qty(&item_id) == 0 {
-        equipped.item_id = "hand".to_string();
+        equipped.item_id = if devuelve_cubo { "bucket".to_string() } else { "hand".to_string() };
     }
 }
 

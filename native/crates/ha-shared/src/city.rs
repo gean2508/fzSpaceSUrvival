@@ -1605,17 +1605,9 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
             // Portal de dos celdas al frente y al fondo de CADA vivienda: una
             // casa sin puerta no existe, y la calzada puede comerse una cara.
             let centro = ANCHO_DE_HILERA / 2;
-            if borde && (ux == centro - 1 || ux == centro) {
-                return Some(Tile::Door);
-            }
-            // **Y una puerta en las dos PUNTAS de la hilera.** Con puertas sólo al
-            // frente y al fondo, una calle que cruce la fila de este a oeste se
-            // come las dos y la casa queda sellada — que es la razón por la que la
-            // casa suelta ya tenía portal en las cuatro caras. Medido: 1 sellada
-            // de 1.743 antes de esto, 0 después.
-            let punta = rx == 0 || rx == house_w - 1;
-            let cz = house_d / 2;
-            if punta && (rz == cz - 1 || rz == cz) {
+            // Sólo al frente: la de atrás y las de las puntas quedaban bajo la
+            // fachada, que no las dibuja (ver la casa suelta, más abajo).
+            if rz == house_d - 1 && (ux == centro - 1 || ux == centro) {
                 return Some(Tile::Door);
             }
             if medianera || borde {
@@ -1656,13 +1648,19 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
         // ahora hace falta un cruce entero encima, y entonces el problema no es la
         // puerta. Medido en Ciudad Central: 4 casas selladas de 1.849 → 0. Lo
         // cuida `toda_casa_generada_tiene_por_donde_entrar`.
-        let portal_z = (house_d / 4).clamp(2, 6);
+        //
+        // ⚠ **29 sep 2026: SÓLO AL FRENTE.** Las puertas de los costados y del
+        // fondo quedaban DEBAJO de la fachada, que no las dibuja: desde afuera se
+        // entraba a la casa atravesando una pared pintada (reporte del usuario).
+        // Desde que ninguna pared se planta en la calzada
+        // (`ninguna_pared_en_la_calzada`), la calle ya no se come el frente, así
+        // que la razón de las cuatro caras desapareció: se entra por donde la
+        // fachada tiene su puerta, y por el portón.
         // A lo ancho, la MISMA cuenta que usan el camino y el portón
         // ([`portal_del_frente`]): que las tres coincidan es el arreglo.
         let (p0, p1) = portal_del_frente(0, house_w);
         let en_x = rx >= p0 && rx < p1;
-        let en_z = rz >= (house_d - portal_z) / 2 && rz < (house_d - portal_z) / 2 + portal_z;
-        if (en_x && (rz == house_d - 1 || rz == 0)) || (en_z && (rx == 0 || rx == house_w - 1)) {
+        if en_x && rz == house_d - 1 {
             return Some(Tile::Door);
         }
         // **El PORTÓN**: la otra abertura del frente, la del auto. Es una puerta

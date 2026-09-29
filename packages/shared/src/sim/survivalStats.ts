@@ -75,6 +75,8 @@ export const FOOD_RESTORE: Record<string, FoodRestore> = {
   chicken: { hunger: 20, thirst: 0 },
   rabbit_meat: { hunger: 18, thirst: 0 },
   egg: { hunger: 12, thirst: 4 },
+  milk_bucket: { hunger: 10, thirst: 35 },
+  water_bucket: { hunger: 0, thirst: 40 },
 };
 
 export function foodRestore(itemId: string): FoodRestore | undefined {

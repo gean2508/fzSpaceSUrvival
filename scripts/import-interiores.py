@@ -97,6 +97,22 @@ NO_SON_MUEBLES = {
     "furniture/bano_76", "furniture/living_4",
 }
 
+#: **Y lo que ni el nombre ni esta lista cazaban: la revisión visual.** Se miró
+#: cada recorte (`scripts/revision-visual.json`, 29 sep 2026) y salieron los
+#: espejos del gimnasio, los termotanques del baño, los cuadros del museo y las
+#: pantallas del estudio sembrados de pie en mitad del cuarto — el "tengo muebles
+#: montados sobre las paredes" del usuario —, además de frazadas sin cama, tramos
+#: de mesada y pesas sueltas. Adentro no entra NADA marcado: ni pared (`P`), ni
+#: suelo (`S`: una alfombra de pie frena el paso), ni pieza (`M`), ni suelto (`X`).
+REVISION = os.path.join(ROOT, "scripts/revision-visual.json")
+NO_ENTRA_ADENTRO = set("XMPS")
+
+
+def descartados_por_la_revision():
+    with open(REVISION, encoding="utf8") as fh:
+        claves = json.load(fh)["claves"]
+    return {k for k, d in claves.items() if set(d.get("flags", "")) & NO_ENTRA_ADENTRO}
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -107,6 +123,7 @@ def main():
         sprites = json.load(fh)["sprites"]
     cache = {}
     por_tema = defaultdict(list)
+    revisados = descartados_por_la_revision()
 
     for clave, e in sprites.items():
         if "#" in clave or not clave.startswith(("furniture/", "interior/")):
@@ -115,7 +132,7 @@ def main():
         tema = next((t for t in TEMAS if familia.startswith(t + "_")), None)
         if tema is None:
             continue
-        if any(p in familia for p in NO_ES_MUEBLE) or clave in NO_SON_MUEBLES:
+        if any(p in familia for p in NO_ES_MUEBLE) or clave in NO_SON_MUEBLES or clave in revisados:
             continue
         r = e.get("rect") or e.get("strip")
         if not r:

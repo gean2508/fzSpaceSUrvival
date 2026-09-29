@@ -46,6 +46,7 @@ pub struct NpcMenuPlugin;
 
 impl Plugin for NpcMenuPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<NpcMenu>,));
         app.init_resource::<NpcMenu>()
             .init_resource::<NpcShot>()
             .add_systems(

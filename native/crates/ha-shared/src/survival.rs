@@ -80,6 +80,9 @@ pub fn food_restore(item_id: &str) -> Option<(f32, f32)> {
         "chicken" => (20.0, 0.0),
         "rabbit_meat" => (18.0, 0.0),
         "egg" => (12.0, 4.0),
+        // Los cubos se BEBEN y devuelven el cubo vacío (`survival_stats`).
+        "milk_bucket" => (10.0, 35.0),
+        "water_bucket" => (0.0, 40.0),
         _ => return None,
     })
 }

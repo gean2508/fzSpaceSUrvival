@@ -1936,6 +1936,11 @@ fn build_interact_prompt(
     if let Some(m) = mueble_que_se_abre {
         return Some(format!("Tocá para abrir: {}", m.to_lowercase()));
     }
+    if target.kind.is_none() && target.place_cell.is_some() {
+        if let Some(t) = crate::cubo::ayuda(&equipped.item_id) {
+            return Some(t.to_string());
+        }
+    }
     // — Granja —
     if hold.active && hold.placing_crop {
         return Some("Sembrando…".to_string());

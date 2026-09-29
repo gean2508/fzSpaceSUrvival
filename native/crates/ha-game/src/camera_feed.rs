@@ -24,6 +24,7 @@ pub struct CameraFeedPlugin;
 
 impl Plugin for CameraFeedPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<PlacedCameras>,));
         app.init_resource::<WorldSightings>()
             .init_resource::<CameraFeedState>()
             .init_resource::<PlacedCameras>()

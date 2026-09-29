@@ -238,6 +238,30 @@ def icono_etiqueta(l):
     l.contorno(t[0])
 
 
+# — el cubo (29 sep 2026) ——————————————————————————————————————————————
+
+
+def cubo(contenido=None):
+    """Un balde de hierro visto en 3/4: el cuerpo que se angosta abajo, la boca
+    elíptica arriba y el asa. `contenido` pinta el líquido en la boca."""
+    def f(l):
+        m = rampa((170, 176, 186), 4)
+        l.poligono([(8, 12), (24, 12), (22, 27), (10, 27)], m[2])
+        l.poligono([(8, 12), (12, 12), (13, 27), (10, 27)], m[3])
+        l.elipse(16, 12, 8, 3, m[1])
+        if contenido is not None:
+            c = rampa(contenido, 3)
+            l.elipse(16, 12, 6.5, 2, c[1])
+            l.elipse(14, 11.5, 2.5, 1, c[2])
+        else:
+            l.elipse(16, 12.5, 6.5, 2, m[0])
+        l.banda(8, 12, 12, 4, 1.5, m[1])
+        l.banda(12, 4, 20, 4, 1.5, m[1])
+        l.banda(20, 4, 24, 12, 1.5, m[1])
+        l.contorno(m[0])
+    return f, False
+
+
 PIEZAS = {
     # clave: (receta, apoyado, nombre)
     "cultivo/tierra_arada": (*tierra_arada(TIERRA), "Tierra arada"),
@@ -259,6 +283,10 @@ PIEZAS = {
     "items/bone": (icono_hueso, False, "Hueso"),
     "items/egg": (icono_huevo, False, "Huevo"),
     "items/name_tag": (icono_etiqueta, False, "Etiqueta"),
+    "items/bucket": (*cubo(), "Cubo"),
+    "items/water_bucket": (*cubo((72, 130, 200)), "Cubo con agua"),
+    "items/milk_bucket": (*cubo((238, 236, 228)), "Cubo con leche"),
+    "items/lava_bucket": (*cubo((226, 110, 40)), "Cubo con lava"),
 }
 
 

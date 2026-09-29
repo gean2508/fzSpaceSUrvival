@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """**EL SLOT CANÓNICO APUNTA AL PIXEL QUE YA ESTÁ.**
 
-    python3 scripts/asignar-del-pack.py [--dry-run]
+    python3 scripts/asignar-del-pack.py [--dry-run | --verificar]
 
 ## El error que esto repara
 
@@ -47,18 +47,21 @@ ASIGNACIONES = {
     # — agua: el kit de camping y playa estaba entero —
     "agua/boya": ("agua/boya_1", "Boya"),
     "agua/bote": ("agua/bote_abajo_1", "Bote"),
-    "agua/muelle": ("agua/camping_muelle_2", "Muelle"),
+    # `camping_muelle_2` era un poste suelto (pieza del kit); el muelle entero
+    # no existe en el pack, así que va el cabezal con sus dos pilotes.
+    "agua/muelle": ("agua/muelle_2", "Muelle"),
     "agua/estrella_mar": ("agua/estrella_de_mar_azul_grande", "Estrella de mar"),
     "agua/flotador": ("agua/salvavidas", "Salvavidas"),
     "agua/tronco_flotante": ("tiles/floating_trunk", "Tronco flotante"),
-    "fishing/balde": ("agua/balde_chico_azul_1", "Balde"),
-    "fishing/spot": ("agua/pesca_1", "Sitio de pesca"),
+    # Los `balde_chico_*` son SALVAVIDAS (revisión visual del 29 sep 2026).
+    "fishing/balde": ("prop/obra_balde", "Balde"),
     # — parcela —
     "prop/parrilla": ("prop/camping_parrilla", "Parrilla"),
     "prop/arenero": ("nature/villa_patio_juguete_arena_caja_1", "Arenero"),
     "prop/hamaca": ("building/villa_patio_juguete_hamaca_1", "Hamacas"),
     "prop/buzon_casa": ("building/buzon_grande_azul", "Buzón"),
-    "prop/cantero": ("azotea/cantero", "Cantero"),
+    # `azotea/cantero` es un equipo de techo, no un cantero.
+    "prop/cantero": ("nature/villa_patio_flores_10", "Cantero"),
     "prop/auto_estacionado": ("vehicle/auto_1", "Auto estacionado"),
     "prop/arco_basket": ("building/basquet_red_1", "Aro de básquet"),
     "prop/tobogan": ("building/patio_juguete_1", "Tobogán"),
@@ -72,12 +75,15 @@ ASIGNACIONES = {
     "fence/piedra": ("fence/cerca_abajo_medio", "Muro de piedra"),
     # — naturaleza —
     "nature/tocon": ("nature/tocon_1", "Tocón"),
-    "nature/pasto": ("nature/pasto_5", "Matas de pasto"),
-    "nature/flores_rojas": ("nature/arbusto_con_flores_1", "Flores"),
+    # `pasto_5` es una pieza del blob de pasto (media costura), no una mata.
+    "nature/pasto": ("nature/pasto_matas", "Matas de pasto"),
+    "nature/flores_rojas": ("nature/flores_rojo", "Flores rojas"),
     # — vehículos y estructuras —
     "vehicle/bus": ("vehicle/colectivo_abajo", "Colectivo"),
-    "vehicle/tanque": ("building/tanque_arma_marron_derecha_costado_1", "Tanque"),
-    "structure/boulder": ("nature/piedra_1", "Peñasco"),
+    # `tanque_arma_*` es sólo la torreta; el tanque entero es `tanque_marron_*`.
+    "vehicle/tanque": ("building/tanque_marron_derecha_costado", "Tanque"),
+    # `piedra_1` es un guijarro; el peñasco es la grande.
+    "structure/boulder": ("nature/piedra_8", "Peñasco"),
     "structure/monument": ("nature/estatua_angel", "Monumento"),
     "decor/mine_hole": ("building/mina_1", "Boca de mina"),
     # — muebles: Modern Interiors entero estaba importado —
@@ -85,10 +91,12 @@ ASIGNACIONES = {
     "furniture/banera": ("furniture/bano_156", "Bañera"),
     "furniture/lampara": ("furniture/living_80", "Lámpara de pie"),
     "furniture/planta": ("furniture/living_13", "Planta de maceta"),
-    "furniture/ropero": ("furniture/living_41", "Ropero"),
+    # `living_41` es una vitrina angosta de costado; el ropero es del dormitorio.
+    "furniture/ropero": ("furniture/dormitorio_514", "Ropero"),
     "furniture/mostrador": ("furniture/living_53", "Mostrador"),
-    "furniture/estante": ("building/carpa_estante", "Estante"),
-    "furniture/escritorio": ("prop/mesa_1", "Escritorio"),
+    "furniture/estante": ("furniture/biblioteca", "Estante"),
+    # `prop/mesa_1` es una mesa de exterior; el escritorio es éste.
+    "furniture/escritorio": ("furniture/dormitorio_393", "Escritorio"),
     # — edificios y fachadas —
     "building/escuela": ("building/escuela_1", "Escuela"),
     "building/garaje": ("building/venta_de_garaje_edificio_puerta", "Garaje"),
@@ -103,6 +111,23 @@ ASIGNACIONES = {
 }
 
 
+def recorte_vacio(entrada):
+    """¿El recorte de esta entrada no tiene un solo pixel? Pasa cuando el atlas se
+    reempaqueta y una copia vieja queda apuntando a donde ya no hay nada."""
+    from PIL import Image
+
+    ruta = RAIZ / "native/crates/ha-game/assets" / entrada.get("png", "")
+    if not ruta.is_file():
+        return True
+    r = entrada.get("rect") or entrada.get("strip")
+    if not r:
+        return False
+    gw, gh = entrada.get("grid", [32, 32])
+    im = Image.open(ruta).convert("RGBA")
+    caja = (r["col"] * gw, r["row"] * gh, (r["col"] + r["w"]) * gw, (r["row"] + r["h"]) * gh)
+    return im.crop(caja).getbbox() is None
+
+
 def main():
     seco = "--dry-run" in sys.argv
     man = json.loads(MANIFEST.read_text())
@@ -110,6 +135,20 @@ def main():
     faltan = [o for _, (o, _) in ASIGNACIONES.items() if o not in sp]
     if faltan:
         raise SystemExit(f"claves de origen que no están en el manifest: {faltan}")
+    vacios = [o for _, (o, _) in ASIGNACIONES.items() if recorte_vacio(sp[o])]
+    if vacios:
+        raise SystemExit(f"claves de origen con el recorte VACÍO: {vacios}")
+    # **La copia se pudre si el atlas se reempaqueta y nadie vuelve a copiar.**
+    # Pasó: después de una corrida de `import-pack-masivo.py` la mitad de estos
+    # slots apuntaba a otra cosa (la boya era un tacho, la manzana una máquina
+    # expendedora, las cercas y el escritorio a celdas vacías). Por eso el
+    # importador masivo llama a este script al terminar, y `--verificar` lo caza.
+    if "--verificar" in sys.argv:
+        podridos = [s for s, (o, _) in ASIGNACIONES.items() if sp.get(s) != sp[o]]
+        if podridos:
+            raise SystemExit(f"slots canónicos desfasados de su origen: {podridos}")
+        print(f"{len(ASIGNACIONES)} slots canónicos al día")
+        return 0
     for slot, (origen, label) in ASIGNACIONES.items():
         sp[slot] = json.loads(json.dumps(sp[origen]))
         man.setdefault("objects", {}).setdefault(slot, {})["label"] = label

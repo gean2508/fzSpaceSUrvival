@@ -36,7 +36,8 @@
     "dev:pc:game": "node scripts/dev-pc.mjs --game",
     "build:native": "make -C native release",
     "qa:suite": "node scripts/ha-suite.mjs",
-    "instalar:pc": "bash scripts/instalar-en-la-pc.sh"
+    "instalar:pc": "bash scripts/instalar-en-la-pc.sh",
+    "validate:arte": "python3 scripts/aplicar-revision-visual.py --verificar && python3 scripts/asignar-del-pack.py --verificar"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

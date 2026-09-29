@@ -1361,6 +1361,21 @@ def es_gameplay(o):
     )
 
 
+#: **Y lo que ni el nombre de archivo delata: la revisión VISUAL.** El 29 sep 2026
+#: se miró el recorte de cada clave (`scripts/revision-visual.json`): parlantes y
+#: consolas de sonido sembrados en el agua, macetas que cuelgan de una pared
+#: plantadas en el pasto, pedazos de muelle y de arco de roca sueltos. Lo marcado
+#: `X` (fuera de lugar), `M` (pieza) o `P` (va en una pared) no sale sorteado.
+#: `S` sí: una rejilla en la vereda es justo lo que va ahí.
+REVISION_VISUAL = os.path.join(ROOT, "scripts/revision-visual.json")
+
+
+def descartados_por_la_revision():
+    with open(REVISION_VISUAL, encoding="utf8") as fh:
+        claves = json.load(fh)["claves"]
+    return {k for k, d in claves.items() if set(d.get("flags", "")) & set("XMP")}
+
+
 def cobertura(im):
     """Fracción del recorte que tiene pixel opaco. 1,0 = no hay silueta."""
     alfa = im.split()[-1]
@@ -1371,6 +1386,7 @@ def elegir_siembra(objetos):
     """Qué objetos siembra el mundo en cada sitio. Devuelve
     `contexto → [(clave, ancho, alto, peso)]`."""
     por_contexto = {}
+    revisados = descartados_por_la_revision()
     for nombre, regla in CONTEXTOS.items():
         elegidos = []
         for o in objetos:
@@ -1385,6 +1401,9 @@ def elegir_siembra(objetos):
             # **Y segundo: ¿es de otro sistema?** Un dron es un vehículo, no un
             # adorno de vereda. Ver `NO_ES_DECORACION`.
             if es_gameplay(o):
+                continue
+            # **Y tercero: ¿la revisión visual lo descartó?** Ver `REVISION_VISUAL`.
+            if o.clave in revisados:
                 continue
             w, h = o.size
             # **Una baldosa no es un objeto suelto.** Un recorte con el pixel al
@@ -1510,11 +1529,16 @@ def main():
         # Las páginas se acaban de reescribir desde los PNG crudos: la mata de
         # pasto que el pack pinta al pie de cada árbol volvió. Fuera otra vez.
         import subprocess
-        subprocess.run(
-            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                          "podar-pasto-de-arboles.py")],
-            check=True,
-        )
+        aca = os.path.dirname(os.path.abspath(__file__))
+        subprocess.run([sys.executable, os.path.join(aca, "podar-pasto-de-arboles.py")], check=True)
+        # Lo que la revisión visual corrigió (nombres, capa de suelo, siembra) lo
+        # acabamos de pisar con los nombres del pack.
+        subprocess.run([sys.executable, os.path.join(aca, "aplicar-revision-visual.py")], check=True)
+        # **El reempaquetado pudre las copias.** Los slots canónicos son copias
+        # de una entrada del pack, y acabamos de mover todo de página: sin volver
+        # a copiar, la boya pasaba a ser un tacho y el escritorio una celda vacía.
+        # Va DESPUÉS de la revisión, así la copia se lleva también su capa.
+        subprocess.run([sys.executable, os.path.join(aca, "asignar-del-pack.py")], check=True)
 
 
 if __name__ == "__main__":

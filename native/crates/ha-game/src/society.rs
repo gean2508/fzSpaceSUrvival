@@ -669,6 +669,7 @@ pub struct SocietyPlugin;
 
 impl Plugin for SocietyPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<Society>, crate::salir::reiniciar::<Religion>,));
         app.init_resource::<Society>()
             .init_resource::<Religion>()
             // La sociedad NPC vive SÓLO en partida. Antes se poblaba en el primer

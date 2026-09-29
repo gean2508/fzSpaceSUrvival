@@ -32,7 +32,7 @@ def recorte(man, clave):
     if not isinstance(e, dict) or "png" not in e:
         return None
     gw, gh = e.get("grid", [32, 32])
-    r = e.get("rect")
+    r = e.get("rect") or e.get("strip")
     if r is None:
         poses = e.get("poses") or {}
         if not poses:

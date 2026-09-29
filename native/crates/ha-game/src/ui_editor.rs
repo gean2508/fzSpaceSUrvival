@@ -197,6 +197,8 @@ struct UiEditorLabel;
 pub enum UiEditorCommand {
     Menu,
     CloseMenu,
+    /// Guardar la partida y volver al menú principal (`crate::salir`).
+    SalirAlMenu,
     CloseSettings,
     Toggle,
     SelectMove,
@@ -558,7 +560,7 @@ fn editor_button_system(
     mut trans: ResMut<crate::transition::FlightTransition>,
     mut flight: ResMut<Flight>,
     mut fly: ResMut<crate::creative_fly::CreativeFlight>,
-    mut frame: ResMut<crate::universe::UniverseFrame>,
+    (mut frame, mut salida): (ResMut<crate::universe::UniverseFrame>, ResMut<crate::salir::SalidaAlMenu>),
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
     mut buttons: Query<(&Interaction, &UiEditorCommand, &mut BackgroundColor), Changed<Interaction>>,
 ) {
@@ -656,6 +658,13 @@ fn editor_button_system(
                     state.settings_open = false;
                     state.enabled = false;
                     state.active_pointer = None;
+                }
+                UiEditorCommand::SalirAlMenu => {
+                    state.menu_open = false;
+                    state.settings_open = false;
+                    state.enabled = false;
+                    state.active_pointer = None;
+                    salida.pedida = true;
                 }
                 UiEditorCommand::CloseSettings => {
                     state.settings_open = false;

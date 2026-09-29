@@ -229,6 +229,15 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "pie",
         output_qty: 1,
     },
+    // **El cubo** (Minecraft: tres lingotes de hierro en V). Con él se ordeña,
+    // se junta agua o lava y se vuelca.
+    CraftRecipe {
+        id: 30,
+        display_name: "Cubo",
+        ingredients: &[("iron_ingot", 3)],
+        output_id: "bucket",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {

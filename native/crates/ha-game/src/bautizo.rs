@@ -76,6 +76,7 @@ pub struct BautizoPlugin;
 
 impl Plugin for BautizoPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<Bautizo>,));
         app.init_resource::<Bautizo>()
             .add_event::<NombreElegido>()
             .add_systems(Update, (sincronizar_panel, teclas, teclado_fisico, refrescar).chain());

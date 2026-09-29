@@ -493,6 +493,7 @@ pub struct UniversePlugin;
 
 impl Plugin for UniversePlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<TerrainLodState>,));
         app.init_resource::<UniverseFrame>()
             .init_resource::<TerrainLodState>()
             .init_resource::<TerrainLodJob>()

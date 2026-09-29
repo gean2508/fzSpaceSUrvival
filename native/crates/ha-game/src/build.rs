@@ -353,6 +353,7 @@ pub struct BuildPlugin;
 
 impl Plugin for BuildPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<BuildIndicatorSpawned>,));
         app.init_resource::<SelectedBuildPiece>()
             .init_resource::<BuildFacing>()
             .init_resource::<MiraDeObra>()

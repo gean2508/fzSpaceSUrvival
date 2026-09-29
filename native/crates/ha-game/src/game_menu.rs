@@ -34,6 +34,7 @@ pub struct GameMenuPlugin;
 
 impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<GameMenuState>,));
         app.init_resource::<GameMenuState>()
             .add_systems(
                 Update,
@@ -363,6 +364,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 use crate::ui_editor::UiEditorCommand as C;
                 menu_button(bar, "EDITAR UI", C::Toggle);
                 menu_button(bar, "AJUSTES", C::OpenSettings);
+                menu_button(bar, "MENÚ PRINCIPAL", C::SalirAlMenu);
                 menu_button(bar, "CERRAR", C::CloseMenu);
             });
 
