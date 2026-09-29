@@ -1351,46 +1351,51 @@ fn spawn_hotbar(parent: &mut ChildBuilder, layout: &TouchLayout, _short: f32, he
                 } else if is_item {
                     let idx = i - 1;
                     e.insert(HotbarItemSlot { index: idx });
+                    // **El icono CENTRADO en la casilla** (29 sep 2026): iba
+                    // arriba en una columna con el rótulo abajo, y la cantidad
+                    // era un hermano de flex que lo corría a un costado. Ahora es
+                    // lo mismo que la casilla de la mochila: icono al 70 % en el
+                    // centro y la cantidad superpuesta abajo a la derecha.
                     e.with_children(|slot_node| {
                         slot_node.spawn((
                             Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Percent(100.0),
-                                flex_direction: FlexDirection::Column,
-                                justify_content: JustifyContent::SpaceBetween,
-                                align_items: AlignItems::Center,
-                                padding: UiRect::vertical(Val::Px(1.0)),
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(15.0),
+                                top: Val::Percent(15.0),
+                                width: Val::Percent(70.0),
+                                height: Val::Percent(70.0),
                                 ..default()
                             },
-                        ))
-                        .with_children(|col| {
-                            col.spawn((
-                                Node {
-                                    width: Val::Percent(78.0),
-                                    height: Val::Percent(68.0),
-                                    ..default()
-                                },
-                                HotbarSlotIcon,
-                            ));
-                            col.spawn((
-                                Text::new(""),
-                                TextFont {
-                                    font_size: (heart * 0.28).clamp(6.0, 8.0),
-                                    ..default()
-                                },
-                                TextColor(ui_theme::text_muted()),
-                                HotbarSlotName,
-                            ));
-                        });
+                            HotbarSlotIcon,
+                        ));
                         slot_node.spawn((
                             Text::new(""),
-                            TextFont {
-                                font_size: (heart * 0.34).clamp(7.0, 10.0),
-                                ..default()
-                            },
-                            TextColor(ui_theme::text_primary()),
-                            HotbarSlotQty,
+                            TextFont { font_size: 0.1, ..default() },
+                            TextColor(Color::NONE),
+                            HotbarSlotName,
                         ));
+                        slot_node
+                            .spawn(Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(0.0),
+                                top: Val::Percent(58.0),
+                                width: Val::Percent(90.0),
+                                height: Val::Percent(38.0),
+                                justify_content: JustifyContent::FlexEnd,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            })
+                            .with_children(|q| {
+                                q.spawn((
+                                    Text::new(""),
+                                    TextFont {
+                                        font_size: (heart * 0.34).clamp(7.0, 10.0),
+                                        ..default()
+                                    },
+                                    TextColor(ui_theme::text_primary()),
+                                    HotbarSlotQty,
+                                ));
+                            });
                     });
                 }
             }

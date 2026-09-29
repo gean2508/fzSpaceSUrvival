@@ -890,16 +890,7 @@ pub fn biome_tile(body: CelestialBody, biome: Biome, tx: i64, tz: i64) -> Tile {
         // una mota— y después se le exige a la celda que TENGA CON QUÉ CASAR
         // ([`orilla_dibujable`]). Lo que no se puede dibujar no se genera.
         Biome::Swamp => {
-            let charco = |x: i64, z: i64| fbm(seed ^ 0x5A11_0001, x, z, CHARCO_PERIODO) < 0.42;
-            if !charco(tx, tz) {
-                return Tile::Grass;
-            }
-            if orilla_dibujable(
-                charco(tx, tz - 1),
-                charco(tx + 1, tz),
-                charco(tx, tz + 1),
-                charco(tx - 1, tz),
-            ) {
+            if charco_dibujable(seed, tx, tz, CHARCO_PROFUNDIDAD) {
                 Tile::Water
             } else {
                 Tile::Grass
@@ -958,6 +949,31 @@ pub fn biome_tile(body: CelestialBody, biome: Biome, tx: i64, tz: i64) -> Tile {
 /// pasto deja de ser mayoría frente a la playa de arena. 14 arregla el dibujo sin
 /// vaciar el bioma.
 const CHARCO_PERIODO: i64 = 14;
+
+/// Cuántas veces se re-pregunta "¿tenés con qué casar?" contra vecinas que a su
+/// vez pueden haberse quitado. Con UNA sola pasada (lo de antes) la celda se
+/// evaluaba contra el ruido crudo, pero la vecina con la que contaba podía
+/// haberse ido en TODA su pasada: quedaban canales de una celda de ancho hechos de
+/// cuadrados celestes lisos, sin orilla — el arroyo recto con cantos a escuadra
+/// junto al acantilado. Tres alcanza: cada pasada es una capa más de vecinas.
+const CHARCO_PROFUNDIDAD: u8 = 3;
+
+/// ¿Hay agua de charco en esta celda del pantano DESPUÉS de sacar lo que no se
+/// puede dibujar? Recursivo por `prof` para que el quitar una celda no deje a su
+/// vecina sin pareja.
+fn charco_dibujable(seed: u32, tx: i64, tz: i64, prof: u8) -> bool {
+    let crudo = |x: i64, z: i64| fbm(seed ^ 0x5A11_0001, x, z, CHARCO_PERIODO) < 0.42;
+    if !crudo(tx, tz) {
+        return false;
+    }
+    if prof == 0 {
+        return true;
+    }
+    let v = |x: i64, z: i64| {
+        if prof == 1 { crudo(x, z) } else { charco_dibujable(seed, x, z, prof - 1) }
+    };
+    orilla_dibujable(v(tx, tz - 1), v(tx + 1, tz), v(tx, tz + 1), v(tx - 1, tz))
+}
 
 /// **¿PUEDE ESTA CELDA DE AGUA DIBUJAR SU ORILLA?**
 ///
@@ -1451,12 +1467,43 @@ pub fn natural_tile(body: CelestialBody, tx: i64, tz: i64) -> Tile {
     // (`relief::alto_de_pared`, de 1 a 10); si el río o el charco del pantano
     // llegan hasta ahí, la roca queda pintada encima del líquido. Quién dice
     // hasta dónde llega ese dibujo: `relief::bajo_el_dibujo_de_una_pared`.
-    if matches!(t, Tile::Water | Tile::WaterDeep)
-        && crate::relief::bajo_el_dibujo_de_una_pared(body, tx, tz)
-    {
+    //
+    // **Y lo que sobra tras el corte tiene que poder dibujarse** (29 sep 2026):
+    // secar el pie de la pared parte el agua en trozos — un canal de una celda que
+    // sube junto al acantilado, un cuadrado suelto — y a un trozo así el autotile
+    // no le sabe poner orilla (`orilla_dibujable`). Salía como cuadros celestes
+    // lisos de cantos rectos, "el río roto" de las capturas. Ver [`mojada`].
+    if matches!(t, Tile::Water | Tile::WaterDeep) && !mojada(body, tx, tz, RESTO_DEL_CORTE) {
         return tile_seco(body, tx, tz);
     }
     t
+}
+
+/// Cuántas capas de vecinas se re-miran al decidir si un resto de agua sobrevive
+/// al corte de la pared (ver [`mojada`]). Igual que `CHARCO_PROFUNDIDAD`.
+const RESTO_DEL_CORTE: u8 = 3;
+
+/// ¿Queda agua en esta celda una vez cortado el pie de las paredes y quitados los
+/// restos que no se pueden dibujar? Sólo juzga el agua QUIETA: un río conserva su
+/// cauce tal cual (`hay_rio`), que es angosto a propósito.
+fn mojada(body: CelestialBody, tx: i64, tz: i64, prof: u8) -> bool {
+    if let Some(t) = crate::relief::relief_tile(body, tx, tz) {
+        return matches!(t, Tile::Water | Tile::WaterDeep);
+    }
+    if !matches!(biome_tile(body, biome_at(body, tx, tz), tx, tz), Tile::Water | Tile::WaterDeep)
+        || crate::relief::bajo_el_dibujo_de_una_pared(body, tx, tz)
+    {
+        return false;
+    }
+    if prof == 0 || hay_rio(body, tx, tz) {
+        return true;
+    }
+    orilla_dibujable(
+        mojada(body, tx, tz - 1, prof - 1),
+        mojada(body, tx + 1, tz, prof - 1),
+        mojada(body, tx, tz + 1, prof - 1),
+        mojada(body, tx - 1, tz, prof - 1),
+    )
 }
 
 /// **¿Corre un río por esta celda?** Es [`river_here`] con la altura y el nivel

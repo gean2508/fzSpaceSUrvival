@@ -271,8 +271,13 @@ pub mod bosque {
     use crate::art2d::ArtLibrary;
 
     /// Lo lejano: matorral y piedritas, chiquito y lento.
+    ///
+    /// Sin `prop/cesped_cortado` (29 sep 2026): es una LOSA plana de césped, un
+    /// cuadrado sin silueta, y a escala 2 salía como parches cuadrados más
+    /// claros y más oscuros por todo el fondo — "está roto al fondo". Tampoco
+    /// nada marcado `S` en `scripts/revision-visual.json`.
     const LEJOS: [&str; 4] =
-        ["nature/arbusto_1", "nature/arbusto_10", "prop/cesped_cortado", "nature/piedra_1"];
+        ["nature/arbusto_1", "nature/arbusto_10", "nature/flores_rojo", "nature/piedra_1"];
     /// La capa del medio del bosque de día.
     const MEDIO: [&str; 4] =
         ["nature/arbol_10", "nature/arbusto_1", "nature/piedra_1", "prop/farol_de_calle_1"];

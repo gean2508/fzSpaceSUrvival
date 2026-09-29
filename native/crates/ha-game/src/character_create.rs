@@ -69,7 +69,7 @@ impl Plugin for CharacterCreatePlugin {
             .add_systems(OnExit(GamePhase::CharacterCreate), despawn_screen)
             .add_systems(
                 Update,
-                (name_input, button_system, resolver_toque, refresh, sync_grid, sincronizar_colores, animate_showcase, sync_keyboard, scroll_grid)
+                (name_input, button_system, resolver_toque, seguir_pestana, refresh, sync_grid, sincronizar_colores, animate_showcase, sync_keyboard, scroll_grid)
                     .chain()
                     .run_if(in_state(GamePhase::CharacterCreate)),
             )
@@ -103,45 +103,45 @@ fn cc_autoshot(
     mut next: ResMut<NextState<GamePhase>>,
     mut exit: EventWriter<bevy::app::AppExit>,
     mut keyboard: ResMut<KeyboardOpen>,
+    mut capa: ResMut<GridLayer>,
 ) {
     let Ok(prefix) = crate::flags::var("HA_CCSHOT") else { return };
     if shot.done {
         return;
     }
     shot.frames += 1;
+    let mut foto = |nombre: &str| {
+        commands
+            .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+            .observe(bevy::render::view::screenshot::save_to_disk(format!("{prefix}_{nombre}.png")));
+    };
     // Los tiempos son GENEROSOS a propósito: las cinco capas del muñeco son PNG
     // que se decodifican en hilos de IO, y disparando a los 30 frames de entrar
     // la captura salía con la vitrina vacía — parecía un bug de layout y era la
     // foto sacada antes de que llegara el arte.
+    //
+    // Cada pestaña de la cuadrícula sale en su propia foto: los ojos, el pelo
+    // y sus colores son los que más se rompían al importar.
     match shot.frames {
         10 => next.set(GamePhase::CharacterCreate),
-        100 => {
-            commands
-                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
-                .observe(bevy::render::view::screenshot::save_to_disk(format!(
-                    "{prefix}_creacion.png"
-                )));
-        }
+        100 => foto("creacion"),
+        105 => capa.0 = Layer::Body,
+        135 => foto("piel"),
+        140 => capa.0 = Layer::Eyes,
+        170 => foto("ojos"),
+        175 => capa.0 = Layer::Hair,
+        205 => foto("pelo"),
+        210 => capa.0 = Layer::Accessory,
+        240 => foto("accesorios"),
+        245 => capa.0 = Layer::Outfit,
         // El teclado en pantalla: es la única forma de escribir el nombre en el
         // teléfono, así que entra en la corrida de QA como una pantalla más.
-        120 => keyboard.0 = true,
-        140 => {
-            commands
-                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
-                .observe(bevy::render::view::screenshot::save_to_disk(format!(
-                    "{prefix}_teclado.png"
-                )));
-        }
-        160 => keyboard.0 = false,
-        180 => next.set(GamePhase::Loading),
-        205 => {
-            commands
-                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
-                .observe(bevy::render::view::screenshot::save_to_disk(format!(
-                    "{prefix}_carga.png"
-                )));
-        }
-        f if f >= 240 => {
+        260 => keyboard.0 = true,
+        280 => foto("teclado"),
+        300 => keyboard.0 = false,
+        320 => next.set(GamePhase::Loading),
+        345 => foto("carga"),
+        f if f >= 380 => {
             shot.done = true;
             exit.send(bevy::app::AppExit::Success);
         }
@@ -275,6 +275,41 @@ struct CcThumb(String);
 /// La ficha de una capa en la fila de arriba de la cuadricula.
 #[derive(Component, Clone, Copy)]
 struct CcLayerTab(Layer);
+
+/// El recuadro de "elegida" de una pestaña de capa.
+#[derive(Component, Clone, Copy)]
+struct ElegidoDeTab(Layer);
+
+/// **Las pestañas y los rótulos siguen a la capa activa.** El recuadro, el
+/// marco de la ficha, "CAPA: …" arriba y "ROPA 24" debajo del nombre se armaban
+/// una vez: al tocar OJOS la grilla cambiaba pero todo lo demás seguía diciendo
+/// ROPA (auditoría del 29 sep 2026).
+fn seguir_pestana(
+    mut commands: Commands,
+    capa: Res<GridLayer>,
+    art: Res<crate::art2d::ArtLibrary>,
+    mut recuadros: Query<(&ElegidoDeTab, &mut Visibility)>,
+    mut fichas: Query<(&CcLayerTab, &mut ImageNode)>,
+    raiz: Query<Entity, With<CcRoot>>,
+) {
+    if !capa.is_changed() {
+        return;
+    }
+    for (e, mut v) in &mut recuadros {
+        *v = if e.0 == capa.0 { Visibility::Inherited } else { Visibility::Hidden };
+    }
+    for (t, mut img) in &mut fichas {
+        let clave = if t.0 == capa.0 { crate::ui_pack::marco::SLOT } else { crate::ui_pack::marco::SLOT_CHICO };
+        if let Some(nuevo) = art.ui_frame_node(clave) {
+            img.image = nuevo.image;
+            img.rect = nuevo.rect;
+            img.image_mode = nuevo.image_mode;
+        }
+    }
+    for r in &raiz {
+        commands.entity(r).try_insert(Dirty);
+    }
+}
 
 /// Que capa se esta eligiendo en la cuadricula. Es lo unico que la pantalla
 /// recuerda aparte del look.
@@ -572,9 +607,24 @@ fn spawn_screen(
                         .insert((Button, CcAction::PickLayer(cap), CcLayerTab(cap)));
                     up::texto(l, etiqueta_capa(cap), 28.0, Pack::TINTA, tx + tab_w / 2.0,
                               iy + 44.0, Ancla::Medio, k);
-                    if act {
-                        up::elegido(l, tx, iy, tab_w, 84.0, 6.0, k);
-                    }
+                    // El recuadro de la pestaña elegida existe en las cinco y se
+                    // prende en la activa (`seguir_pestana`): antes se dibujaba al
+                    // armar la pantalla y al cambiar de capa se quedaba en ROPA.
+                    l.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px((tx - 3.0) * k),
+                            top: Val::Px((iy - 3.0) * k),
+                            width: Val::Px(tab_w * k),
+                            height: Val::Px(84.0 * k),
+                            border: UiRect::all(Val::Px(6.0 * k)),
+                            ..default()
+                        },
+                        BorderColor(Pack::ACENTO),
+                        ZIndex(8),
+                        if act { Visibility::Inherited } else { Visibility::Hidden },
+                        ElegidoDeTab(cap),
+                    ));
                 }
 
                 // La grilla de estilos: siete por tres, con su canaleta.
@@ -663,6 +713,25 @@ const COLS_GRID: usize = 7;
 const FILAS_GRID: usize = 3;
 /// El lado de una casilla y la separación, en coordenadas del mockup.
 const LADO_GRID: f32 = 130.0;
+
+/// **Dónde está la cabeza en la celda de 32×64, medido** (29 sep 2026). Se medía
+/// "de la fila 4 a la 30" y estaba mal: en el cuadro que usa la grilla
+/// (`walk`, de frente) el pelo empieza en la fila 18 y el mentón termina en la 44
+/// (bbox de `cuerpo/000` + `pelo/000`), así que el centro es la 31. Con 17 el
+/// retrato encuadraba el aire sobre la cabeza: sólo se veía la punta del pelo y
+/// los ojos quedaban cortados abajo.
+const CENTRO_CABEZA: f32 = 31.0;
+
+/// El centro vertical de lo que muestra cada capa en su muestra de COLOR, en
+/// filas de la celda. Medido igual: pelo 18-36, ropa 44-62, accesorio 12-46.
+fn centro_de_muestra(capa: Layer) -> f32 {
+    match capa {
+        Layer::Hair => 27.0,
+        Layer::Outfit => 53.0,
+        Layer::Accessory => 29.0,
+        _ => CENTRO_CABEZA,
+    }
+}
 const SEP_GRID: f32 = 12.0;
 
 /// El pulgar de la canaleta: se mueve siguiendo el scroll de la grilla.
@@ -1819,11 +1888,11 @@ fn celda_estilo(
     let escala = if cuerpo_entero { 2.0_f32 } else { 4.0 };
     let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * escala;
     // El encuadre: el cuerpo entero se apoya arriba; el retrato se centra en la
-    // cabeza, que ocupa de la fila 4 a la 30 de la celda de 64.
+    // cabeza (ver [`CENTRO_CABEZA`]).
     let (off_x, off_y) = if cuerpo_entero {
         (LADO_GRID / 2.0 - cel.x / 2.0, 2.0)
     } else {
-        (LADO_GRID / 2.0 - cel.x / 2.0, LADO_GRID / 2.0 - 17.0 * escala)
+        (LADO_GRID / 2.0 - cel.x / 2.0, LADO_GRID / 2.0 - CENTRO_CABEZA * escala)
     };
 
     let mut nodo = Node {
@@ -1991,11 +2060,15 @@ fn sincronizar_colores(
                     // La muestra encuadra el TORSO: la cabeza no dice nada del
                     // color de una remera, y para el pelo el encuadre igual cae
                     // sobre la melena.
+                    // Escala 62/32: la celda de 32 llena la muestra de ancho y
+                    // se corre para que quede centrada la parte de la capa.
+                    let esc = 62.0 / 32.0;
+                    let top = 31.0 - centro_de_muestra(capa) * esc;
                     m.spawn((
                         Node {
                             position_type: PositionType::Absolute,
                             left: Val::Px(0.0),
-                            top: Val::Px(-46.0 * k),
+                            top: Val::Px(top * k),
                             width: Val::Px(62.0 * k),
                             height: Val::Px(124.0 * k),
                             ..default()

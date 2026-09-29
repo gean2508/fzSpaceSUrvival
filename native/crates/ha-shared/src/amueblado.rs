@@ -318,6 +318,11 @@ pub fn amueblar(body: CelestialBody, casa: (i64, i64, i64, i64, &'static str)) -
             entradas.push(cuarto[0]);
         }
         let mut ocupadas: HashSet<(i64, i64)> = HashSet::new();
+        // **Lo que cada mueble TAPA a la vista**, además de lo que pisa (29 sep
+        // 2026). Un ropero apoya una celda pero su dibujo sube tres: contra la
+        // pared de un costado se apilaban uno bajo otro y cada uno tapaba la mitad
+        // del de arriba ("los muebles están cortados"). Dos dibujos no se pisan.
+        let mut a_la_vista: HashSet<(i64, i64)> = HashSet::new();
         let limite = (cuarto.len() as f32 * 0.34) as usize;
         let mut sem = hash_cell(0x3ab1_e0d0 ^ orden as u32, hx, hz) | 1;
         let mut azar = move || {
@@ -385,11 +390,19 @@ pub fn amueblar(body: CelestialBody, casa: (i64, i64, i64, i64, &'static str)) -
                 if !costado && !(0..cw).all(|dx| es_muro(x0 + dx, z0 - 1)) {
                     continue;
                 }
+                let alto = decor.size[1].round().max(1.0) as i64;
+                let dibujo: Vec<(i64, i64)> = (prof - alto..prof)
+                    .flat_map(|dz| (0..cw).map(move |dx| (x0 + dx, z0 + dz)))
+                    .collect();
+                if dibujo.iter().any(|c| a_la_vista.contains(c)) {
+                    continue;
+                }
                 let prueba: HashSet<(i64, i64)> = ocupadas.iter().chain(pie.iter()).copied().collect();
                 if !transitable(&celdas, &prueba, &entradas) {
                     continue;
                 }
                 ocupadas = prueba;
+                a_la_vista.extend(dibujo);
                 hay_contenedor |= contenedor_de(decor.key).is_some();
                 fuera.push(Mueble { decor, x0, z0, cw, prof });
                 break;
@@ -452,7 +465,19 @@ mod tests {
                             con_muebles += 1;
                         }
                         let mut usadas = HashSet::new();
+                        let mut vistas_dibujo = HashSet::new();
                         for m in &muebles {
+                            // Lo que el dibujo tapa tampoco se comparte: un mueble
+                            // no puede quedar cortado por el de abajo.
+                            let alto = m.decor.size[1].round().max(1.0) as i64;
+                            for dz in m.prof - alto..m.prof {
+                                for dx in 0..m.cw {
+                                    assert!(
+                                        vistas_dibujo.insert((m.x0 + dx, m.z0 + dz)),
+                                        "un mueble tapa a otro en {casa:?}"
+                                    );
+                                }
+                            }
                             for dz in 0..m.prof {
                                 for dx in 0..m.cw {
                                     let c = (m.x0 + dx, m.z0 + dz);

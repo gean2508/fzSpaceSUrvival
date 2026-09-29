@@ -1119,7 +1119,8 @@ pub fn retiro_del_canto(body: CelestialBody, tx: i64, tz: i64) -> bool {
 pub fn relief_cell(body: CelestialBody, tx: i64, tz: i64) -> ReliefCell {
     // Descarte antes de la memoria: en el llano y bajo el agua la respuesta sale
     // de la caché de niveles y no vale la pena ocupar una ranura con ella.
-    let (h, l) = cached_cell(body, tx, tz);
+    let (h, _) = cached_cell(body, tx, tz);
+    let l = cached_level(body, tx, tz);
     if l <= 0 {
         return ReliefCell::Flat;
     }
@@ -1522,7 +1523,85 @@ fn cached_cell(body: CelestialBody, tx: i64, tz: i64) -> (f32, i8) {
 }
 
 fn cached_level(body: CelestialBody, tx: i64, tz: i64) -> i8 {
-    cached_cell(body, tx, tz).1
+    let b = body as u8;
+    let epoca = crate::partida::epoca();
+    let slot = slot_espacial(tx, tz);
+    if let Some(v) = FILTRO_CACHE.with(|c| {
+        let c = c.borrow();
+        let e = &c[slot];
+        (e.filled && e.body == b && e.tx == tx && e.tz == tz && e.epoca == epoca).then_some(e.level)
+    }) {
+        return v;
+    }
+    let level = nivel_sin_migas(body, tx, tz);
+    if !crate::grueso::activo() {
+        FILTRO_CACHE.with(|c| {
+            c.borrow_mut()[slot] =
+                LevelSlot { tx, tz, body: b, field: 0.0, level, filled: true, epoca };
+        });
+    }
+    level
+}
+
+thread_local! {
+    static FILTRO_CACHE: RefCell<Vec<LevelSlot>> = RefCell::new(
+        vec![LevelSlot { tx: i64::MIN, tz: i64::MIN, body: 0, field: 0.0, level: 0, filled: false, epoca: 0 }; CACHE_SLOTS],
+    );
+}
+
+/// **NINGUNA TERRAZA MÁS CHICA QUE UNA CASA** (29 sep 2026).
+///
+/// El escalón sale de cortar un campo continuo en franjas, y donde el campo roza
+/// el corte quedan MIGAS: pozos de una o dos celdas en mitad del pasto, islitas
+/// de un escalón, puntas de una celda. Cada una se dibuja con su acantilado
+/// completo —cuatro cantos, labio, pie— y el resultado es la "cuadrícula de roca
+/// rota" que el usuario mandó en capturas de varios sitios distintos: no es un
+/// lugar mal generado, es una regla que faltaba en TODO el planeta.
+///
+/// La regla: una celda de tierra que comparte su escalón con 3 o menos de sus 8
+/// vecinas, y cuyas vecinas están casi todas (5+) en OTRO escalón común, toma el
+/// de ellas. Un borde recto de terraza tiene 5 iguales y no se toca; una esquina
+/// convexa tiene 3 y se redondea un poco; un pozo de 2×2 tiene 3 y se tapa.
+///
+/// No toca el agua (ni la vuelve agua) ni el cauce de un río, que es angosto a
+/// propósito y lo esculpe `rios::perfil_del_cauce`.
+fn nivel_sin_migas(body: CelestialBody, tx: i64, tz: i64) -> i8 {
+    let (_, l) = cached_cell(body, tx, tz);
+    if water_tile(l).is_some() || crate::rios::perfil_del_cauce(body, tx, tz).is_some() {
+        return l;
+    }
+    let mut vecinas = [0i8; 8];
+    let mut i = 0;
+    for dz in -1..=1i64 {
+        for dx in -1..=1i64 {
+            if dx == 0 && dz == 0 {
+                continue;
+            }
+            vecinas[i] = cached_cell(body, tx + dx, tz + dz).1;
+            i += 1;
+        }
+    }
+    let iguales = vecinas.iter().filter(|v| **v == l).count();
+    if iguales > 3 {
+        return l;
+    }
+    let mut moda = l;
+    let mut veces = 0;
+    for v in vecinas {
+        if water_tile(v).is_some() {
+            continue;
+        }
+        let n = vecinas.iter().filter(|w| **w == v).count();
+        if n > veces {
+            veces = n;
+            moda = v;
+        }
+    }
+    if veces >= 5 {
+        moda
+    } else {
+        l
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2147,6 +2226,38 @@ mod tests {
         }
     }
 
+    /// **Casi no quedan migas de terraza** (ver `nivel_sin_migas`): celdas de
+    /// tierra fuera de un cauce con 3 o menos vecinas en su escalón. Antes del
+    /// filtro eran los pozos y puntas de roca que se veían por todo el mapa.
+    #[test]
+    fn no_hay_migas_de_terraza() {
+        let b = CelestialBody::Earth;
+        let (mut crudas, mut filtradas, mut tierra) = (0, 0, 0);
+        for tz in (-600..600).step_by(3) {
+            for tx in (-600..600).step_by(3) {
+                let raw = cached_cell(b, tx, tz).1;
+                if water_tile(raw).is_some() || crate::rios::perfil_del_cauce(b, tx, tz).is_some() {
+                    continue;
+                }
+                tierra += 1;
+                let (mut ic, mut i_f) = (0, 0);
+                for dz in -1..=1i64 {
+                    for dx in -1..=1i64 {
+                        if (dx, dz) == (0, 0) {
+                            continue;
+                        }
+                        ic += usize::from(cached_cell(b, tx + dx, tz + dz).1 == raw);
+                        i_f += usize::from(relief_level(b, tx + dx, tz + dz) == relief_level(b, tx, tz));
+                    }
+                }
+                crudas += usize::from(ic <= 1);
+                filtradas += usize::from(i_f <= 1);
+            }
+        }
+        eprintln!("migas (≤1 vecina igual): crudas {crudas}, filtradas {filtradas} de {tierra}");
+        assert!(filtradas * 4 <= crudas.max(4), "el filtro no limpió: {crudas} → {filtradas}");
+    }
+
     /// La caché no puede cambiar NI UN nivel respecto de calcularlo a pelo. Es la
     /// red de seguridad de la única optimización del módulo.
     #[test]
@@ -2156,7 +2267,7 @@ mod tests {
                 for j in -50..50 {
                     let (tx, tz) = (i * 13 - 7, j * 17 + 3);
                     let direct = level_from_field(b, relief_field(b, tx, tz));
-                    assert_eq!(relief_level(b, tx, tz), direct, "{b:?} ({tx},{tz})");
+                    assert_eq!(cached_cell(b, tx, tz).1, direct, "{b:?} ({tx},{tz})");
                 }
             }
         }

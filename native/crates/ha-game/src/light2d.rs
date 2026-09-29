@@ -860,7 +860,31 @@ pub struct GroundShadow {
     /// poste es finita.
     base: Vec2,
     foot: f32,
+    /// **La sombra tiene la FORMA del objeto** (29 sep 2026). Es el mismo dibujo
+    /// del objeto, espejado, en negro translúcido y aplastado contra el suelo: la
+    /// sombra de un árbol es copa y tronco, no una franja con el borde recto
+    /// ("la sombra es una puta línea recta"). Sólo para lo que no se anima (el
+    /// recorte de un sprite animado cambia cada cuadro y la copia quedaría
+    /// congelada); lo animado sigue con la mancha de contacto.
+    silueta: bool,
+    /// El objeto que proyecta. La silueta cuelga de un soporte intermedio (ver
+    /// [`ESCORZO_DEL_SUELO`]), así que el dueño ya no es su padre directo.
+    owner: Entity,
 }
+
+/// **El suelo se ve escorzado.** La cámara es 3/4: un metro sobre el suelo hacia
+/// el fondo ocupa menos pantalla que un metro hacia los lados. Una sombra es una
+/// figura tendida SOBRE EL SUELO, así que hay que girarla en el plano del suelo y
+/// recién después aplastar ese plano en `y`. Un sprite no puede hacerlo solo (la
+/// escala se aplica antes de la rotación), por eso la silueta cuelga de un soporte
+/// con esta escala y es la silueta la que gira adentro. Girada a pelo era un
+/// árbol acostado con el grosor de un árbol de pie: "un árbol oscuro pegado al
+/// lado del árbol", no la sombra de nada.
+const ESCORZO_DEL_SUELO: f32 = 0.55;
+
+/// Cuánto del alto del objeto (0..1) se mete la sombra bajo su propio pie, para
+/// que arranque DEBAJO del tronco y no al lado, que es lo que la despega.
+const SOLAPE_DEL_PIE: f32 = 0.07;
 
 /// Debajo de este alto (m) un sprite no proyecta sombra: florcitas, piedritas y
 /// briznas de pasto la tendrían más grande que ellas mismas.
@@ -883,18 +907,24 @@ fn attach_ground_shadows(
     mut commands: Commands,
     shadow_tex: Option<Res<ShadowTexture>>,
     candidates: Query<
-        (Entity, &Sprite, &GlobalTransform),
+        (Entity, &Sprite, &GlobalTransform, Has<crate::art2d::ArtAnimated>),
         (
             Without<ShadowChecked>,
             Without<LitOverlay>,
             Without<GroundShadow>,
             Without<crate::sim::UnlitSprite>,
             Without<Parent>,
+            // **El arte de tile no proyecta** (29 sep 2026): el acantilado, la
+            // orilla y la cascada son TERRENO, y el terreno ya tiene su sombra de
+            // terraza horneada en el suelo. Con la de sprite encima, cada columna
+            // de acantilado tiraba una franja/cuadro oscuro sobre el pasto y el
+            // agua — las bandas diagonales y los cuadrados de las capturas.
+            Without<crate::world2d::TileArt>,
         ),
     >,
 ) {
     let Some(tex) = shadow_tex else { return };
-    for (entity, sprite, gt) in &candidates {
+    for (entity, sprite, gt, animado) in &candidates {
         crate::render::try_insert(&mut commands, entity, "sombra/marca", ShadowChecked);
         let Some(size) = sprite.custom_size else { continue };
         let z = gt.translation().z;
@@ -935,13 +965,45 @@ fn attach_ground_shadows(
         // azulado de la sombra ambiental (`sky2d`), para que de día y de noche
         // pertenezca a la misma paleta.
         let foot = -size.y * 0.5 + width * 0.10;
+        // La silueta: lo estático con su propio dibujo (ver `GroundShadow::silueta`).
+        if sprite.texture_atlas.is_none() && !animado {
+            let rig = commands
+                .spawn((
+                    Transform::from_xyz(0.0, -size.y * 0.5 + size.y * SOLAPE_DEL_PIE, -0.02)
+                        .with_scale(Vec3::new(1.0, ESCORZO_DEL_SUELO, 1.0)),
+                    Visibility::default(),
+                ))
+                .id();
+            let shadow = commands
+                .spawn((
+                    GroundShadow { base: size, foot: 0.0, silueta: true, owner: entity },
+                    crate::sim::UnlitSprite,
+                    Sprite {
+                        image: sprite.image.clone(),
+                        rect: sprite.rect,
+                        custom_size: Some(size),
+                        flip_x: sprite.flip_x,
+                        // Espejada hacia abajo y colgada del pie: el pie del dibujo
+                        // queda pegado al pie del objeto y la copa cae lejos.
+                        flip_y: true,
+                        color: Color::srgba(0.02, 0.06, 0.055, 0.45),
+                        anchor: Anchor::TopCenter,
+                        ..default()
+                    },
+                    Transform::default(),
+                ))
+                .id();
+            crate::render::try_add_child(&mut commands, rig, shadow);
+            crate::render::try_add_child(&mut commands, entity, rig);
+            continue;
+        }
         // `try_add_child` y no `with_children`: el dueño de esta sombra puede
         // haberse ido en este mismo frame (el streamer tiró su chunk mientras
         // caminabas), y colgarle un hijo a una entidad muerta es un pánico —
         // el cierre al azar tras un rato de juego. Ver `render::try_add_child`.
         let shadow = commands
             .spawn((
-                GroundShadow { base: Vec2::new(length, width), foot },
+                GroundShadow { base: Vec2::new(length, width), foot, silueta: false, owner: entity },
                 crate::sim::UnlitSprite,
                 Sprite {
                     image: tex.0.clone(),
@@ -988,7 +1050,7 @@ fn cast_shadows(
     camera: Query<(&Transform, &OrthographicProjection), (With<GameCamera>, Without<GroundShadow>)>,
     lights: Query<(Entity, &Light2d, &GlobalTransform)>,
     parents: Query<&GlobalTransform, Without<GroundShadow>>,
-    mut shadows: Query<(&GroundShadow, &Parent, &mut Transform, &mut Sprite)>,
+    mut shadows: Query<(&GroundShadow, &mut Transform, &mut Sprite)>,
     mut acc: Local<f32>,
     span: Res<crate::debug::CpuSpanStats>,
 ) {
@@ -1050,8 +1112,8 @@ fn cast_shadows(
     let warm = (sky.color.x - sky.color.z).clamp(0.0, 1.0) * sky_on;
     let tint = Vec3::new(0.02, 0.06, 0.055).lerp(Vec3::new(0.030, 0.045, 0.105), warm);
 
-    for (sh, parent, mut tf, mut sprite) in &mut shadows {
-        let owner = parent.get();
+    for (sh, mut tf, mut sprite) in &mut shadows {
+        let owner = sh.owner;
         let Ok(gt) = parents.get(owner) else { continue };
         let p = gt.translation().truncate();
         if p.distance(cam) > cull_r {
@@ -1089,6 +1151,28 @@ fn cast_shadows(
         }
         let len = v.length().min(2.4);
         let dir = v.normalize_or_zero();
+        if sh.silueta {
+            // La silueta cuelga del pie hacia su `-y` local: se gira para que ese
+            // lado apunte en contra de la luz, y se alarga con el sol rasante. En
+            // reposo (sin luz direccional) queda aplastada bajo el objeto.
+            tf.translation.x = 0.0;
+            tf.translation.y = sh.foot;
+            // El rumbo se mide en el plano del suelo (sin escorzo): el soporte lo aplasta después.
+            let ang = if len > 0.06 {
+                (dir.y / ESCORZO_DEL_SUELO).atan2(dir.x) + std::f32::consts::FRAC_PI_2
+            } else {
+                0.0
+            };
+            tf.rotation = Quat::from_rotation_z(ang);
+            sprite.custom_size = Some(Vec2::new(sh.base.x, sh.base.y * (0.30 + 0.32 * len)));
+            let a = (0.30 + 0.30 * w.min(1.2)) * (1.0 - ambiente.weather.cover * 0.45) * (1.0 - 0.10 * len);
+            sprite.color = if shadow_debug() {
+                Color::srgba(1.0, 0.0, 0.8, 1.0)
+            } else {
+                Color::srgba(tint.x, tint.y, tint.z, a.clamp(0.0, 0.7))
+            };
+            continue;
+        }
         // El quad está anclado al pie, así que la traslación no se mueve: la sombra
         // nace siempre donde el objeto toca el suelo. Lo único que cambia es hacia
         // dónde apunta y cuánto mide.

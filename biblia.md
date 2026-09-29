@@ -7032,6 +7032,31 @@ marco rompió la Luna por no ver que la cámara asumía el marco estático.
 
 ## §12 Troubleshooting
 
+- **Segunda ronda de "todo roto" en el celu (29 sep 2026) — qué era cada cosa.**
+  - **Ítems sobre el borde de madera del inventario**: los marcos del kit (9-slice)
+    tienen borde declarado de ~11 px y `max_corner_scale` lo estiraba a 66 px. Ahora
+    `ui_pack::escala_de_los_marcos` (PostUpdate, antes del layout) fija la esquina a
+    `3·k·scale_factor` y `ESQUINA_SIN_AJUSTAR = 6` sale de `art2d::ui_frame_node`.
+  - **Splash/menú fuera de pantalla**: el primer frame en el celu tiene el
+    `TouchLayout` por defecto (1280). `ui_pack::k()` = min(ancho/ANCHO, alto/ALTO) y
+    `rehacer_pantalla_si_cambia_k` re-arma la pantalla cuando cambia la escala.
+  - **Sombras**: la silueta es el dibujo del objeto (`light2d::GroundShadow.silueta`),
+    pero tiene que ser una figura TENDIDA EN EL SUELO: cuelga de un soporte con
+    `ESCORZO_DEL_SUELO` (0,55 en `y`) y gira adentro; arranca `SOLAPE_DEL_PIE` bajo
+    el tronco. Girada sin escorzo era "un árbol oscuro al lado del árbol". El arte
+    de tile (`TileArt`: acantilado, orilla, cascada) NO proyecta sombra.
+  - **Migas de terraza** (pozos/puntas de 1-2 celdas en el borde de un escalón):
+    `relief::nivel_sin_migas` las funde con el escalón vecino (no toca agua ni
+    cauces). Test `no_hay_migas_de_terraza`.
+  - **Agua partida en cuadros celestes lisos**: `geography::natural_tile` seca el pie
+    de las paredes y eso dejaba canales de 1 celda y trozos sin orilla dibujable.
+    Ahora `geography::mojada` re-mira 3 capas de vecinas con `orilla_dibujable`
+    (agua quieta; el río conserva su cauce), y `charco_dibujable` hace lo mismo en el
+    pantano. Repro: `HA_PARTIDA_NUEVA=1 HA_SEMILLA=37963 HA_VISTA=245,-64`.
+  - **Muebles cortados en casas**: `amueblado::amueblar` lleva un `a_la_vista` — dos
+    muebles no pueden solapar su dibujo (celdas `prof-alto..prof` × ancho).
+  - `HA_SEMILLA=n` fija la semilla de la partida nueva para reproducir un sitio.
+
 - **"Se cierra solo después de un rato de jugar" — REPRODUCIDO Y MEDIDO (3 ago 2026).**
 
   ⚠ **La entrada anterior decía "es un pánico, no falta de memoria". Era al revés.**

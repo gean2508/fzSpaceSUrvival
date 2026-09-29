@@ -1027,7 +1027,7 @@ impl ArtLibrary {
             // 8 px de botón a 2x sale de 16 y el mockup los tiene de 24. Con el
             // borde declarado, el tope sube para que la esquina llegue a su
             // escala real.
-            max_corner_scale: if declarado.is_some() { 6.0 } else { 2.0 },
+            max_corner_scale: if declarado.is_some() { crate::ui_pack::ESQUINA_SIN_AJUSTAR } else { 2.0 },
         });
         Some(node)
     }

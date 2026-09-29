@@ -76,9 +76,46 @@ pub mod marco {
 // La escala
 // ---------------------------------------------------------------------------
 
-/// **El único factor de escala de la interfaz.** El mockup mide 2400 de ancho.
+/// **El único factor de escala de la interfaz.** El mockup mide 2400 × 1080:
+/// manda el lado que primero se queda corto, así una pantalla más ancha que
+/// 20:9 no se come la parte de abajo.
 pub fn k(touch: &TouchLayout) -> f32 {
-    (touch.width.max(320.0) / 2400.0).clamp(0.18, 3.0)
+    let por_ancho = touch.width.max(320.0) / ANCHO;
+    let por_alto = touch.height.max(180.0) / ALTO;
+    por_ancho.min(por_alto).clamp(0.18, 3.0)
+}
+
+/// **Las pantallas de menú se rehacen si la escala cambió después de armarlas.**
+///
+/// En el teléfono, el primer cuadro todavía no conoce la ventana: `TouchLayout`
+/// vale su default (1280 de ancho) y el splash y el menú se armaban con una
+/// escala más grande que la pantalla real — "desde el splash ya se sale de la
+/// pantalla, no está centrada" (29 sep 2026). Cada pantalla se arma una sola vez
+/// en su `OnEnter`, así que nadie la corregía. Esto re-entra al mismo estado
+/// (sale y vuelve a entrar) cuando la escala se mueve, sólo en las pantallas de
+/// menú: en `Playing` la ventana ya está medida hace rato.
+fn rehacer_pantalla_si_cambia_k(
+    layout: Res<TouchLayout>,
+    fase: Res<State<crate::game_phase::GamePhase>>,
+    mut next: ResMut<NextState<crate::game_phase::GamePhase>>,
+    mut armada_con: Local<Option<(crate::game_phase::GamePhase, f32)>>,
+) {
+    use crate::game_phase::GamePhase as F;
+    let actual = fase.get().clone();
+    if !matches!(actual, F::Splash | F::MainMenu | F::CharacterCreate) {
+        *armada_con = None;
+        return;
+    }
+    let kk = k(&layout);
+    match armada_con.as_ref() {
+        Some((f, viejo)) if *f == actual => {
+            if (kk - viejo).abs() > 0.002 {
+                *armada_con = Some((actual.clone(), kk));
+                next.set(actual);
+            }
+        }
+        _ => *armada_con = Some((actual, kk)),
+    }
 }
 
 /// Alto del lienzo del mockup, en sus propias unidades.
@@ -480,7 +517,53 @@ impl Plugin for UiPackPlugin {
         app.init_resource::<HojaPj>()
             .init_resource::<HaloTex>()
             .add_systems(Startup, preparar_halo)
-            .add_systems(Update, preparar_hoja);
+            .add_systems(Update, (preparar_hoja, rehacer_pantalla_si_cambia_k))
+            .add_systems(PostUpdate, escala_de_los_marcos.before(bevy::ui::UiSystem::Layout));
+    }
+}
+
+/// Esquina de un marco del kit que todavía no se ajustó (la pone
+/// `ArtLibrary::ui_frame_node` para los marcos con borde declarado).
+pub const ESQUINA_SIN_AJUSTAR: f32 = 6.0;
+
+/// Un marco del kit ya llevado a la escala de la pantalla.
+#[derive(Component)]
+pub struct MarcoDelKit;
+
+/// **El borde de madera mide lo que mide en la maqueta.** Bevy agranda las
+/// esquinas de un 9-slice hasta `max_corner_scale` según el tamaño del nodo:
+/// con el tope en 6, un panel grande dibujaba su moldura de 11 px a 66 px
+/// físicos, cuando la maqueta (x3 por píxel del kit) le da 33. Todo lo que el
+/// panel pone "adentro" —pestañas, casillas, barras— caía ENCIMA de la madera y
+/// la interfaz se veía rota (captura del usuario, 29 sep 2026). La escala del
+/// kit en pantalla es `3 × k` puntos lógicos por píxel, o sea `3·k·factor` en
+/// físicos, que es la unidad del `TextureSlicer`.
+fn escala_de_los_marcos(
+    mut commands: Commands,
+    layout: Res<TouchLayout>,
+    mut nuevos: Query<(Entity, &mut ImageNode), (Without<MarcoDelKit>, Changed<ImageNode>)>,
+    mut viejos: Query<&mut ImageNode, With<MarcoDelKit>>,
+    mut ultima: Local<f32>,
+) {
+    use bevy::ui::widget::NodeImageMode;
+    let escala = (3.0 * k(&layout) * layout.scale_factor.max(0.5)).max(1.0);
+    for (e, mut img) in &mut nuevos {
+        let NodeImageMode::Sliced(s) = &img.image_mode else { continue };
+        if s.max_corner_scale != ESQUINA_SIN_AJUSTAR {
+            continue;
+        }
+        if let NodeImageMode::Sliced(s) = &mut img.image_mode {
+            s.max_corner_scale = escala;
+        }
+        commands.entity(e).try_insert(MarcoDelKit);
+    }
+    if (escala - *ultima).abs() > 1e-3 {
+        *ultima = escala;
+        for mut img in &mut viejos {
+            if let NodeImageMode::Sliced(s) = &mut img.image_mode {
+                s.max_corner_scale = escala;
+            }
+        }
     }
 }
 

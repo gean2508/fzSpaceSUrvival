@@ -552,7 +552,10 @@ fn tick_splash(
         // quien toca NUEVA PARTIDA. Es la prueba de que una partida nueva viene
         // limpia (nada de las paredes ni los pozos de corridas anteriores).
         if crate::flags::var("HA_PARTIDA_NUEVA").is_ok() && crate::partida::activa().is_none() {
-            crate::partida::crear("QA", None, false);
+            // `HA_SEMILLA=n` reproduce el mundo de una partida concreta (la del
+            // usuario sale en la barra de PARTIDAS) para mirar lo que él ve.
+            let semilla = crate::flags::var("HA_SEMILLA").ok().and_then(|v| v.parse().ok());
+            crate::partida::crear("QA", semilla, false);
         }
         next.set(GamePhase::Loading);
         return;
