@@ -156,7 +156,19 @@ fn sync_lifecycle_pause(
                 unfocused_mode: idle,
             }
         } else {
-            bevy::winit::WinitSettings::mobile()
+            // **`Continuous`, igual que al arrancar (`lib.rs`), NUNCA `mobile()`.**
+            // `mobile()` es `reactive(1/60)` + cada evento de entrada: con el dedo
+            // en el joystick la pantalla reporta a 120-240 Hz y el juego corría
+            // 2-4 veces más seguido de lo que presentaba. Lo peor es que sólo
+            // pasaba DESPUÉS de la primera pausa (bajar la cortina, una llamada,
+            // apagar la pantalla): desde ahí la partida entera quemaba batería y
+            // calentaba el teléfono al doble. Reporte del 29 sep 2026.
+            bevy::winit::WinitSettings {
+                focused_mode: bevy::winit::UpdateMode::Continuous,
+                unfocused_mode: bevy::winit::UpdateMode::reactive_low_power(
+                    std::time::Duration::from_secs(1),
+                ),
+            }
         };
     }
 }

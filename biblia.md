@@ -4793,6 +4793,21 @@ mueble). Lo que salió, y cómo quedó:
 - **Puertas sólo al frente** (`city.rs`): las laterales y traseras se dibujaban
   horizontales sobre un muro vertical. La fachada frena por los costados
   (`SolidoDeFachada`).
+- **Mochila rehecha para que ENTRE** (29 sep 2026): la casilla se calcula por el
+  alto del lienzo (antes la última fila se dibujaba encima del marco), 8
+  columnas y **la primera fila es la barra rápida** (`spawn_bag_hotbar_cell`,
+  mismas marcas que la hotbar del HUD). La columna PERSONAJE perdió los cuatro
+  huecos de equipo que no hacían nada: queda el muñeco y EN LA MANO. CONSTRUIR
+  elige al SOLTAR sin arrastre (antes elegía al apoyar y cerraba: "toco para
+  scrollear y se cierra"). Los íconos animados (la linterna) usan su primer
+  cuadro; la hotbar ya no rotula en inglés debajo del icono.
+- **`world_edits.json` va DENTRO del APK**: lo que se planta en el editor de
+  mundo para probar sale en todas las partidas. Estaba la pieza de prueba del
+  usuario (cuarto + cocina + dos heladeras + fogata en 9,-5); se vació.
+- **El terminador del disco sigue al RELOJ** en el cuerpo que pisás
+  (`universe::sync_terminators`): antes sólo miraba la órbita y a las 08:29 el
+  jugador podía estar en la mitad oscura — subías de día y arriba era de noche,
+  y al cambiar el zoom alternaba suelo claro / disco oscuro (el titileo).
 - **MENÚ PRINCIPAL** en el menú de pausa (`salir.rs`): guarda todo como una
   pausa de la app, despeja el mundo en `OnExit(Playing)` y reinicia los
   recursos de partida. Driver `HA_SALIRTEST` (dos vueltas).
@@ -6744,6 +6759,32 @@ activo y **no** limpia con escala 1.0.
 cámara de blit se crea siempre (con escala 1.0 sólo se salta el quad), así que la UI
 siempre tiene dueño. Si alguna vez se elimina ese módulo, hay que devolverle
 `IsDefaultUiCamera` a `GameCamera`.
+
+### RESUELTO (29 sep 2026) — "bomba de lag, drena batería, se cuelga el celu"
+
+- **Después de la primera pausa, el juego corría con cada toque.**
+  `platform::sync_lifecycle_pause` volvía de segundo plano con
+  `WinitSettings::mobile()` (`reactive(1/60)` + cada evento de entrada), justo lo
+  que `lib.rs` prohíbe: con el dedo en el joystick la pantalla reporta a
+  120-240 Hz y el juego simulaba 2-4 veces por cuadro presentado. Bastaba bajar
+  la cortina una vez. Ahora vuelve a `Continuous`.
+- **Tope de FPS** (`fps_tope.rs`, AJUSTES → FPS: 30 / 60 / libre). En el
+  teléfono arranca en 30: el Redmi no llega a 60 en una aldea y, sin tope, el
+  vsync de su pantalla de 90 Hz lo hacía ir a lo que diera (15-32, desparejo),
+  con el procesador al máximo y calentándose. Se guarda en el layout de UI.
+- **Nada de diagnóstico en el APK.** En Android ya no se registran el overlay de
+  perf, su log periódico (ordenaba todos los sprites visibles cada 5 s), el log
+  de tirones, el censo, el log de spans, la sonda de etapas (7 schedules extra
+  por frame), la ablación ni el overlay de colisión; y el menú no muestra
+  TIERRA/LUNA/ESPACIO/PERF/SONDA. Todo sigue en la compu.
+- **La mochila re-armaba la UI entera cada frame**: `update_inventory_slot_visuals`
+  y `update_hotbar_item_visuals` reescribían el `ImageNode` de cada casilla
+  siempre (la hotbar, jugando o no). Ahora sólo cuando cambia el inventario.
+  Con la mochila abierta el celu bajaba a 15 fps.
+- **Censo de entidades**: `HA_CENSO=1` (compu) loguea cada 10 s los arquetipos
+  más poblados. En una casa: ~2.700 sprites de `TileArt`, ~1.100 sombras de
+  suelo, 900 estrellas + 420 motas + 560 rocas del cinturón vivas en la
+  superficie (ocultas). Las del espacio son el próximo recorte.
 
 ### Suposiciones que resultaron FALSAS — no volver a "arreglarlas"
 

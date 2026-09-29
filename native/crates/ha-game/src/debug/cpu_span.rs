@@ -12,8 +12,13 @@ impl Plugin for CpuSpanPlugin {
         app.init_resource::<CpuSpanStats>()
             .init_resource::<SpanAccumulator>()
             .init_resource::<TotalUpdateStart>()
-            .add_systems(First, record_total_update_span)
-            .add_systems(Last, log_cpu_spans);
+            .add_systems(First, record_total_update_span);
+        // El log de spans es de la compu: en el teléfono no se escribe nada
+        // (29 sep 2026, "nada de pruebas en el celu"). Los contadores quedan
+        // —son un `fetch_add` y los lee el reporte de cuelgues—; sin el sistema
+        // que los vacía sólo acumulan (u64 de microsegundos: no desbordan).
+        #[cfg(not(target_os = "android"))]
+        app.add_systems(Last, log_cpu_spans);
     }
 }
 

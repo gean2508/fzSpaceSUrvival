@@ -182,6 +182,8 @@ enum CalAdjust {
     SfxUp,
     MusicDown,
     MusicUp,
+    FpsDown,
+    FpsUp,
 }
 
 #[derive(Component)]
@@ -271,6 +273,7 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                 spawn_cal_row(panel, "Render", CalAdjust::RenderDown, CalAdjust::RenderUp);
                 spawn_cal_row(panel, "SFX", CalAdjust::SfxDown, CalAdjust::SfxUp);
                 spawn_cal_row(panel, "Music", CalAdjust::MusicDown, CalAdjust::MusicUp);
+                spawn_cal_row(panel, "FPS", CalAdjust::FpsDown, CalAdjust::FpsUp);
             })
             .id();
     });
@@ -437,6 +440,13 @@ fn calibration_button_system(
                         CalAdjust::CurveUp => cal.stick_curve_exponent += 0.1,
                         CalAdjust::RenderDown => cal.render_scale -= 0.05,
                         CalAdjust::RenderUp => cal.render_scale += 0.05,
+                        CalAdjust::FpsDown | CalAdjust::FpsUp => {
+                            use crate::input::calibration::FPS_MAX_OPCIONES as O;
+                            let i = O.iter().position(|v| *v == cal.fps_max).unwrap_or(0);
+                            let n = O.len();
+                            let j = if matches!(other, CalAdjust::FpsUp) { (i + 1) % n } else { (i + n - 1) % n };
+                            cal.fps_max = O[j];
+                        }
                         _ => {}
                     }
                     config.calibration = cal.clamp();
@@ -467,6 +477,10 @@ fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration, audio: &crate::audio
         }
         CalAdjust::SfxUp | CalAdjust::SfxDown => format!("{:.0}%", audio.sfx * 100.0),
         CalAdjust::MusicUp | CalAdjust::MusicDown => format!("{:.0}%", audio.music * 100.0),
+        CalAdjust::FpsUp | CalAdjust::FpsDown => match cal.fps_max {
+            0 => "libre".into(),
+            n => format!("{n}"),
+        },
     }
 }
 
@@ -823,7 +837,7 @@ fn point_in_rect(pos: Vec2, rect: [f32; 4]) -> bool {
 fn save_ui_layout(config: &UiLayoutConfig) {
     let cal = config.calibration.clamp();
     let body = format!(
-        "move,{:.5},{:.5},{:.3}\nuse,{:.5},{:.5},{:.3}\njump,{:.5},{:.5},{:.3}\ncal,{:.3},{:.3},{:.3},{:.3}\n",
+        "move,{:.5},{:.5},{:.3}\nuse,{:.5},{:.5},{:.3}\njump,{:.5},{:.5},{:.3}\ncal,{:.3},{:.3},{:.3},{:.3},{}\n",
         config.move_stick.x,
         config.move_stick.y,
         config.move_stick.scale,
@@ -837,6 +851,7 @@ fn save_ui_layout(config: &UiLayoutConfig) {
         cal.movement_sensitivity,
         cal.stick_curve_exponent,
         cal.render_scale,
+        cal.fps_max,
     );
     if let Err(err) = std::fs::write(layout_path(), body) {
         eprintln!("ui layout save failed: {err}");
@@ -854,11 +869,17 @@ fn load_ui_layout() -> Option<UiLayoutConfig> {
             let mv = parts.next()?.parse::<f32>().ok()?;
             let curve = parts.next()?.parse::<f32>().ok()?;
             let render = parts.next()?.parse::<f32>().ok()?;
+            // Campo nuevo (29 sep 2026): los archivos viejos no lo traen.
+            let fps_max = parts
+                .next()
+                .and_then(|v| v.trim().parse::<u32>().ok())
+                .unwrap_or(crate::input::calibration::DEFAULT_FPS_MAX);
             config.calibration = InputCalibration {
                 camera_sensitivity: cam,
                 movement_sensitivity: mv,
                 stick_curve_exponent: curve,
                 render_scale: render,
+                fps_max,
             }
             .clamp();
             continue;

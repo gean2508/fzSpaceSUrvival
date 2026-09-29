@@ -15,7 +15,15 @@ impl Plugin for PerfDebugPlugin {
         app.init_resource::<PerfStats>()
             .init_resource::<PerfOverlayVisible>()
             .init_resource::<PerfBreakdownTimer>()
-            .init_resource::<PerfRingBuffer>()
+            .init_resource::<PerfRingBuffer>();
+        // **En el teléfono, nada de esto.** Son herramientas de la compu: el
+        // overlay, el log periódico (ordenaba todos los sprites visibles cada
+        // 5 s — un tirón fijo), el log de tirones y el censo. Los recursos
+        // quedan porque otros sistemas los leen (el reporte de cuelgues).
+        #[cfg(target_os = "android")]
+        return;
+        #[cfg(not(target_os = "android"))]
+        app
             .add_systems(Startup, spawn_perf_overlay)
             .add_systems(
                 Update,
@@ -28,7 +36,8 @@ impl Plugin for PerfDebugPlugin {
                     log_hitches,
                 )
                     .chain(),
-            );
+            )
+            .add_systems(Update, censo_de_entidades);
         #[cfg(not(target_os = "android"))]
         app.add_systems(Update, debug_screenshot);
     }
@@ -577,5 +586,41 @@ pub fn apply_android_frame_cap(mut window: Query<&mut Window, With<PrimaryWindow
     #[cfg(not(target_os = "android"))]
     {
         win.present_mode = bevy::window::PresentMode::AutoVsync;
+    }
+}
+
+/// **Censo de entidades por arquetipo.** `HA_CENSO=1` → cada 10 s, los 20
+/// arquetipos más poblados con sus componentes propios del juego. El `ents=` del
+/// log dice CUÁNTAS hay; esto dice QUÉ son, que es lo que hace falta para bajar
+/// el número sin adivinar.
+pub fn censo_de_entidades(world: &mut World, mut t: Local<f32>) {
+    if crate::flags::var("HA_CENSO").is_err() {
+        return;
+    }
+    *t += world.resource::<Time<bevy::time::Real>>().delta_secs();
+    if *t < 10.0 {
+        return;
+    }
+    *t = 0.0;
+    let comps = world.components();
+    let mut v: Vec<(usize, String)> = world
+        .archetypes()
+        .iter()
+        .filter(|a| !a.is_empty())
+        .map(|a| {
+            let nombres: Vec<String> = a
+                .components()
+                .filter_map(|c| comps.get_name(c))
+                .filter(|n| n.starts_with("ha_game") || n.contains("Sprite") || n.contains("Parent"))
+                .map(|n| n.rsplit("::").next().unwrap_or(n).to_string())
+                .collect();
+            (a.len(), nombres.join("+"))
+        })
+        .collect();
+    v.sort_by(|a, b| b.0.cmp(&a.0));
+    let total: usize = v.iter().map(|x| x.0).sum();
+    eprintln!("ha-censo total={total}");
+    for (n, k) in v.iter().take(20) {
+        eprintln!("ha-censo   {n:5} {k}");
     }
 }

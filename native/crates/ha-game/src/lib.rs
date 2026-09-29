@@ -34,6 +34,7 @@ mod tirados;
 mod bautizo;
 mod salir;
 mod cubo;
+mod fps_tope;
 mod ambient;
 mod consola;
 mod marca;
@@ -317,9 +318,11 @@ fn run_app_inner() {
         // está en el tope de 16 que admite `Plugins` (el mismo motivo por el que
         // el parallax de los menús está aparte).
         .add_plugins(render::fireworks::FireworksPlugin)
-        .add_plugins(AblatePlugin)
-        .add_plugins(debug::StageProbePlugin)
-        .add_plugins(debug::VerColisionPlugin)
+        // **Herramientas de la compu, no del teléfono** (reporte del 29 sep 2026:
+        // "las pruebas que hagas, que se queden para la compu"). La sonda de
+        // etapas mete siete schedules extra en CADA frame; la ablación y el
+        // overlay de colisión sólo sirven con variables de entorno.
+        .add_plugins(herramientas_de_la_compu)
         .add_plugins(chargen::ChargenPlugin)
         .add_plugins(loading::LoadingPlugin)
         .add_plugins(vault::VaultPlugin)
@@ -330,7 +333,7 @@ fn run_app_inner() {
         .add_plugins(weather::WeatherPlugin)
         .add_plugins(granja::GranjaPlugin)
         .add_plugins(textos_mundo::TextosMundoPlugin)
-        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin))
+        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, fps_tope::FpsTopePlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)
@@ -382,4 +385,13 @@ fn desktop_wgpu_backends() -> Backends {
     {
         Backends::VULKAN
     }
+}
+
+/// Los plugins de diagnóstico que sólo existen en la compu. En el APK no se
+/// registran: nada de lo que se mide o se prueba viaja al teléfono.
+fn herramientas_de_la_compu(app: &mut App) {
+    #[cfg(not(target_os = "android"))]
+    app.add_plugins((AblatePlugin, debug::StageProbePlugin, debug::VerColisionPlugin));
+    #[cfg(target_os = "android")]
+    let _ = app;
 }

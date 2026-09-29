@@ -350,15 +350,20 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             // visible sólo en "EDITAR UI".
             menu_row(root, |bar| {
                 use crate::ui_editor::UiEditorCommand as C;
-                menu_button(bar, "TIERRA", C::GoEarth);
-                menu_button(bar, "LUNA", C::GoLuna);
-                menu_button(bar, "ESPACIO", C::GoSpace);
+                // Los saltos de mundo, el medidor y la sonda son herramientas
+                // de prueba: en el teléfono no aparecen (29 sep 2026).
+                #[cfg(not(target_os = "android"))]
+                {
+                    menu_button(bar, "TIERRA", C::GoEarth);
+                    menu_button(bar, "LUNA", C::GoLuna);
+                    menu_button(bar, "ESPACIO", C::GoSpace);
+                }
                 menu_button(bar, "CREATIVO", C::ToggleCreative);
-                menu_button(bar, "PERF", C::TogglePerf);
-                // Enciende `ha-stages`/`ha-sys` en logcat. Es la única forma de
-                // tenerlas en el teléfono: se leen de `HA_STAGES` y a un APK no
-                // se le pasan variables de entorno (ver `debug/stages.rs`).
-                menu_button(bar, "SONDA", C::ToggleProbe);
+                #[cfg(not(target_os = "android"))]
+                {
+                    menu_button(bar, "PERF", C::TogglePerf);
+                    menu_button(bar, "SONDA", C::ToggleProbe);
+                }
             });
             menu_row(root, |bar| {
                 use crate::ui_editor::UiEditorCommand as C;

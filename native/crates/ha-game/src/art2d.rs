@@ -1641,12 +1641,24 @@ fn preload_item_icons(art: Res<ArtLibrary>, mut icons: ResMut<ItemIconCache>) {
     for key in claves {
         let Some(handle) = art.get(&key) else { continue };
         let Some(item_id) = key.strip_prefix("items/") else { continue };
-        let rect = art.rects.get(&key).copied().map(|[x, y, w, h]| {
-            Rect::from_corners(
-                Vec2::new(x as f32, y as f32),
-                Vec2::new((x + w) as f32, (y + h) as f32),
-            )
-        });
+        let rect = art
+            .rects
+            .get(&key)
+            .copied()
+            .map(|[x, y, w, h]| {
+                Rect::from_corners(
+                    Vec2::new(x as f32, y as f32),
+                    Vec2::new((x + w) as f32, (y + h) as f32),
+                )
+            })
+            // **Un ítem animado es su PRIMER cuadro.** La linterna es una tira de
+            // cuatro (`strip`, sin `rect`): sin esto la mochila, la hotbar y la
+            // receta dibujaban las cuatro llamas en fila (29 sep 2026).
+            .or_else(|| {
+                art.strips.get(&key).map(|s| {
+                    Rect::from_corners(s.origin.as_vec2(), (s.origin + s.cell).as_vec2())
+                })
+            });
         icons.preload(item_id, handle.clone(), rect);
     }
 }

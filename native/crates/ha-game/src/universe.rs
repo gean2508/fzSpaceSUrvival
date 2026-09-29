@@ -466,10 +466,17 @@ pub struct NightTexture(pub Handle<Image>);
 fn sync_terminators(
     frame: Res<UniverseFrame>,
     clock: Res<SolarSystemClock>,
+    dia: Res<crate::sky2d::DayClock>,
+    jugador: Query<&crate::sim::SimState, With<crate::sim::Player>>,
     mut night: Query<(&BodyNightSide, &mut Transform)>,
     mut limb: Query<(&BodyLimb, &mut Transform), Without<BodyNightSide>>,
+    mut log_una_vez: Local<u32>,
 ) {
     let t = clock.t;
+    let pie = jugador
+        .get_single()
+        .ok()
+        .map(|s| body_offset_from_world([s.body.x, s.body.y, s.body.z], frame.ref_body, t));
     // El arco de limbo va del lado del Sol. Poco desplazamiento a propósito (0.09 radios):
     // con más, el halo se despega del disco por el lado oscuro y se ve el truco.
     for (l, mut tf) in &mut limb {
@@ -480,12 +487,33 @@ fn sync_terminators(
     }
     for (n, mut tf) in &mut night {
         let o = body_offset(n.body, frame.ref_body, t);
-        // Desplazado 0.62 radios hacia el anti-Sol: deja un creciente iluminado
+        let r = body_radius(n.body);
+        let dir = -sun_dir_from(n.body, t);
+        // Desplazado 0.78 radios hacia el anti-Sol: deja un creciente iluminado
         // de un tercio del disco, que es como se ve un planeta desde fuera de su
         // órbita. Al orbitar, el creciente gira solo.
-        let away = -sun_dir_from(n.body, t) * body_radius(n.body) * 0.78;
+        let mut centro = o + dir * r * 0.78;
+        // **El cuerpo que pisás obedece al RELOJ, no a la órbita** (29 sep 2026).
+        // La sombra se orientaba sólo por la posición heliocéntrica, así que a las
+        // 08:29 el jugador podía quedar en la mitad oscura del disco: subías de día
+        // y arriba "era de noche", y al alejar/acercar la vista alternaba entre el
+        // suelo (de día) y el disco (de noche) — el titileo claro/oscuro. Ahora la
+        // noche se corre desde el jugador según la luz del día: a mediodía queda
+        // del otro lado del disco, al atardecer el terminador pasa por tus pies y
+        // a medianoche estás en el medio de la sombra. Mismo dato que el velo de
+        // la superficie (`DayClock::daylight`), así no pueden contradecirse.
+        if n.body == frame.ref_body {
+            if let Some(p) = pie.filter(|p| p.distance(o) < r * 1.6) {
+                let d = r * 1.1 * (0.15 + 1.85 * dia.daylight());
+                centro = p + dir * d;
+                if *log_una_vez < 1 && crate::flags::var("HA_FLYTEST").is_ok() {
+                    *log_una_vez += 1;
+                    eprintln!("ha-terminador: pie a {:.0} m del centro (r {:.0}), día {:.2}", p.distance(o), r, dia.daylight());
+                }
+            }
+        }
         let z = tf.translation.z; // épsilon por cuerpo — ver `spawn_universe`
-        tf.translation = Vec3::new(o.x + away.x, o.y + away.y, z);
+        tf.translation = Vec3::new(centro.x, centro.y, z);
     }
 }
 

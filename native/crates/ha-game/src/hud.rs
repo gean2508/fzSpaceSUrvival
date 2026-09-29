@@ -73,7 +73,7 @@ impl Plugin for PixelHudPlugin {
             .add_systems(Startup, ensure_game_ui_root)
             .init_resource::<BagShot>()
             .add_systems(Update, (mover_pulgar_inventario, barras_de_la_mochila).after(bag_panel_system))
-            .add_systems(Update, (skin_ui_from_art, casillas_del_kit, marcos_del_kit, pintar_personaje_mochila, capturar_mochila).after(spawn_hud_once))
+            .add_systems(Update, (skin_ui_from_art, casillas_del_kit, marcos_del_kit, pintar_personaje_mochila, pintar_mano_mochila, capturar_mochila).after(spawn_hud_once))
             // Aparte del bloque de abajo: ese ya llegó al tope de 20 sistemas
             // por tupla que acepta `add_systems`.
             .add_systems(
@@ -1808,13 +1808,6 @@ fn scroll_craft_list(
             .fold(0.0f32, f32::max);
         let tope = max_scroll(view_h, content_h);
         sp.offset_y = (sp.offset_y + dy).clamp(0.0, tope);
-        // Diagnostico del scroll de la mochila: si `tope` sale 0 con una lista
-        // larga, el problema es la MEDIDA (el contenido se reporta del alto del
-        // marco), no el gesto. Se imprime solo cuando hay arrastre real.
-        eprintln!(
-            "ha-scroll: dy={dy:.0} vista={view_h:.0} contenido={content_h:.0} tope={tope:.0} pos={:.0}",
-            sp.offset_y
-        );
     }
 }
 
@@ -2181,6 +2174,15 @@ const INV_COL_PERS: f32 = 152.0;
 const INV_TABS_H: f32 = 36.0;
 const INV_HEAD_H: f32 = 26.0;
 const INV_SCROLL_W: f32 = 6.0;
+/// Columnas de la grilla de la mochila: las de la barra rápida, así la primera
+/// fila es la barra y las de abajo la mochila, alineadas.
+const BAG_COLS: usize = HOTBAR_ITEM_SLOTS;
+/// Filas que tienen que entrar sin scroll: la barra más la grilla.
+const BAG_FILAS: usize = 1 + (GRID_COLS * GRID_ROWS).div_ceil(BAG_COLS);
+
+/// El icono de lo que tenés en la mano, en la columna del personaje.
+#[derive(Component)]
+struct IconoManoMochila;
 
 /// El hueco donde va el muñeco de la columna de PERSONAJE. Lo llena
 /// [`pintar_personaje_mochila`], que es un sistema aparte porque
@@ -2230,14 +2232,28 @@ fn spawn_bag_panel(
     // forma de volver a la mochila.
     let tab = if creativo { BagTab::Build } else { tab };
 
-    // Geometría, en unidades de la maqueta.
-    let grid_w = GRID_COLS as f32 * INV_PITCH - INV_GAP;
+    // Geometría, en unidades de la maqueta (800 × 360).
+    //
+    // **Todo entra en la pantalla** (29 sep 2026). Con la casilla fija en 40 el
+    // panel medía 372 de alto en un lienzo de 360: la última fila de la mochila
+    // se dibujaba ENCIMA del marco y el panel se salía por arriba y por abajo
+    // ("los ítems están montados sobre el marco"). Ahora la casilla se calcula
+    // para que las filas de la mochila —la barra rápida primero, después la
+    // grilla— entren enteras sin scroll.
+    let cols = BAG_COLS;
+    let pyu = 4.0;
+    let fijo = 2.0 * INV_BORDE + 2.0 * INV_PAD + INV_TABS_H + 6.0 + INV_HEAD_H + 6.0;
+    let alto_libre = up::ALTO / 3.0 - 2.0 * pyu - fijo;
+    let filas = BAG_FILAS as f32;
+    let slot_u = ((alto_libre + INV_GAP) / filas - INV_GAP).floor().min(INV_SLOT);
+    let pitch_u = slot_u + INV_GAP;
+    let alto_grilla = filas * pitch_u - INV_GAP;
+    let grid_w = cols as f32 * pitch_u - INV_GAP;
     let inner_w = INV_COL_PERS + 14.0 + grid_w + 4.0 + INV_SCROLL_W;
     let panel_w = inner_w + 2.0 * INV_PAD + 2.0 * INV_BORDE;
-    let inner_h = INV_TABS_H + 6.0 + INV_HEAD_H + 6.0 + (GRID_ROWS as f32 * INV_PITCH - INV_GAP);
+    let inner_h = INV_TABS_H + 6.0 + INV_HEAD_H + 6.0 + alto_grilla;
     let panel_h = inner_h + 2.0 * INV_PAD + 2.0 * INV_BORDE;
     let pxu = (800.0 - panel_w) / 2.0;
-    let pyu = 6.0;
     let ix = pxu + INV_BORDE + INV_PAD;
     let iy = pyu + INV_BORDE + INV_PAD;
 
@@ -2356,28 +2372,38 @@ fn spawn_bag_panel(
 
                     // ── la columna del personaje ──────────────────────────
                     let cy0 = iy + INV_TABS_H + 6.0;
-                    let alto_col =
-                        INV_HEAD_H + 6.0 + (GRID_ROWS as f32 * INV_PITCH - INV_GAP);
+                    let alto_col = INV_HEAD_H + 6.0 + alto_grilla;
                     let alto_pers = alto_col - 66.0;
                     up::marco(l, art, up::marco::LISO, u(ix), u(cy0), u(INV_COL_PERS),
                               u(alto_pers), k);
+                    // El título va ADENTRO del marco, debajo de la moldura (antes
+                    // se montaba sobre el borde de arriba).
                     up::texto(l, "PERSONAJE", 28.0, Pack::TINTA, u(ix + INV_COL_PERS / 2.0),
-                              u(cy0) + 26.0, Ancla::Medio, k);
+                              u(cy0 + 14.0), Ancla::Medio, k);
+                    // **El muñeco, grande y centrado.** Los cuatro huecos de equipo
+                    // del mockup (MANO, ESCUDO, ESPALDA, LUZ) no hacían nada —no
+                    // había sistema de equipo detrás— y se leían como algo roto.
+                    // Queda lo que sí existe: lo que tenés en la mano.
+                    let alto_muneco = (alto_pers - 30.0 - slot_u - 18.0).max(40.0);
+                    let ancho_muneco = alto_muneco / 2.0;
                     l.spawn((
-                        up::caja(u(ix + INV_COL_PERS / 2.0) - u(16.0), u(cy0 + 26.0),
-                                 u(32.0), u(64.0), k),
+                        up::caja(u(ix + (INV_COL_PERS - ancho_muneco) / 2.0), u(cy0 + 24.0),
+                                 u(ancho_muneco), u(alto_muneco), k),
                         HuecoPersonaje,
                         Name::new("HuecoPersonaje"),
                     ));
-                    // Los cuatro huecos de equipo del mockup.
-                    for (i, et) in ["MANO", "ESCUDO", "ESPALDA", "LUZ"].into_iter().enumerate() {
-                        let ex = if i < 2 { ix + 3.0 } else { ix + INV_COL_PERS - INV_SLOT - 3.0 };
-                        let ey = cy0 + 26.0 + (i % 2) as f32 * (INV_SLOT + 8.0);
-                        up::marco(l, art, up::marco::SLOT, u(ex), u(ey), u(INV_SLOT),
-                                  u(INV_SLOT), k);
-                        up::texto(l, et, 20.0, Pack::TINTA, u(ex + INV_SLOT / 2.0),
-                                  u(ey + INV_SLOT) + 16.0, Ancla::Medio, k);
-                    }
+                    let mx = ix + (INV_COL_PERS - slot_u) / 2.0;
+                    let my = cy0 + alto_pers - slot_u - 16.0;
+                    up::marco(l, art, up::marco::SLOT, u(mx), u(my), u(slot_u), u(slot_u), k);
+                    l.spawn((
+                        up::caja(u(mx + slot_u * 0.15), u(my + slot_u * 0.15), u(slot_u * 0.7),
+                                 u(slot_u * 0.7), k),
+                        ImageNode::default(),
+                        IconoManoMochila,
+                        Name::new("ManoMochila"),
+                    ));
+                    up::texto(l, "EN LA MANO", 20.0, Pack::TINTA, u(ix + INV_COL_PERS / 2.0),
+                              u(my + slot_u) + 14.0, Ancla::Medio, k);
 
                     // ── el estado ─────────────────────────────────────────
                     let sy = cy0 + alto_pers + 6.0;
@@ -2511,7 +2537,6 @@ fn spawn_bag_panel(
 
                     // ── la grilla ─────────────────────────────────────────
                     let gy = hy + INV_HEAD_H + 6.0;
-                    let alto_grilla = GRID_ROWS as f32 * INV_PITCH - INV_GAP;
                     let mut vista = up::caja(u(gx), u(gy), u(grid_w), u(alto_grilla), k);
                     vista.overflow = Overflow::scroll_y();
                     // `BagScrollView` es lo que hace que el arrastre del dedo
@@ -2541,9 +2566,9 @@ fn spawn_bag_panel(
                             // 2 px de holgura —el redondeo que antes perdía una
                             // columna no alcanza a mandar la undécima abajo— y
                             // cada casilla va con `flex_shrink: 0`.
-                            let paso = u(INV_SLOT) * k;
+                            let paso = u(slot_u) * k;
                             let hueco = u(INV_GAP) * k;
-                            let ancho = GRID_COLS as f32 * paso + (GRID_COLS as f32 - 1.0) * hueco + 2.0;
+                            let ancho = cols as f32 * paso + (cols as f32 - 1.0) * hueco + 2.0;
                             let grilla = || Node {
                                 width: Val::Px(ancho),
                                 flex_direction: FlexDirection::Row,
@@ -2562,8 +2587,14 @@ fn spawn_bag_panel(
                                         Name::new("BagGrid"),
                                     ))
                                     .with_children(|grid| {
+                                        // **La primera fila ES la barra rápida**
+                                        // (29 sep 2026): cambiar lo que llevás a
+                                        // mano no obliga a cerrar la mochila.
+                                        for i in 0..HOTBAR_ITEM_SLOTS {
+                                            spawn_bag_hotbar_cell(grid, i, u(slot_u) * k, heart);
+                                        }
                                         for i in 0..(GRID_COLS * GRID_ROWS) {
-                                            spawn_inventory_grid_cell(grid, i, u(INV_SLOT) * k, heart);
+                                            spawn_inventory_grid_cell(grid, i, u(slot_u) * k, heart);
                                         }
                                     });
                                 }
@@ -2594,7 +2625,7 @@ fn spawn_bag_panel(
                                     ))
                                     .with_children(|list| {
                                         fill_build_group(list, group, page, heart,
-                                                         u(INV_SLOT) * k);
+                                                         u(slot_u) * k);
                                     });
                                 }
                             }
@@ -3236,6 +3267,95 @@ fn spawn_inventory_grid_cell(parent: &mut ChildBuilder, index: usize, lado: f32,
                 ));
             });
         });
+}
+
+/// Una casilla de la BARRA RÁPIDA dentro de la mochila. Es la misma casilla
+/// que la de la grilla, pero con las marcas de la hotbar: la pintan
+/// `update_hotbar_item_visuals` y los mismos sistemas de toque/arrastre, así que
+/// mover algo entre la barra y la mochila es tocar una y después la otra.
+fn spawn_bag_hotbar_cell(parent: &mut ChildBuilder, index: usize, lado: f32, heart: f32) {
+    parent
+        .spawn((
+            Button,
+            Node {
+                width: Val::Px(lado),
+                height: Val::Px(lado),
+                min_width: Val::Px(lado),
+                min_height: Val::Px(lado),
+                flex_shrink: 0.0,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+            CasillaDelKit,
+            HotbarItemSlot { index },
+            Name::new("BarraEnMochila"),
+        ))
+        .with_children(|slot| {
+            slot.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(15.0),
+                    top: Val::Percent(15.0),
+                    width: Val::Percent(70.0),
+                    height: Val::Percent(70.0),
+                    ..default()
+                },
+                HotbarSlotIcon,
+            ));
+            slot.spawn((
+                Text::new(""),
+                TextFont { font_size: 0.1, ..default() },
+                TextColor(Color::NONE),
+                HotbarSlotName,
+            ));
+            slot.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Percent(58.0),
+                    width: Val::Percent(92.0),
+                    height: Val::Percent(38.0),
+                    justify_content: JustifyContent::FlexEnd,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Name::new("CantidadCasilla"),
+            ))
+            .with_children(|q| {
+                q.spawn((
+                    Text::new(""),
+                    TextFont { font_size: (heart * 0.42).clamp(9.0, 16.0), ..default() },
+                    TextColor(crate::ui_pack::Pack::TEXTO),
+                    HotbarSlotQty,
+                ));
+            });
+        });
+}
+
+/// El icono de lo que tenés en la mano, en la columna PERSONAJE.
+fn pintar_mano_mochila(
+    equipped: Res<EquippedItem>,
+    mut icons: ResMut<ItemIconCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut q: Query<(&mut ImageNode, &mut Visibility, Ref<IconoManoMochila>)>,
+) {
+    for (mut img, mut vis, marca) in &mut q {
+        if !marca.is_added() && !equipped.is_changed() {
+            continue;
+        }
+        let id = equipped.item_id.as_str();
+        if id.is_empty() || id == "hand" {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+        let icon = icons.icon(id, &mut images);
+        img.image = icon.image;
+        img.rect = icon.rect;
+        *vis = Visibility::Inherited;
+    }
 }
 
 /// Marca una casilla que tiene que llevar el marco del kit (`ui/marco_slot`).
@@ -4603,8 +4723,15 @@ fn update_inventory_slot_visuals(
         Query<&mut Text, (With<InventorySlotQty>, Without<HotbarSlotQty>)>,
         Query<&mut Text, (With<InventorySlotName>, Without<HotbarSlotName>)>,
     )>,
+    nuevas: Query<(), Added<InventoryGridSlot>>,
 ) {
     if !bag.open {
+        return;
+    }
+    // **Sólo cuando algo cambió.** Reescribir el `ImageNode` de 36 casillas cada
+    // frame las marcaba cambiadas y la UI se re-armaba entera cada frame: con la
+    // mochila abierta el teléfono bajaba a 15 fps (captura del 29 sep 2026).
+    if !ui.is_changed() && nuevas.is_empty() {
         return;
     }
     let _guard = span_guard(&span, CpuSpanSlot::Hud);
@@ -4697,7 +4824,13 @@ fn update_hotbar_item_visuals(
         Query<&mut Text, (With<HotbarSlotName>, Without<InventorySlotName>)>,
     )>,
     span: Res<CpuSpanStats>,
+    nuevas: Query<(), Added<HotbarItemSlot>>,
 ) {
+    // Igual que la grilla: tocar el `ImageNode` y el fondo de la barra cada frame
+    // re-armaba la UI entera sesenta veces por segundo, jugando o no.
+    if !ui.is_changed() && nuevas.is_empty() {
+        return;
+    }
     let _guard = span_guard(&span, CpuSpanSlot::Hud);
     for (slot, mut border, mut bg, children) in &mut slots {
         let stack = &ui.hotbar[slot.index];
@@ -4756,11 +4889,11 @@ fn update_hotbar_item_visuals(
             let mut name_labels = slot_texts.p1();
             visit_slot_entities(children, &children_q, &mut |entity| {
                 if let Ok(mut text) = name_labels.get_mut(entity) {
-                    let label = if stack.is_empty() {
-                        String::new()
-                    } else {
-                        item_hotbar_label(stack.item_id.as_deref().unwrap_or("wood"))
-                    };
+                    // **Sin rótulo debajo del icono** (29 sep 2026): eran cuatro
+                    // letras en inglés ("Ston", "Stic") montadas sobre el marco de
+                    // la casilla. El icono ya dice qué es.
+                    let _ = item_hotbar_label;
+                    let label = String::new();
                     if text.0 != label {
                         text.0 = label;
                     }

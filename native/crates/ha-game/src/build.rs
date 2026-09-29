@@ -405,25 +405,48 @@ fn desktop_rotate_hotkey(keys: Res<ButtonInput<KeyCode>>, mut facing: ResMut<Bui
 
 /// Picking a piece in the bag's CONSTRUIR tab selects it, enters build mode and
 /// closes the bag so you can place it right away.
+///
+/// **Al SOLTAR, y sólo si el dedo no arrastró** (29 sep 2026). Elegía al apoyar:
+/// cualquier intento de scrollear la lista empezaba sobre una pieza, la elegía y
+/// cerraba la mochila ("toco para hacer scroll y se cierra la ventana"). Es el
+/// mismo criterio que ya usaban la mochila y las recetas.
 fn build_tab_select(
     mut buttons: Query<(&Interaction, &BagBuildPieceButton, &mut BackgroundColor), Changed<Interaction>>,
+    touches: Res<Touches>,
     mut selected: ResMut<SelectedBuildPiece>,
     mut build_mode: ResMut<BuildModeActive>,
     mut bag: ResMut<BagPanelState>,
+    mut pendiente: Local<Option<(usize, f32)>>,
 ) {
     for (interaction, button, mut bg) in &mut buttons {
         if *interaction == Interaction::Pressed {
-            selected.0 = button.0;
-            build_mode.active = true;
-            bag.open = false;
-            *bg = BackgroundColor(ui_theme::button_bg(UiButtonTone::Craft, UiButtonState::Pressed));
-        } else {
-            *bg = BackgroundColor(ui_theme::button_bg(
-                UiButtonTone::Craft,
-                ui_theme::interaction_state(*interaction, false),
-            ));
+            *pendiente = Some((button.0, 0.0));
         }
+        *bg = BackgroundColor(ui_theme::button_bg(
+            UiButtonTone::Craft,
+            ui_theme::interaction_state(*interaction, false),
+        ));
     }
+    let Some((pieza, recorrido)) = pendiente.as_mut() else { return };
+    if !bag.open {
+        *pendiente = None;
+        return;
+    }
+    let mut dedo = false;
+    for t in touches.iter() {
+        dedo = true;
+        *recorrido += t.delta().length();
+    }
+    if dedo {
+        return;
+    }
+    // Soltó: toque si no arrastró más que el umbral.
+    if *recorrido <= crate::hud::BAG_UMBRAL {
+        selected.0 = *pieza;
+        build_mode.active = true;
+        bag.open = false;
+    }
+    *pendiente = None;
 }
 
 /// Show/hide the CONSTRUIR section with its tab (display toggle owned here).

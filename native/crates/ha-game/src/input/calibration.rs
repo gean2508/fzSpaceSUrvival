@@ -28,12 +28,24 @@ pub const STICK_DEADZONE_RADIUS_FRAC: f32 = 0.10;
 pub const STICK_DEADZONE_NORM_MIN: f32 = 0.05;
 pub const STICK_DEADZONE_NORM_MAX: f32 = 0.18;
 
+/// Los topes que se pueden elegir en AJUSTES (0 = sin tope).
+pub const FPS_MAX_OPCIONES: [u32; 3] = [30, 60, 0];
+#[cfg(target_os = "android")]
+pub const DEFAULT_FPS_MAX: u32 = 30;
+#[cfg(not(target_os = "android"))]
+pub const DEFAULT_FPS_MAX: u32 = 0;
+
 #[derive(Clone, Copy, Debug)]
 pub struct InputCalibration {
     pub camera_sensitivity: f32,
     pub movement_sensitivity: f32,
     pub stick_curve_exponent: f32,
     pub render_scale: f32,
+    /// Tope de cuadros por segundo. En el teléfono va en 30 por defecto: el
+    /// Redmi no llega a 60 en una aldea y, sin tope, el vsync de su pantalla de
+    /// 90 Hz lo hacía correr a lo que diera — cuadros desparejos, batería y
+    /// calor ("se cuelga, drena batería", 29 sep 2026). 0 = sin tope.
+    pub fps_max: u32,
 }
 
 impl Default for InputCalibration {
@@ -43,6 +55,7 @@ impl Default for InputCalibration {
             movement_sensitivity: 1.0,
             stick_curve_exponent: DEFAULT_STICK_CURVE_EXPONENT,
             render_scale: DEFAULT_RENDER_SCALE,
+            fps_max: DEFAULT_FPS_MAX,
         }
     }
 }
@@ -53,6 +66,9 @@ impl InputCalibration {
         self.movement_sensitivity = self.movement_sensitivity.clamp(0.5, 2.0);
         self.stick_curve_exponent = self.stick_curve_exponent.clamp(1.0, 2.2);
         self.render_scale = self.render_scale.clamp(0.55, 1.0);
+        if !FPS_MAX_OPCIONES.contains(&self.fps_max) {
+            self.fps_max = DEFAULT_FPS_MAX;
+        }
         self
     }
 }
