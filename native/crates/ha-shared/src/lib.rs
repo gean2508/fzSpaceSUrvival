@@ -33,6 +33,7 @@ pub mod rng;
 pub mod credos;
 pub mod sims;
 pub mod sociedad;
+pub mod civ;
 pub mod types;
 pub mod ui;
 pub mod cosmic_scale;

@@ -250,6 +250,7 @@ fn sync_menu(
     mut images: ResMut<Assets<Image>>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
     assets: Res<AssetServer>,
+    mut civ: ResMut<crate::civilizacion::Civ>,
 ) {
     let changed = menu.open_uid != menu.shown_uid || menu.refresh;
     if !changed {
@@ -285,6 +286,9 @@ fn sync_menu(
             t.push_str("  |  malhechor conocido");
         } else if npc.vida.pers.moral > 0.6 {
             t.push_str("  |  buena persona");
+        }
+        if let Some(f) = civ.ficha_npc(uid, npc.x, npc.z) {
+            t.push_str(&format!("\n{f}"));
         }
         t
     };

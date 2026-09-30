@@ -3431,6 +3431,75 @@ cazar, huir) y el genoma IAFZ sólo *cómo* se mueve hacia ello.
 no se poda conducta emergente; `Vida` lleva `#[serde(default)]` (guardados viejos
 cargan).
 
+### Civilización emergente (`ha-shared/src/civ/`, `civilizacion.rs`) — 29 sep 2026
+
+Capa de HISTORIA sobre la de vida: gobierno, elecciones, leyes y justicia, guerras,
+familias y herencia, ciencia, cultos, colonias en otros cuerpos. **Nada está
+guionado**: las reglas son las de la física del conocimiento y de la legitimidad, y la
+historia sale sola (una pieza de nave hallada acorta de ~46-79 a ~24-27 años el
+camino de una ciudad a otro cuerpo; sin pieza, igual llegan cuando lo sabrían hacer).
+
+**Solo Rust.** Vive en `ha-shared::civ`, SIN espejo TypeScript: el servidor no la
+conoce, es del cliente. (Regla 3 no aplica; sí el determinismo: misma semilla, mismo
+mundo; `pruebas.rs::determinista`.)
+
+**Física del saber (`saber.rs`, `ciencia.rs`).** 38 saberes en un DAG con
+prerrequisitos, sustrato (recurso local que hace falta), costo en días-persona y
+`Alcance` (Tierra, Mar, Aire, Luna, Planetas, Exterior). Un pueblo investiga con sus
+eruditos; un **artefacto** salta prerrequisitos y sustrato (costo x0,35); el saber se
+difunde por comercio, se archiva en bibliotecas y se OLVIDA al año si nadie lo porta
+ni está archivado. Las ideas de frontera (espacio) sólo las persigue quien sueña con
+lo lejano. `ciencia::rate` lleva un x0,55 de afinación: no bajar sin correr `una_pieza_de_nave_lleva_a_la_luna`.
+
+**Legitimidad multi-fuente (`pueblo.rs::Convencion`, `gobierno.rs`).** Pesos
+[fuerza, linaje, fe, voto, riqueza]; manda el de más `poder` según ESOS pesos y el
+régimen ("monarquía", "república"...) se DEDUCE, no se decreta. Elecciones cada 80
+días (4 años) si el voto pesa >= 0,28; golpes, revoluciones, sucesiones; leyes
+(impuesto, penas, libertad de culto, servicio) y justicia (multa, cárcel, destierro,
+muerte).
+
+**Personas (`persona.rs`, `gente.rs`).** Notables con 9 rasgos, parentesco, apellido
+de linaje, matrimonio, hijos, herencia y mortalidad. `Persona.npc` engancha con el
+`uid` de un NPC del juego (lazy, `Civ::persona_para`).
+
+**Guerra y diplomacia (`guerra.rs`).** Actitudes y alianzas anuales; puntaje de guerra
+por pueblo; batallas cada 5 días; disuasión nuclear x0,03; anexión (vasallo, tributo,
+rebelión). El perdedor cede artefactos al ganador (50 % c/u).
+
+**Espacio (`obras.rs`).** Obras (Nave, Biblioteca, Muralla...) elegidas por rasgos del
+gobernante, guerra y amenaza. Una Nave necesita SOPORTE_VITAL y sale rumbo a un cuerpo
+alcanzable y libre; la expedición llega con probabilidad `calidad`; la colonia nace
+con `habit` bajo (sin soporte vital no crece), puede pasar hambre, extinguirse o
+independizarse. Cuerpos: 0 Tierra, 1 Luna, 2..6 planetas/lunas, 7..11 exterior.
+
+**Reloj.** 1 día ≈ 30 s reales, `DIAS_ANIO = 20`. Sigue corriendo siempre, sin dibujarse:
+lo único que se ve es lo cercano al jugador (`society.rs`). Al abrir el juego se pone al
+día lo que pasó fuera (tope 160 días = 8 años, 3 días por fotograma). Guardado:
+`persist_dir()/civ/civ.json` cada 90 s y al salir (`idx_rel` es `serde(skip)`: tras
+cargar, `reindexar()`).
+
+**El jugador es una persona más (`jugador.rs`).** Se inscribe en el pueblo más
+cercano (`civ_jugador`); puede donar, entregar piezas de nave (`part_*` del
+inventario), enseñar (sólo si el pueblo tiene los prerrequisitos), presentarse a
+elecciones, mediar, agitar (`incitar`) y decretar SI gobierna. Matar a un NPC
+encarnado cuesta prestigio y abre sucesión (`harm_events` -> `matado_por_el_jugador`);
+lo que la civilización mata (ejecuciones, tragedias) se retira de la escena por
+`civ_bajas` -> `despedir_npc`.
+
+**Vista de dios.** Menú -> MUNDO: pestañas PUEBLO / MUNDO / CRÓNICA / ACCIONES. Es un
+overlay opaco que reemplaza al menú (mantiene `menu_open`, así el input queda
+bloqueado como siempre). Driver: `HA_CIVSHOT=/tmp/civ HA_CIVDIAS=400 HA_AUTOPLAY=1
+./native/target/qa/ha-game` deja `civ-{pueblo,mundo,cronica,acciones}.png`.
+
+**Tests:** `cargo test --profile qa -p ha-shared civ` (~70 s; NO en debug, es lento).
+`la_historia_se_produce_sola` exige elecciones, sucesiones, guerras, paces y
+descubrimientos en 4 semillas x 300 años.
+
+**Pendiente:** gente reunida en la plaza el día de elección; cárcel/destierro
+visibles en el mundo; pueblos-colonia como NPCs jugables en otros cuerpos; que la
+guerra entre pueblos cercanos se vea (soldados). Retunear frecuencia de guerras si
+molesta (`guerra.rs`: `sigmoide((s-1)*3) * 0.3`).
+
 ### IA frugal (IAFZ-64) y evolución
 
 La IA frugal del usuario (HIVE_OS / IAFZ-64) es una **Deep Binary Neural Network**

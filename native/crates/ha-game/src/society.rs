@@ -1634,8 +1634,18 @@ fn tick_society_remote(
 /// accidental. Muerte → su familia lo recuerda (rencor fuerte) y los testigos (otras
 /// familias) también. Es la semilla del "le maté al papá y esa familia me odia".
 #[allow(clippy::too_many_arguments)]
+/// Saca del mundo a un NPC que murió por decisión de la civilización (ejecución, vejez del
+/// linaje, tragedia): mismo libro de cuentas que una muerte a golpes.
+pub(crate) fn despedir_npc(commands: &mut Commands, soc: &mut Society, e: Entity, npc: &Npc) {
+    commands.entity(e).despawn_recursive();
+    soc.alive = soc.alive.saturating_sub(1);
+    soc.free_ids.push(npc.brain);
+    soc.dirty = true;
+}
+
 fn harm_events(
     mut commands: Commands,
+    mut civ: ResMut<crate::civilizacion::Civ>,
     tap: Res<AbilityTapPulse>,
     cursor: Res<AimCursor>,
     mut soc: ResMut<Society>,
@@ -1668,7 +1678,7 @@ fn harm_events(
             victim = Some((e, n.family, n.uid, n.x, n.z));
         }
     }
-    let Some((e, family, _uid, vx, vz)) = victim else {
+    let Some((e, family, uid, vx, vz)) = victim else {
         return;
     };
     // C1: fuera de alcance real del jugador → no cuenta como golpe (no consume cooldown,
@@ -1715,6 +1725,7 @@ fn harm_events(
     for f in witnesses {
         soc.adjust(f, REP_WITNESS);
     }
+    civ.matado_por_el_jugador(uid, vx, vz);
     commands.entity(e).despawn_recursive();
     soc.alive = soc.alive.saturating_sub(1);
     soc.free_ids.push(brain_id);

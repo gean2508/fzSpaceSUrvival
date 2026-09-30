@@ -80,12 +80,13 @@ struct LunaBaseMonitor;
 
 fn sync_game_menu(
     editor: Res<UiEditorState>,
+    civ: Res<crate::civilizacion::Civ>,
     mut state: ResMut<GameMenuState>,
     mut commands: Commands,
 ) {
     // ONE menu: shown whenever open. Edit-UI mode keeps it (goes see-through
     // via `sync_menu_edit_mode`); only the CALIBRATION sub-dialog replaces it.
-    let want = editor.menu_open && !editor.settings_open;
+    let want = editor.menu_open && !editor.settings_open && !civ.panel;
     if want && !state.spawned {
         state.root = Some(spawn_menu(&mut commands));
         state.spawned = true;
@@ -367,6 +368,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             });
             menu_row(root, |bar| {
                 use crate::ui_editor::UiEditorCommand as C;
+                menu_button(bar, "MUNDO", crate::civilizacion::BotonMundo);
                 menu_button(bar, "EDITAR UI", C::Toggle);
                 menu_button(bar, "AJUSTES", C::OpenSettings);
                 menu_button(bar, "MENÚ PRINCIPAL", C::SalirAlMenu);

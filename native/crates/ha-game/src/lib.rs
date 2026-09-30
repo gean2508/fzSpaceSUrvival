@@ -70,6 +70,7 @@ mod creative_fly;
 mod nav_computer;
 mod colony;
 mod society;
+mod civilizacion;
 mod harvest;
 mod held_item;
 mod chests;
@@ -349,6 +350,7 @@ fn run_app_inner() {
             companion::CompanionPlugin,
             dialog::DialogPlugin,
             society::SocietyPlugin,
+            civilizacion::CivPlugin,
             npc_menu::NpcMenuPlugin,
             camera_feed::CameraFeedPlugin,
             held_item::HeldItemPlugin,
