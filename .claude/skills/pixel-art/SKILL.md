@@ -1,6 +1,6 @@
 ---
 name: pixel-art
-description: OBLIGATORIO antes de crear, dibujar o generar CUALQUIER gráfico del juego (PNG, sprite, icono, tile, retrato, elemento de UI). Fija el estilo único —la grilla, la paleta, el sombreado, la sombra de contacto— medido sobre el pack de LimeZu, para que todo lo que se dibuje de acá en adelante se vea del mismo juego. Usar también al revisar arte existente o al decidir si un slot necesita pixel nuevo.
+description: OBLIGATORIO antes de crear, dibujar o generar CUALQUIER gráfico del juego (PNG, sprite, icono, tile, retrato, elemento de UI). Fija el estilo único —la grilla, la paleta, el sombreado, la sombra de contacto— medido sobre el pack de LimeZu, para que todo lo que se dibuje de acá en adelante se vea del mismo juego. Fija también EL LISTÓN de calidad (§0.0): nada de elipses/rectángulos planos «de Paint»; volumen con `scripts/lib/volumen.py` y comparación contra `scripts/galeria-arte.py`. Usar también al revisar arte existente o al decidir si un slot necesita pixel nuevo.
 ---
 
 # El estilo del juego es UNO y está medido
@@ -9,6 +9,55 @@ Todo lo que se dibuje para Ki tiene que poder ponerse al lado de un asset de
 LimeZu sin que se note cuál es cuál. Esto no es una guía de gusto: son números
 sacados de medir 250-400 singles de 32x32 de Modern Exteriors y las 168 páginas
 del pack que el juego dibuja hoy (75,9 millones de píxeles).
+
+## 0.0 EL LISTÓN (2 oct 2026): nunca más «hecho en Paint»
+
+> El usuario lo pidió así, textual: *«que nunca más hagan feo y que solo hagan como tú hiciste como
+> mínimo o mejor»*. Esta sección manda sobre todo lo demás de la skill cuando se dibuja una pieza.
+
+**Qué era «Paint».** Cada pieza era una elipse o un rectángulo rellenos con tres tonos: simétrica, de bordes
+parejos, sin grano, sin brillo, a veces con la luz invertida. Pasaba el corsé de `lib/pixel.py` (paleta,
+alfa, dithering) y aun así se veía de otro juego, porque **cumplir las reglas de color no da forma ni volumen**.
+
+**Qué hay que hacer SIEMPRE** (y cómo, con las funciones que ya existen):
+1. **Mirar la lámina de referencia antes de dibujar**: `python3 scripts/galeria-arte.py /tmp/g.png` y `Read`.
+   Son las 87 piezas que fijan el nivel (comida, minerales, materias, granja, mundo, interfaz, máquinas). Tu pieza
+   tiene que poder ponerse en esa lámina sin que se note el cambio de oficio. **Ese es el listón, no un número.**
+2. **Silueta propia e irregular**: `lib.volumen.blob(...)` (elipse perturbada con ruido de bajo orden y semilla
+   propia) o un polígono pensado. Nada de elipses ni rectángulos perfectos ni formas simétricas de plantilla.
+3. **Volumen por cúpula iluminada**: `lib.volumen.esculpir(l, mask, rampa(base, 5), ...)` saca una cúpula de la
+   silueta, la ilumina **desde arriba-izquierda**, la cuantiza a bandas de la rampa del pack y las junta en
+   manchas (filtro de moda). Cinco tonos, no tres. El lado de abajo-derecha es el oscuro.
+4. **Textura real del pack como relieve**: `textura=` (la roca `tiles/roca` en piedra, vetas de corteza en madera…)
+   con `fuerza_textura` 0,35-0,6; las superficies grandes siguen yendo por `lib/materiales.py`.
+5. **Detalle que la distingue**: granos de mineral con luz y sombra (`motas`), brillo puntual de 1-2 píxeles
+   (blanco o tono más claro de la rampa) en el lado de la luz, juntas, nudos, costillas, marcas. Una pieza sin un
+   solo detalle no está terminada.
+6. **Familia correcta**: ítems de mochila/iconos = contorno de 1 px azul-violeta de TODA la silueta
+   (`lib.iconos.silueta`); objetos del mundo = sin contorno, sombra de contacto al pie (`Lienzo.sombra_al_pie`) y
+   apoyados al ras (`verificar(apoyado=True)`).
+7. **Pasar el piso automático y mirar el resultado ampliado AL LADO de la lámina**:
+   `lib.volumen.exigir_liston(im, nombre)` (corta si tiene menos de 4 tonos con peso, la luz viene de abajo-derecha
+   o es una plantilla simétrica de pocos tonos) y `python3 scripts/auditar-arte.py` (audita todo `art/gen`).
+   ⚠ **El piso mide lo peor, no lo bueno**: que pase no alcanza. Lo que decide es la lámina.
+
+**Dónde están las recetas modelo** (copiá su forma de resolver cada cosa en vez de inventar otra):
+`scripts/lib/volumen.py` (blob, esculpir, motas, el piso) · `scripts/lib/iconos.py` (bultos/menas, lingotes,
+ladrillo, esquirla, sal, gota, comida, tronco, palos, frascos, hachas, picos, antorcha, escudo) ·
+`scripts/lib/granja_v2.py` (suelo arado que repite sin costura, cultivos, huevo, hueso, cubos, corazón) ·
+`scripts/lib/mundo_v2.py` (cactus, rocas, juncos, pozo, cofre, estantes, taxi) · `scripts/lib/ui_v2.py` (pestañas,
+globo, máquinas) · `scripts/dibujar-minerales.py` (veta + cristales facetados). Cada `dibujar-*.py` publica su hoja
+con `lib.pixel.publicar`; **un script nuevo se suma a la lista y al ⚠ de orden de scripts de la biblia §18**.
+
+**Lo que NO se acepta** (si lo ves en una pieza, está mal aunque `verificar()` pase):
+- una elipse/rectángulo relleno con una rampa corta; una forma simétrica izquierda-derecha de punta a punta;
+- la luz de abajo o de la derecha; el borde de arriba-izquierda más oscuro que el de abajo-derecha;
+- cero grano y cero brillo; tonos que cambian de a un escalón sin ninguna mancha menor (se ve «plastificado»);
+- contorno de un solo color en una pieza del mundo, o ausencia de contorno en un ítem de mochila;
+- pegar un mismo patrón en damero (dithering) para «dar textura»: la textura sale del pack, no de un damero.
+
+**El proceso de entrega no cambia** (§3-§4), pero ahora el paso de «mirarla» es obligatorio contra la lámina, y
+**la pieza vieja que se encuentre por debajo del listón se rehace, no se deja**.
 
 ## 0. Antes de dibujar: ¿de verdad falta?
 

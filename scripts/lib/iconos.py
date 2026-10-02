@@ -141,13 +141,15 @@ def gota(base):
 
 
 def ramitas(base):
-    """Carbón vegetal: tres palitos negros con punta lustrosa."""
-    c = rampa(base, 5)
+    """Carbón vegetal: tres palitos negros con punta lustrosa y vetas."""
+    c = rampa(base, 6)
     l = Lienzo()
     for (x0, y0, x1, y1) in [(8, 22, 22, 9), (11, 26, 26, 15), (7, 16, 17, 7)]:
-        l.banda(x0, y0, x1, y1, 4.5, c[2])
-        l.banda(x0 - 1, y0 - 1, x1 - 1, y1 - 1, 1.6, c[4])
-        l.banda(x0 + 1, y0 + 1, x1 + 1, y1 + 1, 1.2, c[0])
+        l.banda(x0, y0, x1, y1, 5.0, c[2])
+        l.banda(x0 - 1, y0 - 1, x1 - 1, y1 - 1, 1.8, c[4])
+        l.banda(x0 + 1, y0 + 1, x1 + 1, y1 + 1, 1.4, c[0])
+        l.punto((x0 + x1) // 2, (y0 + y1) // 2, c[5])
+        l.punto((x0 + x1) // 2 + 2, (y0 + y1) // 2 - 2, c[3])
     silueta(l)
     l.verificar(apoyado=False)
     return l
@@ -272,10 +274,12 @@ def textura_corteza() -> np.ndarray:
 def palos():
     l = Lienzo()
     c = rampa((140, 98, 58), 5)
-    l.banda(7, 24, 25, 9, 3.5, c[2])
-    l.banda(6, 23, 24, 8, 1.4, c[4])
-    l.banda(9, 9, 24, 25, 3.5, c[3])
-    l.banda(8, 8, 23, 24, 1.4, c[4])
+    for (x0, y0, x1, y1, tono) in [(7, 24, 25, 9, 2), (9, 9, 24, 25, 3)]:
+        l.banda(x0, y0, x1, y1, 4.6, c[tono])
+        l.banda(x0 - 1, y0 - 1, x1 - 1, y1 - 1, 1.6, c[4])
+        l.banda(x0 + 1, y0 + 1, x1 + 1, y1 + 1, 1.4, c[0])
+        mx, my = (x0 + x1) // 2, (y0 + y1) // 2
+        l.rect(mx - 1, my - 1, 3, 2, c[1])                          # un nudo
     silueta(l)
     l.verificar(apoyado=False)
     return l

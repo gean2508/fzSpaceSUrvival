@@ -107,7 +107,9 @@ sin preguntar. Sólo corta un bloqueo físico real, y se dice tal cual (biblia �
      por decisión del usuario: la prohibición era por CÓMO salían mis dibujos
      (un color plano), no por dibujar. Ahora el estilo está medido y hay corsé
      que lo hace cumplir — **skill `pixel-art`, obligatoria antes de generar
-     cualquier gráfico**, con `scripts/lib/pixel.py`. Lo dibujado vive en
+     cualquier gráfico**, con `scripts/lib/pixel.py`. **El listón (§0.0 de esa skill) es
+     el mínimo: volumen con `scripts/lib/volumen.py`, nunca elipses ni rectángulos planos «de Paint», y
+     comparar la pieza contra `python3 scripts/galeria-arte.py` antes de darla por buena.** Lo dibujado vive en
      `art/gen/`, lo comprado en `art/pack/`, y el arte real gana siempre.
    - **Rects, offsets, pivotes y claves de variante se MIDEN, no se escriben** —
      los publica el importador o el editor, nunca un número a ojo. Las variantes

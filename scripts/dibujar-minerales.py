@@ -107,9 +107,11 @@ def main():
     from lib.iconos import bulto, lingote, polvo, silueta
 
     def cristal_icono(base, semilla):
+        # el mismo racimo que la veta del mundo, con el contorno de Interiors y sin sombra de contacto
         l = Lienzo()
-        cristal(l, base, 10, 6, 8, 17, 1)
-        cristal(l, base, 16, 10, 7, 14, -1)
+        cristal(l, base, 5, 9, 9, 19, 1)
+        cristal(l, base, 14, 4, 10, 24, -1)
+        cristal(l, base, 10, 15, 8, 14, 0)
         silueta(l)
         l.verificar(apoyado=False)
         return l.im

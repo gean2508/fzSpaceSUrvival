@@ -18,6 +18,12 @@ al lado de un asset de LimeZu sin que se note cuál es cuál. Antes de empezar l
 3. **Pedí a los vecinos.** `python3 scripts/critico-pixel.py algo.png [--ext]` te muestra tu pieza
    (o cualquier otra) junto a los 7 más parecidos. Mirá la lámina con `Read` ANTES de dibujar:
    copiá su forma de resolver siluetas, el tamaño, dónde cae la luz, el grosor del contorno.
+3b. **EL LISTÓN (obligatorio, skill §0.0).** Antes de dibujar corré `python3 scripts/galeria-arte.py /tmp/g.png` y
+   mirá la lámina con `Read`: es el nivel mínimo. Las formas NO son elipses ni rectángulos: se hacen con
+   `scripts/lib/volumen.py` (`blob`, `esculpir` = cúpula iluminada arriba-izquierda con 5 tonos + textura del
+   pack, `motas`) y `scripts/lib/iconos.py` (`silueta` = contorno de Interiors). Las recetas modelo viven en
+   `lib/iconos.py`, `granja_v2.py`, `mundo_v2.py`, `ui_v2.py`. Al terminar: `exigir_liston(im, nombre)` y
+   `scripts/auditar-arte.py`, y comparás tu pieza ampliada AL LADO de la lámina. Si se nota que es otra mano, se rehace.
 4. **Dibujá con el corsé**, nunca con PIL directo: `scripts/lib/pixel.py` (`Lienzo`, `rampa`,
    `verificar`). Las superficies grandes (tejado, madera, ladrillo, piedra, pasto) NO se rellenan
    con una rampa lisa: se sintetizan con píxeles del pack

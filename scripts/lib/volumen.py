@@ -140,3 +140,57 @@ def motas(l: Lienzo, mask: np.ndarray, color_base, n: int, semilla: int, tam=(1,
                 l.punto(x + ii, y + jj, r[2])
         l.punto(x, y, r[3])
         l.punto(x + w - 1, y + h - 1, r[0])
+
+
+# ── el listón: lo mínimo que tiene que cumplir una pieza dibujada ───────────────────────────────
+
+def medir_calidad(im) -> dict:
+    """Medidas objetivas de «tiene volumen» de un sprite RGBA (PIL). Sirve igual para una pieza nueva que
+    para auditar una vieja. Las piezas de terreno (losas que llenan la celda) no se miden con esto."""
+    a = np.asarray(im.convert("RGBA")).astype(np.float32)
+    op = a[..., 3] > 200
+    n = int(op.sum())
+    if n < 30:
+        return {"n": n}
+    lum = (a[..., :3] * [0.299, 0.587, 0.114]).sum(-1)
+    # tonos: colores distintos (cuantizados de a 8) con al menos el 1 % del área
+    q = (a[..., :3][op] // 8).astype(int)
+    cols, cuentas = np.unique(q[:, 0] * 10000 + q[:, 1] * 100 + q[:, 2], return_counts=True)
+    tonos = int((cuentas >= max(2, 0.01 * n)).sum())
+    # luz: la mitad arriba-izquierda tiene que ser más clara que la de abajo-derecha
+    ys, xs = np.nonzero(op)
+    cy, cx = ys.mean(), xs.mean()
+    ul = lum[ys[(ys + xs) <= (cy + cx)], xs[(ys + xs) <= (cy + cx)]].mean()
+    dr = lum[ys[(ys + xs) > (cy + cx)], xs[(ys + xs) > (cy + cx)]].mean()
+    # forma: qué tanto llena su caja (una elipse perfecta llena 0.785; un rectángulo, 1.0)
+    h, w = ys.max() - ys.min() + 1, xs.max() - xs.min() + 1
+    llena = n / float(h * w)
+    # simetría izquierda-derecha exacta = forma de plantilla
+    sub = op[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+    sim = float((sub == sub[:, ::-1]).mean())
+    return {"n": n, "tonos": tonos, "luz": float(ul - dr), "llena": float(llena), "sim": sim}
+
+
+def pasa_liston(m: dict) -> list[str]:
+    """Las fallas de una medida contra el piso de calidad (lista vacía = pasa). Es un PISO, no la meta: lo
+    que se exige a una pieza nueva es que se parezca a las de `scripts/galeria-arte.py` (ver la skill)."""
+    if m["n"] < 30:
+        return []
+    fallas = []
+    minimo = 4 if m["n"] > 250 else 3
+    if m["tonos"] < minimo:
+        fallas.append(f"sólo {m['tonos']} tonos con peso (mínimo {minimo}): relleno plano")
+    if m["luz"] < -45:
+        fallas.append(f"la luz viene de abajo-derecha (diferencia {m['luz']:.0f}): invertí el sombreado")
+    if m["llena"] > 0.93 and m["sim"] > 0.97 and m["tonos"] < 6:
+        fallas.append("rectángulo/elipse simétrico de plantilla con pocos tonos: usá `blob` o una silueta propia")
+    return fallas
+
+
+def exigir_liston(im, nombre: str = "pieza"):
+    """**Corta si la pieza está por debajo del piso.** Llamarlo al final de cada generador de arte nuevo."""
+    m = medir_calidad(im)
+    fallas = pasa_liston(m)
+    if fallas:
+        raise SystemExit(f"{nombre}: por debajo del listón del pack — " + "; ".join(fallas) + ". Ver .claude/skills/pixel-art/SKILL.md §0.0")
+    return m
