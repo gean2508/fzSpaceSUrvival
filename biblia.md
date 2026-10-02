@@ -8079,10 +8079,8 @@ cuadro. `escaleras::nivel_nuevo` ahora sólo sube si hay suelo arriba (con test)
    `walls` con `fachada_*`. Si algún día molesta, la salida es derivar una tira
    fina del propio paño (memoria: el arte se recorta de lo que ya está asignado,
    no se le pide otra pose al usuario).
-3. **Que la ciudad generada use el kit.** Hoy lo usa lo que colocás vos;
-   `geography::building_in_block` sigue estampando la casa vieja por tiles.
-4. **Las tiendas y los carteles.** Entraron al manifest (34 slots) y no los
-   consume nadie todavía.
+3. ~~Que la ciudad generada use el kit.~~ **Descartado (2 oct 2026):** el usuario dijo que las ciudades están bien; lo que pidió fueron más opciones de casas (§18).
+4. ✅ **Las tiendas y los carteles** (2 oct 2026): los locales de los planos llevan su `cartel/<rubro>` sobre la puerta y un encargado (§18).
 
 Con C2–C6 cerrados, lo que sigue es lo que el mapa está pidiendo: **oficios y
 minijuegos en los edificios que ya existen** (vender en el restaurante, atender en
@@ -8348,7 +8346,7 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
 
 **Falta (honesto) — todo lo que sigue necesita ver la pantalla o el hardware, por eso no se hizo a ciegas**
 * (hecho) Hojas de aldeano compactas y panel 9-slice en el HUD: ver §13.
-* Ciudad generada con el kit, tiendas/carteles, gym
+* (hecho/descartado: ver §18) gym
   de fauna con agua+amenaza (reentrenar `FAUNA.adn`), cada uno toca render o
   entrenamiento largo y se valida con ojo (el origen flotante se midió: no hace falta, ver §17).
 * **Nada de esto está probado en el celu**: por orden del usuario (2 oct) se prueba AL FINAL.
@@ -8479,8 +8477,44 @@ pueblo civil más cercano: lo descubierto se ve en la calle. Además: el **conto
 (antes la cáscara era sólo dibujo) salvo en puertas y vanos, y los **tabiques son paredes reales** del
 kit de madera. `HA_PLANOSTEST=1 HA_FORCE_TOUCH=1` deja `plano-<id>-calle.png` / `-adentro.png`.
 
+### El descubrimiento se VE y se JUEGA (2 oct 2026, 2.ª tanda)
+El usuario lo pidió así: «de nada sirve una simulación en números si al entrar el juego se siente vacío».
+* **Se ve** (`ha-game/saber_vivo.rs`): uno de cada cinco aldeanos cerca tuyo se anota para estudiar y se
+  le **encarna un erudito o artesano real** del pueblo civil (`Civ::encarnar_estudioso`). Cuando trabaja
+  o no tiene nada urgente, prueba una receta REAL del cuaderno de su pueblo: lo dice en voz alta, prende
+  una fogata chica (`Fogata`) y a los 5,5 s dice si salió (con la frecuencia con que de verdad le sale:
+  `ok/n`). Si cree en un mito, lo cuenta («siempre me sale de noche»).
+* **Se conversa**: menú del aldeano → **PREGUNTAR** (qué hace, lo último que le salió, el mito, a qué
+  local atiende y **las noticias del barrio**; hablar sube la amistad hasta 0,35) y **ENSEÑAME** (si su
+  fama contigo ≥ 0,22 te pasa una receta que no sabés: `Experimentos::aprender`; si era un mito, te lo
+  dice y lo probás vos bajo otra circunstancia). Los que no son eruditos sólo saben una parte de lo firme.
+* **Consecuencias** (`ha-game/barrio.rs`, memoria por pueblo en `barrio.json`):
+  * Los **infectados atacan a los vecinos** (persiguen al más cercano, 16 celdas de olfato) y los
+    matan (`civ.muerte_de_npc`, herencia, testigos con `Seguridad` a cero).
+  * Cada vecino decide **pelear o correr** según carácter y lo que sufrió el barrio
+    (`Lecciones::valentia`: sube con muertes, ataques, victorias y con ver pelear a otros → los barrios
+    golpeados se organizan solos). Los que pelean usan `Actividad::Atacar` del motor de Sims.
+  * Las **casas de los pueblos tienen calidad** (`EdificioVivo::calidad`): `calidad_de_obra` = 30 + 40 ×
+    (cuánto sabe techar el pueblo: cerámica, mortero, metal, vidrio del CUADERNO) + 8 × goteras sufridas.
+    < 55 **gotea** con lluvia fuerte: el de adentro se queja, el barrio lo anota, al parar la lluvia la
+    remiendan (+30) y la próxima obra sale mejor. Con lluvia ≥ 0,6 la mitad se refugia en su casa.
+  * Lo sufrido cambia lo que construyen: más torres, residencias y departamentos (`plano_para(k, defensivo)`).
+  * Los vecinos **viven en lo que se construye** (`mudar_vecinos`: adultos sin casa o hacinados) y los
+    locales tienen **encargado** (`poner_encargado` → `Vivienda.puesto`), con el **cartel del rubro**
+    (`EdificioVivo::rubro`, `cartel/<rubro>` del pack) colgado sobre la puerta.
+* **Lo descubierto sirve**: un material derivado en la mano pega `1 + 6 × utilidad(Arma)`
+  (`fauna::dano_de`, `materias::utilidad_de_item`). El picado queda igual (vive en `ha-shared`, espejo TS).
+* **Cada vecino tiene su matiz** (`society::tinte_individual`, hasta −12 % por canal, estable por uid):
+  con 20 hojas, ya no hay dos idénticos al lado. NO es una cara única (eso pide componer la hoja: sigue en §13).
+* Driver `HA_VIDATEST=1 HA_WEATHER=storm HA_FORCE_TOUCH=1 HA_AUTOPLAY=1` (Xvfb): lleva al jugador a la
+  ciudad más cercana, suelta 4 infectados entre 48 vecinos y mide defensa; levanta una casa mala, la habita
+  y llueve. Resultado: 4/4 infectados caídos, 0 muertes, goteras anotadas.
+* **Decisión**: «ciudad generada con el kit modular» queda DESCARTADA — el usuario dijo que las ciudades
+  están bien con los assets que tienen; lo que pidió fueron más opciones de casas (los 8 planos) y eso está.
+
 ### Falta (honesto)
-* Los NPC no «enseñan» recetas al jugador (hay comercio entre pueblos, no un botón APRENDER).
-* Las herramientas/armas hechas con un material descubierto no cambian aún la velocidad de picar ni el
-  daño: el material sirve para construir (acabados) y para el bono del pueblo.
-* El detalle visual de las 8 casas se miró en capturas de escritorio; el celu va al final.
+* Los NPC no se «siguen» ni te siguen por amistad (la regla «nada de séquito» manda); sí se conversa y se aprende.
+* Un NPC no estudia cuando vos no estás cerca: lo que pasa lejos sigue siendo el cuaderno por pueblo.
+* El picado con herramientas de material descubierto no cambia (necesita tocar `ha-shared` + TS).
+* Remiendo: sólo se modela como número de calidad; no hay obra visible de «subirse al techo».
+* El detalle visual de las casas y el cartel se miró en capturas de escritorio; el celu va al final.

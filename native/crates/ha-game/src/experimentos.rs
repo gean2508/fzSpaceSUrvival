@@ -52,6 +52,39 @@ impl Experimentos {
     fn tocar(&mut self) {
         self.version = self.version.wrapping_add(1);
     }
+
+    /// ¿Ya sabe esta receta (firme)? Evita enseñar lo que ya está en el cuaderno.
+    pub(crate) fn sabe(&self, e: &ha_shared::civ::descubrimiento::Entrada) -> bool {
+        let k = ha_shared::civ::descubrimiento::clave(e.a, (e.b != ha_shared::civ::descubrimiento::SIN_B).then_some(e.b), e.calor);
+        self.cuaderno.entradas.get(&k).map(|x| x.firme() || (x.resultado.is_some() && x.ritual == e.ritual && x.ok >= e.ok)).unwrap_or(false)
+    }
+
+    /// **Un aldeano te enseña una receta.** Se anota tal cual la conoce él: con lo que le salió
+    /// y, si la tiene atada a un mito («sólo de noche»), con el mito. Le sirve a quien la prueba
+    /// bajo otra circunstancia y ve que sale igual. Devuelve el texto de lo aprendido.
+    pub(crate) fn aprender(&mut self, de: &str, r: &crate::civilizacion::Receta) -> String {
+        let e = &r.entrada;
+        let b = (e.b != ha_shared::civ::descubrimiento::SIN_B).then_some(e.b);
+        let k = ha_shared::civ::descubrimiento::clave(e.a, b, e.calor);
+        self.materia().registrar(&r.resultado);
+        registrar(&r.resultado);
+        if r.resultado.id >= N_CRUDOS {
+            self.cuaderno.materiales.insert(r.resultado.id);
+        }
+        let mut copia = e.clone();
+        copia.n = copia.n.max(2);
+        copia.ok = copia.ok.max(2);
+        copia.de_oido = true;
+        self.cuaderno.entradas.insert(k, copia);
+        self.log.push(format!("{de} te enseñó: {}.", r.resultado.nombre));
+        self.tocar();
+        guardar(self);
+        let ab = match &r.nombre_b {
+            Some(nb) => format!("{} con {nb}", r.nombre_a),
+            None => r.nombre_a.clone(),
+        };
+        format!("{ab} a calor {:.1} da {}", e.calor as f32 / PASOS_CALOR as f32, r.resultado.nombre)
+    }
 }
 
 fn ruta() -> std::path::PathBuf {
@@ -508,6 +541,29 @@ mod tests {
         assert!(nombre_derivado(&ceramicas[0]).unwrap().contains("cerámica"));
         assert!(inv.qty("clay") < 3, "no se consumió la arcilla");
         assert!(e.cuaderno.entradas.len() >= 1 && e.cuaderno.materiales.len() >= 1);
+    }
+
+    /// Lo que un aldeano te enseña entra en tu cuaderno como receta firme, con el material nombrado,
+    /// y no se vuelve a ofrecer.
+    #[test]
+    fn un_aldeano_te_ensena_una_receta_y_no_se_repite() {
+        use ha_shared::civ::descubrimiento::Entrada;
+        let (mut e, _, _) = con_mochila(&[]);
+        let fus = e.materia().get(ARCILLA).unwrap().props.fusion;
+        let calor = (fus * PASOS_CALOR as f32).ceil() as u8 + 1;
+        let Resultado::Obtiene(m, ley) = e.materia().reaccionar(ARCILLA, None, calor as f32 / PASOS_CALOR as f32, false) else { return };
+        let r = crate::civilizacion::Receta {
+            entrada: Entrada { a: ARCILLA, b: u64::MAX, calor, resultado: Some(m.id), ley: ley.into(), n: 5, ok: 4, ctx_vistos: 3, ritual: false, ctx_creido: 0, de_oido: false },
+            resultado: m.clone(),
+            nombre_a: "arcilla".into(),
+            nombre_b: None,
+        };
+        assert!(!e.sabe(&r.entrada));
+        let txt = e.aprender("Marta", &r);
+        assert!(txt.contains(&m.nombre), "{txt}");
+        assert!(e.sabe(&r.entrada), "tras aprenderla la tiene que saber");
+        assert_eq!(e.cuaderno.firmes().count(), 1, "la receta enseñada es firme");
+        assert!(e.cuaderno.materiales.contains(&m.id));
     }
 
     #[test]

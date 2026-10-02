@@ -45,10 +45,12 @@ const ANILLO_MAX: f32 = 28.0;
 /// Más lejos que esto de todos los jugadores, se van.
 const OLVIDO: f32 = 70.0;
 const OLFATO: f32 = 45.0;
+/// A los vecinos los huelen de más cerca que a vos (no se arrastra a toda la horda sobre el pueblo).
+const OLFATO_VECINO: f32 = 16.0;
 const VEL: f32 = 2.1;
 const VEL_CERCA: f32 = 2.6;
-const ATAQUE_RADIO: f32 = 0.95;
-const ATAQUE_CD: f32 = 1.2;
+pub(crate) const ATAQUE_RADIO: f32 = 0.95;
+pub(crate) const ATAQUE_CD: f32 = 1.2;
 const DANO: f32 = 7.0;
 const VIDA: f32 = 12.0;
 /// Alcance del jugador para golpear (m) y radio del toque sobre el infectado.
@@ -65,12 +67,12 @@ const TAMANO: Vec2 = Vec2::new(0.95, 1.9);
 
 #[derive(Component)]
 pub struct Infectado {
-    x: f32,
-    z: f32,
-    vida: f32,
-    ataque_cd: f32,
+    pub(crate) x: f32,
+    pub(crate) z: f32,
+    pub(crate) vida: f32,
+    pub(crate) ataque_cd: f32,
     /// Segundos de destello rojo tras un golpe.
-    destello: f32,
+    pub(crate) destello: f32,
     /// Para que no vayan todos en fila: un desvío fijo por individuo.
     desvio: f32,
     /// Segundos seguidos empujando contra algo que no cede.
@@ -264,6 +266,7 @@ fn mover_y_morder(
     mut pedidos: ResMut<crate::puertas::PedidosDePuerta>,
     mut golpes: ResMut<GolpesAParedes>,
     player: Query<&Transform, (With<Player>, Without<Infectado>)>,
+    vecinos: Query<&crate::society::Npc>,
     mut sim: Query<&mut SimState, With<Player>>,
     mut q: Query<(&mut Infectado, &mut Transform, &mut Sprite)>,
     mut ultimo: Local<f32>,
@@ -282,9 +285,19 @@ fn mover_y_morder(
     for (mut i, mut tf, mut sprite) in &mut q {
         i.ataque_cd = (i.ataque_cd - dt).max(0.0);
         i.destello = (i.destello - dt).max(0.0);
-        let (dx, dz) = (px - i.x, pz - i.z);
-        let d = (dx * dx + dz * dz).sqrt().max(1e-3);
-        if d < olfato {
+        // Persigue a quien tenga más cerca: vos o un vecino (que se defiende, ver `barrio.rs`).
+        let (mut tx, mut tz) = (px, pz);
+        let mut d_jug = ((px - i.x).powi(2) + (pz - i.z).powi(2)).sqrt().max(1e-3);
+        let mut a_un_vecino = false;
+        for v in vecinos.iter() {
+            let dv = ((v.x - i.x).powi(2) + (v.z - i.z).powi(2)).sqrt().max(1e-3);
+            if dv < d_jug && dv < OLFATO_VECINO {
+                (tx, tz, d_jug, a_un_vecino) = (v.x, v.z, dv, true);
+            }
+        }
+        let (dx, dz) = (tx - i.x, tz - i.z);
+        let d = d_jug;
+        if d < olfato.max(if a_un_vecino { OLFATO_VECINO } else { 0.0 }) {
             let v = if d < 8.0 { VEL_CERCA } else { VEL };
             // Rumbo al jugador con un desvío fijo que se apaga al acercarse.
             let a = dz.atan2(dx) + i.desvio * (d / olfato).min(1.0);
@@ -312,7 +325,7 @@ fn mover_y_morder(
                 }
             }
         }
-        if d < ATAQUE_RADIO && i.ataque_cd <= 0.0 {
+        if d < ATAQUE_RADIO && i.ataque_cd <= 0.0 && !a_un_vecino {
             i.ataque_cd = ATAQUE_CD;
             mordidas += 1;
         }

@@ -53,7 +53,7 @@ impl Plugin for NpcMenuPlugin {
             .init_resource::<NpcShot>()
             .add_systems(
                 Update,
-                (pick_npc, close_menu_by_distance, npc_menu_autoshot, sync_menu, menu_buttons)
+                (pick_npc, close_menu_by_distance, npc_menu_autoshot, sync_menu, menu_buttons, menu_saber)
                     .chain(),
             )
             .add_systems(
@@ -179,6 +179,10 @@ enum NpcAction {
     Vender,
     /// Gasta lingotes de oro en una prenda.
     Comprar,
+    /// Preguntarle en qué anda: lo que prueba, lo que sabe. Charlar así hace amistad.
+    Preguntar,
+    /// Pedirle que te enseñe una receta de las que sabe (si te aprecia lo bastante).
+    Aprender,
     Close,
 }
 
@@ -534,6 +538,10 @@ fn sync_menu(
             ))
             .with_children(|row| {
                 npc_button(row, "HABLAR", NpcAction::Talk, NEON_CYAN);
+                if role != "HOSTIL" {
+                    npc_button(row, "PREGUNTAR", NpcAction::Preguntar, Color::srgb(0.75, 0.95, 1.0));
+                    npc_button(row, "ENSEÑAME", NpcAction::Aprender, Color::srgb(0.7, 1.0, 0.75));
+                }
                 if role == "HOSTIL" {
                     npc_button(row, "CALMAR", NpcAction::Calm, Color::srgb(1.0, 0.7, 0.4));
                 } else {
@@ -559,6 +567,93 @@ fn sync_menu(
                 npc_button(row, "CERRAR", NpcAction::Close, NEON_MAGENTA);
             });
         });
+}
+
+/// Amistad mínima (fama de su familia con vos) para que te enseñe una receta.
+const APRENDER_MIN_REP: f32 = 0.22;
+/// Cuánto sube la fama cada vez que le preguntás por lo suyo, y hasta dónde sólo charlando.
+const PREGUNTAR_REP: f32 = 0.05;
+const PREGUNTAR_TOPE: f32 = 0.35;
+const PREGUNTAR_DESCANSO: f32 = 25.0;
+
+/// PREGUNTAR / ENSEÑAME: lo que cada aldeano sabe viene del cuaderno de su pueblo (la
+/// civilización), y lo que te enseña entra en TU cuaderno de experimentos.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn menu_saber(
+    interactions: Query<(&Interaction, &NpcAction), Changed<Interaction>>,
+    mut menu: ResMut<NpcMenu>,
+    mut npcs: Query<(Entity, &mut Npc)>,
+    mut soc: ResMut<Society>,
+    mut speech: ResMut<SpeechQueue>,
+    mut civ: ResMut<crate::civilizacion::Civ>,
+    mut exp: ResMut<crate::experimentos::Experimentos>,
+    memoria: Res<crate::barrio::Memoria>,
+    eds: Res<crate::edificios::Edificios>,
+    time: Res<Time>,
+    mut descanso: Local<std::collections::HashMap<u64, f32>>,
+) {
+    let Some(uid) = menu.open_uid else { return };
+    for (interaction, action) in &interactions {
+        if *interaction != Interaction::Pressed || !matches!(action, NpcAction::Preguntar | NpcAction::Aprender) {
+            continue;
+        }
+        let Some((e, mut npc)) = npcs.iter_mut().find(|(_, n)| n.uid == uid) else { continue };
+        let ahora = time.elapsed_secs();
+        let rep = soc.rep(npc.family);
+        let Some(saber) = civ.saber_de_npc(uid, npc.x, npc.z, false) else {
+            say_from(&mut speech, e, npc.x, npc.z, "Yo? Yo sólo vivo acá.", Color::srgb(0.92, 0.96, 1.0), true);
+            continue;
+        };
+        let amable = Color::srgb(0.75, 0.95, 1.0);
+        let linea: String = match action {
+            NpcAction::Preguntar => {
+                let mut t = match saber.oficio {
+                    ha_shared::civ::persona::Oficio::Erudito => format!("Estudio las cosas de {}: pruebo qué pasa al juntarlas con fuego.", saber.pueblo),
+                    ha_shared::civ::persona::Oficio::Artesano => format!("Trabajo con las manos en {}; aprendí a transformar lo que hay.", saber.pueblo),
+                    o => format!("Soy {} de {}.", o.etiqueta(), saber.pueblo),
+                };
+                if let Some(r) = saber.recetas.iter().max_by_key(|r| r.entrada.ok) {
+                    t += &format!(" Lo último que me salió: {}.", r.resultado.nombre);
+                    if r.entrada.ritual {
+                        t += &format!(" Eso sí: sólo sale {}.", crate::saber_vivo::CIRCUNSTANCIAS[(r.entrada.ctx_creido as usize) % 8]);
+                    }
+                } else {
+                    t += " Todavía no me salió nada que valga.";
+                }
+                if let Some(p) = npc.vivienda.puesto {
+                    if let Some(i) = eds.en(0, 0, p.min.0 + p.w / 2, p.min.1 + p.h / 2) {
+                        if eds.list[i].rubro > 0 {
+                            let r = crate::edificios::RUBROS[(eds.list[i].rubro as usize - 1) % crate::edificios::RUBROS.len()].1;
+                            t += &format!(" Atiendo la {r}.");
+                        }
+                    }
+                }
+                if let Some(n) = crate::barrio::noticias(&memoria.de(npc.town_x, npc.town_z)) {
+                    t += &format!(" Del barrio: {n}");
+                }
+                if descanso.get(&uid).copied().unwrap_or(0.0) <= ahora {
+                    descanso.insert(uid, ahora + PREGUNTAR_DESCANSO);
+                    soc.adjust_capped(npc.family, PREGUNTAR_REP, PREGUNTAR_TOPE);
+                }
+                t
+            }
+            _ => {
+                if rep < APRENDER_MIN_REP {
+                    "No te conozco lo bastante como para enseñarte lo mío. Charlemos más.".to_string()
+                } else if let Some(r) = saber.recetas.iter().find(|r| !exp.sabe(&r.entrada)) {
+                    let aprendido = exp.aprender(&saber.nombre, r);
+                    soc.adjust_capped(npc.family, 0.02, 1.0);
+                    format!("Mirá: {aprendido}.{}", if r.entrada.ritual { " Ojo, yo lo hago siempre así; a lo mejor no hace falta." } else { "" })
+                } else {
+                    "Ya sabés todo lo que yo sé hacer.".to_string()
+                }
+            }
+        };
+        crate::causal::registrar("ensenanza", format!("{} le dijo: {}", saber.nombre, linea.chars().take(60).collect::<String>()));
+        push_history(&mut npc.history, &linea);
+        say_from(&mut speech, e, npc.x, npc.z, linea, amable, true);
+        menu.refresh = true;
+    }
 }
 
 fn npc_button(parent: &mut ChildBuilder, label: &str, action: NpcAction, color: Color) {
@@ -608,6 +703,8 @@ fn menu_buttons(
                 menu.open_uid = None;
                 menu.refresh = true;
             }
+            // Las resuelve `menu_saber` (necesita el mundo civil y el cuaderno).
+            NpcAction::Preguntar | NpcAction::Aprender => {}
             NpcAction::Talk => {
                 if let Some((e, mut npc)) = npcs.iter_mut().find(|(_, n)| n.uid == uid) {
                     let rep = soc.rep(npc.family);

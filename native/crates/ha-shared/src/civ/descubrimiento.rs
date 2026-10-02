@@ -35,7 +35,7 @@ pub const PASOS_CALOR: u8 = 20;
 /// Tope de materiales a mano por pueblo y de recetas por cuaderno: el costo no crece sin freno.
 const MAX_A_MANO: usize = 160;
 const MAX_ENTRADAS: usize = 3000;
-const SIN_B: u64 = u64::MAX;
+pub const SIN_B: u64 = u64::MAX;
 
 /// Una receta observada.
 #[derive(Clone, Debug, Serialize, Deserialize)]

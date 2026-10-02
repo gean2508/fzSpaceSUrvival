@@ -94,17 +94,25 @@ pub fn icono_generico(item: &str) -> Option<String> {
 
 // ── nombres y propiedades de los derivados que el jugador conoce ─────────────────────────────
 
-static REGISTRO: RwLock<Option<HashMap<String, (String, Props)>>> = RwLock::new(None);
+static REGISTRO: RwLock<Option<HashMap<String, Material>>> = RwLock::new(None);
 
 /// Registra un derivado para que la UI pueda mostrar su nombre.
 pub fn registrar(m: &Material) {
     if let Ok(mut g) = REGISTRO.write() {
-        g.get_or_insert_with(HashMap::new).insert(item_de_derivado(m), (m.nombre.clone(), m.props));
+        g.get_or_insert_with(HashMap::new).insert(item_de_derivado(m), m.clone());
     }
 }
 
 pub fn nombre_derivado(item: &str) -> Option<String> {
-    REGISTRO.read().ok()?.as_ref()?.get(item).map(|(n, _)| n.clone())
+    REGISTRO.read().ok()?.as_ref()?.get(item).map(|m| m.nombre.clone())
+}
+
+/// Qué tan bueno es el material de este ítem (derivado que el jugador conoce) para un uso, 0..1.
+/// Es lo que hace que lo descubierto SIRVA: un metal duro en la mano pega más que un palo.
+pub fn utilidad_de_item(item: &str, uso: Uso) -> Option<f32> {
+    let g = REGISTRO.read().ok()?;
+    let m = g.as_ref()?.get(item)?;
+    Some(utilidad(m, uso))
 }
 
 pub fn vaciar_registro() {
@@ -188,6 +196,19 @@ mod tests {
         assert_eq!(icono_generico(&item).as_deref(), Some("mat_metal"));
         registrar(&m);
         assert_eq!(nombre_derivado(&item), Some(m.nombre.clone()));
+    }
+
+    #[test]
+    fn un_material_descubierto_en_la_mano_pega_segun_sus_propiedades() {
+        let mundo = Materia::nueva(9);
+        let Resultado::Obtiene(m, _) = mundo.reaccionar(MENA_COBRE, Some(CARBON), 1.0, false) else { panic!() };
+        registrar(&m);
+        let item = item_de_derivado(&m);
+        let u = utilidad_de_item(&item, Uso::Arma).unwrap();
+        assert!((0.0..=1.0).contains(&u));
+        let d = crate::fauna::dano_de(&item);
+        assert!((1.0..=7.0).contains(&d) && (d - (1.0 + 6.0 * u)).abs() < 1e-4);
+        assert_eq!(utilidad_de_item("wood", Uso::Arma), None);
     }
 
     #[test]

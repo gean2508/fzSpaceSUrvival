@@ -141,6 +141,46 @@ pub struct EdificioVivo {
     /// Índice en [`TEMAS`].
     pub tema: usize,
     pub ed: Edificio,
+    /// 0..100: qué tan bien techado y sellado quedó. Los que levantan a mano (el jugador, el mundo
+    /// generado) quedan firmes; los de los pueblos salen según lo que el pueblo sabe, y una casa mala
+    /// gotea cuando llueve (`barrio.rs`). Los guardados viejos no lo traen: se leen como firmes.
+    #[serde(default = "calidad_firme")]
+    pub calidad: u8,
+    /// Qué vende un local (índice en [`RUBROS`] + 1; 0 = no es un local). El cartel de encima sale de acá.
+    #[serde(default)]
+    pub rubro: u8,
+}
+
+/// Los carteles de local que trae el pack (`cartel/<rubro>`), y cómo se lo dice el pueblo.
+pub const RUBROS: &[(&str, &str)] = &[
+    ("panaderia", "panadería"),
+    ("carniceria", "carnicería"),
+    ("heladeria", "heladería"),
+    ("discos", "disquería"),
+    ("pesca", "pescadería"),
+    ("gimnasio", "gimnasio"),
+];
+
+pub fn calidad_firme() -> u8 {
+    100
+}
+
+/// La huella con puerta de un edificio, tal como la recuerdan los vecinos (`hogares::Huella`): el
+/// rectángulo de planta baja y una puerta del frente (cara sur). `None` si no tiene entrada al frente.
+pub fn huella_de(ed: &ha_shared::edificio::Edificio) -> Option<ha_shared::hogares::Huella> {
+    use ha_shared::build_grid::WallAxis;
+    let celdas = ed.celdas();
+    let (x0, x1) = (celdas.iter().map(|c| c.0).min()?, celdas.iter().map(|c| c.0).max()?);
+    let (z0, z1) = (celdas.iter().map(|c| c.1).min()?, celdas.iter().map(|c| c.1).max()?);
+    // La puerta más cercana al centro del frente (un frente de varios módulos tiene una por módulo).
+    let centro = (x0 + x1) / 2;
+    let puerta = ed
+        .aberturas()
+        .iter()
+        .filter(|(b, k)| k.is_entrance() && b.axis() == WallAxis::H && b.tz == z1 + 1)
+        .map(|(b, _)| b.tx)
+        .min_by_key(|tx| (tx - centro).abs())?;
+    Some(ha_shared::hogares::Huella { min: (x0, z0), w: x1 - x0 + 1, h: z1 - z0 + 1, puerta: (puerta, z1) })
 }
 
 impl EdificioVivo {
@@ -245,6 +285,8 @@ pub fn aplicar(
                 z,
                 tema: (cx.unsigned_abs() as usize).wrapping_add(cz.unsigned_abs() as usize) % TEMAS.len(),
                 ed: Edificio::nuevo(cuarto),
+                calidad: calidad_firme(),
+                rubro: 0,
             });
             eds.toco();
             Some("Ambiente fundado")
@@ -368,7 +410,12 @@ pub fn fundar_plano(
             return Err("Ya hay algo construido ahí");
         }
     }
-    eds.list.push(EdificioVivo { body, z, tema, ed });
+    let rubro = if matches!(plano.uso, ha_shared::planos::Uso::Comercio) {
+        1 + (ha_shared::worldgen::hash_cell(0x7E4D, ax, az) % RUBROS.len() as u32) as u8
+    } else {
+        0
+    };
+    eds.list.push(EdificioVivo { body, z, tema, ed, calidad: calidad_firme(), rubro });
     let i = eds.list.len() - 1;
     eds.toco();
     estampar_piso(tiles, eds, body, z, ax, az);
@@ -643,6 +690,19 @@ fn dibujar_cascara(
                         .con_pie(tramo.tz),
                     ));
                     alto += celdas;
+                }
+                // El cartel del local, colgado sobre la puerta (el módulo del medio del frente).
+                if ev.rubro > 0 && m == enteros / 2 {
+                    let slug = RUBROS[(ev.rubro as usize - 1) % RUBROS.len()].0;
+                    let clave = format!("cartel/{slug}");
+                    let size = art.medida_de_obra(&clave, None, Vec2::new(5.0 * TILE_M, 1.6 * TILE_M));
+                    let pie = tramo.tz as f32 * TILE_M;
+                    let base = render_xy((x0 as f32 + MODULO as f32 * 0.5) * TILE_M, pie);
+                    commands.spawn((
+                        BandaSprite { idx, modulo: m as usize, piso: 99 },
+                        art.sprite_or_color(&clave, Color::srgb(0.9, 0.8, 0.5), size),
+                        Transform::from_xyz(base.x, base.y + (ALTO_PLANTA_BAJA as f32 - 1.4) * TILE_M + size.y * 0.5, crate::layers::fachada(pie) + 0.002),
+                    ));
                 }
             }
         }

@@ -405,8 +405,8 @@ pub(crate) struct Npc {
     // --- Religión + propósito (runtime; se reconstruye cerca del ídolo) ---
     pub(crate) faith: f32,      // 0..1 devoción hacia el fundador; sube cerca del ídolo
     pub(crate) converted: bool, // fiel: sigue/venera al ídolo (fundador)
-    home_x: f32,      // ancla de su CASA (pos de spawn) — deambula cerca, no en círculos
-    home_z: f32,
+    pub(crate) home_x: f32,      // ancla de su CASA (pos de spawn) — deambula cerca, no en círculos
+    pub(crate) home_z: f32,
     /// Centro del PUEBLO al que pertenece (la plaza). Es el asentamiento de `geography`
     /// donde nació; ya no hay "un centro por cuerpo", puede haber varios pueblos.
     pub(crate) town_x: f32,
@@ -1498,6 +1498,14 @@ fn seed_society(
 // --- Conducta (sesgada por la reputación) ------------------------------------
 
 /// Tinte suave por secta: se reconoce el corro a simple vista sin tapar la skin.
+/// Un matiz propio de cada vecino (hasta −12 % por canal, estable por uid): con 20 hojas de aldeano,
+/// esto evita que dos vecinos al lado se vean idénticos sin gastar una textura más.
+pub(crate) fn tinte_individual(uid: u64) -> Color {
+    let h = ha_shared::sims::hash(uid ^ 0x71E7_0001);
+    let c = |k: u32| 1.0 - 0.12 * (((h >> (k * 8)) & 0xFF) as f32 / 255.0);
+    Color::srgb(c(0), c(1), c(2))
+}
+
 fn tinte_credo(id: u16) -> Color {
     match id % 6 {
         0 => Color::srgb(0.80, 0.90, 1.00),
@@ -1907,7 +1915,7 @@ fn tick_society(
         } else if linaje::etapa(n.age, n.padre != 0 || n.madre != 0) == Etapa::Anciano {
             Color::srgb(0.86, 0.86, 0.92)
         } else {
-            Color::WHITE
+            tinte_individual(n.uid)
         };
     }
     religion.followers = followers;
@@ -2792,6 +2800,19 @@ pub(crate) fn npc_role(faith: f32, converted: bool, rep: f32) -> &'static str {
 
 #[cfg(test)]
 mod religion_tests {
+    #[test]
+    fn cada_vecino_tiene_su_matiz_y_ninguno_se_ve_apagado() {
+        use bevy::color::ColorToComponents;
+        let mut distintos = std::collections::BTreeSet::new();
+        for uid in 1..200u64 {
+            let c = tinte_individual(uid).to_srgba();
+            assert!(c.red >= 0.87 && c.green >= 0.87 && c.blue >= 0.87, "demasiado oscuro: {c:?}");
+            distintos.insert(((c.red * 100.0) as u32, (c.green * 100.0) as u32, (c.blue * 100.0) as u32));
+        }
+        assert!(distintos.len() > 100, "pocos matices: {}", distintos.len());
+        assert_eq!(tinte_individual(7), tinte_individual(7));
+    }
+
     use super::*;
 
     /// **Los fieles no te siguen.** El pedido es explícito y se rompió una vez:

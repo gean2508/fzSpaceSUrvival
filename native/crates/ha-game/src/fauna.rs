@@ -2666,6 +2666,11 @@ pub fn vida_de(art_key: &str) -> f32 {
 /// Daño de un golpe según lo que llevás en la mano. Las espadas usan el de su
 /// regla de interacción; el resto, lo que pegaría esa herramienta.
 pub fn dano_de(item: &str) -> f32 {
+    // Un material que el jugador descubrió, en la mano: pega según lo duro y tenaz que salió
+    // (un buen metal ronda el de una espada; una cerámica quebradiza, poco más que un palo).
+    if let Some(u) = crate::materias::utilidad_de_item(item, ha_shared::civ::materia::Uso::Arma) {
+        return 1.0 + 6.0 * u;
+    }
     if let Some(d) = ha_shared::resolve_interaction(Some(item), ha_shared::InteractTargetKind::Animal)
         .and_then(|r| r.damage)
     {

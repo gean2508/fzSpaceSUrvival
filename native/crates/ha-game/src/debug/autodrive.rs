@@ -246,6 +246,14 @@ impl Plugin for AutoDrivePlugin {
         // **Todos los planos, uno al lado del otro.** Levanta cada plano del catálogo (sin cobrar) en
         // un lote libre cerca del jugador y deja una captura por plano desde la calle y una desde
         // adentro: `plano-<id>-calle.png` / `plano-<id>-adentro.png`. HA_PLANOSTEST=1 HA_FORCE_TOUCH=1.
+        // **La vida del barrio (HA_VIDATEST=1 HA_WEATHER=storm)**: en la ciudad más cercana suelta
+        // infectados entre los vecinos (¿se defienden, corren, mueren, lo anotan?), levanta una casa
+        // mala, la habita y deja llover (¿gotea, lo anota, la remienda?). Imprime `ha-vida: ...`.
+        if crate::flags::var("HA_VIDATEST").is_ok() {
+            app.init_resource::<VidaTestState>();
+            app.add_systems(Update, vida_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         if crate::flags::var("HA_PLANOSTEST").is_ok() {
             app.init_resource::<PlanosTestState>();
             app.add_systems(Update, planos_test_drive.before(aplicar_actuacion_del_driver));
@@ -5336,6 +5344,144 @@ fn nivel_log(world: &mut World) {
 
 #[derive(Resource)]
 struct NivelUltimo(i32);
+
+#[derive(Resource, Default)]
+struct VidaTestState {
+    stage: u32,
+    entered: f32,
+    base: crate::barrio::Lecciones,
+    casa: Option<usize>,
+    pob0: usize,
+    ciudad: (f32, f32),
+}
+
+fn vida_pasar(world: &mut World, now: f32) {
+    let mut st = world.resource_mut::<VidaTestState>();
+    st.stage += 1;
+    st.entered = now;
+}
+
+fn vida_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+    let (stage, entered) = {
+        let st = world.resource::<VidaTestState>();
+        (st.stage, st.entered)
+    };
+    // Algo (la región, el guardado) devuelve al jugador al origen: se lo mantiene en la ciudad.
+    if stage > 0 {
+        let (cx, cz) = world.resource::<VidaTestState>().ciudad;
+        let (px, pz) = player_xz(world);
+        if (px - cx).abs() > 150.0 || (pz - cz).abs() > 150.0 {
+            teleport_surface(world, cx, cz);
+        }
+    }
+    let espera = [0.0, 25.0, 4.0, 30.0, 50.0][(stage as usize).min(4)];
+    if stage > 0 && now - entered < espera {
+        return;
+    }
+    let body = ha_shared::CelestialBody::Earth;
+    match stage {
+        0 => {
+            let mut best: Option<(i64, (i64, i64))> = None;
+            for sx in -25..25 {
+                for sz in -25..25 {
+                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    if s.tier != ha_shared::geography::SettlementTier::City {
+                        continue;
+                    }
+                    let d = s.center.0.abs() + s.center.1.abs();
+                    if best.map_or(true, |(bd, _)| d < bd) {
+                        best = Some((d, s.center));
+                    }
+                }
+            }
+            let Some((_, (cx, cz))) = best else {
+                eprintln!("ha-vida: NO HAY CIUDAD");
+                std::process::exit(1);
+            };
+            teleport_surface(world, cx as f32, cz as f32);
+            world.resource_mut::<VidaTestState>().ciudad = (cx as f32, cz as f32);
+            eprintln!("ha-vida: ciudad en ({cx}, {cz})");
+            vida_pasar(world, now);
+        }
+        1 => {
+            let (px, pz) = player_xz(world);
+            let n = count_npcs_near(world, 60.0);
+            let total = world.resource::<crate::barrio::Memoria>().total();
+            world.resource_mut::<VidaTestState>().base = total;
+            world.resource_mut::<VidaTestState>().pob0 = n;
+            eprintln!("ha-vida: vecinos a menos de 60: {n}; jugador ({px:.0},{pz:.0})");
+            // Cuatro infectados cayendo sobre el centro, entre la gente.
+            world.resource_scope::<crate::art2d::ArtLibrary, _>(|world, art| {
+                let mut cmds = world.commands();
+                for k in 0..4u32 {
+                    let a = k as f32 * 1.6;
+                    crate::infectados::spawn_guardia(&mut cmds, &art, px + a.cos() * 9.0, pz + a.sin() * 9.0, 7 + k);
+                }
+            });
+            world.flush();
+            vida_pasar(world, now);
+        }
+        2 => {
+            // Cuatro segundos de pelea y una foto.
+            shot(world, &format!("{}/vida-1-defensa.png", flytest_dir()));
+            vida_pasar(world, now);
+        }
+        3 => {
+            let vivos = world.query::<&crate::infectados::Infectado>().iter(world).count();
+            let n = count_npcs_near(world, 60.0);
+            let total = world.resource::<crate::barrio::Memoria>().total();
+            let b = world.resource::<VidaTestState>().base;
+            let pob0 = world.resource::<VidaTestState>().pob0;
+            eprintln!(
+                "ha-vida: DEFENSA infectados vivos {vivos}/4 · vecinos {pob0}→{n} · ataques +{} muertes +{} defendidas +{}",
+                total.ataques - b.ataques, total.muertes - b.muertes, total.defendidas - b.defendidas
+            );
+            shot(world, &format!("{}/vida-2-despues.png", flytest_dir()));
+            // Una casa mala, ocupada por los dos vecinos más cercanos.
+            let (px, pz) = player_xz(world);
+            let idx = ha_shared::planos::PLANOS.iter().position(|p| p.id == "cabana").unwrap_or(0);
+            let p = &ha_shared::planos::PLANOS[idx];
+            let Some((ax, az)) = planos_sitio(world, p, px as i64 + 18, pz as i64, 11) else {
+                eprintln!("ha-vida: no hay lote para la casa");
+                std::process::exit(1);
+            };
+            let ed_idx = world.resource::<crate::edificios::Edificios>().list.len() - 1;
+            let huella = {
+                let mut eds = world.resource_mut::<crate::edificios::Edificios>();
+                eds.list[ed_idx].calidad = 20;
+                crate::edificios::huella_de(&eds.list[ed_idx].ed)
+            };
+            eprintln!("ha-vida: casa mala (calidad 20) en ({ax},{az}), huella {huella:?}");
+            let mut q = world.query::<&mut crate::society::Npc>();
+            let mut vec: Vec<_> = q.iter_mut(world).collect();
+            vec.sort_by(|a, b| ((a.x - px).powi(2) + (a.z - pz).powi(2)).total_cmp(&((b.x - px).powi(2) + (b.z - pz).powi(2))));
+            for n in vec.iter_mut().take(2) {
+                n.vivienda.casa = huella;
+            }
+            drop(vec);
+            world.resource_mut::<VidaTestState>().casa = Some(ed_idx);
+            vida_pasar(world, now);
+        }
+        _ => {
+            let total = world.resource::<crate::barrio::Memoria>().total();
+            let b = world.resource::<VidaTestState>().base;
+            let ed_idx = world.resource::<VidaTestState>().casa.unwrap_or(0);
+            let calidad = world.resource::<crate::edificios::Edificios>().list.get(ed_idx).map(|e| e.calidad);
+            eprintln!(
+                "ha-vida: LLUVIA gotean +{} remendadas +{} · calidad de la casa mala ahora {calidad:?}",
+                total.gotean - b.gotean, total.remendadas - b.remendadas
+            );
+            shot(world, &format!("{}/vida-3-lluvia.png", flytest_dir()));
+            eprintln!("ha-verify: VIDATEST DONE");
+            std::process::exit(0);
+        }
+    }
+}
 
 #[derive(Resource, Default)]
 struct PlanosTestState {

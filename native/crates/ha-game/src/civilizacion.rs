@@ -215,6 +215,127 @@ impl Civ {
         let cargo = if pu.gobernante == Some(p) { format!("gobierna {}", pu.nombre) } else { format!("{} de {}", per.oficio.etiqueta(), pu.nombre) };
         Some(format!("{}, {}", per.nombre, cargo))
     }
+
+    /// Como `persona_para`, pero para los que se ven estudiando: si el NPC todavía no encarna a
+    /// nadie, se le da un erudito o artesano libre del pueblo (si hay), no uno cualquiera.
+    pub(crate) fn encarnar_estudioso(&mut self, uid: u64, x: f32, z: f32) -> Option<u32> {
+        use ha_shared::civ::persona::Oficio;
+        let m = self.mundo.as_mut()?;
+        let clave = (uid as u32).max(1);
+        if let Some(p) = m.persona_de_npc(clave) {
+            return Some(p);
+        }
+        let pueblo = pueblo_mas_cercano(m, self.cuerpo, x, z)?;
+        let dia = m.dia;
+        let libres: Vec<u32> = m.pueblos[&pueblo]
+            .gente
+            .iter()
+            .copied()
+            .filter(|g| *g != JUGADOR_ID)
+            .filter_map(|g| m.personas.get(&g))
+            .filter(|p| p.npc == 0 && p.adulta(dia) && matches!(p.oficio, Oficio::Erudito | Oficio::Artesano))
+            .map(|p| p.id)
+            .collect();
+        if libres.is_empty() {
+            return None;
+        }
+        let id = libres[(clave as usize) % libres.len()];
+        m.personas.get_mut(&id)?.npc = clave;
+        Some(id)
+    }
+
+    /// Lo que el NPC `uid` sabe hacer (lo que su pueblo anotó en el cuaderno y él conoce) y cómo
+    /// se llama cada material. `encarnar`: si todavía no es una persona, se le busca una (los que
+    /// se ven estudiando prefieren eruditos/artesanos).
+    pub(crate) fn saber_de_npc(&mut self, uid: u64, x: f32, z: f32, encarnar: bool) -> Option<SaberNpc> {
+        use ha_shared::civ::persona::Oficio;
+        let p = if encarnar { self.encarnar_estudioso(uid, x, z).or_else(|| self.persona_para(uid, x, z)) } else { self.persona_para(uid, x, z) }?;
+        let m = self.mundo.as_ref()?;
+        let per = m.personas.get(&p)?;
+        let pu = m.pueblos.get(&per.pueblo)?;
+        let estudia = matches!(per.oficio, Oficio::Erudito | Oficio::Artesano);
+        let nombre = |id: u64| m.materia.get(id).map(|x| x.nombre.clone()).unwrap_or_else(|| "algo".into());
+        let mut recetas = Vec::new();
+        for (k, e) in pu.cuaderno.entradas.iter() {
+            let Some(res) = e.resultado else { continue };
+            // Los que estudian saben todo el cuaderno (hasta lo dudoso); el resto, sólo lo firme y
+            // de a pedazos: cada uno sabe lo que le toca por su trabajo.
+            let sabe = if estudia { true } else { e.firme() && (*k ^ p as u64) % 3 == 0 };
+            if !sabe {
+                continue;
+            }
+            let Some(mat) = m.materia.get(res).cloned() else { continue };
+            recetas.push(Receta {
+                entrada: e.clone(),
+                resultado: mat,
+                nombre_a: nombre(e.a),
+                nombre_b: (e.b != ha_shared::civ::descubrimiento::SIN_B).then(|| nombre(e.b)),
+            });
+        }
+        Some(SaberNpc {
+            persona: p,
+            oficio: per.oficio,
+            curiosidad: per.curiosidad,
+            nombre: per.nombre.clone(),
+            pueblo: pu.nombre.clone(),
+            recetas,
+        })
+    }
+
+    /// Un NPC encarnado murió por una causa del mundo (infectados, no el jugador): la civilización lo
+    /// registra igual que una baja cualquiera (sucesión, duelo).
+    pub(crate) fn muerte_de_npc(&mut self, uid: u64, x: f32, z: f32) {
+        if let Some(p) = self.persona_para(uid, x, z) {
+            if let Some(m) = self.mundo.as_mut() {
+                m.notificar_muerte(p, false);
+                self.sucio = true;
+            }
+        }
+    }
+
+    /// 0..1: cuánto sabe techar y sellar el pueblo civil más cercano — cerámica (tejas), aglutinante
+    /// (mortero), metal (clavos, chapa) y vidrio (ventanas). Lo calcula de lo que el cuaderno dice que
+    /// sabe PRODUCIR, no de una lista.
+    pub(crate) fn saber_de_techar(&self, x: f32, z: f32) -> f32 {
+        use ha_shared::civ::materia::Clase;
+        let Some(m) = self.mundo.as_ref() else { return 0.0 };
+        let Some(p) = m
+            .pueblos
+            .values()
+            .filter(|p| p.vivo && p.cuerpo == 0)
+            .min_by(|a, b| ((a.x - x).powi(2) + (a.z - z).powi(2)).total_cmp(&((b.x - x).powi(2) + (b.z - z).powi(2))))
+        else {
+            return 0.0;
+        };
+        let clases: Vec<Clase> = p.cuaderno.producibles().iter().filter_map(|id| m.materia.get(*id).map(|x| x.clase)).collect();
+        let tiene = |f: &dyn Fn(&Clase) -> bool| clases.iter().any(f);
+        let n = [
+            tiene(&|c| *c == Clase::Ceramica),
+            tiene(&|c| *c == Clase::Aglutinante),
+            tiene(&|c| matches!(c, Clase::Metal | Clase::Aleacion)),
+            tiene(&|c| *c == Clase::Vidrio),
+        ];
+        n.iter().filter(|b| **b).count() as f32 / 4.0
+    }
+}
+
+/// Una receta que un NPC conoce, con los nombres ya resueltos.
+#[derive(Clone)]
+pub(crate) struct Receta {
+    pub entrada: ha_shared::civ::descubrimiento::Entrada,
+    pub resultado: ha_shared::civ::materia::Material,
+    pub nombre_a: String,
+    pub nombre_b: Option<String>,
+}
+
+/// Lo que un aldeano sabe, visto desde el juego (menú y taller visible).
+pub(crate) struct SaberNpc {
+    pub persona: u32,
+    pub oficio: ha_shared::civ::persona::Oficio,
+    pub curiosidad: f32,
+    pub nombre: String,
+    pub pueblo: String,
+    pub recetas: Vec<Receta>,
 }
 
 fn pueblo_mas_cercano(m: &Mundo, cuerpo: u8, x: f32, z: f32) -> Option<u32> {
