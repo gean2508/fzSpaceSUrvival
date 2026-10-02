@@ -48,6 +48,7 @@ pub mod build_grid;
 pub mod edificio;
 pub mod escaleras;
 pub mod cuevas;
+pub mod subsuelo;
 pub mod zonas;
 pub mod transition;
 pub mod world_edits;

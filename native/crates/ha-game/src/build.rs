@@ -678,10 +678,19 @@ fn sync_build_indicator(
 /// dos es a propósito — es un solo eje, no dos sistemas.
 fn sync_floor_indicator(
     tiles: Res<TileWorld>,
+    ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
+    player: Query<&Transform, With<crate::sim::Player>>,
     mut chips: Query<(&mut Visibility, &Children), With<FloorIndicator>>,
     mut labels: Query<&mut Text>,
 ) {
     let z = tiles.z;
+    // Bajo tierra la chapa dice EN QUÉ BIOMA estás (`ha_shared::subsuelo`): se nota a simple vista
+    // por el color de la roca y acá se confirma con el nombre.
+    let bioma = player.get_single().ok().map(|t| {
+        let body = crate::world2d::active_surface_body(&ctx, &planet);
+        ha_shared::subsuelo::bioma_en(body, t.translation.x.floor() as i64, (-t.translation.y).floor() as i64).nombre()
+    });
     for (mut vis, children) in &mut chips {
         let want = if z == 0 { Visibility::Hidden } else { Visibility::Inherited };
         if *vis != want {
@@ -693,6 +702,8 @@ fn sync_floor_indicator(
         // ASCII-only: la fuente del juego no dibuja acentos ni flechas.
         let line = if z > 0 {
             format!("PISO {}", z + 1)
+        } else if let Some(b) = bioma {
+            b.to_string()
         } else {
             format!("SUBSUELO {}", -z)
         };

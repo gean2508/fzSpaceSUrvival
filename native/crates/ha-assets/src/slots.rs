@@ -306,6 +306,10 @@ const BUILD_ART_KEYS: &[(&str, &str)] = &[
     // que llena la pantalla y `floor/cueva` el suelo pisado de la galería y de
     // los sótanos que se excavan (el pack de interiores trae ambos).
     ("tiles/subsuelo", "Tierra del subsuelo (macizo)"),
+    ("tiles/subsuelo_arcilla", "Subsuelo de arcilla (macizo)"),
+    ("tiles/subsuelo_cristal", "Subsuelo de cristal (macizo)"),
+    ("tiles/subsuelo_musgo", "Subsuelo de musgo (macizo)"),
+    ("tiles/subsuelo_hierro", "Subsuelo de hierro (macizo)"),
     ("floor/cueva", "Suelo de cueva / sótano"),
 ];
 

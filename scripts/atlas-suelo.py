@@ -718,6 +718,19 @@ def main():
         if derivacion:
             destino, peso = derivacion
             cand = [dict(l, im=derivar(l["im"], destino, peso)) for l in cand]
+        # **El piso de la galería es UNA piedra, no un muestrario**: el pack trae pisos de interior de
+        # otro estilo (alfombra, parqué) que por color caen cerca y salían como manchas ocre sueltas en
+        # el suelo de la cueva. Sólo se quedan las que se parecen de verdad a la primera.
+        if clave == "floor/cueva" and cand:
+            import colorsys
+            import numpy as np
+
+            def croma90(im):
+                px = np.asarray(im.convert("RGB")).reshape(-1, 3) / 255.0
+                return float(np.percentile([colorsys.rgb_to_hsv(*p)[1] for p in px], 90))
+
+            c0 = croma90(cand[0]["im"])
+            cand = [cand[0]] + [l for l in cand[1:] if abs(croma90(l["im"]) - c0) <= 0.06]
         elegidas[clave] = cand
         mejor = cand[0]
         clima = ""
@@ -832,6 +845,9 @@ def main():
         import subprocess, sys
         subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                      "dibujar-marcas-de-suelo.py")], check=True)
+        # Y el macizo del subsuelo (roca del pack en rampa fría), que también vive en esta hoja.
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                     "dibujar-subsuelo.py")], check=True)
 
 
 if __name__ == "__main__":

@@ -516,6 +516,8 @@ fn sync_sky(
         (&StarField, &mut Visibility, &mut Transform, &mut Sprite),
         (With<StarSprite>, Without<NightOverlay>),
     >,
+    time: Res<Time>,
+    mut velo_suave: Local<Option<Vec3>>,
 ) {
     let cam_pos = camera
         .get_single()
@@ -672,7 +674,22 @@ fn sync_sky(
         // La cueva es más cerrada que la noche, pero por el mismo mecanismo:
         // más α, no más color (si no, vuelve la niebla plana).
         night_alpha = 0.992;
-        veil = Vec3::new(0.0008, 0.0038, 0.0034);
+        // El matiz del fondo es el del BIOMA donde estás (`ha_shared::subsuelo`), y cambia de a poco
+        // al cruzar de uno a otro (nada de saltos de color).
+        let meta = player
+            .get_single()
+            .map(|s| {
+                let b = crate::world2d::active_surface_body(&world_ctx, &planet);
+                let v = ha_shared::subsuelo::bioma_en(b, s.body.x.floor() as i64, s.body.z.floor() as i64).velo();
+                Vec3::new(v[0], v[1], v[2])
+            })
+            .unwrap_or(Vec3::new(0.0008, 0.0038, 0.0034));
+        let actual = velo_suave.unwrap_or(meta);
+        let nuevo = actual.lerp(meta, (time.delta_secs() * 1.5).min(1.0));
+        *velo_suave = Some(nuevo);
+        veil = nuevo;
+    } else {
+        *velo_suave = None;
     }
     // La linterna **NO** aclara la pantalla entera. Antes hacía
     // `night_alpha *= 0.45`, o sea: llevar una antorcha subía el brillo del mundo

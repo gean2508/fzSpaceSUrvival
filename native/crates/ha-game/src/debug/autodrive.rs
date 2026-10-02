@@ -249,6 +249,13 @@ impl Plugin for AutoDrivePlugin {
         // **La vida del barrio (HA_VIDATEST=1 HA_WEATHER=storm)**: en la ciudad más cercana suelta
         // infectados entre los vecinos (¿se defienden, corren, mueren, lo anotan?), levanta una casa
         // mala, la habita y deja llover (¿gotea, lo anota, la remienda?). Imprime `ha-vida: ...`.
+        // **Los biomas del subsuelo (HA_SUBTEST=1)**: baja a la capa de las cuevas en un punto de cada
+        // bioma, abre una sala de 9×7 y captura. Es el ojo del cambio de roca, cara de pared y tinte.
+        if crate::flags::var("HA_SUBTEST").is_ok() {
+            app.init_resource::<SubTestState>();
+            app.add_systems(Update, sub_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         if crate::flags::var("HA_VIDATEST").is_ok() {
             app.init_resource::<VidaTestState>();
             app.add_systems(Update, vida_test_drive.before(aplicar_actuacion_del_driver));
@@ -5344,6 +5351,87 @@ fn nivel_log(world: &mut World) {
 
 #[derive(Resource)]
 struct NivelUltimo(i32);
+
+#[derive(Resource, Default)]
+struct SubTestState {
+    idx: usize,
+    entered: f32,
+    sitios: Vec<(ha_shared::subsuelo::Bioma, i64, i64)>,
+    listo: bool,
+    armado: bool,
+}
+
+fn sub_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+    let body = ha_shared::CelestialBody::Earth;
+    if !world.resource::<SubTestState>().listo {
+        // Un punto por bioma, buscado en el mundo (no coordenadas a mano).
+        let mut vistos = std::collections::BTreeMap::new();
+        'b: for tx in (-1500..1500i64).step_by(24) {
+            for tz in (-1500..1500i64).step_by(24) {
+                let b = ha_shared::subsuelo::bioma_en(body, tx, tz);
+                // Un punto bien adentro de la región: sus cuatro vecinos de 20 celdas son del mismo bioma.
+                if [(20, 0), (-20, 0), (0, 20), (0, -20)].iter().all(|(dx, dz)| ha_shared::subsuelo::bioma_en(body, tx + dx, tz + dz) == b) {
+                    vistos.entry(b).or_insert((tx, tz));
+                }
+                if vistos.len() == ha_shared::subsuelo::BIOMAS.len() {
+                    break 'b;
+                }
+            }
+        }
+        let mut st = world.resource_mut::<SubTestState>();
+        st.sitios = vistos.into_iter().map(|(b, (x, z))| (b, x, z)).collect();
+        st.listo = true;
+        st.entered = now;
+        eprintln!("ha-sub: {} biomas encontrados", st.sitios.len());
+        return;
+    }
+    let (idx, entered) = {
+        let st = world.resource::<SubTestState>();
+        (st.idx, st.entered)
+    };
+    if now - entered < 5.0 {
+        return;
+    }
+    let n = world.resource::<SubTestState>().sitios.len();
+    if idx >= n {
+        eprintln!("ha-verify: SUBTEST DONE");
+        std::process::exit(0);
+    }
+    let (bioma, tx, tz) = world.resource::<SubTestState>().sitios[idx];
+    if world.resource::<SubTestState>().armado {
+        // La sala ya está abierta y el mundo tuvo cinco segundos para dibujarla: ahora sí, la foto.
+        shot(world, &format!("{}/sub-{idx}-{:?}.png", flytest_dir(), bioma).to_lowercase());
+        eprintln!("ha-sub: {bioma:?} en ({tx},{tz})");
+        let mut st = world.resource_mut::<SubTestState>();
+        st.idx += 1;
+        st.armado = false;
+        st.entered = now;
+        return;
+    }
+    {
+        let mut tiles = world.resource_mut::<TileWorld>();
+        tiles.z = -1;
+        // Una sala de 9×7 con un pilar suelto en el medio, para ver caras de pared y esquinas.
+        for dx in -4..=4i64 {
+            for dz in -3..=3i64 {
+                if (dx, dz) == (2, -1) || (dx, dz) == (-3, 1) {
+                    continue;
+                }
+                tiles.author_tile(body, -1, tx + dx, tz + dz, ha_shared::topdown::Tile::CaveFloor);
+            }
+        }
+        tiles.version = tiles.version.wrapping_add(1);
+    }
+    teleport_surface(world, tx as f32 + 0.5, tz as f32 + 0.5);
+    let mut st = world.resource_mut::<SubTestState>();
+    st.entered = now;
+    st.armado = true;
+}
 
 #[derive(Resource, Default)]
 struct VidaTestState {

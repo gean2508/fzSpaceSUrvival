@@ -144,6 +144,27 @@ fn veta_de(semilla: u32, tx: i64, tz: i64) -> u8 {
 /// Lo que da de más picar la celda `(tx, tz)` de tipo `tile`, además de lo de siempre.
 pub fn extra_al_picar(semilla: u32, tile: Tile, tx: i64, tz: i64) -> Option<&'static str> {
     let azar = h(semilla, tx, tz, 0x91C0) % 100;
+    // **El macizo del subsuelo suelta lo de su BIOMA** (`ha_shared::subsuelo`): el arcillar da arcilla, la
+    // veta de hierro da mena, la gruta de musgo caliza, las cavernas de cristal sal. La cueva de piedra
+    // conserva las vetas de siempre (carbón, cobre, estaño, hierro, caliza por región).
+    if tile == Tile::Subsoil {
+        use ha_shared::subsuelo::Bioma;
+        return match ha_shared::subsuelo::bioma_en(ha_shared::CelestialBody::Earth, tx, tz) {
+            Bioma::Arcilla if azar < 60 => Some("clay"),
+            Bioma::Hierro if azar < 45 => Some("iron_ore"),
+            Bioma::Musgo if azar < 35 => Some("limestone"),
+            Bioma::Musgo if azar < 43 => Some("coal"),
+            Bioma::Cristal if azar < 22 => Some("salt"),
+            Bioma::Piedra if azar < 22 => match veta_de(semilla, tx, tz) {
+                1 => Some("coal"),
+                2 => Some(if azar % 3 == 0 { "tin_ore" } else { "copper_ore" }),
+                3 => Some("iron_ore"),
+                4 => Some("limestone"),
+                _ => None,
+            },
+            _ => None,
+        };
+    }
     let piedra = matches!(tile, Tile::Stone | Tile::Rock | Tile::RockRed | Tile::RockDark | Tile::Basalt | Tile::Cliff);
     if piedra {
         if azar >= 22 {
@@ -224,6 +245,24 @@ mod tests {
         assert_eq!(vistos.len(), 5, "faltan tipos de veta: {vistos:?}");
         // Determinista.
         assert_eq!(extra_al_picar(7, Tile::Stone, 100, 100), extra_al_picar(7, Tile::Stone, 100, 100));
+    }
+
+    #[test]
+    fn el_subsuelo_suelta_lo_de_su_bioma() {
+        use ha_shared::subsuelo::{bioma_en, Bioma};
+        let b = ha_shared::CelestialBody::Earth;
+        let mut por_bioma: std::collections::BTreeMap<Bioma, std::collections::BTreeSet<&str>> = Default::default();
+        for tx in (-900..900).step_by(5) {
+            for tz in (-900..900).step_by(5) {
+                if let Some(it) = extra_al_picar(7, Tile::Subsoil, tx, tz) {
+                    por_bioma.entry(bioma_en(b, tx, tz)).or_default().insert(it);
+                }
+            }
+        }
+        assert_eq!(por_bioma[&Bioma::Arcilla].iter().copied().collect::<Vec<_>>(), vec!["clay"]);
+        assert_eq!(por_bioma[&Bioma::Hierro].iter().copied().collect::<Vec<_>>(), vec!["iron_ore"]);
+        assert!(por_bioma[&Bioma::Musgo].contains("limestone"));
+        assert_eq!(por_bioma[&Bioma::Cristal].iter().copied().collect::<Vec<_>>(), vec!["salt"]);
     }
 
     #[test]

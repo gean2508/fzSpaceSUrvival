@@ -2396,6 +2396,39 @@ fn pit_quads(
     orilla(PIT_RIM, PIT_WALL, pared);
 }
 
+/// Qué parte de la celda ocupa la cara de una pared del subsuelo (la de abajo, la que mira a la galería).
+const CARA_DE_PARED: f32 = 0.42;
+
+/// ¿Es la celda un macizo del subsuelo (roca o tierra de la capa, no una pared que construiste)?
+fn es_macizo(t: Tile) -> bool {
+    matches!(t, Tile::Subsoil | Tile::Stone | Tile::RockDark | Tile::Bedrock | Tile::Rock | Tile::Basalt | Tile::RockRed)
+}
+
+/// **¿Esta celda es la pared de una galería vista de frente?** Macizo con el hueco al SUR (en la
+/// vista 3/4 la cara que se ve es la que mira hacia vos). Sólo bajo tierra.
+fn es_cara_de_pared_del_subsuelo(tiles: &TileWorld, body: CelestialBody, suelo: Tile, tx: i64, tz: i64) -> bool {
+    tiles.z < 0 && es_macizo(suelo) && !tiles.tile_at(body, tx, tz + 1).solid()
+}
+
+/// **La sombra de rincón del subsuelo.** Una celda abierta se oscurece hacia las paredes que la
+/// rodean y una de roca con hueco al lado se apaga un poco: el macizo se hunde y la galería queda
+/// "excavada". Cada vértice promedia las cuatro celdas que lo tocan (ver `esquina`), así que sale
+/// un degradé y no un escalón. Cuesta ocho consultas por celda y sólo bajo tierra.
+fn oclusion_del_subsuelo(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> f32 {
+    if tiles.z >= 0 {
+        return 1.0;
+    }
+    let sol = |dx: i64, dz: i64| tiles.tile_at(body, tx + dx, tz + dz).solid();
+    if tiles.tile_at(body, tx, tz).solid() {
+        // roca con hueco pegado: más oscura, así la pared se despega de la tapa
+        let abierto = !sol(0, 1) || !sol(0, -1) || !sol(1, 0) || !sol(-1, 0);
+        return if abierto { 0.82 } else { 1.0 };
+    }
+    let lados = sol(0, 1) as u8 + sol(0, -1) as u8 + sol(1, 0) as u8 + sol(-1, 0) as u8;
+    let diag = sol(1, 1) as u8 + sol(-1, 1) as u8 + sol(1, -1) as u8 + sol(-1, -1) as u8;
+    (1.0 - 0.09 * lados as f32 - 0.04 * diag as f32).max(0.55)
+}
+
 /// One `Mesh2d` covering a CHUNK×CHUNK grid of tiles, each a colored quad at
 /// render pos `(tx*TILE, -tz*TILE)`.
 fn build_chunk_mesh(
@@ -2466,7 +2499,7 @@ fn build_chunk_mesh(
             let tz = cz * CHUNK + iz as i64 - 1;
             let k = if iz < CHUNK as usize { arriba[iz] } else { abajo[iz - 2] };
             let (_, sombra) = tile_render_color_y_sombra(tiles, body, tx, tz, TileShade::Full);
-            *v = sombra * k;
+            *v = sombra * k * oclusion_del_subsuelo(tiles, body, tx, tz);
         }
     }
     // (lx, lz) = línea de esquina local 0..=CHUNK
@@ -2519,7 +2552,20 @@ fn build_chunk_mesh(
             if matches!(suelo, Tile::Cliff | Tile::Slope) {
                 suelo = suelo_del_relieve(body, tx, tz);
             }
-            let uv = suelo_de_la_celda(art, body, suelo, tx, tz, vereda).unwrap_or(blanca);
+            // **Bajo tierra el macizo y la galería llevan el carácter de su BIOMA** (`ha_shared::subsuelo`):
+            // otra roca según la región, y el piso de la galería con su tinte.
+            let bioma = (tiles.z < 0).then(|| ha_shared::subsuelo::bioma_en(body, tx, tz));
+            let uv = match bioma {
+                Some(b) if es_macizo(suelo) => art
+                    .suelo_uv_seeded(b.clave_de_macizo(), celda_semilla(tx, tz))
+                    .or_else(|| suelo_de_la_celda(art, body, suelo, tx, tz, vereda))
+                    .unwrap_or(blanca),
+                _ => suelo_de_la_celda(art, body, suelo, tx, tz, vereda).unwrap_or(blanca),
+            };
+            let tinte = match bioma {
+                Some(b) if suelo == Tile::CaveFloor => b.tinte_del_piso(),
+                _ => [1.0, 1.0, 1.0],
+            };
             // **Con losa el color de vértice es el SOMBREADO en gris.**
             //
             // No puede ser el color del material —la losa ya lo trae, y
@@ -2541,10 +2587,29 @@ fn build_chunk_mesh(
                 if uv == blanca {
                     [base[0] * k, base[1] * k, base[2] * k, 1.0]
                 } else {
-                    [k, k, k, 1.0]
+                    [k * tinte[0], k * tinte[1], k * tinte[2], 1.0]
                 }
             };
-            quad_esquinas(x0, y0, TILE_M, TILE_M, [color(ks[0]), color(ks[1]), color(ks[2]), color(ks[3])], uv);
+            // **La cara de la pared del subsuelo.** Una celda de roca con la galería al sur se
+            // parte en dos: la tapa (arriba) y la CARA que mira a la galería (abajo, más oscura,
+            // con un filo claro en el canto). Es lo que hace que el macizo se lea como una pared
+            // y que cavar deje una galería con borde, no un recorte en la nada.
+            if es_cara_de_pared_del_subsuelo(tiles, body, suelo, tx, tz) && uv != blanca {
+                let mid_uv = (uv[1] + uv[3]) * 0.5;
+                let alto = TILE_M * CARA_DE_PARED;
+                let oscuro = |c: [f32; 4]| [c[0] * 0.58, c[1] * 0.58, c[2] * 0.62, c[3]];
+                let (a, b, c, d) = (color(ks[0]), color(ks[1]), color(ks[2]), color(ks[3]));
+                // tapa: de arriba hasta (1 - CARA) de la celda
+                quad_esquinas(x0, y0 + alto, TILE_M, TILE_M - alto, [a, b, c, d], [uv[0], uv[1], uv[2], mid_uv]);
+                // cara: el tramo de abajo, oscurecido
+                quad_esquinas(x0, y0, TILE_M, alto, [oscuro(a), oscuro(b), oscuro(a), oscuro(b)], [uv[0], mid_uv, uv[2], uv[3]]);
+                // filo claro entre la tapa y la cara
+                let filo = TILE_M * 0.07;
+                let luz = |c: [f32; 4]| [(c[0] * 1.35).min(1.0), (c[1] * 1.35).min(1.0), (c[2] * 1.3).min(1.0), c[3]];
+                quad_esquinas(x0, y0 + alto, TILE_M, filo, [luz(a), luz(b), luz(b), luz(a)], [uv[0], uv[1], uv[2], uv[1] + (uv[3] - uv[1]) * 0.08]);
+            } else {
+                quad_esquinas(x0, y0, TILE_M, TILE_M, [color(ks[0]), color(ks[1]), color(ks[2]), color(ks[3])], uv);
+            }
         }
     }
 

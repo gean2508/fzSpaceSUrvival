@@ -20,8 +20,6 @@
   "floor/cueva#s3",
   "floor/cueva#s4",
   "floor/cueva#s5",
-  "floor/cueva#s6",
-  "floor/cueva#s7",
   "floor/vereda",
   "floor/vereda#s1",
   "floor/vereda#s2",
@@ -98,9 +96,7 @@
    "s2",
    "s3",
    "s4",
-   "s5",
-   "s6",
-   "s7"
+   "s5"
   ],
   "floor/vereda": [
    "s1",

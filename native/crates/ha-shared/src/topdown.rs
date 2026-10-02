@@ -21,21 +21,21 @@ pub const PLAYER_RADIUS: f32 = 0.34;
 /// **El fondo del mundo**: por debajo de este nivel todo es [`Tile::Bedrock`], y
 /// el lecho de roca no se pica ni se cava. Es lo único que frena a quien baja.
 ///
-/// Eran 8 pisos. Con el terreno voxel (cavar hacia abajo, §5) esos 8 se hacen
-/// cortos: bajar es ahora una decisión que se repite, y "muchas capas hasta el
-/// fondo" es parte de lo que hace que valga la pena bajar. 16 no cuesta nada —
-/// el subsuelo es procedural y sólo se genera la capa que pisás.
+/// **Hay UNA capa de subsuelo** (2 oct 2026, decisión del usuario: «hay que priorizar el
+/// rendimiento»): la de las cuevas, con biomas por región (`subsuelo.rs`). Antes eran 16
+/// niveles de roca maciza que nadie visitaba y cada uno costaba chunks, luz y memoria en el
+/// Redmi.
 ///
 /// **Es el índice más bajo que existe, no la profundidad del lecho.** Desde que
 /// una meseta es tierra APILADA sobre el piso base ([`tierra_de_meseta`]), el que
 /// cava en la cordillera arranca más arriba y necesita más índices para llegar al
 /// mismo fondo: por eso hay [`TIERRA_DE_MESETA_MAX`] niveles de margen. La
 /// profundidad del lecho, medida desde el piso base, es [`LECHO_DE_ROCA`].
-pub const MIN_Z_LEVEL: i32 = -16 - TIERRA_DE_MESETA_MAX;
+pub const MIN_Z_LEVEL: i32 = LECHO_DE_ROCA - TIERRA_DE_MESETA_MAX;
 
 /// **Profundidad del lecho de roca, MEDIDA DESDE EL PISO BASE.** Por debajo de
 /// esto todo es [`Tile::Bedrock`] y no se pica: es el límite del mundo.
-pub const LECHO_DE_ROCA: i32 = -16;
+pub const LECHO_DE_ROCA: i32 = -2;
 
 /// **Cuánta tierra de meseta se puede llegar a apilar sobre el piso base.**
 ///
@@ -1032,10 +1032,27 @@ fn deposit_roll(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Deposit
             0..=1 => Some(Deposit::OreIron),
             _ => None,
         },
+        CelestialBody::Earth if deep => {
+            // **Lo que se ve en la pared depende del bioma** (`subsuelo.rs`): la veta de hierro es de
+            // hierro, las cavernas de cristal brillan con gemas, y el resto tiene lo de siempre.
+            use crate::subsuelo::Bioma;
+            match (crate::subsuelo::bioma_en(body, tx, tz), roll) {
+                (Bioma::Hierro, 0..=26) => Some(Deposit::OreIron),
+                (Bioma::Hierro, 27..=29) => Some(Deposit::OreGold),
+                (Bioma::Cristal, 0..=12) => Some(Deposit::GemBlue),
+                (Bioma::Cristal, 13..=21) => Some(Deposit::GemRed),
+                (Bioma::Cristal, 22..=24) => Some(Deposit::OreGold),
+                (Bioma::Arcilla, 0..=2) => Some(Deposit::OreIron),
+                (Bioma::Arcilla, 3..=6) => Some(Deposit::OreGold),
+                (Bioma::Musgo, 0..=3) => Some(Deposit::OreIron),
+                (Bioma::Musgo, 4..=5) => Some(Deposit::GemBlue),
+                (Bioma::Piedra, 0..=6) => Some(Deposit::OreIron),
+                (Bioma::Piedra, 7..=10) => Some(Deposit::OreGold),
+                (Bioma::Piedra, 11..=13) => Some(Deposit::GemBlue),
+                _ => None,
+            }
+        }
         CelestialBody::Earth => match roll {
-            0..=6 if deep => Some(Deposit::OreIron),
-            7..=10 if deep => Some(Deposit::OreGold),
-            11..=13 if deep => Some(Deposit::GemBlue),
             0..=2 => Some(Deposit::OreIron),
             _ => None,
         },

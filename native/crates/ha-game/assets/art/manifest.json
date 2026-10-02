@@ -7037,34 +7037,6 @@
     {
      "id": "s7",
      "label": "floor/asfalto s7"
-    },
-    {
-     "id": "p7",
-     "label": "suelo_urbano_vereda_1"
-    },
-    {
-     "id": "p10",
-     "label": "suelo_urbano_vereda_1_2"
-    },
-    {
-     "id": "p11",
-     "label": "suelo_urbano_vereda_1_3"
-    },
-    {
-     "id": "p12",
-     "label": "suelo_urbano_vereda_1_4"
-    },
-    {
-     "id": "p13",
-     "label": "suelo_urbano_vereda_1_5"
-    },
-    {
-     "id": "p14",
-     "label": "vereda_1"
-    },
-    {
-     "id": "p15",
-     "label": "vereda_10"
     }
    ]
   },
@@ -7181,14 +7153,6 @@
     {
      "id": "s5",
      "label": "floor/cueva s5"
-    },
-    {
-     "id": "s6",
-     "label": "floor/cueva s6"
-    },
-    {
-     "id": "s7",
-     "label": "floor/cueva s7"
     }
    ]
   },
@@ -7281,8 +7245,24 @@
    "label": "floor/vereda",
    "variants": [
     {
+     "id": "s1",
+     "label": "floor/vereda s1"
+    },
+    {
      "id": "s2",
      "label": "floor/vereda s2"
+    },
+    {
+     "id": "s3",
+     "label": "floor/vereda s3"
+    },
+    {
+     "id": "s4",
+     "label": "floor/vereda s4"
+    },
+    {
+     "id": "s5",
+     "label": "floor/vereda s5"
     }
    ]
   },
@@ -7466,6 +7446,14 @@
     {
      "id": "s3",
      "label": "floor/vereda_tipo2 s3"
+    },
+    {
+     "id": "s4",
+     "label": "floor/vereda_tipo2 s4"
+    },
+    {
+     "id": "s5",
+     "label": "floor/vereda_tipo2 s5"
     }
    ]
   },
@@ -7496,6 +7484,22 @@
     {
      "id": "s3",
      "label": "floor/vereda_tipo3 s3"
+    },
+    {
+     "id": "s4",
+     "label": "floor/vereda_tipo3 s4"
+    },
+    {
+     "id": "s5",
+     "label": "floor/vereda_tipo3 s5"
+    },
+    {
+     "id": "s6",
+     "label": "floor/vereda_tipo3 s6"
+    },
+    {
+     "id": "s7",
+     "label": "floor/vereda_tipo3 s7"
     }
    ]
   },
@@ -7534,6 +7538,14 @@
     {
      "id": "s3",
      "label": "floor/vereda_tipo4 s3"
+    },
+    {
+     "id": "s4",
+     "label": "floor/vereda_tipo4 s4"
+    },
+    {
+     "id": "s5",
+     "label": "floor/vereda_tipo4 s5"
     },
     {
      "id": "s6",
@@ -7597,6 +7609,14 @@
     {
      "id": "s3",
      "label": "floor/vereda_tipo6 s3"
+    },
+    {
+     "id": "s4",
+     "label": "floor/vereda_tipo6 s4"
+    },
+    {
+     "id": "s5",
+     "label": "floor/vereda_tipo6 s5"
     }
    ]
   },
@@ -25224,6 +25244,27 @@
   "items/bone": {
    "label": "Hueso"
   },
+  "items/botas_1": {
+   "label": "Calzado 1 (roja)"
+  },
+  "items/botas_2": {
+   "label": "Calzado 2 (azul)"
+  },
+  "items/botas_3": {
+   "label": "Calzado 3 (roja)"
+  },
+  "items/botas_4": {
+   "label": "Calzado 4 (verde)"
+  },
+  "items/botas_5": {
+   "label": "Calzado 5 (turquesa)"
+  },
+  "items/botas_6": {
+   "label": "Calzado 6 (gris)"
+  },
+  "items/botas_7": {
+   "label": "Calzado 7 (naranja)"
+  },
   "items/bread": {
    "label": "Pan"
   },
@@ -25235,6 +25276,15 @@
   },
   "items/chicken": {
    "label": "Pollo crudo"
+  },
+  "items/clay": {
+   "label": "Arcilla"
+  },
+  "items/coal": {
+   "label": "Carbón"
+  },
+  "items/copper_ore": {
+   "label": "Mena de cobre"
   },
   "items/dirt": {
    "label": "Tierra"
@@ -25254,6 +25304,15 @@
   "items/gold_ingot": {
    "label": "Lingote de oro"
   },
+  "items/gorra_azul": {
+   "label": "Gorra azul"
+  },
+  "items/gorra_roja": {
+   "label": "Gorra roja"
+  },
+  "items/gorro_gris": {
+   "label": "Gorro de lana gris"
+  },
   "items/grape": {
    "label": "Uvas"
   },
@@ -25263,6 +25322,9 @@
   "items/iron_ingot": {
    "label": "Lingote de hierro"
   },
+  "items/iron_ore": {
+   "label": "Mena de hierro"
+  },
   "items/jetpack": {
    "label": "Mochila propulsora"
   },
@@ -25271,6 +25333,39 @@
   },
   "items/leather": {
    "label": "Cuero"
+  },
+  "items/leather_boots": {
+   "label": "Botas de cuero"
+  },
+  "items/leather_cap": {
+   "label": "Gorro de cuero"
+  },
+  "items/leather_vest": {
+   "label": "Chaleco de cuero"
+  },
+  "items/limestone": {
+   "label": "Caliza"
+  },
+  "items/mat_aglutinante": {
+   "label": "Aglutinante"
+  },
+  "items/mat_aleacion": {
+   "label": "Aleación"
+  },
+  "items/mat_ceramica": {
+   "label": "Cerámica"
+  },
+  "items/mat_combustible": {
+   "label": "Carbón vegetal"
+  },
+  "items/mat_compuesto": {
+   "label": "Compuesto"
+  },
+  "items/mat_metal": {
+   "label": "Metal"
+  },
+  "items/mat_vidrio": {
+   "label": "Vidrio"
   },
   "items/meat": {
    "label": "Carne"
@@ -25329,6 +25424,111 @@
   "items/rabbit_meat": {
    "label": "Carne de conejo"
   },
+  "items/resin": {
+   "label": "Resina"
+  },
+  "items/ropa_01": {
+   "label": "Ropa 01 (gris)"
+  },
+  "items/ropa_02": {
+   "label": "Ropa 02 (verde)"
+  },
+  "items/ropa_03": {
+   "label": "Ropa 03 (gris)"
+  },
+  "items/ropa_04": {
+   "label": "Ropa 04 (azul)"
+  },
+  "items/ropa_05": {
+   "label": "Ropa 05 (azul)"
+  },
+  "items/ropa_06": {
+   "label": "Ropa 06 (gris)"
+  },
+  "items/ropa_07": {
+   "label": "Ropa 07 (gris)"
+  },
+  "items/ropa_08": {
+   "label": "Ropa 08 (gris)"
+  },
+  "items/ropa_09": {
+   "label": "Ropa 09 (azul)"
+  },
+  "items/ropa_10": {
+   "label": "Ropa 10 (gris)"
+  },
+  "items/ropa_11": {
+   "label": "Ropa 11 (roja)"
+  },
+  "items/ropa_12": {
+   "label": "Ropa 12 (naranja)"
+  },
+  "items/ropa_13": {
+   "label": "Ropa 13 (gris)"
+  },
+  "items/ropa_14": {
+   "label": "Ropa 14 (rosa)"
+  },
+  "items/ropa_15": {
+   "label": "Ropa 15 (azul)"
+  },
+  "items/ropa_16": {
+   "label": "Ropa 16 (azul)"
+  },
+  "items/ropa_17": {
+   "label": "Ropa 17 (naranja)"
+  },
+  "items/ropa_18": {
+   "label": "Ropa 18 (gris)"
+  },
+  "items/ropa_19": {
+   "label": "Ropa 19 (azul)"
+  },
+  "items/ropa_20": {
+   "label": "Ropa 20 (violeta)"
+  },
+  "items/ropa_21": {
+   "label": "Ropa 21 (roja)"
+  },
+  "items/ropa_22": {
+   "label": "Ropa 22 (gris)"
+  },
+  "items/ropa_23": {
+   "label": "Ropa 23 (naranja)"
+  },
+  "items/ropa_24": {
+   "label": "Ropa 24 (azul)"
+  },
+  "items/ropa_25": {
+   "label": "Ropa 25 (turquesa)"
+  },
+  "items/ropa_26": {
+   "label": "Ropa 26 (turquesa)"
+  },
+  "items/ropa_27": {
+   "label": "Ropa 27 (azul)"
+  },
+  "items/ropa_28": {
+   "label": "Ropa 28 (roja)"
+  },
+  "items/ropa_29": {
+   "label": "Ropa 29 (azul)"
+  },
+  "items/ropa_30": {
+   "label": "Ropa 30 (gris)"
+  },
+  "items/ropa_31": {
+   "label": "Ropa 31 (naranja)"
+  },
+  "items/ropa_32": {
+   "label": "Ropa 32 (naranja)"
+  },
+  "items/ropa_33": {
+   "label": "Ropa 33 (roja)"
+  },
+  "items/salt": {
+   "label": "Sal"
+  },
   "items/sand": {
    "label": "Arena"
   },
@@ -25353,6 +25553,9 @@
   "items/stone_pickaxe": {
    "label": "Pico de piedra"
   },
+  "items/tin_ore": {
+   "label": "Mena de estaño"
+  },
   "items/torch": {
    "label": "Antorcha"
   },
@@ -25376,6 +25579,9 @@
   },
   "items/wool": {
    "label": "Lana"
+  },
+  "items/wool_coat": {
+   "label": "Abrigo de lana"
   },
   "ledge/arena": {
    "label": "Bordillo de arena"
@@ -32109,19 +32315,19 @@
    "variants": [
     {
      "id": "m1",
-     "label": "Nieve con marca 1"
+     "label": "ice con marca 1"
     },
     {
      "id": "m2",
-     "label": "Nieve con marca 2"
+     "label": "ice con marca 2"
     },
     {
      "id": "m3",
-     "label": "Nieve con marca 3"
+     "label": "ice con marca 3"
     },
     {
      "id": "m4",
-     "label": "Nieve con marca 4"
+     "label": "ice con marca 4"
     }
    ]
   },
@@ -32253,7 +32459,88 @@
   },
   "tiles/subsuelo": {
    "label": "Subsuelo",
-   "variants": []
+   "variants": [
+    {
+     "id": "m1",
+     "label": "piedra 1"
+    },
+    {
+     "id": "m2",
+     "label": "piedra 2"
+    },
+    {
+     "id": "m3",
+     "label": "piedra 3"
+    }
+   ]
+  },
+  "tiles/subsuelo_arcilla": {
+   "label": "Subsuelo: arcilla",
+   "variants": [
+    {
+     "id": "m1",
+     "label": "arcilla 1"
+    },
+    {
+     "id": "m2",
+     "label": "arcilla 2"
+    },
+    {
+     "id": "m3",
+     "label": "arcilla 3"
+    }
+   ]
+  },
+  "tiles/subsuelo_cristal": {
+   "label": "Subsuelo: cristal",
+   "variants": [
+    {
+     "id": "m1",
+     "label": "cristal 1"
+    },
+    {
+     "id": "m2",
+     "label": "cristal 2"
+    },
+    {
+     "id": "m3",
+     "label": "cristal 3"
+    }
+   ]
+  },
+  "tiles/subsuelo_hierro": {
+   "label": "Subsuelo: hierro",
+   "variants": [
+    {
+     "id": "m1",
+     "label": "hierro 1"
+    },
+    {
+     "id": "m2",
+     "label": "hierro 2"
+    },
+    {
+     "id": "m3",
+     "label": "hierro 3"
+    }
+   ]
+  },
+  "tiles/subsuelo_musgo": {
+   "label": "Subsuelo: musgo",
+   "variants": [
+    {
+     "id": "m1",
+     "label": "musgo 1"
+    },
+    {
+     "id": "m2",
+     "label": "musgo 2"
+    },
+    {
+     "id": "m3",
+     "label": "musgo 3"
+    }
+   ]
   },
   "tiles/water_arena": {
    "label": "Agua (orilla de arena)",
@@ -33444,192 +33731,6 @@
      "label": "Helicóptero 2"
     }
    ]
-  },
-  "items/leather_cap": {
-   "label": "Gorro de cuero"
-  },
-  "items/leather_vest": {
-   "label": "Chaleco de cuero"
-  },
-  "items/wool_coat": {
-   "label": "Abrigo de lana"
-  },
-  "items/leather_boots": {
-   "label": "Botas de cuero"
-  },
-  "items/ropa_01": {
-   "label": "Ropa 01 (gris)"
-  },
-  "items/ropa_02": {
-   "label": "Ropa 02 (verde)"
-  },
-  "items/ropa_03": {
-   "label": "Ropa 03 (gris)"
-  },
-  "items/ropa_04": {
-   "label": "Ropa 04 (azul)"
-  },
-  "items/ropa_05": {
-   "label": "Ropa 05 (azul)"
-  },
-  "items/ropa_06": {
-   "label": "Ropa 06 (gris)"
-  },
-  "items/ropa_07": {
-   "label": "Ropa 07 (gris)"
-  },
-  "items/ropa_08": {
-   "label": "Ropa 08 (gris)"
-  },
-  "items/ropa_09": {
-   "label": "Ropa 09 (azul)"
-  },
-  "items/ropa_10": {
-   "label": "Ropa 10 (gris)"
-  },
-  "items/ropa_11": {
-   "label": "Ropa 11 (roja)"
-  },
-  "items/ropa_12": {
-   "label": "Ropa 12 (naranja)"
-  },
-  "items/ropa_13": {
-   "label": "Ropa 13 (gris)"
-  },
-  "items/ropa_14": {
-   "label": "Ropa 14 (rosa)"
-  },
-  "items/ropa_15": {
-   "label": "Ropa 15 (azul)"
-  },
-  "items/ropa_16": {
-   "label": "Ropa 16 (azul)"
-  },
-  "items/ropa_17": {
-   "label": "Ropa 17 (naranja)"
-  },
-  "items/ropa_18": {
-   "label": "Ropa 18 (gris)"
-  },
-  "items/ropa_19": {
-   "label": "Ropa 19 (azul)"
-  },
-  "items/ropa_20": {
-   "label": "Ropa 20 (violeta)"
-  },
-  "items/ropa_21": {
-   "label": "Ropa 21 (roja)"
-  },
-  "items/ropa_22": {
-   "label": "Ropa 22 (gris)"
-  },
-  "items/ropa_23": {
-   "label": "Ropa 23 (naranja)"
-  },
-  "items/ropa_24": {
-   "label": "Ropa 24 (azul)"
-  },
-  "items/ropa_25": {
-   "label": "Ropa 25 (turquesa)"
-  },
-  "items/ropa_26": {
-   "label": "Ropa 26 (turquesa)"
-  },
-  "items/ropa_27": {
-   "label": "Ropa 27 (azul)"
-  },
-  "items/ropa_28": {
-   "label": "Ropa 28 (roja)"
-  },
-  "items/ropa_29": {
-   "label": "Ropa 29 (azul)"
-  },
-  "items/ropa_30": {
-   "label": "Ropa 30 (gris)"
-  },
-  "items/ropa_31": {
-   "label": "Ropa 31 (naranja)"
-  },
-  "items/ropa_32": {
-   "label": "Ropa 32 (naranja)"
-  },
-  "items/ropa_33": {
-   "label": "Ropa 33 (roja)"
-  },
-  "items/gorra_roja": {
-   "label": "Gorra roja"
-  },
-  "items/gorra_azul": {
-   "label": "Gorra azul"
-  },
-  "items/gorro_gris": {
-   "label": "Gorro de lana gris"
-  },
-  "items/botas_1": {
-   "label": "Calzado 1 (roja)"
-  },
-  "items/botas_2": {
-   "label": "Calzado 2 (azul)"
-  },
-  "items/botas_3": {
-   "label": "Calzado 3 (roja)"
-  },
-  "items/botas_4": {
-   "label": "Calzado 4 (verde)"
-  },
-  "items/botas_5": {
-   "label": "Calzado 5 (turquesa)"
-  },
-  "items/botas_6": {
-   "label": "Calzado 6 (gris)"
-  },
-  "items/botas_7": {
-   "label": "Calzado 7 (naranja)"
-  },
-  "items/clay": {
-   "label": "Arcilla"
-  },
-  "items/coal": {
-   "label": "Carbón"
-  },
-  "items/copper_ore": {
-   "label": "Mena de cobre"
-  },
-  "items/tin_ore": {
-   "label": "Mena de estaño"
-  },
-  "items/iron_ore": {
-   "label": "Mena de hierro"
-  },
-  "items/limestone": {
-   "label": "Caliza"
-  },
-  "items/resin": {
-   "label": "Resina"
-  },
-  "items/salt": {
-   "label": "Sal"
-  },
-  "items/mat_metal": {
-   "label": "Metal"
-  },
-  "items/mat_aleacion": {
-   "label": "Aleación"
-  },
-  "items/mat_ceramica": {
-   "label": "Cerámica"
-  },
-  "items/mat_vidrio": {
-   "label": "Vidrio"
-  },
-  "items/mat_aglutinante": {
-   "label": "Aglutinante"
-  },
-  "items/mat_compuesto": {
-   "label": "Compuesto"
-  },
-  "items/mat_combustible": {
-   "label": "Carbón vegetal"
   }
  },
  "origen": {
@@ -129114,100 +129215,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 31,
+    "col": 29,
     "h": 1,
     "row": 1,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p10": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 11,
-    "h": 1,
-    "row": 26,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p11": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 14,
-    "h": 1,
-    "row": 26,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p12": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 17,
-    "h": 1,
-    "row": 26,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p13": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 20,
-    "h": 1,
-    "row": 26,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p14": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 0,
-    "h": 1,
-    "row": 26,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p15": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 3,
-    "h": 1,
-    "row": 26,
-    "w": 1
-   }
-  },
-  "floor/asfalto#p7": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/city_terrains_3.png",
-   "rect": {
-    "col": 8,
-    "h": 1,
-    "row": 26,
     "w": 1
    }
   },
@@ -129219,9 +129229,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 0,
+    "col": 30,
     "h": 1,
-    "row": 2,
+    "row": 1,
     "w": 1
    }
   },
@@ -129233,9 +129243,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 1,
+    "col": 31,
     "h": 1,
-    "row": 2,
+    "row": 1,
     "w": 1
    }
   },
@@ -129247,7 +129257,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 2,
+    "col": 0,
     "h": 1,
     "row": 2,
     "w": 1
@@ -129261,7 +129271,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 3,
+    "col": 1,
     "h": 1,
     "row": 2,
     "w": 1
@@ -129275,7 +129285,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 4,
+    "col": 2,
     "h": 1,
     "row": 2,
     "w": 1
@@ -129289,7 +129299,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 5,
+    "col": 3,
     "h": 1,
     "row": 2,
     "w": 1
@@ -129303,7 +129313,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 6,
+    "col": 4,
     "h": 1,
     "row": 2,
     "w": 1
@@ -129769,34 +129779,6 @@
    "png": "art/pack/suelo.png",
    "rect": {
     "col": 20,
-    "h": 1,
-    "row": 0,
-    "w": 1
-   }
-  },
-  "floor/cueva#s6": {
-   "grid": [
-    32,
-    32
-   ],
-   "layer": "Floor",
-   "png": "art/pack/suelo.png",
-   "rect": {
-    "col": 21,
-    "h": 1,
-    "row": 0,
-    "w": 1
-   }
-  },
-  "floor/cueva#s7": {
-   "grid": [
-    32,
-    32
-   ],
-   "layer": "Floor",
-   "png": "art/pack/suelo.png",
-   "rect": {
-    "col": 22,
     "h": 1,
     "row": 0,
     "w": 1
@@ -130384,21 +130366,11 @@
     32
    ],
    "layer": "Floor",
-   "png": "art/pack/construccion.png",
-   "poses": {
-    "center": {
-     "rect": {
-      "col": 16,
-      "h": 1,
-      "row": 0,
-      "w": 1
-     }
-    }
-   },
+   "png": "art/pack/suelo.png",
    "rect": {
-    "col": 16,
+    "col": 12,
     "h": 1,
-    "row": 0,
+    "row": 2,
     "w": 1
    }
   },
@@ -130410,7 +130382,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 15,
+    "col": 13,
     "h": 1,
     "row": 2,
     "w": 1
@@ -130424,7 +130396,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 16,
+    "col": 14,
     "h": 1,
     "row": 2,
     "w": 1
@@ -130438,7 +130410,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 17,
+    "col": 15,
     "h": 1,
     "row": 2,
     "w": 1
@@ -130452,7 +130424,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 18,
+    "col": 16,
     "h": 1,
     "row": 2,
     "w": 1
@@ -130466,7 +130438,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 19,
+    "col": 17,
     "h": 1,
     "row": 2,
     "w": 1
@@ -130480,7 +130452,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 20,
+    "col": 18,
     "h": 1,
     "row": 2,
     "w": 1
@@ -130494,7 +130466,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 21,
+    "col": 19,
     "h": 1,
     "row": 2,
     "w": 1
@@ -132224,7 +132196,21 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 23,
+    "col": 21,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "floor/vereda#s1": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 22,
     "h": 1,
     "row": 0,
     "w": 1
@@ -132238,7 +132224,49 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
+    "col": 23,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "floor/vereda#s3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 24,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "floor/vereda#s4": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
     "col": 25,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "floor/vereda#s5": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 26,
     "h": 1,
     "row": 0,
     "w": 1
@@ -133478,7 +133506,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 29,
+    "col": 27,
     "h": 1,
     "row": 0,
     "w": 1
@@ -133492,7 +133520,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 30,
+    "col": 28,
     "h": 1,
     "row": 0,
     "w": 1
@@ -133506,13 +133534,41 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 31,
+    "col": 29,
     "h": 1,
     "row": 0,
     "w": 1
    }
   },
   "floor/vereda_tipo2#s3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 30,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo2#s4": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 31,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo2#s5": {
    "grid": [
     32,
     32
@@ -133562,7 +133618,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 3,
+    "col": 1,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133576,7 +133632,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 4,
+    "col": 2,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133590,7 +133646,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 5,
+    "col": 3,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133604,7 +133660,63 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo3#s4": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo3#s5": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
     "col": 6,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo3#s6": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo3#s7": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 8,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133674,7 +133786,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 11,
+    "col": 9,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133688,7 +133800,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 12,
+    "col": 10,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133702,13 +133814,41 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 13,
+    "col": 11,
     "h": 1,
     "row": 1,
     "w": 1
    }
   },
   "floor/vereda_tipo4#s3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 12,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo4#s4": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 13,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo4#s5": {
    "grid": [
     32,
     32
@@ -133730,7 +133870,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 17,
+    "col": 15,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133772,7 +133912,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 18,
+    "col": 16,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133786,7 +133926,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 19,
+    "col": 17,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133800,7 +133940,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 20,
+    "col": 18,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133814,7 +133954,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 21,
+    "col": 19,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133828,7 +133968,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 22,
+    "col": 20,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133842,7 +133982,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 23,
+    "col": 21,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133856,7 +133996,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 24,
+    "col": 22,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133870,7 +134010,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 25,
+    "col": 23,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133884,7 +134024,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 26,
+    "col": 24,
     "h": 1,
     "row": 1,
     "w": 1
@@ -133898,13 +134038,41 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 27,
+    "col": 25,
     "h": 1,
     "row": 1,
     "w": 1
    }
   },
   "floor/vereda_tipo6#s3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 26,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo6#s4": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 27,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "floor/vereda_tipo6#s5": {
    "grid": [
     32,
     32
@@ -133954,7 +134122,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 7,
+    "col": 5,
     "h": 1,
     "row": 2,
     "w": 1
@@ -133968,7 +134136,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 8,
+    "col": 6,
     "h": 1,
     "row": 2,
     "w": 1
@@ -133982,7 +134150,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 9,
+    "col": 7,
     "h": 1,
     "row": 2,
     "w": 1
@@ -133996,7 +134164,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 10,
+    "col": 8,
     "h": 1,
     "row": 2,
     "w": 1
@@ -134010,7 +134178,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 11,
+    "col": 9,
     "h": 1,
     "row": 2,
     "w": 1
@@ -134024,7 +134192,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 12,
+    "col": 10,
     "h": 1,
     "row": 2,
     "w": 1
@@ -134038,7 +134206,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 13,
+    "col": 11,
     "h": 1,
     "row": 2,
     "w": 1
@@ -212223,16 +212391,16 @@
    }
   },
   "items/axe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 28,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/beef": {
@@ -212261,17 +212429,108 @@
     "w": 1
    }
   },
-  "items/bread": {
-   "png": "art/gen/items.png",
+  "items/botas_1": {
    "grid": [
     32,
     32
    ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/botas_2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 1,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/botas_3": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
    "rect": {
     "col": 2,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/botas_4": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 3,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/botas_5": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/botas_6": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/botas_7": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 6,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/bread": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/items.png",
+   "rect": {
+    "col": 2,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/bucket": {
@@ -212313,17 +212572,56 @@
     "w": 1
    }
   },
-  "items/dirt": {
-   "png": "art/gen/items.png",
+  "items/clay": {
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/coal": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 1,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/copper_ore": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 2,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/dirt": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 9,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/egg": {
@@ -212353,94 +212651,146 @@
    }
   },
   "items/gem_blue": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 20,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/gem_red": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 19,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/gold_ingot": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 18,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
+   }
+  },
+  "items/gorra_azul": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 10,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/gorra_roja": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 9,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/gorro_gris": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 11,
+    "h": 1,
+    "row": 2,
+    "w": 1
    }
   },
   "items/grape": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 1,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/hand": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 23,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/iron_ingot": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 17,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
+   }
+  },
+  "items/iron_ore": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 0,
+    "w": 1
    }
   },
   "items/jetpack": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 24,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/lantern": {
@@ -212490,29 +212840,172 @@
    }
   },
   "items/leather": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 12,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
+   }
+  },
+  "items/leather_boots": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 10,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/leather_cap": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 9,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/leather_vest": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "items/limestone": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_aglutinante": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 12,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_aleacion": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 9,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_ceramica": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 10,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_combustible": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 14,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_compuesto": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 13,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_metal": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 8,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/mat_vidrio": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 11,
+    "h": 1,
+    "row": 0,
+    "w": 1
    }
   },
   "items/meat": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 3,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/milk_bucket": {
@@ -212555,107 +213048,107 @@
    }
   },
   "items/orange": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 0,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/part_engine": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 4,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/part_fin": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 5,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/part_lander": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 6,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/part_nose": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 2,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/part_tank": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 3,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/pickaxe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 31,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/pie": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 4,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/pork": {
@@ -212672,42 +213165,42 @@
    }
   },
   "items/potion_blue": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 26,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/potion_green": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 27,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/probe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 25,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/pumpkin": {
@@ -212749,121 +213242,589 @@
     "w": 1
    }
   },
-  "items/sand": {
-   "png": "art/gen/items.png",
+  "items/resin": {
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 6,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_01": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_02": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 1,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_03": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 2,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_04": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 3,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_05": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_06": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_07": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 6,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_08": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_09": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 8,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_10": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 9,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_11": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
    "rect": {
     "col": 10,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
+   }
+  },
+  "items/ropa_12": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 11,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/ropa_13": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_14": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 1,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_15": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 2,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_16": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 3,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_17": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_18": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_19": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 6,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_20": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_21": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 8,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_22": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 9,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_23": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 10,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_24": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 11,
+    "h": 1,
+    "row": 1,
+    "w": 1
+   }
+  },
+  "items/ropa_25": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_26": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 1,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_27": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 2,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_28": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 3,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_29": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_30": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_31": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 6,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_32": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/ropa_33": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 8,
+    "h": 1,
+    "row": 2,
+    "w": 1
+   }
+  },
+  "items/salt": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "items/sand": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/items.png",
+   "rect": {
+    "col": 10,
+    "h": 1,
+    "row": 0,
+    "w": 1
    }
   },
   "items/shield_wood": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 22,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/snow": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 11,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/soup": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 5,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/sticks": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 7,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/stone": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 8,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/stone_axe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 30,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/stone_pickaxe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 1,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
+   }
+  },
+  "items/tin_ore": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 3,
+    "h": 1,
+    "row": 0,
+    "w": 1
    }
   },
   "items/torch": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 21,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/water_bucket": {
@@ -212906,42 +213867,42 @@
    }
   },
   "items/wood": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 6,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/wood_axe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 29,
+    "h": 1,
     "row": 0,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/wood_pickaxe": {
-   "png": "art/gen/items.png",
    "grid": [
     32,
     32
    ],
+   "png": "art/gen/items.png",
    "rect": {
     "col": 0,
+    "h": 1,
     "row": 1,
-    "w": 1,
-    "h": 1
+    "w": 1
    }
   },
   "items/wool": {
@@ -212954,6 +213915,19 @@
     "col": 15,
     "h": 1,
     "row": 0,
+    "w": 1
+   }
+  },
+  "items/wool_coat": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/ropa_items.png",
+   "rect": {
+    "col": 8,
+    "h": 1,
+    "row": 3,
     "w": 1
    }
   },
@@ -270985,7 +271959,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 23,
+    "col": 17,
     "h": 1,
     "row": 3,
     "w": 1
@@ -270999,7 +271973,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 24,
+    "col": 18,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271013,7 +271987,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 25,
+    "col": 19,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271041,7 +272015,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 17,
+    "col": 11,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271055,7 +272029,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 18,
+    "col": 12,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271069,7 +272043,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 19,
+    "col": 13,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271205,7 +272179,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 22,
+    "col": 20,
     "h": 1,
     "row": 2,
     "w": 1
@@ -271219,7 +272193,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 23,
+    "col": 21,
     "h": 1,
     "row": 2,
     "w": 1
@@ -271233,7 +272207,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 24,
+    "col": 22,
     "h": 1,
     "row": 2,
     "w": 1
@@ -271247,7 +272221,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 25,
+    "col": 23,
     "h": 1,
     "row": 2,
     "w": 1
@@ -271275,9 +272249,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 26,
+    "col": 20,
     "h": 1,
-    "row": 2,
+    "row": 3,
     "w": 1
    }
   },
@@ -271289,9 +272263,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 27,
+    "col": 21,
     "h": 1,
-    "row": 2,
+    "row": 3,
     "w": 1
    }
   },
@@ -271303,9 +272277,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 28,
+    "col": 22,
     "h": 1,
-    "row": 2,
+    "row": 3,
     "w": 1
    }
   },
@@ -271317,9 +272291,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 29,
+    "col": 23,
     "h": 1,
-    "row": 2,
+    "row": 3,
     "w": 1
    }
   },
@@ -271345,7 +272319,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 30,
+    "col": 24,
     "h": 1,
     "row": 2,
     "w": 1
@@ -271359,7 +272333,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 31,
+    "col": 25,
     "h": 1,
     "row": 2,
     "w": 1
@@ -271373,9 +272347,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 0,
+    "col": 26,
     "h": 1,
-    "row": 3,
+    "row": 2,
     "w": 1
    }
   },
@@ -271387,9 +272361,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 1,
+    "col": 27,
     "h": 1,
-    "row": 3,
+    "row": 2,
     "w": 1
    }
   },
@@ -271429,7 +272403,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 6,
+    "col": 0,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271443,7 +272417,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 7,
+    "col": 1,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271457,7 +272431,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 8,
+    "col": 2,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271471,7 +272445,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 9,
+    "col": 3,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271513,9 +272487,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 2,
+    "col": 28,
     "h": 1,
-    "row": 3,
+    "row": 2,
     "w": 1
    }
   },
@@ -271527,9 +272501,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 3,
+    "col": 29,
     "h": 1,
-    "row": 3,
+    "row": 2,
     "w": 1
    }
   },
@@ -271541,9 +272515,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 4,
+    "col": 30,
     "h": 1,
-    "row": 3,
+    "row": 2,
     "w": 1
    }
   },
@@ -271555,9 +272529,9 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 5,
+    "col": 31,
     "h": 1,
-    "row": 3,
+    "row": 2,
     "w": 1
    }
   },
@@ -271583,7 +272557,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 10,
+    "col": 4,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271597,7 +272571,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 11,
+    "col": 5,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271611,7 +272585,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 12,
+    "col": 6,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271625,7 +272599,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 13,
+    "col": 7,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271653,7 +272627,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 20,
+    "col": 14,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271667,7 +272641,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 21,
+    "col": 15,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271681,7 +272655,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 22,
+    "col": 16,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271723,7 +272697,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 14,
+    "col": 8,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271737,7 +272711,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 15,
+    "col": 9,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271751,7 +272725,7 @@
    "layer": "Floor",
    "png": "art/pack/suelo.png",
    "rect": {
-    "col": 16,
+    "col": 10,
     "h": 1,
     "row": 3,
     "w": 1
@@ -271776,9 +272750,276 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 26,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo#m1": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 24,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo#m2": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 25,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo#m3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 27,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_arcilla": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 30,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_arcilla#m1": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 31,
+    "h": 1,
+    "row": 3,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_arcilla#m2": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_arcilla#m3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 1,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_cristal": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 2,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_cristal#m1": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 3,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_cristal#m2": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 4,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_cristal#m3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 5,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_hierro": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 10,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_hierro#m1": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 11,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_hierro#m2": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 12,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_hierro#m3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 13,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_musgo": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 6,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_musgo#m1": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 7,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_musgo#m2": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
    "rect": {
     "col": 8,
+    "h": 1,
+    "row": 4,
+    "w": 1
+   }
+  },
+  "tiles/subsuelo_musgo#m3": {
+   "grid": [
+    32,
+    32
+   ],
+   "layer": "Floor",
+   "png": "art/pack/suelo.png",
+   "rect": {
+    "col": 9,
     "h": 1,
     "row": 4,
     "w": 1
@@ -283186,812 +284427,6 @@
     "h": 1,
     "row": 18,
     "w": 1
-   }
-  },
-  "items/leather_cap": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 9,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/leather_vest": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 7,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/wool_coat": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 8,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/leather_boots": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 10,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_01": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 0,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_02": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 1,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_03": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 2,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_04": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 3,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_05": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 4,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_06": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 5,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_07": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 6,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_08": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 7,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_09": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 8,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_10": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 9,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_11": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 10,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_12": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 11,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_13": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 0,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_14": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 1,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_15": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 2,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_16": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 3,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_17": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 4,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_18": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 5,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_19": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 6,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_20": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 7,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_21": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 8,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_22": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 9,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_23": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 10,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_24": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 11,
-    "row": 1,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_25": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 0,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_26": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 1,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_27": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 2,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_28": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 3,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_29": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 4,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_30": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 5,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_31": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 6,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_32": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 7,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/ropa_33": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 8,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/gorra_roja": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 9,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/gorra_azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 10,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/gorro_gris": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 11,
-    "row": 2,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 0,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 1,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 2,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_4": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 3,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_5": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 4,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_6": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 5,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/botas_7": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/ropa_items.png",
-   "rect": {
-    "col": 6,
-    "row": 3,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/clay": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 0,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/coal": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 1,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/copper_ore": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 2,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/tin_ore": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 3,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/iron_ore": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 4,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/limestone": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 5,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/resin": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 6,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/salt": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 7,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_metal": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 8,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_aleacion": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 9,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_ceramica": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 10,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_vidrio": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 11,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_aglutinante": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 12,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_compuesto": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 13,
-    "row": 0,
-    "w": 1,
-    "h": 1
-   }
-  },
-  "items/mat_combustible": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/materias.png",
-   "rect": {
-    "col": 14,
-    "row": 0,
-    "w": 1,
-    "h": 1
    }
   }
  }
