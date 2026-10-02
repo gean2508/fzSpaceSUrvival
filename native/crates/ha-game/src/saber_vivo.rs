@@ -29,6 +29,7 @@ const ENTRE_PRUEBAS: (f32, f32) = (18.0, 40.0);
 const ESPERA_RESULTADO: f32 = 5.5;
 const FOGATA_S: f32 = 7.0;
 const REFRESCO_S: f32 = 150.0;
+const REINTENTO_S: f32 = 15.0;
 
 /// Las circunstancias con las que un crédulo ata un éxito (el índice es `Entrada::ctx_creido`).
 pub const CIRCUNSTANCIAS: [&str; 8] = [
@@ -55,6 +56,9 @@ struct Estudioso {
 #[derive(Resource, Default)]
 pub struct Taller {
     gente: HashMap<u64, Option<Estudioso>>,
+    /// Los que se anotaron pero la civilización todavía no pudo encarnar (el mundo civil carga
+    /// después, sobre todo en el celu): se reintenta cada tanto en vez de descartarlos para siempre.
+    reintento: HashMap<u64, f32>,
 }
 
 impl Taller {
@@ -145,7 +149,18 @@ fn estudiar(
             continue;
         }
         let uid = n.uid;
-        let entrada = taller.gente.entry(uid);
+        let t = &mut *taller;
+        // Un estudioso que no se pudo encarnar vuelve a intentarse pasado un rato.
+        if matches!(t.gente.get(&uid), Some(None)) {
+            match t.reintento.get(&uid) {
+                Some(cuando) if ahora >= *cuando && mirados < MIRAR => {
+                    t.gente.remove(&uid);
+                    t.reintento.remove(&uid);
+                }
+                _ => continue,
+            }
+        }
+        let entrada = t.gente.entry(uid);
         let est = match entrada {
             std::collections::hash_map::Entry::Vacant(v) => {
                 // Sólo uno de cada cinco aldeanos se anota para estudiar; los demás no gastan nada.
@@ -155,6 +170,10 @@ fn estudiar(
                 }
                 mirados += 1;
                 let s = civ.saber_de_npc(uid, n.x, n.z, true).filter(|s| matches!(s.oficio, Oficio::Erudito | Oficio::Artesano) && !s.recetas.is_empty());
+                if s.is_none() {
+                    // Sin persona todavía: se vuelve a mirar en REINTENTO_S.
+                    t.reintento.insert(uid, ahora + REINTENTO_S);
+                }
                 let nuevo = s.map(|s| Estudioso {
                     nombre: s.nombre,
                     oficio: s.oficio,

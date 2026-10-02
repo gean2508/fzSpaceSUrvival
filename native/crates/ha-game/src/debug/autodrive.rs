@@ -5375,8 +5375,9 @@ fn vida_test_drive(world: &mut World) {
     if stage > 0 {
         let (cx, cz) = world.resource::<VidaTestState>().ciudad;
         let (px, pz) = player_xz(world);
-        if (px - cx).abs() > 150.0 || (pz - cz).abs() > 150.0 {
-            teleport_surface(world, cx, cz);
+        if (px - cx).abs() > 150.0 || (pz - cz).abs() > 150.0 || world.resource::<TileWorld>().z != 0 {
+            // `teleport_a_celda` también devuelve la planta a la superficie (si no, se cae al pozo).
+            teleport_a_celda(world, cx, cz);
         }
     }
     let espera = [0.0, 50.0, 4.0, 30.0, 50.0][(stage as usize).min(4)];
@@ -5384,6 +5385,10 @@ fn vida_test_drive(world: &mut World) {
         return;
     }
     let body = ha_shared::CelestialBody::Earth;
+    // En el celu el mundo tarda: se espera a que EXISTA (como `city_test_drive`) antes de empezar.
+    if stage == 0 && !mundo_listo(world) {
+        return;
+    }
     match stage {
         0 => {
             let mut best: Option<(i64, (i64, i64))> = None;
@@ -5403,7 +5408,7 @@ fn vida_test_drive(world: &mut World) {
                 eprintln!("ha-vida: NO HAY CIUDAD");
                 std::process::exit(1);
             };
-            teleport_surface(world, cx as f32, cz as f32);
+            teleport_a_celda(world, cx as f32, cz as f32);
             world.resource_mut::<VidaTestState>().ciudad = (cx as f32, cz as f32);
             eprintln!("ha-vida: ciudad en ({cx}, {cz})");
             vida_pasar(world, now);

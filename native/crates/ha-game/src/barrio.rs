@@ -41,7 +41,7 @@ const ALERTA: f32 = 18.0;
 const ALCANCE_VECINO: f32 = 1.7;
 const DANO_VECINO: f32 = 4.0;
 /// Cuánto le saca una mordida a la vida de un vecino (1.0 = llena).
-const MORDIDA: f32 = 0.2;
+const MORDIDA: f32 = 0.15;
 const TESTIGOS: f32 = 25.0;
 /// Una casa por debajo de esto gotea con lluvia fuerte.
 pub const GOTEA_BAJO: u8 = 55;
