@@ -69,6 +69,9 @@ pub struct Persona {
     pub preso_hasta: u64,
     /// Id del `NpcRecord` del juego que la encarna ahora mismo (0 = ninguno).
     pub npc: u32,
+    /// Refugio antiatómico donde está guardada (0 = a la intemperie).
+    #[serde(default)]
+    pub refugio: u32,
 }
 
 impl Persona {

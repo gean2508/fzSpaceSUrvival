@@ -130,6 +130,16 @@ impl Contenedor {
                 None => fuera.push((it, n)),
             }
         }
+        // **Ropa del creador de personajes** (Project Zomboid: la ropa se encuentra). El ropero
+        // casi siempre trae una prenda; la cómoda, a veces.
+        let prob_ropa = match self {
+            Contenedor::Ropero => 7,
+            Contenedor::Comoda => 2,
+            _ => 0,
+        };
+        if azar(10) < prob_ropa {
+            fuera.push((crate::armadura::prenda_al_azar(azar(1000)), 1));
+        }
         fuera
     }
 }

@@ -53,3 +53,7 @@ native/ha-shot-*.png
 
 # Cache de los scripts de Python (import-pack-masivo importa pack_lexico).
 __pycache__/
+
+# Partidas de prueba (nunca se commitean) y bancos derivados del pack LimeZu (no redistribuir).
+native/partidas/
+scripts/lib/bancos/

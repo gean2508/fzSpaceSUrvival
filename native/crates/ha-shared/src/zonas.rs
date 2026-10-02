@@ -200,6 +200,13 @@ impl Zonas {
 /// candado, ni recorrido, ni rama que prediga mal.
 static HAY_ZONAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Cuántas veces se instalaron zonas: entra en la clave de la caché de tiles.
+static GENERACION: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn generacion() -> u32 {
+    GENERACION.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 static ZONAS: std::sync::RwLock<Option<Zonas>> = std::sync::RwLock::new(None);
 
 /// Instala las zonas autoradas. Lo llama el juego al cargar `world_edits.json`, y
@@ -210,6 +217,7 @@ static ZONAS: std::sync::RwLock<Option<Zonas>> = std::sync::RwLock::new(None);
 /// del planeta, el editor) y encadenarles un `&Zonas` a todas sería propagar un
 /// argumento por veinte firmas para algo que, en una partida, no cambia nunca.
 pub fn instalar(zonas: Zonas) {
+    GENERACION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let hay = !zonas.is_empty();
     if let Ok(mut w) = ZONAS.write() {
         *w = Some(zonas);

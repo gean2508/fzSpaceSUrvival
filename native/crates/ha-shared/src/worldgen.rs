@@ -30,6 +30,31 @@ pub fn hash_cell(seed: u32, tx: i64, tz: i64) -> u32 {
 /// no el tile: por eso un bosque se ve bosque y una sabana tiene cuatro árboles
 /// contados, aunque los dos pisen césped.
 pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKind> {
+    // **Memoria por celda**, igual que `topdown_tile`: la colisión de decoración del que
+    // camina pregunta por decenas de celdas por tick y cada respuesta recorre tile,
+    // bioma, calles vecinas y retiro del canto (medido en el Redmi: `ob_decor` = 9,2 ms
+    // por cuadro caminando). Pura dada la semilla, la época y las zonas autoradas.
+    if crate::grueso::activo() {
+        return surface_decor_at_calc(body, tx, tz);
+    }
+    const RANURAS: usize = 4096;
+    type Clave = (u8, i64, i64, u32, u32);
+    thread_local! {
+        static MEMO: std::cell::RefCell<Vec<Option<(Clave, Option<DecorKind>)>>> =
+            std::cell::RefCell::new(vec![None; RANURAS]);
+    }
+    let clave: Clave = (body as u8, tx, tz, crate::partida::epoca(), crate::zonas::generacion());
+    let h = (tx as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (tz as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+    let ranura = (h >> 40) as usize % RANURAS;
+    if let Some(v) = MEMO.with(|m| m.borrow()[ranura].as_ref().and_then(|(c, v)| (*c == clave).then_some(*v))) {
+        return v;
+    }
+    let v = surface_decor_at_calc(body, tx, tz);
+    MEMO.with(|m| m.borrow_mut()[ranura] = Some((clave, v)));
+    v
+}
+
+fn surface_decor_at_calc(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKind> {
     let seed = crate::body_terrain_seed(body) ^ 0x1234_abcd;
     let tile = topdown_tile(body, 0, tx, tz);
     // `buildable_ground` y no `!solid()`: desde que el bajío se nada, `!solid()`
@@ -102,6 +127,22 @@ pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKi
                 Some(crate::geography::Civil::Road | crate::geography::Civil::Bridge)
             ) {
                 return None;
+            }
+        }
+        // **Y NI SOBRE LA VEREDA** (30 sep 2026). La copa se dibuja con el pie en
+        // la celda del tronco y sube hacia el norte —hasta 8 celdas un pino—, así
+        // que un árbol en el pasto del parque, pegado a la acera, le tendía la
+        // copa por encima de la vereda y de la calle de atrás. Se mira la columna
+        // del tronco hacia el norte (donde está la copa) y un costado de una
+        // celda a cada lado: ni acera ni calzada bajo la copa.
+        for dz in -8..=1 {
+            for dx in -2..=2 {
+                if dx == 0 && dz == 0 {
+                    continue;
+                }
+                if crate::geography::civil_at(body, tx + dx, tz + dz).is_some() {
+                    return None;
+                }
             }
         }
     }
@@ -292,16 +333,62 @@ pub fn nature_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static
     // a la vista — el sitio no era el jardín de nadie, sólo estaba en el mismo
     // cuadrante. `settlement_covering` sí mide el casco (su radio), así que el
     // jardín termina donde termina el pueblo y afuera vuelve a haber monte.
-    let cerca_de_gente = crate::geography::settlement_covering(body, tx, tz).is_some();
-    let tabla = match (cerca_de_gente, roll % 3) {
+    let cerca_de_gente = crate::geography::settlement_covering(body, tx, tz);
+    let tabla = match (&cerca_de_gente, roll % 3) {
         // Alrededor de un asentamiento la flora es de JARDÍN: lo plantado se
         // distingue de lo que creció solo, y esa diferencia es la que dice "acá
         // vive alguien" antes de ver la primera casa.
-        (true, 0 | 1) => crate::pack_siembra::PARQUE,
-        (false, 0) => crate::pack_siembra::BOSQUE,
+        (Some(s), 0 | 1) => return jardin_del_pueblo(body, s, tx, tz, roll),
+        (None, 0) => crate::pack_siembra::BOSQUE,
         _ => NATURE_SPECIES,
     };
     pick_weighted(tabla, roll)
+}
+
+/// Los objetos de la tabla `PARQUE` que son **equipamiento**: se colocan en un
+/// sitio pensado para ellos, no se siembran a los dados.
+///
+/// La fuente, la estatua de seto, el arco de seto y los bancos son un OBJETO con
+/// lugar (la plaza), no flora. Sorteados por celda salían plantados en cualquier
+/// pradera del casco —"¿qué hace un arco de seto ahí?"— y la fuente, que es el
+/// más pesado de la tabla, se repetía cada pocos pasos.
+fn es_equipamiento_de_parque(key: &str) -> bool {
+    ["fuente", "pasto_arco", "pasto_estatua", "banco", "flores_banco"].iter().any(|m| key.contains(m))
+}
+
+/// Un florero o una maceta es un objeto de interior/terraza: sobre el pasto
+/// pelado de un descampado no tiene qué hacer.
+fn es_maceta(key: &str) -> bool {
+    key.contains("florero") || key.contains("maceta")
+}
+
+/// Qué crece en el jardín de un pueblo: flores y matas sueltas en cualquier
+/// parte; el equipamiento (fuente, bancos) sólo dentro de una plaza, y nunca el
+/// arco ni la estatua de seto, que son piezas de un jardín compuesto a mano.
+fn jardin_del_pueblo(
+    body: CelestialBody,
+    s: &crate::geography::Settlement,
+    tx: i64,
+    tz: i64,
+    roll: u32,
+) -> Option<&'static ExtraDecor> {
+    let en_plaza = crate::city::lot_at(body, s, tx, tz)
+        .is_some_and(|l| l.program().key == "lot/plaza");
+    for i in 0..12u32 {
+        let r = roll.wrapping_add(i.wrapping_mul(0x9e37_79b1));
+        let e = pick_weighted(crate::pack_siembra::PARQUE, r)?;
+        if es_equipamiento_de_parque(e.key) {
+            if en_plaza && !e.key.contains("pasto_") {
+                return Some(e);
+            }
+            continue;
+        }
+        if es_maceta(e.key) {
+            continue;
+        }
+        return Some(e);
+    }
+    None
 }
 
 /// Props cerca de asentamientos (el "patio" del pueblo): ~3% de esas celdas.
@@ -1055,5 +1142,23 @@ mod tests {
             (12.0..48.0).contains(&permille),
             "{permille:.1} por mil de celdas de bosque con árbol"
         );
+    }
+}
+
+#[cfg(test)]
+mod memo_decor_tests {
+    use super::*;
+
+    #[test]
+    fn la_memoria_del_decor_no_cambia_ninguna_respuesta() {
+        for (cx, cz) in [(0i64, 0i64), (-754, -1818), (3000, -900)] {
+            for dx in -24..24 {
+                for dz in -24..24 {
+                    let a = surface_decor_at_calc(CelestialBody::Earth, cx + dx, cz + dz);
+                    assert_eq!(a, surface_decor_at(CelestialBody::Earth, cx + dx, cz + dz));
+                    assert_eq!(a, surface_decor_at(CelestialBody::Earth, cx + dx, cz + dz));
+                }
+            }
+        }
     }
 }

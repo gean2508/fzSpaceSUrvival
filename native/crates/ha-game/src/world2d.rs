@@ -194,7 +194,21 @@ pub struct StreamCtl<'w> {
     /// carga espera a que esto sea 0: es la definición honesta de "el anillo
     /// visible ya está armado".
     backlog: ResMut<'w, ChunkBacklog>,
+    /// Flora chica de chunks Full que todavía no se pobló. Ver [`SmallDecorQueue`].
+    small_queue: ResMut<'w, SmallDecorQueue>,
 }
+
+/// Cola de la flora chica (matas, props de calle, muebles) por chunk `Full`.
+///
+/// Es la parte más cara de armar un chunk —recorre las 256 celdas por la cadena
+/// entera de tablas de `worldgen`— y antes se hacía DENTRO de la tanda del chunk,
+/// así que aterrizar sobre una ciudad (25 chunks `Full` de golpe) costaba cientos
+/// de milisegundos en el Redmi en un solo frame. Ahora el suelo, los árboles y las
+/// piedras entran en su tanda y esto se va llenando con el resto del presupuesto de
+/// cada frame, lo más cercano al jugador primero. `ChunkBacklog` la cuenta, así
+/// que la pantalla de carga sigue esperando a que se vacíe.
+#[derive(Resource, Default)]
+pub struct SmallDecorQueue(Vec<(CelestialBody, i32, i64, i64)>);
 
 /// Chunks pendientes tras el último pase de streaming (0 = anillo completo).
 #[derive(Resource, Default)]
@@ -388,6 +402,22 @@ struct RegrowCell {
 }
 
 impl TileWorld {
+    /// Una copia liviana (sólo las ediciones y el nivel) para muestrear el terreno desde un hilo
+    /// de fondo: la malla lejana (`universe::LodBake`) no necesita nada más del `TileWorld`.
+    pub fn copia_para_lod(&self) -> TileWorld {
+        TileWorld {
+            edits: self.edits.clone(),
+            z: self.z,
+            version: self.version,
+            removed_floors: Vec::new(),
+            edit_log: Vec::new(),
+            regrow: Vec::new(),
+            dirty: false,
+            was_paused: false,
+            debounce: 0.0,
+        }
+    }
+
     /// Cuántas celdas editó el jugador (pozos, bloques, tierra picada) en todos
     /// los cuerpos. Una partida NUEVA tiene cero.
     pub fn edit_count(&self) -> usize {
@@ -764,14 +794,33 @@ pub fn decor_hits_box(
     if z == 0 && muebles_frenan(flora, body, aabb) {
         return true;
     }
-    let reach: i64 = art.footprint_reach();
-    let x0 = (aabb[0] / TILE_M).floor() as i64 - reach;
-    let x1 = (aabb[2] / TILE_M).floor() as i64 + reach;
-    let z0 = (aabb[1] / TILE_M).floor() as i64 - reach;
-    let z1 = (aabb[3] / TILE_M).floor() as i64 + reach;
+    // **El alcance depende de QUIÉN se siembra.** Lo procedural (árboles y rocas) casi no tiene
+    // huella: escanear con el alcance de la casa autorada más grande (7 celdas) eran ~300
+    // celdas por pregunta, y cada vecino pregunta varias veces por cuadro (medido en el
+    // Redmi: `ob_decor` = 10-20 ms). Lo autorado, que sí puede ser grande, se busca por lista.
+    let rp: i64 = art.decor_reach();
+    let x0 = (aabb[0] / TILE_M).floor() as i64 - rp;
+    let x1 = (aabb[2] / TILE_M).floor() as i64 + rp;
+    let z0 = (aabb[1] / TILE_M).floor() as i64 - rp;
+    let z1 = (aabb[3] / TILE_M).floor() as i64 + rp;
     for cz in z0..=z1 {
         for cx in x0..=x1 {
             if decor_cell_hits(art, authored, flora, body, z, cx, cz, aabb) {
+                return true;
+            }
+        }
+    }
+    if let Some(a) = authored.filter(|a| !a.is_empty()) {
+        let reach = art.footprint_reach();
+        let (ax0, ax1) = ((aabb[0] / TILE_M).floor() as i64 - reach, (aabb[2] / TILE_M).floor() as i64 + reach);
+        let (az0, az1) = ((aabb[1] / TILE_M).floor() as i64 - reach, (aabb[3] / TILE_M).floor() as i64 + reach);
+        for d in &a.list {
+            if d.body == body as u8
+                && d.z == z
+                && (ax0..=ax1).contains(&d.x)
+                && (az0..=az1).contains(&d.zc)
+                && decor_cell_hits(art, authored, flora, body, z, d.x, d.zc, aabb)
+            {
                 return true;
             }
         }
@@ -858,8 +907,13 @@ fn decor_cell_hits(
             }
         }
         Some(DecorKind::Rock) => {
-            let rock_key = format!("decor/rock{}", body_art_suffix(body));
-            let keys = [rock_key.as_str(), "decor/rock"];
+            // Sin `format!`: esto corre por celda y por tick al caminar.
+            let rock_key = match body_art_suffix(body) {
+                "_moon" => "decor/rock_moon",
+                "_mars" => "decor/rock_mars",
+                _ => "decor/rock",
+            };
+            let keys = [rock_key, "decor/rock"];
             match art.collision_footprint(&keys) {
                 Some(fp) => footprint_hits(fp, cx, cz, (1.0, 1.0), aabb),
                 None => art.collides_override(&keys).unwrap_or(false) && cell_hits(cx, cz, aabb),
@@ -1076,6 +1130,7 @@ impl Plugin for World2dPlugin {
             .init_resource::<ActivePlanet>()
             .init_resource::<ChunkBudget>()
             .init_resource::<ChunkBacklog>()
+            .init_resource::<SmallDecorQueue>()
             .init_resource::<ChunkMaterial>()
             .init_resource::<LayerFade>()
             .init_resource::<AuthoredDecor>()
@@ -1552,6 +1607,7 @@ fn stream_tile_chunks(
         // Nada que construir acá: si quedara un backlog viejo anotado, la pantalla
         // de carga esperaría para siempre un anillo que no se va a armar.
         ctl.backlog.0 = 0;
+        ctl.small_queue.0.clear();
         // Se destruye A PLAZOS, lo más lejano primero: el jugador ya no lo mira
         // (está subiendo) y el satelital de `universe.rs` ya cubre ese hueco.
         let mut budget = DECOR_DESPAWN_BUDGET_PER_FRAME;
@@ -1714,7 +1770,7 @@ fn stream_tile_chunks(
         }
         spawn_chunk_decor(
             &mut commands, &mut flora, &art, &tiles, &authored.list, &decor_free, body, z, cx, cz,
-            want,
+            want, &mut ctl.small_queue,
         );
         // `spawn_chunk_decor` ya spawnea la flora chica cuando el nivel es Full;
         // el arte de tile va aparte (y sólo una vez, porque acabamos de limpiar).
@@ -1751,6 +1807,7 @@ fn stream_tile_chunks(
     // sabe cuántos van a entrar hasta después de recorrerlos (el plazo puede
     // cortar antes de agotar el conteo), así que el backlog se cuenta AL SALIR.
     let mut missing_done = 0usize;
+    let mut built_full: HashSet<(i64, i64)> = HashSet::new();
     for &(cx, cz) in &missing {
         if budget == 0 || reloj.elapsed() >= plazo {
             break;
@@ -1780,6 +1837,9 @@ fn stream_tile_chunks(
             MeshMaterial2d(mat.0.clone()),
             Transform::from_xyz(0.0, 0.0, 0.0),
         ));
+        if decor_level == DecorDetail::Full {
+            built_full.insert((cx, cz));
+        }
         if decor_level != DecorDetail::None {
             spawn_chunk_decor(
                 &mut commands,
@@ -1793,16 +1853,40 @@ fn stream_tile_chunks(
                 cx,
                 cz,
                 decor_level,
+                &mut ctl.small_queue,
             );
             // Tiles con arte "vivo" (agua/autotile/piezas construidas) como
             // sprites — en TODAS las capas (subsuelos/pisos usan floor/wall/*).
             spawn_chunk_tile_art(&mut commands, &art, &tiles, body, z, cx, cz);
         }
     }
+    // Flora chica de los chunks Full con lo que sobre del plazo, lo más cercano
+    // primero. Siempre avanza al menos un chunk por frame aunque el suelo haya
+    // gastado el plazo, o una cola larga no se vaciaría nunca.
+    if !ctl.small_queue.0.is_empty() {
+        let queue = &mut ctl.small_queue.0;
+        queue.sort_by_key(|&(_, _, cx, cz)| std::cmp::Reverse((cx - pcx).pow(2) + (cz - pcz).pow(2)));
+        let mut hechos = 0usize;
+        while let Some(&(qbody, qz, cx, cz)) = queue.last() {
+            if hechos > 0 && reloj.elapsed() >= plazo {
+                break;
+            }
+            queue.pop();
+            let vigente = qbody == body
+                && qz == z
+                && (detail_of.get(&(cx, cz)) == Some(&DecorDetail::Full)
+                    || built_full.contains(&(cx, cz)));
+            if !vigente {
+                continue;
+            }
+            spawn_chunk_small_decor(&mut commands, &flora, &art, &tiles, &decor_free, body, z, cx, cz);
+            hechos += 1;
+        }
+    }
     // La pantalla de carga no levanta la cortina hasta que esto llega a 0 (y
     // `pending_decor` también, porque un anillo con el suelo puesto pero sin
     // árboles se ve a medio hacer).
-    ctl.backlog.0 = (missing.len() - missing_done) + deferred_count;
+    ctl.backlog.0 = (missing.len() - missing_done) + deferred_count + ctl.small_queue.0.len();
 }
 
 fn body_art_suffix(body: CelestialBody) -> &'static str {
@@ -2484,6 +2568,7 @@ fn spawn_chunk_decor(
     cx: i64,
     cz: i64,
     detail: DecorDetail,
+    small_queue: &mut SmallDecorQueue,
 ) {
     // ANIDADA dentro de `stream_tile_chunks`: en la tabla de `ha-sys` este número
     // está INCLUIDO en el de aquél. Se separa a propósito — §10 sospecha de las
@@ -2668,7 +2753,9 @@ fn spawn_chunk_decor(
                     InteractTargetKind::OreGold => "decor/ore_gold",
                     _ => "decor/ore_iron",
                 };
-                let con_arte = art.tile_has_art(key);
+                // Las vetas son UN sprite suelto (art/gen/mundo.png), no poses de tile: `tile_has_art`
+                // decía siempre que no y salían las pepitas de color en vez del dibujo.
+                let con_arte = art.get(key).is_some();
                 let mut e = commands.spawn((
                     SurfaceDecor { cx, cz, z, small: false },
                     InteractTarget { kind, id },
@@ -2799,7 +2886,10 @@ fn spawn_chunk_decor(
     flora.set_chunk_trees(cx as i32, cz as i32, trees);
 
     if detail == DecorDetail::Full {
-        spawn_chunk_small_decor(commands, flora, art, tiles, decor_free, body, z, cx, cz);
+        let entrada = (body, z, cx, cz);
+        if !small_queue.0.contains(&entrada) {
+            small_queue.0.push(entrada);
+        }
     }
 }
 

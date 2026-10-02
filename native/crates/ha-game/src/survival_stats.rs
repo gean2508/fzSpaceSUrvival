@@ -94,6 +94,7 @@ fn tick_survival(
     mut player: Query<(&mut SimState, &Transform), With<Player>>,
     mut persist: ResMut<SurvivalPersist>,
 ) {
+    let _p = crate::debug::probe("fx_tick_survival");
     if is_app_paused() {
         return;
     }
@@ -151,6 +152,10 @@ fn gentle_respawn(sim: &mut SimState, ctx: WorldContext) {
     }
 }
 
+fn ha_ropa(item: &str) -> bool {
+    ha_shared::armadura::prenda(item).is_some()
+}
+
 /// Consumes a completed eat-hold: one food item out of the equipped stack,
 /// bars up. Runs before `update_interact_hud` so the generic no-target branch
 /// doesn't swallow the completion.
@@ -161,6 +166,7 @@ fn consume_eat_hold(
     mut inv_ui: ResMut<InventoryUiState>,
     mut inv_persist: ResMut<InventoryPersistState>,
     mut player: Query<&mut SimState, With<Player>>,
+    mut equipo: ResMut<crate::equipo::Equipo>,
 ) {
     if !hold.completed || !hold.eating {
         return;
@@ -173,6 +179,21 @@ fn consume_eat_hold(
     };
     let item_id = equipped.item_id.clone();
     if inv.qty(&item_id) == 0 {
+        return;
+    }
+    // Una prenda no se come: se viste (`equipo.rs`). La que ocupaba la ranura vuelve a la mochila.
+    if ha_ropa(&item_id) {
+        if let Some(previa) = equipo.vestir(&item_id) {
+            consume_from_ui_slots(&mut inv_ui, &[(item_id.as_str(), 1)]);
+            if let Some(p) = previa {
+                crate::hud::inventory_ui::add_item_to_slots(&mut inv_ui, &p, 1);
+            }
+            flush_slots_to_inventory(&inv_ui, &mut inv);
+            inv_persist.mark_immediate();
+            if inv.qty(&item_id) == 0 {
+                equipped.item_id = "hand".to_string();
+            }
+        }
         return;
     }
     if !apply_food(&mut sim.survival, &item_id) {

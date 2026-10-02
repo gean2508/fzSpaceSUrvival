@@ -221,3 +221,131 @@ fn diag() {
         eprintln!("{} {:?} {}", cronica::fecha(h.dia), h.tipo, h.texto);
     }
 }
+
+// --- física del universo simulado, bombas, refugios ---------------------------------
+
+fn ciudad_de(m: &Mundo) -> u32 {
+    *m.pueblos.values().find(|p| p.rango == 2 && p.cuerpo == 0).map(|p| &p.id).unwrap()
+}
+
+#[test]
+fn la_verdad_de_la_fisica_manda_en_la_ingenieria() {
+    use super::fisica::*;
+    let mut m = Mundo::sembrar(2, &sitios_falsos(24));
+    let c = ciudad_de(&m);
+    m.pueblos.get_mut(&c).unwrap().creencias.err = [0.0; N_LEYES];
+    let bien = m.factor_ingenieria(c, &[GRAVEDAD, ORBITAS, FISION]);
+    m.pueblos.get_mut(&c).unwrap().creencias.err = [0.6; N_LEYES];
+    let mal = m.factor_ingenieria(c, &[GRAVEDAD, ORBITAS, FISION]);
+    assert!(bien > 0.95, "con la física bien medida la ingeniería funciona: {bien}");
+    assert!(mal < 0.7 && mal >= 0.35, "con la física mal medida falla más: {mal}");
+}
+
+#[test]
+fn una_bomba_mal_calculada_no_explota_y_una_bien_calculada_arrasa() {
+    use super::fisica::*;
+    let s = sitios_falsos(24);
+    let mut resultados = [0.0f32; 2];
+    for (i, err) in [0.0f32, 0.9].into_iter().enumerate() {
+        let mut m = Mundo::sembrar(4, &s);
+        let ids: Vec<u32> = m.pueblos.values().filter(|p| p.rango == 2 && p.cuerpo == 0).map(|p| p.id).take(2).collect();
+        let (a, b) = (ids[0], ids[1]);
+        m.pueblos.get_mut(&a).unwrap().creencias.err[FISION] = err;
+        m.pueblos.get_mut(&a).unwrap().arsenal = 30;
+        let antes = m.pueblos[&b].pob;
+        for _ in 0..12 {
+            if m.pueblos[&b].vivo {
+                m.detonar(a, b);
+            }
+        }
+        resultados[i] = m.pueblos[&b].pob / antes;
+        invariantes(&m);
+    }
+    assert!(resultados[0] < 0.1, "12 bombas bien calculadas dejan poco: {}", resultados[0]);
+    assert!(resultados[1] > resultados[0] * 3.0, "las mal calculadas fallan: {:?}", resultados);
+}
+
+#[test]
+fn el_bunker_salva_y_los_sobrevivientes_refundan() {
+    let mut m = Mundo::sembrar(4, &sitios_falsos(24));
+    let ids: Vec<u32> = m.pueblos.values().filter(|p| p.rango == 2 && p.cuerpo == 0).map(|p| p.id).take(2).collect();
+    let (a, b) = (ids[0], ids[1]);
+    let (x, z) = (m.pueblos[&b].x, m.pueblos[&b].z);
+    let r = m.registrar_refugio(x + 50.0, z, 20, 400.0);
+    let salvados: Vec<u32> = m.pueblos[&b].gente.iter().copied().filter(|g| *g != super::mundo::JUGADOR_ID).take(5).collect();
+    assert!(!salvados.is_empty());
+    for g in &salvados {
+        m.refugiar(*g, r).unwrap();
+    }
+    m.pueblos.get_mut(&a).unwrap().arsenal = 40;
+    for _ in 0..40 {
+        if m.pueblos[&b].vivo {
+            m.detonar(a, b);
+            m.pueblos.get_mut(&a).unwrap().arsenal = 40;
+        }
+    }
+    m.extinguir(b);
+    assert!(!m.pueblos[&b].vivo, "el pueblo quedó desierto");
+    for g in &salvados {
+        assert!(m.personas.contains_key(g), "el refugiado murió");
+    }
+    invariantes(&m);
+    assert!(m.fundar_desde_refugio(r, None, x, z).is_err(), "con la lluvia radiactiva no se sale");
+    for _ in 0..600 {
+        m.paso_dia();
+        if m.radiacion_en(x, z) < 0.05 {
+            break;
+        }
+    }
+    invariantes(&m);
+    let nuevo = m.fundar_desde_refugio(r, Some("Nueva Esperanza".into()), x, z).expect("ya se puede salir");
+    assert!(m.pueblos[&nuevo].vivo && m.pueblos[&nuevo].gobernante.is_some());
+    m.avanzar(DIAS_ANIO * 20);
+    invariantes(&m);
+    assert!(m.pueblos[&nuevo].vivo, "la civilización nueva sigue en pie");
+}
+
+#[test]
+fn muchos_mundos_bombas_y_extinciones_sin_romper_nada() {
+    let mut arsenal = 0;
+    let mut deton = 0;
+    let mut extinc = 0;
+    let mut refund = 0;
+    let mut sin_vivos = 0;
+    let mut observ = 0;
+    for semilla in 1..=6u64 {
+        let mut m = Mundo::sembrar(semilla * 7, &sitios_falsos(96));
+        for _ in 0..40 {
+            m.avanzar(DIAS_ANIO * 10);
+            invariantes(&m);
+        }
+        let t = |k: &str| m.cronica.totales.get(k).copied().unwrap_or(0) as usize;
+        arsenal += t("Arsenal");
+        deton += t("Detonacion");
+        extinc += t("Extincion");
+        refund += t("Refundacion");
+        observ += t("Observacion");
+        let vivos = m.pueblos.values().filter(|p| p.vivo).count();
+        if vivos == 0 {
+            sin_vivos += 1;
+        }
+        assert!(m.invierno.is_finite() && (0.0..=1.0).contains(&m.invierno));
+        for p in m.pueblos.values() {
+            assert!(p.arsenal <= catastrofe::TOPE_ARSENAL && p.radiacion.is_finite());
+        }
+        eprintln!("semilla {semilla}: {vivos} pueblos vivos, {} detonaciones, invierno {:.2}", m.detonaciones, m.invierno);
+    }
+    eprintln!("arsenal {arsenal}, detonaciones {deton}, extinciones {extinc}, refundaciones {refund}, observaciones {observ}, mundos muertos {sin_vivos}/6");
+    assert!(sin_vivos < 6, "la humanidad no puede extinguirse en todos los mundos");
+}
+
+#[test]
+fn un_dia_de_civilizacion_cuesta_poco() {
+    let mut m = Mundo::sembrar(9, &sitios_falsos(96));
+    m.avanzar(DIAS_ANIO * 200);
+    let t = std::time::Instant::now();
+    m.avanzar(DIAS_ANIO * 20);
+    let por_dia = t.elapsed().as_secs_f64() * 1000.0 / (DIAS_ANIO * 20) as f64;
+    eprintln!("paso_dia: {por_dia:.2} ms/dia con {} pueblos y {} personas", m.pueblos.len(), m.personas.len());
+    assert!(por_dia < 40.0, "un día de civilización tarda {por_dia:.1} ms");
+}

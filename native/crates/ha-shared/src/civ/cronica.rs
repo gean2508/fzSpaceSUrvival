@@ -34,6 +34,12 @@ pub enum Tipo {
     Obra,
     Jugador,
     Muerte,
+    Observacion,
+    Arsenal,
+    Detonacion,
+    Extincion,
+    Refundacion,
+    Refugio,
 }
 
 impl Tipo {
@@ -41,10 +47,11 @@ impl Tipo {
     pub fn peso(self) -> u8 {
         use Tipo::*;
         match self {
-            Hito | Lanzamiento | Llegada | Independencia | Anexion | Guerra | Revolucion | Paz => 3,
+            Hito | Lanzamiento | Llegada | Independencia | Anexion | Guerra | Revolucion | Paz | Detonacion | Extincion
+            | Refundacion => 3,
             Descubrimiento | Golpe | Eleccion | Sucesion | Fundacion | Tragedia | Hallazgo | Culto
-            | Hambruna | Jugador => 2,
-            Olvido | Ley | Alianza | Obra | Justicia | Batalla => 1,
+            | Hambruna | Jugador | Arsenal | Refugio => 2,
+            Olvido | Ley | Alianza | Obra | Justicia | Batalla | Observacion => 1,
             Crimen | Muerte => 0,
         }
     }

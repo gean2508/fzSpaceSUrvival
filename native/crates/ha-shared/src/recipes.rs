@@ -238,6 +238,36 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "bucket",
         output_qty: 1,
     },
+    // **Ropa y armadura** (pedido del 1 oct 2026): las pieles y la lana de los animales se
+    // visten. Ver `armadura.rs` y `ha-game/equipo.rs`.
+    CraftRecipe {
+        id: 31,
+        display_name: "Gorro de cuero",
+        ingredients: &[("leather", 2), ("wool", 1)],
+        output_id: "leather_cap",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 32,
+        display_name: "Chaleco de cuero",
+        ingredients: &[("leather", 4)],
+        output_id: "leather_vest",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 33,
+        display_name: "Botas de cuero",
+        ingredients: &[("leather", 3), ("wool", 1)],
+        output_id: "leather_boots",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 34,
+        display_name: "Abrigo de lana",
+        ingredients: &[("wool", 6), ("leather", 2)],
+        output_id: "wool_coat",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {

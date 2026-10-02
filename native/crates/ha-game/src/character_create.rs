@@ -1496,20 +1496,20 @@ mod tests {
 // apertura, salen cajas. Lo clava `los_comentarios_son_ascii`.
 
 const QUIP_PIEL: &[&str] = &[
-    "Otra piel? Dale, total no me duele.",
+    "¿Otra piel? Dale, total no me duele.",
     "Con esta me veo bien hasta de noche.",
-    "Ojo que despues no te la cambio.",
-    "Esa me gusta. Pero vos sabras.",
+    "Ojo que después no te la cambio.",
+    "Esa me gusta. Pero vos sabrás.",
 ];
 const QUIP_OJOS: &[&str] = &[
     "Con estos ojos veo el mismo mundo, eh.",
-    "Me estas mirando o me estas eligiendo?",
+    "¿Me estás mirando o me estás eligiendo?",
     "Estos dejalos. Con estos veo bien.",
 ];
 const QUIP_ROPA: &[&str] = &[
     "Linda ropa. Igual me la voy a ensuciar.",
-    "Esto no abriga nada. Sabes que hay noche?",
-    "Me vestis vos y despues se rien de mi.",
+    "Esto no abriga nada. ¿Sabés que hay noche?",
+    "Me vestís vos y después se ríen de mí.",
     "Con esto puesto no me toma nadie en serio.",
 ];
 const QUIP_PELO: &[&str] = &[
@@ -1518,14 +1518,14 @@ const QUIP_PELO: &[&str] = &[
     "Ese corte se lo vi a un aldeano. Lo copiaste.",
 ];
 const QUIP_GORRO: &[&str] = &[
-    "El gorro es lo unico que me representa.",
+    "El gorro es lo único que me representa.",
     "Sin gorro me siento desnudo.",
-    "Con este gorro me van a ver de lejos. Eso es bueno?",
+    "Con este gorro me van a ver de lejos. ¿Eso es bueno?",
 ];
 const QUIP_AZAR: &[&str] = &[
-    "Al azar? Gracias por el esfuerzo.",
-    "Y asi nace un heroe. De casualidad.",
-    "Tira de nuevo, dale. No soy yo el que sufre.",
+    "¿Al azar? Gracias por el esfuerzo.",
+    "Y así nace un héroe. De casualidad.",
+    "Tirá de nuevo, dale. No soy yo el que sufre.",
 ];
 const QUIP_NOMBRE: &[&str] = &[
     "Con ese nombre me voy a tener que hacer respetar.",
@@ -1533,9 +1533,9 @@ const QUIP_NOMBRE: &[&str] = &[
     "Listo. Ya soy alguien.",
 ];
 const QUIP_HOLA: &[&str] = &[
-    "Bueno, aca estoy. Hace lo que quieras.",
-    "Antes de empezar: gorro si, o gorro no?",
-    "Tocame algo. No me dejes asi.",
+    "Bueno, acá estoy. Hacé lo que quieras.",
+    "Antes de empezar: ¿gorro sí, o gorro no?",
+    "Tocame algo. No me dejes así.",
 ];
 
 /// La linea que le toca a un cambio. `None` = el saludo de bienvenida.

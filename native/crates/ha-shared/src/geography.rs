@@ -1112,9 +1112,11 @@ pub fn settlement_in(body: CelestialBody, sx: i64, sz: i64) -> Option<Settlement
         return hit;
     }
     let calculado = settlement_in_sin_memo(body, sx, sz);
-    if !crate::grueso::activo() {
-        SITIOS.with(|t| t.borrow_mut()[ranura] = Some((clave, sx, sz, calculado)));
-    }
+    // Se memoriza también en grueso: el sitio depende de la plataforma
+    // continental, nunca de los ríos, así que un valor calculado desde el aire es
+    // el mismo que el de a pie. Sin esto cada muestra del disco repetía el sorteo
+    // de las nueve celdas vecinas.
+    SITIOS.with(|t| t.borrow_mut()[ranura] = Some((clave, sx, sz, calculado)));
     calculado
 }
 

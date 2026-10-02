@@ -85,6 +85,9 @@ pub struct RenderScaleState {
 }
 
 fn spawn_blit_camera(mut commands: Commands) {
+    if crate::camera::una_sola_camara() {
+        return;
+    }
     commands.spawn((
         BlitCamera,
         Camera2d,

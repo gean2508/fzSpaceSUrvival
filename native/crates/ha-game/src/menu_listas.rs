@@ -45,6 +45,8 @@ pub enum Pantalla {
     Partidas,
     Personajes,
     Nueva,
+    /// MULTIJUGADOR: anfitriones de la LAN y el servidor online.
+    Multijugador,
 }
 
 /// Lo que la pantalla NUEVA PARTIDA tiene armado ahora mismo.
@@ -136,6 +138,8 @@ pub enum AccionLista {
     /// Elegir modo: `true` = creativo.
     Modo(bool),
     Crear,
+    /// MULTIJUGADOR: conectar a esta dirección (`ip:puerto`).
+    Unirse(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +258,7 @@ fn redibujar(
     assets: Res<AssetServer>,
     seleccionado: Res<SelectedCharacter>,
     tecleando: Res<Tecleando>,
+    multi: Res<crate::multijugador::Multi>,
 ) {
     let Ok(mut panel) = paneles.get_single_mut() else { return };
     let abierta = *pantalla != Pantalla::Ninguna;
@@ -281,6 +286,7 @@ fn redibujar(
                     dibujar_personajes(l, &ctx, pend.as_deref(), &seleccionado)
                 }
                 Pantalla::Nueva => dibujar_nueva(l, &ctx, &borrador),
+                Pantalla::Multijugador => dibujar_multijugador(l, &ctx, &multi),
             }
             if escribiendo {
                 dibujar_teclado(l, &ctx, &tecleando.texto);
@@ -318,6 +324,50 @@ fn hace_cuanto(segundos: u64) -> String {
 
 /// **PARTIDAS.** Cada fila es un mundo: su viñeta, su semilla, su día y quiénes
 /// viven ahí. Transcripta de `mock_pantallas::partidas`.
+/// MULTIJUGADOR: los anfitriones que avisaron por la LAN y el servidor online.
+fn dibujar_multijugador(l: &mut ChildBuilder, ctx: &Ctx, multi: &crate::multijugador::Multi) {
+    use crate::ui_pack::{self as up, Ancla, Pack};
+    let k = ctx.k;
+    let (pw, ph) = (1800.0_f32, 810.0_f32);
+    let (pxu, pyu) = ((up::ANCHO - pw) / 2.0, 210.0_f32);
+    up::marco(l, ctx.art, up::marco::PANEL, pxu, pyu, pw, ph, k);
+    up::cartel(l, ctx.art, "MULTIJUGADOR", pxu + pw / 2.0, pyu - 48.0, 640.0, 96.0, 48.0, k);
+    let (ix, iy) = (pxu + 66.0, pyu + 60.0);
+    let (fila_h, sep) = (150.0_f32, 18.0_f32);
+    let mut fila = 0usize;
+    let mut y = |fila: usize| iy + fila as f32 * (fila_h + sep);
+    for a in multi.anfitriones.iter().take(4) {
+        let yy = y(fila);
+        up::marco(l, ctx.art, up::marco::SLOT, ix, yy, pw - 132.0, fila_h, k);
+        up::texto(l, a.nombre.clone(), 44.0, Pack::TINTA, ix + 40.0, yy + 50.0, Ancla::Izq, k);
+        up::texto(
+            l,
+            format!("{} · semilla {} · {} jugando", a.direccion, crate::boot_ui::separar_miles(a.semilla), a.jugadores),
+            28.0, Pack::SUAVE, ix + 40.0, yy + 100.0, Ancla::Izq, k,
+        );
+        up::boton(l, ctx.art, ix + pw - 132.0 - 330.0, yy + 29.0, 290.0, 92.0, Some("UNIRSE"), None, fila == 0, 32.0,
+                  AccionLista::Unirse(a.direccion.clone()), k);
+        fila += 1;
+    }
+    if let Some(dir) = crate::multijugador::servidor_online() {
+        let yy = y(fila);
+        up::marco(l, ctx.art, up::marco::SLOT, ix, yy, pw - 132.0, fila_h, k);
+        up::texto(l, "SERVIDOR ONLINE", 44.0, Pack::TINTA, ix + 40.0, yy + 50.0, Ancla::Izq, k);
+        up::texto(l, dir.clone(), 28.0, Pack::SUAVE, ix + 40.0, yy + 100.0, Ancla::Izq, k);
+        up::boton(l, ctx.art, ix + pw - 132.0 - 330.0, yy + 29.0, 290.0, 92.0, Some("UNIRSE"), None, fila == 0, 32.0,
+                  AccionLista::Unirse(dir), k);
+        fila += 1;
+    }
+    if fila == 0 {
+        up::texto(l, "Buscando anfitriones en tu red...", 36.0, Pack::SUAVE, pxu + pw / 2.0, pyu + ph / 2.0 - 40.0, Ancla::Medio, k);
+        up::texto(l, "Un amigo abre su mundo con MENÚ · MULTIJUGADOR · ANFITRIÓN LAN.", 28.0, Pack::PIE, pxu + pw / 2.0, pyu + ph / 2.0 + 30.0, Ancla::Medio, k);
+    }
+    if !multi.mensaje.is_empty() {
+        up::texto(l, multi.mensaje.clone(), 30.0, Pack::SUAVE, pxu + pw / 2.0, pyu + ph - 46.0, Ancla::Medio, k);
+    }
+    up::boton(l, ctx.art, 40.0, 134.0, 200.0, 76.0, Some("VOLVER"), None, false, 30.0, AccionLista::Cerrar, k);
+}
+
 fn dibujar_partidas(l: &mut ChildBuilder, ctx: &Ctx, pendiente: Option<&str>) {
     use crate::ui_pack::{self as up, Ancla, Pack};
     let k = ctx.k;
@@ -720,6 +770,7 @@ fn tocar(
     mut next: ResMut<NextState<GamePhase>>,
     mut editor: ResMut<crate::ui_editor::UiEditorState>,
     mut tecleando: ResMut<Tecleando>,
+    mut multi: ResMut<crate::multijugador::Multi>,
 ) {
     for (interaccion, accion) in &mut interacciones {
         if *interaccion != Interaction::Pressed {
@@ -732,7 +783,17 @@ fn tocar(
         );
         match accion {
             AccionLista::Cerrar => {
+                if *pantalla == Pantalla::Multijugador {
+                    multi.buscar(false);
+                    multi.cerrar_todo();
+                }
                 *pantalla = Pantalla::Ninguna;
+            }
+            AccionLista::Unirse(dir) => {
+                let nombre = if seleccionado.name.is_empty() { "Viajero".to_string() } else { seleccionado.name.clone() };
+                let piel = crate::multijugador::piel_para(&nombre);
+                multi.conectar(dir.clone(), &nombre, &piel, 0, crate::multijugador::Origen::Menu);
+                pantalla.set_changed();
             }
             AccionLista::Jugar(id) => {
                 partida::abrir(id);

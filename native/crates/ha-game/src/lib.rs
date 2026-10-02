@@ -35,6 +35,16 @@ mod bautizo;
 mod salir;
 mod cubo;
 mod fps_tope;
+mod equipo;
+mod frutales;
+pub mod i18n;
+pub mod red;
+pub mod metas;
+pub mod habilidades;
+pub mod infectados;
+pub mod estados;
+pub mod alijos;
+pub mod multijugador;
 mod ambient;
 mod consola;
 mod marca;
@@ -60,6 +70,7 @@ mod inventory_persist;
 mod machines;
 mod npc_menu;
 mod puertas;
+mod obstaculos;
 mod space_fx;
 mod universe;
 mod platform;
@@ -69,7 +80,9 @@ mod scene;
 mod creative_fly;
 mod nav_computer;
 mod colony;
+mod persistent_agents;
 mod society;
+mod civ_vida;
 mod civilizacion;
 mod harvest;
 mod held_item;
@@ -160,6 +173,22 @@ fn run_app_inner() {
         ..default()
     };
 
+    // **Interruptores para cazar el parpadeo** (1 oct 2026): de a ratos, un cuadro sale SIN
+    // ningún sprite (sólo suelo + UI) cada ~6 s, en el Redmi. Se aíslan sin recompilar:
+    // `setprop debug.ha.present mailbox|immediate|fifo|relaxed`, `debug.ha.latencia 1|2|3`.
+    if let Ok(v) = crate::flags::var("HA_PRESENT") {
+        window.present_mode = match v.as_str() {
+            "mailbox" => bevy::window::PresentMode::Mailbox,
+            "immediate" => bevy::window::PresentMode::Immediate,
+            "relaxed" => bevy::window::PresentMode::FifoRelaxed,
+            "auto" => bevy::window::PresentMode::AutoVsync,
+            _ => bevy::window::PresentMode::Fifo,
+        };
+    }
+    if let Some(n) = crate::flags::var("HA_LATENCIA").ok().and_then(|v| v.parse::<u32>().ok()).and_then(std::num::NonZeroU32::new) {
+        window.desired_maximum_frame_latency = Some(n);
+    }
+
     #[cfg(not(target_os = "android"))]
     {
         // `HA_RES=ancho x alto` — palanca de diagnóstico, no de juego. Sirve para
@@ -189,7 +218,6 @@ fn run_app_inner() {
     }
 
     // `mut` sólo hace falta en el camino no-android (abajo se le encadena más).
-    #[cfg_attr(target_os = "android", allow(unused_mut))]
     let mut plugins = DefaultPlugins
         .set(WindowPlugin {
             primary_window: Some(window),
@@ -216,6 +244,26 @@ fn run_app_inner() {
             file_path: concat!(env!("CARGO_MANIFEST_DIR"), "/assets").to_string(),
             ..default()
         });
+    }
+
+    // `setprop debug.ha.backend gl|vulkan` / `debug.ha.sync_pipe 1` (celu): aislar si el parpadeo
+    // es del driver o de pipelines que se compilan y mientras tanto no se dibujan.
+    #[cfg(target_os = "android")]
+    if crate::flags::var("HA_BACKEND").is_ok() || crate::flags::var("HA_SYNC_PIPE").is_ok() {
+        use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
+        let backends = match crate::flags::var("HA_BACKEND").as_deref() {
+            Ok("gl") => Some(Backends::GL),
+            Ok(_) => Some(Backends::VULKAN),
+            Err(_) => None,
+        };
+        plugins = plugins.set(bevy::render::RenderPlugin {
+            render_creation: RenderCreation::Automatic(WgpuSettings { backends, ..default() }),
+            synchronous_pipeline_compilation: crate::flags::var("HA_SYNC_PIPE").is_ok(),
+            ..default()
+        });
+    }
+    if crate::flags::var("HA_SIN_PIPELINE").is_ok() {
+        plugins = plugins.disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>();
     }
 
     App::new()
@@ -334,7 +382,7 @@ fn run_app_inner() {
         .add_plugins(weather::WeatherPlugin)
         .add_plugins(granja::GranjaPlugin)
         .add_plugins(textos_mundo::TextosMundoPlugin)
-        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, fps_tope::FpsTopePlugin))
+        .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, frutales::FrutalesPlugin, i18n::IdiomaPlugin, multijugador::MultijugadorPlugin, metas::MetasPlugin, habilidades::HabilidadesPlugin, infectados::InfectadosPlugin, estados::EstadosPlugin, alijos::AlijosPlugin, equipo::EquipoPlugin, fps_tope::FpsTopePlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)
@@ -356,6 +404,7 @@ fn run_app_inner() {
             held_item::HeldItemPlugin,
             chests::ChestsPlugin,
         ))
+        .add_plugins(civ_vida::CivVidaPlugin)
         .add_systems(Startup, apply_android_frame_cap)
         .run();
 }
@@ -394,6 +443,10 @@ fn desktop_wgpu_backends() -> Backends {
 fn herramientas_de_la_compu(app: &mut App) {
     #[cfg(not(target_os = "android"))]
     app.add_plugins((AblatePlugin, debug::StageProbePlugin, debug::VerColisionPlugin));
+    // En el celu sólo con `setprop debug.ha.perflog 1` (ver `debug::perf`); sin la
+    // propiedad no se registra nada.
     #[cfg(target_os = "android")]
-    let _ = app;
+    if flags::var("HA_PERFLOG").is_ok() {
+        app.add_plugins((AblatePlugin, debug::StageProbePlugin));
+    }
 }

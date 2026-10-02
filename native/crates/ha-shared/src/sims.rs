@@ -351,6 +351,25 @@ impl Personalidad {
         Self { w, moral, carisma }
     }
 
+    /// Hijo de DOS: cada gen sale de uno u otro (crossover uniforme, elegido por la semilla), con
+    /// una deriva chica encima. La moral y el carisma se mezclan en vez de elegirse.
+    pub fn cruzar(a: &Personalidad, b: &Personalidad, semilla: u64, deriva: f32) -> Self {
+        let mut w = a.w;
+        for (i, v) in w.iter_mut().enumerate() {
+            let base = if unit(semilla.wrapping_add(300 + i as u64)) < 0.5 { a.w[i] } else { b.w[i] };
+            let r = unit(semilla.wrapping_add(7 + i as u64)) * 2.0 - 1.0;
+            *v = (base + r * deriva).clamp(0.5, 1.5);
+        }
+        let rm = unit(semilla.wrapping_add(91)) * 2.0 - 1.0;
+        let rc = unit(semilla.wrapping_add(92)) * 2.0 - 1.0;
+        let mezcla = 0.35 + 0.3 * unit(semilla.wrapping_add(93));
+        Self {
+            w,
+            moral: (a.moral * mezcla + b.moral * (1.0 - mezcla) + rm * deriva * 2.0).clamp(-1.0, 1.0),
+            carisma: (a.carisma * mezcla + b.carisma * (1.0 - mezcla) + rc * deriva).clamp(0.0, 1.0),
+        }
+    }
+
     /// Hijo de `padre`: mismo carácter con una deriva chica.
     pub fn heredar(padre: &Personalidad, semilla: u64, deriva: f32) -> Self {
         let mut w = padre.w;
@@ -689,6 +708,15 @@ impl Vida {
         let mut v = Vida::nueva(uid);
         v.pers = Personalidad::heredar(&padre.pers, uid, 0.12);
         v.credo = padre.credo; // se cría en la fe de la casa
+        v
+    }
+
+    /// Cría de una pareja: carácter cruzado de los dos; se cría en el credo de la madre (o el del
+    /// padre si ella no tiene).
+    pub fn hija_de_pareja(madre: &Vida, padre: &Vida, uid: u64) -> Self {
+        let mut v = Vida::nueva(uid);
+        v.pers = Personalidad::cruzar(&madre.pers, &padre.pers, uid, 0.12);
+        v.credo = if madre.credo != 0 { madre.credo } else { padre.credo };
         v
     }
 

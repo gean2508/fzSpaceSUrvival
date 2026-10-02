@@ -50,7 +50,7 @@ impl Plugin for BootUiPlugin {
             )
             .add_systems(
                 Update,
-                (menu_button_system, settings_button_system, menu_screenshot, rehacer_menu)
+                (menu_button_system, settings_button_system, rotular_idioma, menu_screenshot, rehacer_menu)
                     .run_if(in_state(GamePhase::MainMenu)),
             )
             .add_systems(Update, (animate_bg, boot_pulse))
@@ -142,6 +142,8 @@ enum MenuAction {
     Controles,
     Actualizar,
     Creditos,
+    /// Partidas en red (LAN / online).
+    Multijugador,
     /// Las flechas al lado del personaje: cambian cuál está elegido.
     PjAnterior,
     PjSiguiente,
@@ -155,6 +157,8 @@ struct VersionLabel;
 #[derive(Component, Clone, Copy, PartialEq)]
 enum SettingsAction {
     ToggleFullscreen,
+    /// Español ⇄ English (`crate::i18n`).
+    Idioma,
     Close,
     /// **La versión, que es un botón sin parecerlo.** Siete toques destraban la
     /// consola (`crate::consola`). Es el gesto de las opciones de desarrollador
@@ -705,7 +709,8 @@ fn construir_menu(
                     );
 
                     // ── el riel de la izquierda ───────────────────────────
-                    let riel: [(&str, &str, MenuAction); 4] = [
+                    let riel: [(&str, &str, MenuAction); 5] = [
+                        ("ui/ic_persona", "MULTIJUGADOR", MenuAction::Multijugador),
                         ("ui/ic_engranaje", "AJUSTES", MenuAction::Settings),
                         ("ui/ic_controles", "CONTROLES", MenuAction::Controles),
                         ("ui/ic_bajar", "ACTUALIZAR", MenuAction::Actualizar),
@@ -971,8 +976,14 @@ fn paneles_del_riel(root: &mut ChildBuilder, art: &crate::art2d::ArtLibrary, k: 
                         Some("PANTALLA COMPLETA"), None, false, 34.0,
                         SettingsAction::ToggleFullscreen, k,
                     );
+                    // El idioma: el botón muestra el vigente, siempre en su propia lengua.
+                    up::boton(
+                        l, art, ix, pyu + 216.0, pw - 132.0, 80.0,
+                        Some(crate::i18n::idioma_actual().nombre()), None, false, 34.0,
+                        SettingsAction::Idioma, k,
+                    );
                     // La versión: siete toques y aparece la consola.
-                    let vy = pyu + ph - 210.0;
+                    let vy = pyu + ph - 100.0;
                     up::marco(l, art, up::marco::BOTON, ix, vy, 360.0, 76.0, k)
                         .insert((Button, SettingsAction::Version));
                     l.spawn(up::caja(ix, vy, 360.0, 76.0, k)).with_children(|t| {
@@ -1002,7 +1013,7 @@ fn paneles_del_riel(root: &mut ChildBuilder, art: &crate::art2d::ArtLibrary, k: 
                     // Historial de cierres: con el APK por URL nadie tiene un
                     // cable para hacer `adb pull`.
                     let historial = crate::debug::crash_history_lines(3);
-                    let mut hy = pyu + 250.0;
+                    let mut hy = pyu + 312.0;
                     for linea in historial {
                         up::texto(l, linea, 22.0, Pack::SUAVE, ix, hy, Ancla::Izq, k);
                         hy += 40.0;
@@ -1088,6 +1099,7 @@ fn menu_button_system(
     mut borrador: ResMut<crate::menu_listas::BorradorPartida>,
     mut cual: Local<usize>,
     mut rehacer: ResMut<RehacerMenu>,
+    mut multi: ResMut<crate::multijugador::Multi>,
 ) {
     for (interaction, action, img) in &mut interactions {
         if let Some(mut img) = img {
@@ -1133,6 +1145,11 @@ fn menu_button_system(
                 crate::menu_listas::preparar_borrador(&mut borrador);
                 *pantalla = crate::menu_listas::Pantalla::Nueva;
             }
+            MenuAction::Multijugador => {
+                multi.buscar(true);
+                multi.mensaje.clear();
+                *pantalla = crate::menu_listas::Pantalla::Multijugador;
+            }
             MenuAction::Settings => abrir(PanelRiel::Ajustes),
             MenuAction::Controles => abrir(PanelRiel::Controles),
             MenuAction::Actualizar => abrir(PanelRiel::Actualizar),
@@ -1167,6 +1184,7 @@ fn settings_button_system(
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut consola: ResMut<crate::consola::Consola>,
     mut etiqueta: Query<&mut Text, With<VersionLabel>>,
+    mut idioma: ResMut<crate::i18n::Idioma>,
 ) {
     for (interaction, action, mut bg) in &mut interactions {
         match interaction {
@@ -1182,6 +1200,9 @@ fn settings_button_system(
                                 _ => WindowMode::Windowed,
                             };
                         }
+                    }
+                    SettingsAction::Idioma => {
+                        *idioma = idioma.otro();
                     }
                     SettingsAction::Close => {
                         if let Ok(mut node) = panels.get_single_mut() {
@@ -1276,5 +1297,32 @@ fn boot_pulse(
     }
     for mut bg in &mut bars {
         *bg = BackgroundColor(NEON_MAGENTA.with_alpha(0.5 + 0.5 * pulse));
+    }
+}
+
+
+/// El botón de idioma dice el idioma vigente, en su propia lengua (no se traduce).
+fn rotular_idioma(
+    idioma: Res<crate::i18n::Idioma>,
+    botones: Query<(Entity, &SettingsAction)>,
+    hijos: Query<&Children>,
+    mut textos: Query<&mut Text>,
+) {
+    if !idioma.is_changed() {
+        return;
+    }
+    for (e, a) in &botones {
+        if *a != SettingsAction::Idioma {
+            continue;
+        }
+        let mut pila = vec![e];
+        while let Some(n) = pila.pop() {
+            if let Ok(mut t) = textos.get_mut(n) {
+                t.0 = idioma.nombre().to_string();
+            }
+            if let Ok(h) = hijos.get(n) {
+                pila.extend(h.iter().copied());
+            }
+        }
     }
 }

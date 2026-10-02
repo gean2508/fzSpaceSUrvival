@@ -86,6 +86,13 @@ pub(crate) struct ActionTouchState {
     jump_pointer: Option<u64>,
 }
 
+impl ActionTouchState {
+    /// ¿Hay un dedo sostenido sobre el botón USAR?
+    pub(crate) fn usando(&self) -> bool {
+        self.use_pointer.is_some()
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct ActionButtonsSpawned(bool);
 
@@ -103,11 +110,73 @@ pub struct UseButtonActive(pub bool);
 pub fn sync_use_button_active(
     fly: Res<crate::creative_fly::CreativeFlight>,
     flight: Res<crate::flight::Flight>,
+    equipped: Res<super::EquippedItem>,
+    inv: Res<crate::inventory_persist::PlayerInventory>,
     mut active: ResMut<UseButtonActive>,
 ) {
-    let want = fly.flying() || flight.active;
+    // **Y el botón USAR vuelve a existir para lo que tenés en la mano**: con comida, ropa o un
+    // cubo con agua dice COMER / VESTIR / BEBER y NO compite con el mantener del mundo, que
+    // sigue siendo cavar, talar y picar (como el botón "usar" de Minecraft de bolsillo).
+    let want = fly.flying() || flight.active || uso_del_objeto(&equipped.item_id, &inv).is_some();
     if active.0 != want {
         active.0 = want;
+    }
+}
+
+/// Qué dice el botón USAR para el objeto en la mano (`None` = el objeto no se "usa" solo).
+fn uso_del_objeto(item: &str, inv: &crate::inventory_persist::PlayerInventory) -> Option<&'static str> {
+    if inv.qty(item) == 0 {
+        return None;
+    }
+    crate::equipo::etiqueta_de_uso(item)
+}
+
+/// El texto del botón USAR: BAJAR volando, y la acción del objeto en tierra.
+pub fn update_use_button_label(
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    flight: Res<crate::flight::Flight>,
+    equipped: Res<super::EquippedItem>,
+    inv: Res<crate::inventory_persist::PlayerInventory>,
+    mut labels: Query<&mut Text, With<ActionButtonLabel>>,
+) {
+    let label = if fly.flying() || flight.active {
+        "BAJAR"
+    } else {
+        uso_del_objeto(&equipped.item_id, &inv).unwrap_or("USAR")
+    };
+    for mut text in &mut labels {
+        if text.0 != label {
+            text.0 = label.to_string();
+        }
+    }
+}
+
+/// **Mantener el botón USAR = usar el objeto** (comer, vestirse, beber): arranca el mismo
+/// "mantener" que el escritorio hace con el clic derecho, y soltar lo cancela. Volando el
+/// botón sigue siendo BAJAR y esto no hace nada.
+#[allow(clippy::too_many_arguments)]
+pub fn usar_objeto_con_boton(
+    touch_state: Res<ActionTouchState>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    flight: Res<crate::flight::Flight>,
+    equipped: Res<super::EquippedItem>,
+    inv: Res<crate::inventory_persist::PlayerInventory>,
+    mut hold: ResMut<HoldInteractState>,
+) {
+    if fly.flying() || flight.active || uso_del_objeto(&equipped.item_id, &inv).is_none() {
+        return;
+    }
+    if touch_state.use_pointer.is_some() {
+        if !hold.active && !hold.completed {
+            *hold = HoldInteractState {
+                active: true,
+                duration_ms: 1100,
+                eating: true,
+                ..default()
+            };
+        }
+    } else if hold.eating && hold.active && !hold.completed {
+        hold.release(false);
     }
 }
 

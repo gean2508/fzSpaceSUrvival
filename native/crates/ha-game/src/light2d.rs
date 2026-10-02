@@ -74,6 +74,23 @@ const NIGHT_VEIL_SHADER_HANDLE: Handle<Shader> =
 /// operaciones a ~6, y el rechazo es lo que se paga 40 veces por píxel.
 pub const VEIL_LIGHTS: usize = 40;
 
+/// **Cuántas luces se evalúan de verdad.** El velo y la pasada aditiva recorren TODAS las
+/// luces por cada píxel de la pantalla, así que el costo es píxeles × luces: medido en el
+/// Redmi (30 sep 2026), una ciudad de noche con las 40 luces llenas = ~60 ms de GPU por
+/// cuadro (`resto` en `ha-stages`), contra 2 ms sin luces. En el celu se usan menos (las
+/// más importantes, ver `light_priority`); `HA_LUCES=n` lo fuerza para medir.
+pub fn presupuesto_de_luces() -> usize {
+    static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *N.get_or_init(|| {
+        let por_defecto = if cfg!(target_os = "android") { 8 } else { VEIL_LIGHTS };
+        crate::flags::var("HA_LUCES")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(por_defecto)
+            .clamp(1, VEIL_LIGHTS)
+    })
+}
+
 /// Alcance del pozo de luz respecto al radio declarado del emisor. **Lo usan el
 /// velo y el tinte de sprites por igual**: si no coinciden, un sprite se aclara
 /// donde el suelo sigue negro y eso se lee como "hueco marcado".
@@ -687,8 +704,8 @@ fn tick_lights(
     // hace falta: si el subconjunto cambiara con el orden de la query, los
     // agujeros parpadearían de un tick al otro.
     near.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
-    if near.len() > VEIL_LIGHTS {
-        for (_, e) in near.drain(VEIL_LIGHTS..) {
+    if near.len() > presupuesto_de_luces() {
+        for (_, e) in near.drain(presupuesto_de_luces()..) {
             off.push(e);
         }
     }
@@ -713,7 +730,7 @@ fn tick_lights(
     let mut uniform_lights = [Vec4::ZERO; VEIL_LIGHTS];
     let mut uniform_tints = [Vec4::ZERO; VEIL_LIGHTS];
     let mut count = 0u32;
-    for &(_, e) in near.iter().take(VEIL_LIGHTS) {
+    for &(_, e) in near.iter().take(presupuesto_de_luces()) {
         let Ok((_, light, gt)) = lights.get(e) else { continue };
         let env = if light.day { 1.0 } else { dark };
         let strength = (light.intensity * env * flicker_of(e, light, t)).clamp(0.0, 1.6);
@@ -751,29 +768,49 @@ fn tick_lights(
         uniform_tints[count as usize] = Vec4::new(c.red, c.green, c.blue, bulb_w);
         count += 1;
     }
+    let view_u = view_px.extend(0.0).extend(0.0);
     if let Some(vh) = veil_mat.as_ref() {
-        if let Some(mat) = veil_assets.get_mut(&vh.0) {
-            mat.uniform.lights = uniform_lights;
-            mat.uniform.tints = uniform_tints;
-            mat.uniform.count = count;
-            mat.uniform.view = view_px.extend(0.0).extend(0.0);
+        let igual = veil_assets.get(&vh.0).is_some_and(|m| {
+            m.uniform.count == count
+                && m.uniform.view == view_u
+                && m.uniform.lights == uniform_lights
+                && m.uniform.tints == uniform_tints
+        });
+        if !igual {
+            if let Some(mat) = veil_assets.get_mut(&vh.0) {
+                mat.uniform.lights = uniform_lights;
+                mat.uniform.tints = uniform_tints;
+                mat.uniform.count = count;
+                mat.uniform.view = view_u;
+            }
         }
     }
 
     if let Some(ah) = add_mat.as_ref() {
-        if let Some(mat) = add_assets.get_mut(&ah.0) {
-            // El color/α de la noche lo escribe `sky2d::sync_sky` en el material
-            // del velo; la pasada aditiva lo necesita igual (para su término
-            // ambiente), así que se copia de ahí en vez de duplicar la lógica.
-            if let Some(vh) = veil_mat.as_ref() {
-                if let Some(v) = veil_assets.get(&vh.0) {
-                    mat.uniform.color = v.uniform.color;
+        // El color/α de la noche lo escribe `sky2d::sync_sky` en el material del velo; la
+        // pasada aditiva lo necesita igual (para su término ambiente), así que se copia de
+        // ahí en vez de duplicar la lógica. Y sólo se toca si algo cambió (ver `sync_sky`).
+        let color_velo = veil_mat
+            .as_ref()
+            .and_then(|vh| veil_assets.get(&vh.0))
+            .map(|v| v.uniform.color);
+        let igual = add_assets.get(&ah.0).is_some_and(|m| {
+            m.uniform.count == count
+                && m.uniform.view == view_u
+                && color_velo.map_or(true, |c| m.uniform.color == c)
+                && m.uniform.lights == uniform_lights
+                && m.uniform.tints == uniform_tints
+        });
+        if !igual {
+            if let Some(mat) = add_assets.get_mut(&ah.0) {
+                if let Some(c) = color_velo {
+                    mat.uniform.color = c;
                 }
+                mat.uniform.lights = uniform_lights;
+                mat.uniform.tints = uniform_tints;
+                mat.uniform.count = count;
+                mat.uniform.view = view_u;
             }
-            mat.uniform.lights = uniform_lights;
-            mat.uniform.tints = uniform_tints;
-            mat.uniform.count = count;
-            mat.uniform.view = view_px.extend(0.0).extend(0.0);
         }
     }
     // 5) Las ventanas encendidas de las poses `Light`.
@@ -811,6 +848,12 @@ fn toggle_light_passes(
     let want = if useful { Visibility::Inherited } else { Visibility::Hidden };
     for (_, mut vis) in &mut passes {
         if *vis != want {
+            if crate::flags::var("HA_PERFLOG").is_ok() {
+                eprintln!(
+                    "ha-veil: pasadas de luz {:?} -> {:?} (alfa={:.3} luces={})",
+                    *vis, want, uniform.uniform.color.w, uniform.uniform.count
+                );
+            }
             *vis = want;
         }
     }
@@ -1087,7 +1130,7 @@ fn cast_shadows(
         active.push((light_priority(p.distance(cam), light), e, p, reach, k));
     }
     active.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
-    active.truncate(VEIL_LIGHTS);
+    active.truncate(presupuesto_de_luces());
 
     // Término del cielo: es el MISMO para todo el mundo (el sol está infinitamente
     // lejos), así que se calcula una vez. Rasante = sombra larga.
@@ -1354,7 +1397,7 @@ fn light_sprites(
         active.push((light_priority(d, light), p, reach, Vec3::new(c.red, c.green, c.blue), k));
     }
     active.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
-    active.truncate(VEIL_LIGHTS);
+    active.truncate(presupuesto_de_luces());
 
     // El sprite se tiñe si está en el pozo, aunque la cámara esté lejos: cortar
     // por `cull_r` a secas dejaba props sin teñir en el borde de la pantalla al

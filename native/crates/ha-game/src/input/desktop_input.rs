@@ -175,7 +175,7 @@ pub fn desktop_hold_interact(
                 hold.active = true;
                 hold.duration_ms = 450;
                 hold.placing_chest = true;
-            } else if ha_shared::food_restore(&equipped.item_id).is_some()
+            } else if crate::equipo::es_usable(&equipped.item_id)
                 && target.kind.is_none()
             {
                 // Food equipped, nothing targeted → hold RIGHT mouse to eat.

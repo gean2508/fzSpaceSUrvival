@@ -46,6 +46,7 @@ enum Pestania {
     Pueblo,
     Mundo,
     Cronica,
+    Fisica,
     Acciones,
 }
 
@@ -62,6 +63,12 @@ pub struct Civ {
     mensaje: String,
     refrescar: f32,
     sucio: bool,
+    /// Se abrió tocando el Registro del pueblo: no depende del menú principal.
+    independiente: bool,
+    /// Dónde está el jugador (x, z), para las acciones que dependen del lugar.
+    pub(crate) jugador_pos: (f32, f32),
+    /// El cuerpo que el jugador tiene debajo (0 = Tierra, 1 = Luna…): decide qué pueblos son "los de acá".
+    pub(crate) cuerpo: u8,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -85,6 +92,23 @@ fn ruta() -> PathBuf {
 }
 
 impl Civ {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn mundo_mut(&mut self) -> Option<&mut Mundo> {
+        self.mundo.as_mut()
+    }
+
+    pub(crate) fn mundo_ref(&self) -> Option<&Mundo> {
+        self.mundo.as_ref()
+    }
+
+    /// El Registro es un objeto del pueblo: tocarlo abre la consola sin pasar por el menú.
+    pub(crate) fn abrir_desde_registro(&mut self) {
+        self.panel = true;
+        self.independiente = true;
+        self.pestania = Pestania::Pueblo;
+        self.refrescar = 0.0;
+    }
+
     fn cargar(&mut self) {
         let semilla = ha_shared::partida::semilla() as u64;
         let leido = std::fs::read_to_string(ruta()).ok().and_then(|s| serde_json::from_str::<Archivo>(&s).ok());
@@ -128,7 +152,7 @@ impl Civ {
         if let Some(p) = m.persona_de_npc(clave) {
             return Some(p);
         }
-        let pueblo = pueblo_mas_cercano(m, x, z)?;
+        let pueblo = pueblo_mas_cercano(m, self.cuerpo, x, z)?;
         let dia = m.dia;
         let libres: Vec<u32> = m.pueblos[&pueblo]
             .gente
@@ -168,10 +192,10 @@ impl Civ {
     }
 }
 
-fn pueblo_mas_cercano(m: &Mundo, x: f32, z: f32) -> Option<u32> {
+fn pueblo_mas_cercano(m: &Mundo, cuerpo: u8, x: f32, z: f32) -> Option<u32> {
     m.pueblos
         .values()
-        .filter(|p| p.vivo && p.cuerpo == 0)
+        .filter(|p| p.vivo && p.cuerpo == cuerpo)
         .map(|p| (p.id, (p.x - x).powi(2) + (p.z - z).powi(2)))
         .filter(|(_, d)| *d < RADIO_PUEBLO * RADIO_PUEBLO)
         .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
@@ -208,6 +232,10 @@ enum Accion {
     Culto(i8),
     Paz,
     Agitar(usize),
+    RefugioConstruir,
+    RefugioAbastecer,
+    RefugioInvitar,
+    RefugioFundar,
 }
 
 pub struct CivPlugin;
@@ -276,18 +304,20 @@ fn civ_jugador(
     player: Query<&Transform, With<crate::sim::Player>>,
     selected: Res<crate::game_phase::SelectedCharacter>,
 ) {
+    if let Ok(pt) = player.get_single() {
+        civ.jugador_pos = (pt.translation.x, -pt.translation.y);
+    }
     civ.jugador_visto += time.delta_secs();
     if civ.jugador_visto < 2.0 {
         return;
     }
     civ.jugador_visto = 0.0;
-    if soc.active_body() != Some(0) {
-        return;
-    }
+    let Some(cuerpo) = soc.active_body() else { return };
+    civ.cuerpo = cuerpo;
     let Ok(pt) = player.get_single() else { return };
     let (px, pz) = (pt.translation.x, -pt.translation.y);
     let Some(m) = civ.mundo.as_mut() else { return };
-    let Some(cerca) = pueblo_mas_cercano(m, px, pz) else { return };
+    let Some(cerca) = pueblo_mas_cercano(m, cuerpo, px, pz) else { return };
     if m.jugador.pueblo != Some(cerca) {
         m.entrar_jugador(cerca, &selected.name);
         civ.sucio = true;
@@ -364,8 +394,11 @@ fn panel_sincronizar(
     mut civ: ResMut<Civ>,
     raices: Query<Entity, With<PanelRaiz>>,
 ) {
-    if !editor.menu_open || editor.settings_open {
+    if !civ.independiente && (!editor.menu_open || editor.settings_open) {
         civ.panel = false;
+    }
+    if !civ.panel {
+        civ.independiente = false;
     }
     let hay = raices.iter().next().is_some();
     if civ.panel && !hay {
@@ -396,6 +429,7 @@ fn panel_sincronizar(
                     boton(f, "PUEBLO", 100.0, BotonPestania(Pestania::Pueblo));
                     boton(f, "MUNDO", 100.0, BotonPestania(Pestania::Mundo));
                     boton(f, "CRÓNICA", 100.0, BotonPestania(Pestania::Cronica));
+                    boton(f, "FÍSICA", 100.0, BotonPestania(Pestania::Fisica));
                     boton(f, "ACCIONES", 100.0, BotonPestania(Pestania::Acciones));
                     boton(f, "VOLVER", 100.0, BotonCerrar);
                 });
@@ -425,6 +459,10 @@ fn panel_sincronizar(
                     boton(f, "CULTOS LIBRES +", 140.0, BotonAccion(Accion::Culto(1)));
                     boton(f, "CULTOS LIBRES -", 140.0, BotonAccion(Accion::Culto(-1)));
                     boton(f, "PEDIR PAZ", 110.0, BotonAccion(Accion::Paz));
+                    boton(f, "CONSTRUIR REFUGIO", 170.0, BotonAccion(Accion::RefugioConstruir));
+                    boton(f, "ABASTECER REFUGIO", 170.0, BotonAccion(Accion::RefugioAbastecer));
+                    boton(f, "INVITAR AL REFUGIO", 180.0, BotonAccion(Accion::RefugioInvitar));
+                    boton(f, "FUNDAR PUEBLO NUEVO", 190.0, BotonAccion(Accion::RefugioFundar));
                 });
             });
     } else if !civ.panel && hay {
@@ -444,8 +482,11 @@ const PIEZAS: [(&str, u8); 5] = [
 
 #[allow(clippy::type_complexity)]
 fn panel_botones(
+    mut commands: Commands,
     mut civ: ResMut<Civ>,
     mut inv: ResMut<PlayerInventory>,
+    mut soc: ResMut<Society>,
+    npcs: Query<(Entity, &Npc, &Transform)>,
     botones_mundo: Query<&Interaction, (Changed<Interaction>, With<BotonMundo>)>,
     pestanias: Query<(&Interaction, &BotonPestania), Changed<Interaction>>,
     cerrar: Query<&Interaction, (Changed<Interaction>, With<BotonCerrar>)>,
@@ -473,14 +514,58 @@ fn panel_botones(
         if *i != Interaction::Pressed {
             continue;
         }
-        let msg = ejecutar(&mut civ, &mut inv, a.0);
+        let msg = match a.0 {
+            Accion::RefugioInvitar => invitar_al_refugio(&mut commands, &mut civ, &mut soc, &npcs),
+            otra => ejecutar(&mut civ, &mut inv, otra),
+        };
         civ.mensaje = msg;
         civ.refrescar = 0.0;
         civ.sucio = true;
     }
 }
 
+fn ejecutar_refugio(civ: &mut Civ, inv: &mut PlayerInventory, a: Accion) -> String {
+    match a {
+        Accion::RefugioConstruir => {
+            if inv.qty("stone") < REFUGIO_PIEDRA || inv.qty("wood") < REFUGIO_MADERA {
+                return format!("Un refugio pide {REFUGIO_PIEDRA} de piedra y {REFUGIO_MADERA} de madera.");
+            }
+            let (x, z) = civ.jugador_pos;
+            let Some(m) = civ.mundo.as_mut() else { return "El mundo todavía no cargó.".into() };
+            inv.remove("stone", REFUGIO_PIEDRA);
+            inv.remove("wood", REFUGIO_MADERA);
+            m.registrar_refugio(x, z, REFUGIO_CAPACIDAD, 0.0);
+            "Cavás y sellás un refugio bajo tierra. Falta abastecerlo e invitar a la gente.".into()
+        }
+        Accion::RefugioAbastecer => {
+            let (x, z) = civ.jugador_pos;
+            let manzanas = inv.qty("apple").min(20);
+            let Some(m) = civ.mundo.as_mut() else { return "El mundo todavía no cargó.".into() };
+            let Some(id) = refugio_cercano(m, x, z) else { return "No hay ningún refugio a mano.".into() };
+            if manzanas == 0 {
+                return "No llevás comida para guardar.".into();
+            }
+            inv.remove("apple", manzanas);
+            m.abastecer_refugio(id, manzanas as f32 * 6.0);
+            format!("Guardás {manzanas} manzanas en el refugio.")
+        }
+        Accion::RefugioFundar => {
+            let (x, z) = civ.jugador_pos;
+            let Some(m) = civ.mundo.as_mut() else { return "El mundo todavía no cargó.".into() };
+            let Some(id) = refugio_cercano(m, x, z) else { return "No hay ningún refugio a mano.".into() };
+            match m.fundar_desde_refugio(id, None, x + 40.0, z) {
+                Ok(p) => format!("Los sobrevivientes salen a la luz y fundan {}.", m.nombre_pueblo(p)),
+                Err(e) => e.into(),
+            }
+        }
+        _ => String::new(),
+    }
+}
+
 fn ejecutar(civ: &mut Civ, inv: &mut PlayerInventory, a: Accion) -> String {
+    if matches!(a, Accion::RefugioConstruir | Accion::RefugioAbastecer | Accion::RefugioFundar) {
+        return ejecutar_refugio(civ, inv, a);
+    }
     let Some(m) = civ.mundo.as_mut() else { return "El mundo todavía no cargó.".into() };
     let Some(pueblo) = m.jugador.pueblo else {
         return "Acercate a un pueblo: hasta que no vivas en uno, no sos de nadie.".into();
@@ -564,10 +649,96 @@ fn ejecutar(civ: &mut Civ, inv: &mut PlayerInventory, a: Accion) -> String {
             let v = (m.pueblos[&pueblo].leyes.pena_robo as i8 + d).clamp(0, 3) as u8;
             resultado(m.decretar(pueblo, Decreto::PenaRobo(v)), format!("Pena por robo: {}.", pena(v)))
         }
+        Accion::RefugioConstruir | Accion::RefugioAbastecer | Accion::RefugioInvitar | Accion::RefugioFundar => unreachable!(),
         Accion::Culto(d) => {
             let v = m.pueblos[&pueblo].leyes.libertad_culto + 0.2 * d as f32;
             resultado(m.decretar(pueblo, Decreto::LibertadCulto(v)), format!("Libertad de cultos al {:.0}%.", v.clamp(0.0, 1.0) * 100.0))
         }
+    }
+}
+
+const REFUGIO_PIEDRA: u32 = 60;
+const REFUGIO_MADERA: u32 = 20;
+const REFUGIO_CAPACIDAD: u16 = 24;
+const ALCANCE_REFUGIO: f32 = 30.0;
+const ALCANCE_INVITACION: f32 = 45.0;
+
+fn refugio_cercano(m: &Mundo, x: f32, z: f32) -> Option<u32> {
+    m.refugios
+        .iter()
+        .map(|r| (r.id, ((r.x - x).powi(2) + (r.z - z).powi(2)).sqrt()))
+        .filter(|(_, d)| *d <= ALCANCE_REFUGIO)
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        .map(|(id, _)| id)
+}
+
+/// Los NPC que rodean al jugador aceptan bajar al refugio; se van de la escena y quedan a
+/// resguardo en el mundo. Además llegan hasta seis notables del pueblo más cercano que no
+/// tienen cuerpo en pantalla (oyeron la convocatoria).
+fn invitar_al_refugio(
+    commands: &mut Commands,
+    civ: &mut Civ,
+    soc: &mut Society,
+    npcs: &Query<(Entity, &Npc, &Transform)>,
+) -> String {
+    let (px, pz) = civ.jugador_pos;
+    let Some(rid) = civ.mundo.as_ref().and_then(|m| refugio_cercano(m, px, pz)) else {
+        return "No hay ningún refugio a mano.".into();
+    };
+    let mut metidos = 0;
+    let mut motivo = "";
+    for (e, n, tf) in npcs.iter() {
+        let (nx, nz) = (tf.translation.x, -tf.translation.y);
+        if ((nx - px).powi(2) + (nz - pz).powi(2)).sqrt() > ALCANCE_INVITACION {
+            continue;
+        }
+        let Some(p) = civ.persona_para(n.uid, nx, nz) else { continue };
+        let Some(m) = civ.mundo.as_mut() else { break };
+        match m.refugiar(p, rid) {
+            Ok(()) => {
+                metidos += 1;
+                despedir_npc(commands, soc, e, n);
+            }
+            Err(e) => {
+                motivo = e;
+                break;
+            }
+        }
+    }
+    if motivo.is_empty() {
+        if let Some(m) = civ.mundo.as_mut() {
+            let dia = m.dia;
+            let pueblo = m.pueblos.values().filter(|p| p.vivo && p.cuerpo == 0).min_by(|a, b| {
+                let da = (a.x - px).powi(2) + (a.z - pz).powi(2);
+                let db = (b.x - px).powi(2) + (b.z - pz).powi(2);
+                da.partial_cmp(&db).unwrap()
+            });
+            let libres: Vec<u32> = pueblo
+                .map(|p| {
+                    p.gente
+                        .iter()
+                        .copied()
+                        .filter(|g| *g != JUGADOR_ID)
+                        .filter_map(|g| m.personas.get(&g))
+                        .filter(|q| q.npc == 0 && q.refugio == 0 && q.adulta(dia))
+                        .map(|q| q.id)
+                        .take(6)
+                        .collect()
+                })
+                .unwrap_or_default();
+            for p in libres {
+                if m.refugiar(p, rid).is_ok() {
+                    metidos += 1;
+                }
+            }
+        }
+    }
+    civ.sucio = true;
+    match (metidos, motivo) {
+        (0, "") => "No hay nadie cerca a quien invitar.".into(),
+        (0, e) => e.into(),
+        (n, "") => format!("{n} personas bajan al refugio."),
+        (n, e) => format!("{n} personas bajan al refugio. {e}"),
     }
 }
 
@@ -679,6 +850,37 @@ fn texto_mundo(m: &Mundo) -> String {
     t
 }
 
+fn texto_fisica(m: &Mundo) -> String {
+    let Some(id) = m.jugador.pueblo else {
+        return "Todavía no vivís en ningún pueblo: no sabés qué creen de la física.".into();
+    };
+    const NIVELES: [&str; 7] = ["a ciegas", "intuición", "aproximado", "medido", "preciso", "muy preciso", "exacto"];
+    let mut t = format!("Lo que {} cree de las leyes de ESTE universo (y lo que es de verdad):\n", m.nombre_pueblo(id));
+    for l in m.ver_fisica(id) {
+        if !l.conoce && l.obs == 0 {
+            t += &format!("  {}: ni se lo plantean.\n", l.nombre);
+            continue;
+        }
+        t += &format!(
+            "  {}: creen {:.3} {u}, es {:.3} {u} ({}, {} observaciones)\n",
+            l.nombre, l.creido, l.verdad, NIVELES[(l.nivel as usize).min(6)], l.obs, u = l.unidad
+        );
+    }
+    let p = &m.pueblos[&id];
+    if p.radiacion > 0.01 {
+        t += &format!("Radiación en el pueblo: {:.0}%.\n", p.radiacion * 100.0);
+    }
+    let arsenal = p.arsenal;
+    if arsenal > 0 {
+        t += &format!("Arsenal nuclear: {arsenal}.\n");
+    }
+    if m.invierno > 0.05 {
+        t += &format!("Invierno nuclear en el mundo: {:.0}%.\n", m.invierno * 100.0);
+    }
+    t += &format!("Refugios en el mundo: {}.", m.refugios.len());
+    t
+}
+
 fn texto_cronica(m: &Mundo) -> String {
     let hechos = m.cronica.ultimos(14, 1);
     if hechos.is_empty() {
@@ -707,6 +909,7 @@ fn panel_texto(
         Pestania::Pueblo => texto_pueblo(m),
         Pestania::Mundo => texto_mundo(m),
         Pestania::Cronica => texto_cronica(m),
+        Pestania::Fisica => texto_fisica(m),
         Pestania::Acciones => {
             let base = texto_pueblo(m);
             let primera = base.lines().next().unwrap_or("").to_string();

@@ -16,6 +16,7 @@ use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 
 use crate::camera::GameCamera;
+use crate::companion::{Companion, CompanionOrder, CompanionTask};
 use crate::dialog::{say, say_from, SpeechQueue};
 use crate::input::{touch_blocked, touch_in_move_zone, TouchBlockRects, TouchLayout};
 use crate::inventory_persist::PlayerInventory;
@@ -46,13 +47,18 @@ pub struct NpcMenuPlugin;
 
 impl Plugin for NpcMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<NpcMenu>,));
+        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<NpcMenu>, crate::salir::reiniciar::<Encargos>));
         app.init_resource::<NpcMenu>()
+            .init_resource::<Encargos>()
             .init_resource::<NpcShot>()
             .add_systems(
                 Update,
                 (pick_npc, close_menu_by_distance, npc_menu_autoshot, sync_menu, menu_buttons)
                     .chain(),
+            )
+            .add_systems(
+                Update,
+                (pick_companero, sync_menu_companero, menu_companero).chain().after(menu_buttons),
             );
     }
 }
@@ -138,12 +144,27 @@ struct NpcMenu {
     /// reconstruye en cada "HABLAR" y armar un layout nuevo cada vez iba dejando
     /// `TextureAtlasLayout` huérfanos para toda la partida.
     portrait_layout: Option<Handle<TextureAtlasLayout>>,
+    /// El menú abierto es el del COMPAÑERO (no hay uid de vecino).
+    companero: bool,
+    /// Ya se armó el panel del compañero.
+    companero_shown: bool,
 }
 
 #[derive(Component)]
 struct NpcMenuRoot;
 #[derive(Component)]
 struct NpcMenuHistory;
+#[derive(Component)]
+struct CompaneroAccion(CompanionTask);
+#[derive(Component)]
+struct CompaneroCerrar;
+#[derive(Component)]
+struct CompaneroCharlar;
+
+/// Fama mínima de su familia con vos para que acepte ser tu pareja.
+const PAREJA_MIN_REP: f32 = 0.3;
+/// Cuánto sube la fama de la familia cada trato hecho.
+const TRADE_REP_GAIN: f32 = 0.08;
 
 #[derive(Component, Clone, Copy)]
 enum NpcAction {
@@ -151,7 +172,61 @@ enum NpcAction {
     Convert,
     Calm,
     Trade,
+    Pareja,
+    /// El aldeano te pide algo según su oficio; entregarlo da fama y premio.
+    Encargo,
+    /// Cambia lo que llevás (comida, material, cuero…) por lingotes de oro.
+    Vender,
+    /// Gasta lingotes de oro en una prenda.
+    Comprar,
     Close,
+}
+
+/// Lo que cada aldeano pidió y todavía no se le entregó.
+#[derive(Resource, Default)]
+pub struct Encargos {
+    pendientes: std::collections::HashMap<u64, (&'static str, u32)>,
+    /// Segundo (de reloj) hasta el que ese aldeano no pide otra cosa.
+    descanso: std::collections::HashMap<u64, f32>,
+}
+
+const ENCARGO_REP: f32 = 0.15;
+const ENCARGO_DESCANSO: f32 = 240.0;
+
+/// Cuántas unidades de este ítem valen UN lingote de oro al venderlas (`None` = no se compra).
+pub fn unidades_por_oro(item: &str) -> Option<u32> {
+    Some(match item {
+        "apple" | "orange" | "grape" | "carrot" | "egg" | "wheat" | "sticks" | "wood" | "stone" | "sand" => 12,
+        "bread" | "pie" | "soup" | "meat" | "beef" | "pork" | "chicken" | "mutton" | "rabbit_meat" | "pumpkin" => 6,
+        "leather" | "wool" | "feather" | "bone" | "iron_ingot" => 4,
+        "gem_blue" | "gem_red" => 1,
+        _ => return None,
+    })
+}
+
+/// Lingotes de oro que cuesta una prenda hallable.
+pub const PRECIO_PRENDA: u32 = 2;
+
+/// Qué pide un aldeano: sale de su uid y de su oficio, siempre lo mismo para el mismo.
+fn pedido_para(uid: u64, role: &str) -> (&'static str, u32) {
+    let lista: &[(&str, u32)] = match role {
+        "MINERO" => &[("stone", 8), ("iron_ingot", 1), ("torch", 2)],
+        "GRANJERO" => &[("wheat", 4), ("apple", 5), ("bread", 2)],
+        "CONSTRUCTOR" => &[("wood", 10), ("stone", 6), ("sticks", 8)],
+        _ => &[("apple", 4), ("wood", 6), ("leather", 2), ("bread", 1)],
+    };
+    lista[(sims_hash(uid) % lista.len() as u64) as usize]
+}
+
+fn sims_hash(x: u64) -> u64 {
+    let mut h = x.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h ^= h >> 29;
+    h.wrapping_mul(0xBF58_476D_1CE4_E5B9) >> 8
+}
+
+/// Premio por entregar: más fama y una piedra preciosa de vez en cuando.
+fn premio_para(uid: u64) -> (&'static str, u32) {
+    if sims_hash(uid ^ 77) % 3 == 0 { ("gem_blue", 1) } else { ("apple", 3) }
 }
 
 /// Selección por toque/click: convierte el puntero a mundo y abre el NPC más
@@ -214,6 +289,7 @@ fn pick_npc(
     if let Some((uid, _)) = best {
         menu.open_uid = Some(uid);
         menu.refresh = true;
+        menu.companero = false;
     }
 }
 
@@ -287,6 +363,21 @@ fn sync_menu(
         } else if npc.vida.pers.moral > 0.6 {
             t.push_str("  |  buena persona");
         }
+        match ha_shared::linaje::etapa(npc.age, npc.padre != 0 || npc.madre != 0) {
+            ha_shared::linaje::Etapa::Nino => t.push_str("  |  nino"),
+            ha_shared::linaje::Etapa::Anciano => t.push_str("  |  anciano"),
+            ha_shared::linaje::Etapa::Adulto => {}
+        }
+        if npc.pareja == crate::society::JUGADOR_UID {
+            t.push_str("  |  tu pareja");
+        } else if npc.pareja != 0 {
+            t.push_str(&format!("  |  pareja de {}", npc_name(npc.pareja, npc.family)));
+        }
+        if npc.padre == crate::society::JUGADOR_UID {
+            t.push_str(&format!("\nhijo/a tuyo y de {}", npc_name(npc.madre, npc.family)));
+        } else if npc.madre != 0 {
+            t.push_str(&format!("\nhijo/a de {} y {}", npc_name(npc.madre, npc.family), npc_name(npc.padre, npc.family)));
+        }
         if let Some(f) = civ.ficha_npc(uid, npc.x, npc.z) {
             t.push_str(&format!("\n{f}"));
         }
@@ -295,6 +386,12 @@ fn sync_menu(
     let history: Vec<String> = npc.history.clone();
     let founded = religion.founded;
     let converted = npc.converted;
+    // Se puede proponer pareja a un adulto soltero que te tiene aprecio y que no sea tu hijo/a.
+    let puede_pareja = npc.pareja == 0
+        && npc.padre != crate::society::JUGADOR_UID
+        && ha_shared::linaje::etapa(npc.age, npc.padre != 0 || npc.madre != 0) == ha_shared::linaje::Etapa::Adulto
+        && ha_shared::linaje::es_mujer(uid)
+        && rep >= PAREJA_MIN_REP;
 
     // RETRATO — la misma cara que tiene su cuerpo en el mundo (el índice guarda
     // con qué capas se horneó cada hoja `npc/char_XX`), con la expresión que le
@@ -391,7 +488,7 @@ fn sync_menu(
                 });
             });
             root.spawn((
-                Text::new("ultimos mensajes:"),
+                Text::new("últimos mensajes:"),
                 TextFont { font_size: 12.0, ..default() },
                 TextColor(Color::srgb(0.6, 0.65, 0.75)),
             ));
@@ -440,6 +537,9 @@ fn sync_menu(
                     npc_button(row, "CALMAR", NpcAction::Calm, Color::srgb(1.0, 0.7, 0.4));
                 } else {
                     npc_button(row, "COMERCIAR", NpcAction::Trade, NEON_CYAN);
+                    npc_button(row, "ENCARGO", NpcAction::Encargo, Color::srgb(0.7, 1.0, 0.75));
+                    npc_button(row, "VENDER", NpcAction::Vender, Color::srgb(1.0, 0.85, 0.4));
+                    npc_button(row, "COMPRAR", NpcAction::Comprar, Color::srgb(1.0, 0.85, 0.4));
                 }
                 // Sin culto fundado el botón decía nada y no había forma de
                 // fundarlo hablando: sólo juntando gente encima tuyo. Ahora
@@ -451,6 +551,9 @@ fn sync_menu(
                         ("PREDICAR", NpcAction::Convert)
                     };
                     npc_button(row, label, action, Color::srgb(1.0, 0.86, 0.35));
+                }
+                if puede_pareja {
+                    npc_button(row, "SER PAREJA", NpcAction::Pareja, Color::srgb(1.0, 0.6, 0.75));
                 }
                 npc_button(row, "CERRAR", NpcAction::Close, NEON_MAGENTA);
             });
@@ -489,6 +592,8 @@ fn menu_buttons(
     mut speech: ResMut<SpeechQueue>,
     mut inv: ResMut<PlayerInventory>,
     selected: Res<crate::game_phase::SelectedCharacter>,
+    mut encargos: ResMut<Encargos>,
+    time: Res<Time>,
 ) {
     let Some(uid) = menu.open_uid else {
         return;
@@ -537,7 +642,7 @@ fn menu_buttons(
                         // para reconciliarse de verdad hace falta HACER algo, no spamear.
                         npc.calm_cd = CALM_COOLDOWN;
                         soc.adjust_capped(npc.family, CALM_STEP, CALM_CEILING);
-                        say_from(&mut speech, e, x, z, "...esta bien. Por ahora.", Color::srgb(1.0, 0.8, 0.5), true);
+                        say_from(&mut speech, e, x, z, "...está bien. Por ahora.", Color::srgb(1.0, 0.8, 0.5), true);
                     }
                     menu.refresh = true;
                 }
@@ -566,21 +671,115 @@ fn menu_buttons(
                             // D7: NO incrementar `religion.followers` acá — `tick_society`
                             // ya lo recalcula de cero cada tick contando a los conversos.
                             let line = if first {
-                                format!("Creo en el Ki! Fundamos {}.", religion.name)
+                                format!("¡Creo en el Ki! Fundamos {}.", religion.name)
                             } else {
-                                "Creo en el Ki!".to_string()
+                                "¡Creo en el Ki!".to_string()
                             };
                             say_from(&mut speech, e, x, z, line, Color::srgb(1.0, 0.9, 0.4), true);
                         } else {
-                            say_from(&mut speech, e, x, z, "Cuentame mas...", Color::srgb(1.0, 0.86, 0.5), true);
+                            say_from(&mut speech, e, x, z, "Contame más...", Color::srgb(1.0, 0.86, 0.5), true);
                         }
                     }
                     menu.refresh = true;
                 }
             }
+            NpcAction::Pareja => {
+                if let Some((e, mut npc)) = npcs.iter_mut().find(|(_, n)| n.uid == uid) {
+                    let (x, z) = (npc.x, npc.z);
+                    if npc.pareja == 0 {
+                        npc.pareja = crate::society::JUGADOR_UID;
+                        soc.stats.parejas += 1;
+                        push_history(&mut npc.history, "Me quedo con vos.");
+                        say_from(&mut speech, e, x, z, "Me quedo con vos.", Color::srgb(1.0, 0.7, 0.85), true);
+                    }
+                    menu.refresh = true;
+                }
+            }
+            NpcAction::Vender | NpcAction::Comprar => {
+                let Some((e, npc)) = npcs.iter().find(|(_, n)| n.uid == uid) else { continue };
+                let (x, z) = (npc.x, npc.z);
+                let en = crate::i18n::idioma_actual() == crate::i18n::Idioma::En;
+                let color = Color::srgb(1.0, 0.9, 0.5);
+                if matches!(action, NpcAction::Vender) {
+                    // Se venden TODAS las unidades que completan al menos un lingote.
+                    let mut oro = 0u32;
+                    let mut quitar: Vec<(String, u32)> = Vec::new();
+                    for (id, q) in inv.items.iter() {
+                        if let Some(por) = unidades_por_oro(id) {
+                            let lotes = q / por;
+                            if lotes > 0 && id != "gem_blue" && id != "gem_red" || (por == 1 && *q > 1) {
+                                let lotes = if por == 1 { q - 1 } else { lotes };
+                                oro += lotes;
+                                quitar.push((id.clone(), lotes * por));
+                            }
+                        }
+                    }
+                    if oro == 0 {
+                        let f = if en { "You have nothing worth a gold ingot." } else { "No llevás nada que valga un lingote." };
+                        say_from(&mut speech, e, x, z, f, color, true);
+                    } else {
+                        for (id, n) in quitar {
+                            inv.remove(&id, n);
+                        }
+                        inv.add("gold_ingot", oro);
+                        let f = if en { format!("Deal! {oro} gold ingots.") } else { format!("¡Trato hecho! {oro} lingotes de oro.") };
+                        say_from(&mut speech, e, x, z, f, color, true);
+                    }
+                } else if inv.qty("gold_ingot") >= PRECIO_PRENDA {
+                    inv.remove("gold_ingot", PRECIO_PRENDA);
+                    let n = (sims_hash(uid ^ (time.elapsed().as_millis() as u64)) % 100_000) as u32;
+                    let prenda = ha_shared::armadura::prenda_al_azar(n);
+                    inv.add(prenda, 1);
+                    let nombre = crate::granja::nombre_item(prenda);
+                    let f = if en { format!("Here: {}.", crate::i18n::tr(&nombre)) } else { format!("Tomá: {nombre}.") };
+                    say_from(&mut speech, e, x, z, f, color, true);
+                } else {
+                    let f = if en { format!("A garment costs {PRECIO_PRENDA} gold ingots.") } else { format!("Una prenda sale {PRECIO_PRENDA} lingotes de oro.") };
+                    say_from(&mut speech, e, x, z, f, color, true);
+                }
+            }
+            NpcAction::Encargo => {
+                if let Some((e, npc)) = npcs.iter().find(|(_, n)| n.uid == uid) {
+                    let (x, z, familia) = (npc.x, npc.z, npc.family);
+                    let en = crate::i18n::idioma_actual() == crate::i18n::Idioma::En;
+                    let ahora = time.elapsed_secs();
+                    let color = Color::srgb(0.7, 1.0, 0.75);
+                    let rol = "";
+                    if encargos.descanso.get(&uid).is_some_and(|t| *t > ahora) {
+                        let f = if en { "Thanks, I'm all set for now." } else { "Gracias, por ahora estoy bien." };
+                        say_from(&mut speech, e, x, z, f, color, true);
+                        continue;
+                    }
+                    let (item, n) = *encargos.pendientes.entry(uid).or_insert_with(|| pedido_para(uid, rol));
+                    let nombre = crate::i18n::tr(&crate::granja::nombre_item(item)).into_owned();
+                    if inv.qty(item) >= n {
+                        inv.remove(item, n);
+                        let (pi, pn) = premio_para(uid);
+                        inv.add(pi, pn);
+                        soc.adjust(familia, ENCARGO_REP);
+                        encargos.pendientes.remove(&uid);
+                        encargos.descanso.insert(uid, ahora + ENCARGO_DESCANSO);
+                        let f = if en {
+                            format!("Perfect, thank you! Take {pn} {}.", crate::i18n::tr(&crate::granja::nombre_item(pi)))
+                        } else {
+                            format!("¡Perfecto, gracias! Tomá {pn} de {}.", crate::granja::nombre_item(pi))
+                        };
+                        say_from(&mut speech, e, x, z, f, color, true);
+                    } else {
+                        let tengo = inv.qty(item);
+                        let f = if en {
+                            format!("I need {n} of {nombre}. You have {tengo}.")
+                        } else {
+                            format!("Necesito {n} de {nombre}. Llevás {tengo}.")
+                        };
+                        say_from(&mut speech, e, x, z, f, color, true);
+                    }
+                }
+            }
             NpcAction::Trade => {
                 if let Some((e, npc)) = npcs.iter().find(|(_, n)| n.uid == uid) {
                     let (x, z) = (npc.x, npc.z);
+                    let familia = npc.family;
                     // C4/S6: comercio real contra el `Stock` de la colonia — ya no es un
                     // stub fijo; el NPC ofrece lo que la colonia tiene de sobra.
                     let body = soc.active_body().unwrap_or(0);
@@ -589,6 +788,9 @@ fn menu_buttons(
                     } else if let Some((item, amount)) = soc.try_trade(body) {
                         inv.remove("apple", TRADE_APPLE_COST);
                         inv.add(item, amount as u32);
+                        // Cada trato hecho mejora la fama de su familia con vos: sin esto la fama sólo
+                        // podía bajar y nadie llegaba jamás a aceptar ser tu pareja.
+                        soc.adjust(familia, TRADE_REP_GAIN);
                         let label = if item == "wood" { "madera" } else { "piedra" };
                         say_from(
                             &mut speech,
@@ -597,14 +799,222 @@ fn menu_buttons(
                             z,
                             // Regla 6: la fuente no dibuja acentos ("Tené" salia con
                             // una caja en el medio).
-                            format!("Toma, {amount:.0} de {label}."),
+                            format!("Tomá, {amount:.0} de {label}."),
                             Color::srgb(0.7, 1.0, 0.75),
                             true,
                         );
                     } else {
-                        say_from(&mut speech, e, x, z, "No tengo nada para comerciar aun.", Color::srgb(0.9, 0.96, 1.0), true);
+                        say_from(&mut speech, e, x, z, "No tengo nada para comerciar aún.", Color::srgb(0.9, 0.96, 1.0), true);
                     }
                 }
+            }
+        }
+    }
+}
+
+/// Un toque sobre el compañero abre SU menú (órdenes y charla). Mismo criterio que `pick_npc`:
+/// el toque cuenta si no cae sobre el joystick ni sobre otro panel de UI.
+#[allow(clippy::too_many_arguments)]
+fn pick_companero(
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut touches: EventReader<TouchInput>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cam: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
+    companion: Query<&Transform, With<Companion>>,
+    over_menu: Query<&Interaction, With<NpcMenuRoot>>,
+    touch_layout: Res<TouchLayout>,
+    blocks: Res<TouchBlockRects>,
+    mut menu: ResMut<NpcMenu>,
+) {
+    if over_menu.iter().any(|i| *i != Interaction::None) {
+        return;
+    }
+    let screen = if mouse.just_pressed(MouseButton::Left) {
+        windows.get_single().ok().and_then(|w| w.cursor_position())
+    } else {
+        touches
+            .read()
+            .find(|t| {
+                t.phase == TouchPhase::Started
+                    && !touch_in_move_zone(t.position, &touch_layout)
+                    && !touch_blocked(t.position, &blocks.0)
+            })
+            .map(|t| t.position)
+    };
+    let (Some(screen), Ok((camera, cam_tf)), Ok(win), Ok(ctf)) =
+        (screen, cam.get_single(), windows.get_single(), companion.get_single())
+    else {
+        return;
+    };
+    let Some(world) = crate::render::scale::window_to_world_2d(camera, cam_tf, win, screen) else {
+        return;
+    };
+    if ctf.translation.truncate().distance(world) <= PICK_R && menu.open_uid.is_none() {
+        menu.companero = true;
+        menu.companero_shown = false;
+    }
+}
+
+fn boton_companero() -> Node {
+    Node {
+        height: Val::Px(34.0),
+        border: UiRect::all(Val::Px(2.0)),
+        padding: UiRect::horizontal(Val::Px(8.0)),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    }
+}
+
+/// El panel del compañero: estado, la orden vigente y los botones para darle otra.
+#[allow(clippy::too_many_arguments)]
+fn sync_menu_companero(
+    mut commands: Commands,
+    mut menu: ResMut<NpcMenu>,
+    order: Res<CompanionOrder>,
+    companion: Query<&Companion>,
+    root: Query<Entity, With<NpcMenuRoot>>,
+    mut last_order: Local<Option<CompanionTask>>,
+) {
+    if !menu.companero {
+        if menu.companero_shown {
+            menu.companero_shown = false;
+            for e in &root {
+                commands.entity(e).despawn_recursive();
+            }
+        }
+        return;
+    }
+    // Abrió un vecino por encima: se va el del compañero.
+    if menu.open_uid.is_some() {
+        menu.companero = false;
+        return;
+    }
+    let cambio = *last_order != Some(order.0);
+    if menu.companero_shown && !cambio {
+        return;
+    }
+    *last_order = Some(order.0);
+    menu.companero_shown = true;
+    for e in &root {
+        commands.entity(e).despawn_recursive();
+    }
+    let Ok(c) = companion.get_single() else {
+        menu.companero = false;
+        return;
+    };
+    let estado = c.estado();
+    let orden = match order.0 {
+        CompanionTask::Follow => "te sigue",
+        CompanionTask::Gather => "explora por la zona",
+        CompanionTask::Pray => "reza cerca del ídolo",
+    };
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                // A la IZQUIERDA y compacto: del lado derecho tapaba SALTAR / COMER.
+                left: Val::Px(12.0),
+                top: Val::Px(120.0),
+                width: Val::Px(390.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            BackgroundColor(PANEL_BG),
+            BorderColor(NEON_CYAN),
+            GlobalZIndex(800),
+            FocusPolicy::Block,
+            Interaction::default(),
+            NpcMenuRoot,
+            Name::new("CompaneroMenu"),
+        ))
+        .with_children(|root| {
+            root.spawn((Text::new("Compañero"), TextFont { font_size: 20.0, ..default() }, TextColor(NEON_CYAN)));
+            root.spawn((
+                Text::new(format!("{estado}  |  orden: {orden}")),
+                TextFont { font_size: 13.0, ..default() },
+                TextColor(Color::srgb(0.95, 0.85, 0.55)),
+            ));
+            root.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: Val::Px(6.0),
+                row_gap: Val::Px(6.0),
+                margin: UiRect::top(Val::Px(6.0)),
+                ..default()
+            })
+            .with_children(|row| {
+                for (label, task) in [
+                    ("SEGUIRME", CompanionTask::Follow),
+                    ("EXPLORAR", CompanionTask::Gather),
+                    ("REZAR", CompanionTask::Pray),
+                ] {
+                    let color = if order.0 == task { NEON_MAGENTA } else { NEON_CYAN };
+                    row.spawn((Button, boton_companero(), BorderColor(color), BackgroundColor(BTN_IDLE), CompaneroAccion(task)))
+                        .with_children(|b| {
+                            b.spawn((Text::new(label), TextFont { font_size: 14.0, ..default() }, TextColor(color)));
+                        });
+                }
+                row.spawn((Button, boton_companero(), BorderColor(NEON_CYAN), BackgroundColor(BTN_IDLE), CompaneroCharlar))
+                    .with_children(|b| {
+                        b.spawn((Text::new("CHARLAR"), TextFont { font_size: 14.0, ..default() }, TextColor(NEON_CYAN)));
+                    });
+                row.spawn((Button, boton_companero(), BorderColor(NEON_MAGENTA), BackgroundColor(BTN_IDLE), CompaneroCerrar))
+                    .with_children(|b| {
+                        b.spawn((Text::new("CERRAR"), TextFont { font_size: 14.0, ..default() }, TextColor(NEON_MAGENTA)));
+                    });
+            });
+        });
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn menu_companero(
+    acciones: Query<(&Interaction, &CompaneroAccion), Changed<Interaction>>,
+    charlar: Query<&Interaction, (With<CompaneroCharlar>, Changed<Interaction>)>,
+    cerrar: Query<&Interaction, (With<CompaneroCerrar>, Changed<Interaction>)>,
+    mut menu: ResMut<NpcMenu>,
+    mut order: ResMut<CompanionOrder>,
+    mut speech: ResMut<SpeechQueue>,
+    companion: Query<(Entity, &Companion, &Transform)>,
+    player: Query<&Transform, (With<Player>, Without<Companion>)>,
+) {
+    for (i, a) in &acciones {
+        if *i == Interaction::Pressed {
+            order.0 = a.0;
+            if let Ok((e, c, _)) = companion.get_single() {
+                let (x, z) = c.pos();
+                let frase = match a.0 {
+                    CompanionTask::Follow => "Voy con vos.",
+                    CompanionTask::Gather => "Voy a mirar por ahí.",
+                    CompanionTask::Pray => "Rezo un rato.",
+                };
+                say_from(&mut speech, e, x, z, frase, Color::srgb(0.7, 1.0, 0.9), true);
+            }
+        }
+    }
+    for i in &charlar {
+        if *i == Interaction::Pressed {
+            if let Ok((e, c, _)) = companion.get_single() {
+                let (x, z) = c.pos();
+                let frases = ["A tus órdenes.", "Qué lindo día para andar.", "Cuenta conmigo.", "Si te falta algo, avisame."];
+                let k = (x.abs() * 7.0 + z.abs() * 3.0) as usize % frases.len();
+                say_from(&mut speech, e, x, z, frases[k], Color::srgb(0.7, 1.0, 0.9), true);
+            }
+        }
+    }
+    for i in &cerrar {
+        if *i == Interaction::Pressed {
+            menu.companero = false;
+        }
+    }
+    // Te alejaste: se cierra solo.
+    if menu.companero {
+        if let (Ok((_, _, ct)), Ok(pt)) = (companion.get_single(), player.get_single()) {
+            if ct.translation.truncate().distance(pt.translation.truncate()) > TALK_RANGE * 2.0 {
+                menu.companero = false;
             }
         }
     }

@@ -1837,6 +1837,8 @@ fn eco_test_drive(world: &mut World) {
     let wait = match stage {
         4 => 0.5,
         5 => settle.min(12.0),
+        6 => 12.0,
+        7 => 2.0,
         _ => settle,
     };
     if now - entered < wait {
@@ -1956,18 +1958,42 @@ fn eco_test_drive(world: &mut World) {
             teleport_surface(world, c.x, c.z);
             advance_stage(world, now);
         }
+        5 => {
+            crate::society::forzar_constructor(world);
+            advance_stage(world, now);
+        }
+        7 => {
+            eprintln!("ha-ecotest: DONE");
+            std::process::exit(0);
+        }
         _ => {
             let npcs = count_npcs_near(world, 200.0);
             let at = player_xz(world);
             eprintln!("ha-ecotest: CIUDAD jugador ({:.0},{:.0}) npcs-cerca {npcs}", at.0, at.1);
             shot(world, &format!("{}/eco-2-ciudad.png", flytest_dir()));
+            let obras = world.resource::<crate::structures::BuiltStructures>().list.len();
+            eprintln!("ha-ecotest: OBRAS colocadas por constructores {obras}");
+            let a = crate::society::auditar(world, at.0, at.1, 200.0);
+            eprintln!(
+                "ha-ecotest: VECINOS total {} con-casa {} adentro {} con-ruta {} atascados {}",
+                a.total, a.con_casa, a.dentro_de_casa, a.con_ruta, a.atascados
+            );
+            if a.total > 0 && a.con_casa == 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — ningun vecino de la ciudad tiene casa");
+                report_bug("sociedad", "vecinos con casa", "nadie tiene vivienda asignada");
+                std::process::exit(1);
+            }
+            if a.atascados * 4 > a.total.max(4) {
+                eprintln!("ha-ecotest: INVARIANT roto — mas de un cuarto de los vecinos esta trabado");
+                report_bug("sociedad", "vecinos trabados", "atasco masivo contra edificios");
+                std::process::exit(1);
+            }
             if npcs == 0 {
                 eprintln!("ha-ecotest: INVARIANT roto — la ciudad esta desierta");
                 report_bug("sociedad", "ciudad poblada", "entrar a un asentamiento no sembro gente");
                 std::process::exit(1);
             }
-            eprintln!("ha-ecotest: DONE");
-            std::process::exit(0);
+            advance_stage(world, now);
         }
     }
 }
@@ -2035,6 +2061,11 @@ struct BarrioTestState {
     casas: Vec<(i64, i64, i64, i64, String)>,
     /// Cuándo se pidió abrir las puertas del retrato en curso.
     puertas_pedidas: Option<f32>,
+    /// Prueba de paso por la puerta del retrato `en_puerta`: 0 = sin empezar,
+    /// 1 = caminando contra la puerta CERRADA, 2 = caminando con la puerta
+    /// ABIERTA, 3 = terminada.
+    paseo: u8,
+    paseo_t0: f32,
 }
 
 fn barrio_test_drive(world: &mut World) {
@@ -2164,6 +2195,75 @@ fn barrio_test_drive(world: &mut World) {
             format!("barrio-{shots}-{}", clave.rsplit('/').next().unwrap_or("casa")),
         )
     };
+    if en_puerta && world.resource::<BarrioTestState>().paseo < 3 {
+        let entered = world.resource::<FlyTestState>().stage_entered;
+        let paseo = world.resource::<BarrioTestState>().paseo;
+        if paseo == 0 && !(now - entered > 2.0 && mundo_listo(world)) {
+            teleport_a_celda(world, px, pz);
+            return;
+        }
+        let puerta = {
+            let mut q = world.query::<&crate::building::PuertaDeFachada>();
+            q.iter(world)
+                .filter(|p| p.tx >= hx && p.tx < hx + hw && p.tz == hz + hd - 1)
+                .map(|p| (p.tx, p.tz))
+                .next()
+        };
+        let Some((dx, dz)) = puerta else {
+            eprintln!("ha-puerta: AVISO — la casa no tiene puerta de fachada; se salta la prueba");
+            world.resource_mut::<BarrioTestState>().paseo = 3;
+            return;
+        };
+        let t0 = world.resource::<BarrioTestState>().paseo_t0;
+        let empuja = |world: &mut World| {
+            let mut i = world.resource_mut::<crate::input::MovementIntent>();
+            i.move_x = 0.0;
+            i.move_z = -1.0;
+        };
+        let z_ahora = |world: &mut World| {
+            let mut q = world.query_filtered::<&SimState, With<Player>>();
+            q.get_single(world).map(|s| s.body.z).unwrap_or(0.0)
+        };
+        match paseo {
+            0 => {
+                teleport_a_celda(world, dx as f32 + 0.5, dz as f32 + 2.5);
+                let mut b = world.resource_mut::<BarrioTestState>();
+                b.paseo = 1;
+                b.paseo_t0 = now;
+            }
+            1 => {
+                empuja(world);
+                if now - t0 > 2.0 {
+                    let z = z_ahora(world);
+                    let frena = z > dz as f32 + 1.0;
+                    eprintln!("ha-puerta: CERRADA z={z:.2} (puerta en {dz}) -> {}", if frena { "FRENA (bien)" } else { "ATRAVIESA (MAL)" });
+                    let mut q = world.query::<(&crate::building::PuertaDeFachada, &mut crate::puertas::Abrible)>();
+                    for (p, mut a) in q.iter_mut(world) {
+                        if p.tx == dx && p.tz == dz {
+                            a.pedido = true;
+                        }
+                    }
+                    teleport_a_celda(world, dx as f32 + 0.5, dz as f32 + 2.5);
+                    let mut b = world.resource_mut::<BarrioTestState>();
+                    b.paseo = 2;
+                    b.paseo_t0 = now;
+                }
+            }
+            _ => {
+                empuja(world);
+                if now - t0 > 4.0 {
+                    let z = z_ahora(world);
+                    let pasa = z < dz as f32;
+                    eprintln!("ha-puerta: ABIERTA z={z:.2} (puerta en {dz}) -> {}", if pasa { "PASA (bien)" } else { "NO PASA (MAL)" });
+                    world.resource_mut::<BarrioTestState>().paseo = 3;
+                    let mut i = world.resource_mut::<crate::input::MovementIntent>();
+                    i.move_x = 0.0;
+                    i.move_z = 0.0;
+                }
+            }
+        }
+        return;
+    }
     teleport_a_celda(world, px, pz);
     world.resource_mut::<crate::camera::CameraZoom>().pedir_encuadre(vista);
     let entered = world.resource::<FlyTestState>().stage_entered;
@@ -5586,7 +5686,7 @@ fn vista_drive(world: &mut World) {
         return;
     }
     // el salto largo vuelve a mostrar la pantalla de carga: se espera a que se vaya
-    let beats: [(f32, f32, &str); 2] = [(25.0, 0.0, "vista-0-a-pie"), (40.0, 120.0, "vista-1-alto")];
+    let beats: [(f32, f32, &str); 2] = [(25.0, 0.0, "vista-0-a-pie"), (40.0, 30.0, "vista-1-alto")];
     let shots = world.resource::<FlyTestState>().shots as usize;
     let entered = world.resource::<FlyTestState>().stage_entered;
     if shots >= beats.len() {
@@ -5605,6 +5705,9 @@ fn vista_drive(world: &mut World) {
         fly.vy = 0.0;
     }
     if now - entered > at && mundo_listo(world) {
+        if crate::flags::var("HA_SPRITES_CERCA").is_ok() && shots == 0 {
+            volcar_sprites_cerca(world, 14.0);
+        }
         shot(world, &format!("{}/{name}.png", flytest_dir()));
         world.resource_mut::<FlyTestState>().shots += 1;
     }
@@ -6801,5 +6904,30 @@ fn cubo_test_drive(world: &mut World, mut st: Local<CuboTest>) {
             eprintln!("ha-verify: CUBOTEST {}", if st.fallo { "FAIL" } else { "DONE" });
             std::process::exit(i32::from(st.fallo));
         }
+    }
+}
+
+/// Lista los sprites de color plano (sin imagen) chicos alrededor del jugador, con los nombres de
+/// sus componentes: así se caza un cuadradito que no debería estar ahí.
+fn volcar_sprites_cerca(world: &mut World, r: f32) {
+    let (px, pz) = player_xz(world);
+    let mut q = world.query::<(Entity, &Sprite, &GlobalTransform)>();
+    let mut hallados = Vec::new();
+    for (e, sp, tf) in q.iter(world) {
+        let t = tf.translation();
+        if (t.x - px).powi(2) + (-t.y - pz).powi(2) > r * r {
+            continue;
+        }
+        let Some(c) = sp.custom_size else { continue };
+        if sp.image == Handle::<Image>::default() && c.x < 1.0 && c.y < 1.0 && sp.color.to_srgba().alpha > 0.5 {
+            hallados.push((e, t, sp.color.to_srgba(), c));
+        }
+    }
+    for (e, t, col, c) in hallados {
+        let nombres: Vec<String> = world
+            .inspect_entity(e)
+            .map(|i| i.name().to_string().rsplit("::").next().unwrap_or("").to_string())
+            .collect();
+        eprintln!("ha-sprite: ({:.1},{:.1}) {:?} col ({:.2},{:.2},{:.2}) [{}]", t.x, -t.y, c, col.red, col.green, col.blue, nombres.join(","));
     }
 }

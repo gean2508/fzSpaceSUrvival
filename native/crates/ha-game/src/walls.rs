@@ -181,14 +181,15 @@ pub(crate) struct WallSprite {
 /// ella (`crate::puertas`), y queda como la dejó.
 #[derive(Component)]
 #[require(crate::puertas::Abrible)]
-struct WallDoor {
+pub(crate) struct WallDoor {
+    pub(crate) axis: WallAxis,
     /// Segundos que le quedan a la transición `opening`/`closing` en curso.
     t: f32,
     /// Centro del borde en mundo (x, z) — para la distancia al jugador.
-    cx: f32,
-    cz: f32,
+    pub(crate) cx: f32,
+    pub(crate) cz: f32,
     art: &'static str,
-    open: bool,
+    pub(crate) open: bool,
     /// Medida con la que se spawneó. Cambiar de pose tiene que redibujar del
     /// MISMO tamaño: con una constante acá, la puerta cambiaba de talle al
     /// abrirse.
@@ -686,7 +687,7 @@ fn stream_walls(
         }
         if puerta_animada {
             let (cx, cz) = edge_center(w.tx, w.tz, w.axis);
-            ent.insert(WallDoor { cx, cz, art: def.art, open: false, t: 0.0, size, cara });
+            ent.insert(WallDoor { axis: w.axis, cx, cz, art: def.art, open: false, t: 0.0, size, cara });
         }
         // Un muro con farol/ventana encendida ilumina si el slot lo declara.
         crate::light2d::attach(&mut ent, &art, &[def.art], size);

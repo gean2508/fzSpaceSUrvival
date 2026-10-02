@@ -224,6 +224,44 @@ PAGINAS_DEL_LOTE = {
 }
 
 
+#: **Qué edificio COMPLETO es de qué lote, cuando la página sola no alcanza.**
+#:
+#: La página decide la CLASE (casa, comercio, hotel…), pero hay páginas donde el
+#: pack juntó edificios completos de clases distintas, y elegir sólo por tamaño
+#: los mezcla. Medido el 30 sep 2026 mirando las láminas de cada lote:
+#:
+#: - `12_Hotel_and_Hospital` trae UN hospital y UN hotel, y los dos lotes
+#:   compartían página: el HOSPITAL salía con el cartel HOTEL y el hotel con la
+#:   «H» del helipuerto;
+#: - la ferretería (`Hardware_Store`, cartel + toldo) vive en `Generic_Building`
+#:   junto a los condominios, y el lote `duplex` (vivienda) la sorteaba: una
+#:   ferretería en medio del barrio residencial;
+#: - la casa embrujada (`Haunted_House`, tema Halloween) entraba al sorteo de
+#:   `casa_grande` y `casa_country`: un caserón gótico en una cuadra de chalets.
+#:
+#: Es la regla 8 de CLAUDE.md pero para edificios ENTEROS: no se trata de piezas
+#: de kit (eso lo caza `MARCAS_DE_PIEZA`), sino de a qué parcela le corresponde
+#: cada dibujo completo. `(incluir, excluir)` son regex sobre la clave; `None` no
+#: filtra.
+FILTRO_POR_NOMBRE = {
+    "building/hotel": (r"hotel_y_hospital_hotel", None),
+    "building/hospital": (None, r"hotel_y_hospital_hotel"),
+    "building/duplex": (None, r"ferreteria"),
+    "building/casa_chica": (None, r"embrujada"),
+    "building/casa_mediana": (None, r"embrujada"),
+    "building/casa_grande": (None, r"embrujada"),
+    "building/casa_country": (None, r"embrujada"),
+    "building/villa": (None, r"embrujada"),
+}
+
+#: **Edificios completos que un lote recibe de una página que no es la suya.**
+#: `{lote: [(páginas, regex de la clave)]}`. La ferretería SIN cartel es un
+#: comercio genérico; la del cartel HARDWARE se queda sin lote (es una marca).
+EXTRA_POR_NOMBRE = {
+    "building/tienda": [(("generic_building",), r"^building/ferreteria_tienda$")],
+}
+
+
 def escala_del_juego():
     """`ESCALA_ARTE` tal como la declara el cliente. Si alguien la mueve allá y
     no acá, este script para en seco en vez de reimportar todo el pack a otra
@@ -408,7 +446,7 @@ def llena(pix, ancho, alto):
     return max(filas) / ancho if ancho else 0.0
 
 
-def candidatos(sprites, paginas, cache, propias=()):
+def candidatos(sprites, paginas, cache, propias=(), lote=None):
     """Los recortes de esas páginas del pack que pueden ser un edificio.
 
     `propias` son las claves que escribió ESTE script en la corrida anterior: son
@@ -422,7 +460,16 @@ def candidatos(sprites, paginas, cache, propias=()):
             continue
         if not clave.startswith(CARPETAS) or es_pieza(clave):
             continue
-        if pagina_de(e) not in paginas:
+        extra = any(
+            pagina_de(e) in pgs and re.search(rx, clave)
+            for pgs, rx in EXTRA_POR_NOMBRE.get(lote, ())
+        )
+        if pagina_de(e) not in paginas and not extra:
+            continue
+        inc, exc = FILTRO_POR_NOMBRE.get(lote, (None, None))
+        if inc and not re.search(inc, clave):
+            continue
+        if exc and re.search(exc, clave):
             continue
         r = e.get("rect")
         if not r or r["w"] < MIN_CELDAS[0] or r["h"] < MIN_CELDAS[1]:
@@ -666,7 +713,7 @@ def main():
         if not paginas:
             sin_arte.append((clave, "sin páginas declaradas"))
             continue
-        cand = candidatos(sprites, set(paginas), cache, mias)
+        cand = candidatos(sprites, set(paginas), cache, mias, clave)
         if not cand:
             sin_arte.append((clave, f"ningún edificio en {paginas}"))
             continue

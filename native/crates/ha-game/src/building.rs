@@ -477,6 +477,28 @@ pub(crate) const LOCALES: &[&str] = &[
 /// Los tres temas de pared del kit, en el orden de la hoja del pack.
 const TEMAS_DE_EDIFICIO: &[&str] = &["ladrillo", "azul", "hormigon"];
 
+/// **Ningún edificio deja ver su interior desde afuera.**
+///
+/// Lo que el dibujo de la fachada no alcanza a tapar de la huella —el fondo de
+/// un lote más hondo que el edificio dibujado, o los costados si el sprite no da
+/// el ancho— se cubre con una azotea lisa por debajo (un pelo detrás de la
+/// fachada, en su misma banda). El interior se ve al ENTRAR: el techo se
+/// desvanece (`fade_roofs`) igual que el resto porque lleva el mismo
+/// [`BuildingRoof`].
+fn spawn_azotea_de_respaldo(commands: &mut Commands, r: &RoofRect, body: CelestialBody, z: i32, color: Color) {
+    let huella = Vec2::new(r.w as f32 * TILE_M, r.h as f32 * TILE_M);
+    let centro = render_xy(
+        r.min.0 as f32 * TILE_M + huella.x * 0.5,
+        r.min.1 as f32 * TILE_M + huella.y * 0.5,
+    );
+    let z_frente_mundo = (r.min.1 + r.h) as f32 * TILE_M;
+    commands.spawn((
+        BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+        Sprite::from_color(color, huella),
+        Transform::from_xyz(centro.x, centro.y, crate::layers::fachada(z_frente_mundo) - crate::layers::HAIR),
+    ));
+}
+
 /// **La ciudad levanta un edificio del kit modular, del ancho de la parcela.**
 ///
 /// El pack dibujó `5_Floor_Modular_Building` para apilarse: bandas de
@@ -531,6 +553,10 @@ fn spawn_fachada_apilada(
     let pie = (r.min.1 + r.h) as f32 * TILE_M;
     let base = render_xy(0.0, pie);
     let z_base = crate::layers::fachada(pie);
+    let alto_dibujado = ALTO_PLANTA_BAJA + pisos as i64 * ALTO_PISO + ALTO_AZOTEA;
+    if alto_dibujado < r.h || modulos * MODULO < r.w {
+        spawn_azotea_de_respaldo(commands, r, body, z, Color::srgb(0.46, 0.48, 0.58));
+    }
     for m in 0..modulos {
         let mx = x0 + m * MODULO;
         let mut alto = 0i64;
@@ -538,10 +564,16 @@ fn spawn_fachada_apilada(
             .chain((0..pisos as i64).map(|_| (crate::edificios::PISOS, ALTO_PISO)))
             .chain(std::iter::once((crate::edificios::AZOTEAS, ALTO_AZOTEA)));
         for (piso, (tabla, celdas)) in pila.enumerate() {
-            let clave = art.resolved_key(
-                crate::edificios::variante(tabla, mx, r.min.1, m as usize + piso),
-                Some(tema),
-            );
+            // **Un edificio es UN edificio**: la planta baja cambia de local por módulo, pero
+            // los pisos y la azotea son los mismos en todo el ancho y en toda la altura.
+            // Sorteados por módulo Y por piso, una torre salía con un ventanal, sobre una
+            // rejilla, sobre un balcón: tres fachadas de tres casas distintas apiladas.
+            let pieza = if piso == 0 {
+                crate::edificios::variante(tabla, mx, r.min.1, m as usize)
+            } else {
+                crate::edificios::variante(tabla, r.min.0, r.min.1, 0)
+            };
+            let clave = art.resolved_key(pieza, Some(tema));
             // **Una celda del pack por TILE.** Es una banda que embaldosa a lo
             // largo del frente, igual que una pared: con la escala de objeto
             // (0,95 m/celda) un módulo de 9 mediría 8,55 m sobre 9 tiles y cada
@@ -828,15 +860,44 @@ fn stream_roofs(
         let clave = art_key.map(|k| {
             elegir_fachada(&art, k, &r, body, crate::world2d::celda_semilla(r.min.0, r.min.1))
         });
-        let (size, sube) = roof_layout(&art, clave.as_deref(), huella, residencial);
+        let (size, _) = roof_layout(&art, clave.as_deref(), huella, residencial);
         let z_frente_mundo = (r.min.1 + r.h) as f32 * TILE_M;
         let cx = r.min.0 as f32 * TILE_M + huella.x * 0.5;
         let cz = r.min.1 as f32 * TILE_M + huella.y * 0.5;
         let pos = render_xy(cx, cz);
         // `render_xy` deja +Y hacia el norte, así que "crecer hacia arriba" es
         // sumarle la mitad de lo que sobresale.
-        let pos = Vec2::new(pos.x, pos.y + sube * 0.5);
+        // **El dibujo se apoya en el FRENTE de la huella**, no en su centro. Si
+        // era más chato que el lote (`sube` = 0), quedaba centrado y dejaba una
+        // franja de interior a la vista arriba y otra abajo.
+        let sube_real = size.y - huella.y;
+        // **La puerta dibujada cae SOBRE la celda `Door`.** El dibujo se centraba
+        // en la huella, pero su puerta puede estar corrida dentro de la fachada:
+        // el jugador caminaba hacia la puerta pintada y entraba por otra celda.
+        // Se corre el paño lo que haga falta (hasta 1,5 tiles; lo que quede
+        // destapado lo cubre la azotea de respaldo).
+        let corrimiento = clave
+            .as_deref()
+            .zip(art_key)
+            .and_then(|(k, lote)| {
+                let celdas = art.celdas_de(k, None)?;
+                let (puerta, _) = art.pose(k, "puerta_en_sprite")?;
+                if celdas.x <= 0.0 {
+                    return None;
+                }
+                let escala = size.x / (celdas.x * 32.0);
+                let puerta_x = (puerta[0] as f32 + puerta[2] as f32 * 0.5) * escala;
+                let deseada = (ha_shared::city::puerta_del_frente(lote, r.min.0, r.w) as f32 + 0.5) * TILE_M;
+                let actual = pos.x - size.x * 0.5 + puerta_x;
+                Some((deseada - actual).clamp(-1.5 * TILE_M, 1.5 * TILE_M))
+            })
+            .filter(|d| d.abs() > 0.25 * TILE_M)
+            .unwrap_or(0.0);
+        let pos = Vec2::new(pos.x + corrimiento, pos.y + sube_real * 0.5);
         let (sprite, anim) = roof_sprite(&art, clave.as_deref(), size);
+        if clave.is_some() {
+            spawn_azotea_de_respaldo(&mut commands, &r, body, z, Color::srgb(0.60, 0.58, 0.54));
+        }
         let mut ent = commands.spawn((
             BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
             sprite,

@@ -157,8 +157,22 @@ impl Plugin for FollowCameraPlugin {
     }
 }
 
+/// **Una sola cámara cuando no hay blit** (todo Android: ahí la escala de render está descartada).
+///
+/// Con la cámara de mundo + la de blit/UI sobre la MISMA ventana, el Redmi mostraba cada ~6 s un
+/// cuadro de pantalla SIN ningún sprite (ni jugador, ni árboles, ni velo nocturno: sólo suelo y
+/// UI) — el "el mundo parpadea y a veces la UI también" del 1 oct 2026. Aislado grabando la
+/// pantalla (ffmpeg, cuadro a cuadro) y descartando, una por una: luces, velo, visibilidad,
+/// fases de render, pipelines, modo de presentación, render en paralelo y tope de FPS. Con una
+/// sola cámara: 0 destellos en 15 s y sin tirones de >50 ms. La UI cuelga de la cámara del mundo.
+/// `HA_DOS_CAMARAS=1` devuelve las dos (para investigar).
+pub fn una_sola_camara() -> bool {
+    cfg!(target_os = "android") && crate::flags::var("HA_DOS_CAMARAS").is_err()
+}
+
 fn spawn_camera(mut commands: Commands) {
-    commands.spawn((
+    let sola = una_sola_camara();
+    let mut e = commands.spawn((
         GameCamera,
         Camera2d,
         // **La UI ya no cuelga de acá: vive en la cámara de blit**
@@ -188,6 +202,9 @@ fn spawn_camera(mut commands: Commands) {
         },
         Transform::from_xyz(0.0, 0.0, 100.0),
     ));
+    if sola {
+        e.insert(bevy::ui::IsDefaultUiCamera);
+    }
 }
 
 fn absorb_shake_events(

@@ -112,6 +112,12 @@ impl Plugin for InputPlugin {
         // que recorre el dedo de una persona.)
         app.add_systems(
             Update,
+            (actions::update_use_button_label, actions::usar_objeto_con_boton)
+                .chain()
+                .after(actions::poll_action_buttons_held),
+        );
+        app.add_systems(
+            Update,
             (
                     layout::sync_touch_layout,
                     sync_stick_anchors,

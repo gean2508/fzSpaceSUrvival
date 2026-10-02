@@ -114,6 +114,13 @@ pub fn removed_key(kind: InteractTargetKind) -> (i32, i32) {
 /// mecánica existía y era invisible. Contra el toque perdido protege el
 /// mantenido, que es largo a propósito, no una traba de inventario.
 fn can_dig_down(item_id: &str) -> bool {
+    // **Con comida o ropa en la mano no se cava.** `resolve_interaction` cae a la regla de la
+    // MANO para cualquier ítem sin regla propia, así que una manzana "picaba" el suelo y el
+    // mantener nunca llegaba a `comer`/`vestir` (medido en el Redmi el 1 oct 2026: mantener
+    // con el gorro en la mano abría un pozo).
+    if crate::equipo::es_usable(item_id) {
+        return false;
+    }
     resolve_interaction(Some(item_id), InteractTargetKind::Block)
         .is_some_and(|r| r.duration_ms > 0)
 }
@@ -399,6 +406,7 @@ fn update_look_target(
         if tiles.solid_at(body, tx, tz) {
             let t = tiles.tile_at(body, tx, tz);
             if t != ha_shared::topdown::Tile::Bedrock
+                && !crate::equipo::es_usable(&equipped.item_id)
                 && target_allowed_in_region(InteractTargetKind::Block, region.active)
             {
                 *current = LookTarget {

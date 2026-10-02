@@ -21,7 +21,23 @@ impl Plugin for PerfDebugPlugin {
         // 5 s — un tirón fijo), el log de tirones y el censo. Los recursos
         // quedan porque otros sistemas los leen (el reporte de cuelgues).
         #[cfg(target_os = "android")]
-        return;
+        {
+            // Sólo si se pide por `adb shell setprop debug.ha.perflog 1`: un
+            // contador de frames sin escaneos ni entidades. Apagado, no registra
+            // NADA (no corre ningún sistema extra en el celu).
+            if crate::flags::var("HA_PERFLOG").is_ok() {
+                app.add_systems(Update, (log_frames_ligero, vigilar_visibles));
+                if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
+                    render_app.add_systems(
+                        bevy::render::Render,
+                        vigilar_fase_transparente
+                            .in_set(bevy::render::RenderSet::PhaseSort)
+                            .after(bevy::render::render_phase::sort_phase_system::<bevy::core_pipeline::core_2d::Transparent2d>),
+                    );
+                }
+            }
+            return;
+        }
         #[cfg(not(target_os = "android"))]
         app
             .add_systems(Startup, spawn_perf_overlay)
@@ -623,4 +639,98 @@ pub fn censo_de_entidades(world: &mut World, mut t: Local<f32>) {
     for (n, k) in v.iter().take(20) {
         eprintln!("ha-censo   {n:5} {k}");
     }
+}
+
+
+/// Medidor del celu: fps, p95/p99/máx de frame y cuántos pasan de 33 y 50 ms,
+/// cada 5 s. Sólo con `debug.ha.perflog`; no toca el mundo.
+#[cfg(target_os = "android")]
+fn log_frames_ligero(time: Res<Time<Real>>, mut dts: Local<Vec<f32>>, mut acc: Local<f32>) {
+    let dt = time.delta_secs() * 1000.0;
+    dts.push(dt);
+    *acc += dt;
+    if *acc < 5000.0 {
+        return;
+    }
+    let mut v = std::mem::take(&mut *dts);
+    let n = v.len().max(1);
+    let fps = n as f32 / (*acc / 1000.0);
+    *acc = 0.0;
+    v.sort_by(|a, b| a.total_cmp(b));
+    let q = |f: f32| v[((n as f32 * f) as usize).min(n - 1)];
+    eprintln!(
+        "ha-fps fps={fps:.1} p50={:.1} p95={:.1} p99={:.1} max={:.1} >33={} >50={}",
+        q(0.5),
+        q(0.95),
+        q(0.99),
+        v[n - 1],
+        v.iter().filter(|d| **d > 33.4).count(),
+        v.iter().filter(|d| **d > 50.0).count(),
+    );
+}
+
+
+/// Caza del cuadro "sin sprites" (1 oct 2026): cuenta cuántos sprites y mallas ve la cámara de
+/// juego cada cuadro y avisa cuando de golpe son muchos menos que el cuadro anterior. Si el
+/// aviso sale, la pérdida es del lado del juego (visibilidad); si no sale y el cuadro se ve
+/// vacío, es del render.
+#[cfg(target_os = "android")]
+static FASE_ITEMS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[cfg(target_os = "android")]
+static FASE_EXTRAIDOS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(target_os = "android")]
+fn vigilar_visibles(
+    time: Res<Time<Real>>,
+    camaras: Query<(Entity, &Camera, Option<&Msaa>, Option<&bevy::render::view::RenderLayers>)>,
+    camara: Query<&bevy::render::view::VisibleEntities, With<crate::camera::GameCamera>>,
+    mut antes: Local<(usize, usize)>,
+    mut acc: Local<f32>,
+) {
+    let Ok(v) = camara.get_single() else { return };
+    let sprites = v.get::<With<Sprite>>().len();
+    let mallas = v.get::<With<Mesh2d>>().len();
+    *acc += time.delta_secs();
+    if *acc >= 5.0 {
+        *acc = 0.0;
+        for (e, c, m, l) in &camaras {
+            eprintln!("ha-cam: {e:?} orden={} activa={} hdr={} msaa={:?} capas={:?} target={}", c.order, c.is_active, c.hdr, m, l, match &c.target { bevy::render::camera::RenderTarget::Window(_) => "ventana", _ => "imagen" });
+        }
+        eprintln!(
+            "ha-vis: sprites={sprites} mallas={mallas} fase_items={} extraidos={}",
+            FASE_ITEMS.load(std::sync::atomic::Ordering::Relaxed),
+            FASE_EXTRAIDOS.load(std::sync::atomic::Ordering::Relaxed)
+        );
+    }
+    if antes.0 > 20 && sprites * 3 < antes.0 {
+        eprintln!("ha-visibles: sprites {} -> {} (mallas {} -> {})", antes.0, sprites, antes.1, mallas);
+    }
+    *antes = (sprites, mallas);
+}
+
+
+/// Del lado del RENDER: cuántos sprites llegaron extraídos y cuántos ítems tiene la fase
+/// transparente 2D. Avisa si de golpe caen a casi cero (el cuadro "sólo suelo").
+#[cfg(target_os = "android")]
+fn vigilar_fase_transparente(
+    fases: Res<bevy::render::render_phase::ViewSortedRenderPhases<bevy::core_pipeline::core_2d::Transparent2d>>,
+    sprites: Res<bevy::sprite::ExtractedSprites>,
+    cache: Res<bevy::render::render_resource::PipelineCache>,
+    mut antes: Local<(usize, usize)>,
+) {
+    let esperando = cache.waiting_pipelines().count();
+    if esperando > 0 {
+        eprintln!("ha-pipelines: {esperando} en compilacion");
+    }
+    let items: usize = fases.values().map(|f| f.items.len()).sum();
+    let extraidos = sprites.sprites.len();
+    FASE_ITEMS.store(items, std::sync::atomic::Ordering::Relaxed);
+    FASE_EXTRAIDOS.store(extraidos, std::sync::atomic::Ordering::Relaxed);
+    if (antes.0 > 20 && items * 3 < antes.0) || (antes.1 > 20 && extraidos * 3 < antes.1) {
+        eprintln!(
+            "ha-fase: transparente {} -> {} items, sprites extraidos {} -> {}",
+            antes.0, items, antes.1, extraidos
+        );
+    }
+    *antes = (items, extraidos);
 }

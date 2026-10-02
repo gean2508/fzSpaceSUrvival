@@ -360,6 +360,7 @@ fn world_touch_gesture(
     mut cooldown: ResMut<AbilityCooldown>,
     mut tap: ResMut<AbilityTapPulse>,
     mut actions: ResMut<super::TouchActions>,
+    boton_usar: Res<super::actions::ActionTouchState>,
 ) {
     tap.slot = None;
     if !crate::platform::uses_touch_gameplay_ui() || cursor.locked {
@@ -386,8 +387,11 @@ fn world_touch_gesture(
     }
 
     let Some(_) = runtime.pointer else {
-        // Dedo levantado: cancelar lo que quedara a medias.
-        hold.release(runtime.dragged);
+        // Dedo levantado: cancelar lo que quedara a medias — salvo que el "mantener" lo
+        // sostenga el botón USAR (comer, vestirse), que lo cancela al soltarse él mismo.
+        if !(hold.eating && boton_usar.usando()) {
+            hold.release(runtime.dragged);
+        }
         return;
     };
 
@@ -574,7 +578,7 @@ pub(crate) fn resolve_hold(
             ..default()
         });
     }
-    if ha_shared::food_restore(&equipped.item_id).is_some() {
+    if crate::equipo::es_usable(&equipped.item_id) {
         return Some(HoldInteractState {
             active: true,
             duration_ms: 1100,

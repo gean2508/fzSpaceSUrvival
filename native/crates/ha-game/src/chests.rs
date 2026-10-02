@@ -120,7 +120,43 @@ pub struct ChestWorld {
     debounce: f32,
 }
 
+/// Título del panel de un cadáver (y marca para no guardarlos: ver `load_chests_on_startup`).
+pub const TITULO_CADAVER: &str = "CADÁVER";
+
 impl ChestWorld {
+    /// **El cuerpo de un infectado, con SU inventario** (Project Zomboid): se abre con el mismo
+    /// panel que un cofre. Devuelve el uid con el que `ChestPanelState::open_uid` lo abre.
+    pub fn crear_cadaver(&mut self, body: CelestialBody, x: f32, z: f32, items: &[(&str, u32)]) -> u32 {
+        let uid = self.next_uid;
+        self.next_uid += 1;
+        let mut slots = vec![Stack::default(); CHEST_SLOTS];
+        for (i, (it, n)) in items.iter().enumerate().take(CHEST_SLOTS) {
+            slots[i] = Stack { item_id: Some((*it).to_string()), qty: *n };
+        }
+        self.placed.push(LocalChest { uid, body, x, z, slots, mueble: Some(TITULO_CADAVER.to_string()) });
+        self.dirty = true;
+        uid
+    }
+
+    /// **Un alijo**: cofre común escondido por el mundo (`alijos.rs`), con botín rico.
+    pub fn crear_alijo(&mut self, body: CelestialBody, x: f32, z: f32, items: &[(&str, u32)]) -> u32 {
+        let uid = self.next_uid;
+        self.next_uid += 1;
+        let mut slots = vec![Stack::default(); CHEST_SLOTS];
+        for (i, (it, n)) in items.iter().enumerate().take(CHEST_SLOTS) {
+            slots[i] = Stack { item_id: Some((*it).to_string()), qty: *n };
+        }
+        self.placed.push(LocalChest { uid, body, x, z, slots, mueble: None });
+        self.dirty = true;
+        uid
+    }
+
+    /// Saca un cofre de la lista (el cadáver que ya se descompuso).
+    pub fn quitar(&mut self, uid: u32) {
+        self.placed.retain(|c| c.uid != uid);
+        self.dirty = true;
+    }
+
     fn get_mut(&mut self, uid: u32) -> Option<&mut LocalChest> {
         self.placed.iter_mut().find(|c| c.uid == uid)
     }
@@ -1290,6 +1326,10 @@ fn load_chests_on_startup(mut world: ResMut<ChestWorld>) {
                     qty,
                 };
             }
+        }
+        // Los cadáveres no sobreviven a la sesión: su cuerpo (la entidad) no se guarda.
+        if c.mueble.as_deref() == Some(TITULO_CADAVER) {
+            continue;
         }
         world.placed.push(LocalChest {
             uid: c.uid,

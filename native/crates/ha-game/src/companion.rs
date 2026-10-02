@@ -43,6 +43,17 @@ pub struct Companion {
     was_founded: bool,
 }
 
+impl Companion {
+    /// Qué está haciendo, en una línea para el menú.
+    pub fn estado(&self) -> String {
+        self.vida.actividad().verbo(Clase::Companero).to_string()
+    }
+
+    pub fn pos(&self) -> (f32, f32) {
+        (self.x, self.z)
+    }
+}
+
 /// Tarea asignada al compañero (mano derecha): lo maneja el jugador (o el tester
 /// vía comando). `Follow` = te sigue; `Gather` = deambula amplio (reúne/explora);
 /// `Pray` = orbita cerca del ídolo (venera).
@@ -289,7 +300,7 @@ fn tick_companion(
             &mut speech,
             c.x,
             c.z,
-            format!("Contigo hasta el fin, {}!", religion.name),
+            format!("¡Contigo hasta el fin, {}!", religion.name),
             Color::srgb(1.0, 0.9, 0.35),
         );
         c.say_cd = 6.0;
@@ -302,9 +313,9 @@ fn tick_companion(
                 (Actividad::Descansar, _) => "Un ratito de descanso, jefe.".into(),
                 (Actividad::Jugar, _) => "Voy a echar un vistazo.".into(),
                 (_, CompanionTask::Follow) if religion.founded => "Los fieles crecen, jefe.".into(),
-                (_, CompanionTask::Follow) => "A tus ordenes.".into(),
-                (_, CompanionTask::Gather) => "Reuniendo al rebano.".into(),
-                (_, CompanionTask::Pray) => "Que el Ki nos guie.".into(),
+                (_, CompanionTask::Follow) => "A tus órdenes.".into(),
+                (_, CompanionTask::Gather) => "Reuniendo al rebaño.".into(),
+                (_, CompanionTask::Pray) => "Que el Ki nos guíe.".into(),
             }
         };
         crate::dialog::say(&mut speech, c.x, c.z, line, Color::srgb(0.6, 0.9, 1.0));

@@ -10,7 +10,7 @@ use crate::game_time::fixed_delta_secs;
 use crate::input::{MovementIntent, TouchActions};
 use crate::flight::Flight;
 use crate::scene::WorldContextRuntime;
-use crate::world2d::{active_surface_body, render_xy, sort_z, ActivePlanet, TileWorld};
+use crate::world2d::{active_surface_body, render_xy, sort_z, ActivePlanet};
 
 /// Legacy anchor kept for compat.
 pub const CAVE_INTERIOR_ORIGIN: Vec3 = Vec3::new(0.0, -22.0, 0.0);
@@ -94,6 +94,8 @@ pub struct SimState {
     pub survival: ha_shared::SurvivalStats,
     pub prev_action: bool,
     pub prev_jump: bool,
+    /// Fracción de daño que absorbe la ropa puesta (`equipo.rs`).
+    pub armadura: f32,
 }
 
 #[derive(Component, Default)]
@@ -119,16 +121,11 @@ pub(crate) fn tick_sim(
     flight: Res<Flight>,
     world_ctx: Res<WorldContextRuntime>,
     planet_ctx: Res<ActivePlanet>,
-    tiles: Res<TileWorld>,
-    art: Res<crate::art2d::ArtLibrary>,
-    flora: Res<crate::harvest::FloraHarvest>,
-    authored: Res<crate::world2d::AuthoredDecor>,
-    structures: Res<crate::structures::BuiltStructures>,
-    walls: Res<crate::walls::BuiltWalls>,
+    obs: crate::obstaculos::Obstaculos,
     editor: Res<crate::ui_editor::UiEditorState>,
-    fachadas: Query<&crate::building::SolidoDeFachada>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
+    let _p = crate::debug::probe("fx_tick_sim");
     if flight.blocks_walking() {
         return;
     }
@@ -174,13 +171,7 @@ pub(crate) fn tick_sim(
                 // frenar a quien va a pie. Los desniveles altos siguen siendo
                 // pared — para ésos hay que buscar la rampa.
                 // La CERCA no frena por celda: frena su pie (ver `cerca_frena`).
-                let es_cerca = |tx: i64, tz: i64| {
-                    tiles.z == 0 && tiles.tile_at(body_surface, tx, tz) == ha_shared::topdown::Tile::Fence
-                };
-                let solid = |tx: i64, tz: i64| {
-                    (tiles.walk_blocked(body_surface, tx, tz) && !es_cerca(tx, tz))
-                        || structures.blocks(body_surface, tiles.z, tx, tz)
-                };
+                let solid = |tx: i64, tz: i64| obs.solido(body_surface, tx, tz);
                 // Paredes de BORDE (construcción LDoE): viven en la arista
                 // entre celdas, así que van por fuera del grid de sólidos.
                 //
@@ -189,31 +180,21 @@ pub(crate) fn tick_sim(
                 // en metros y no en el grid. Un farol delgado frena en su poste y
                 // rozar un árbol deja de sentirse un choque fantasma.
                 let r = ha_shared::topdown::PLAYER_RADIUS;
-                let wall_hit = |x: f32, z: f32| {
-                    ha_shared::build_grid::wall_capsule_hits(x, z, &|tx, tz, axis| {
-                        walls.blocks(body_surface, tiles.z, tx, tz, axis)
-                    }) || crate::world2d::decor_hits_box(
-                        &art,
-                        Some(&authored),
-                        Some(&flora),
-                        body_surface,
-                        tiles.z,
-                        [x - r, z - r, x + r, z + r],
-                    ) || (tiles.z == 0
-                        && crate::building::fachada_frena(&fachadas, [x - r, z - r, x + r, z + r]))
-                        || cerca_frena(&es_cerca, [x - r, z - r, x + r, z + r])
-                };
+                let wall_hit = |x: f32, z: f32| obs.caja_frena(body_surface, x, z, r);
                 // Nadar: el bajío no frena, pero se cruza a media velocidad y con
                 // la pose de natación. Sale del TILE (que ya incluye tus ediciones),
                 // así que rellenar un charco con bloques deja de mojarte.
-                let swim = |tx: i64, tz: i64| tiles.tile_at(body_surface, tx, tz).swim();
+                let swim = |tx: i64, tz: i64| {
+                    let _p = crate::debug::probe("ob_swim");
+                    obs.tiles().tile_at(body_surface, tx, tz).swim()
+                };
                 // **DESATASCO.** Si YA estás encimado con algo que frena (cargaste
                 // una partida vieja y ahí ahora hay un mueble, te teletransportaste
                 // encima de una cerca), cualquier paso seguiría encimado y quedabas
                 // clavado para siempre. Mientras dure el encime, lo que frena por
                 // metros no cuenta — salís caminando y desde ahí todo vuelve a frenar.
                 let (x0, z0) = (sim.body.x, sim.body.z);
-                let encimado = wall_hit(x0, z0);
+                let encimado = (input.move_x != 0.0 || input.move_z != 0.0) && wall_hit(x0, z0);
                 let nada = |_: f32, _: f32| false;
                 ha_shared::topdown::step_topdown_movement_full(
                     &mut sim.body,

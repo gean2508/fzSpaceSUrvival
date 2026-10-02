@@ -91,14 +91,14 @@ const VOID: Color = Color::srgb(Ps1Retro::VOID[0], Ps1Retro::VOID[1], Ps1Retro::
 /// ningún lado; la pantalla de carga es el único rato en que alguien las lee.
 /// ASCII-only (regla 6).
 const CONSEJOS: [&str; 8] = [
-    "Mantene el dedo en el suelo para volar. Soltar aterriza.",
-    "Los aldeanos se acuerdan de lo que hiciste la ultima vez.",
+    "Mantené el dedo en el suelo para volar. Soltar aterriza.",
+    "Los aldeanos se acuerdan de lo que hiciste la última vez.",
     "De noche la luz sale de las antorchas: llevate una.",
     "Cada planeta tiene relieve propio. Ninguno es una bola lisa.",
-    "La fauna aprende: lo que te funciono ayer hoy puede fallar.",
-    "Subi derecho y el mundo se vuelve mapa. Nunca hay corte.",
-    "Podes editar el mundo y queda guardado en tu partida.",
-    "Toca a un aldeano para hablarle. Tiene cara y humor propios.",
+    "La fauna aprende: lo que te funcionó ayer hoy puede fallar.",
+    "Subí derecho y el mundo se vuelve mapa. Nunca hay corte.",
+    "Podés editar el mundo y queda guardado en tu partida.",
+    "Tocá a un aldeano para hablarle. Tiene cara y humor propios.",
 ];
 
 #[cfg(test)]

@@ -25,7 +25,7 @@ impl Mundo {
         self.artefactos.iter().any(|a| a.pueblo == pueblo && cierre(a.saber).tiene(s))
     }
 
-    fn sustrato_accesible(&self, pueblo: u32) -> u32 {
+    pub(crate) fn sustrato_accesible(&self, pueblo: u32) -> u32 {
         let mut s = self.pueblos.get(&pueblo).map(|p| p.sustrato).unwrap_or(0);
         for r in &self.relaciones {
             if r.comercio && (r.a == pueblo || r.b == pueblo) {
@@ -169,6 +169,7 @@ impl Mundo {
                 }
             }
         }
+        self.aprender_teoria(pueblo, s);
         let lugar = self.nombre_pueblo(pueblo);
         let nombre_saber = DEFS[s as usize].nombre;
         let nuevo_en_pueblo = !self.pueblos.get(&pueblo).map(|p| p.saberes.tiene(s)).unwrap_or(true);

@@ -73,6 +73,31 @@ claves no tienen una sola entrada en el manifest. **Ojo con leerlo mal**: ese te
 dice qué slot está vacío, NO que el pixel no exista. Casi siempre existe con otro
 nombre.
 
+## 0.5 Dos familias, dos estilos (corrección del 1 oct 2026)
+
+La tabla de abajo se midió sobre **Modern Exteriors** (el mundo: sin contorno). Los
+**ítems, muebles, ropa e iconos** vienen de **Modern Interiors**, que **sí lleva un
+contorno oscuro azul-violeta de 1 px**, colores más vivos y volumen por sombreado de
+2-3 tonos. Dibujar un ítem sin contorno "con las reglas del Exteriors" es lo que hacía
+que mis iconos se vieran de otro juego. Antes de dibujar, saber a qué familia pertenece:
+
+| familia | qué es | contorno | se compara con |
+|---|---|---|---|
+| Exteriors | terreno, fachadas, árboles, vehículos, props de calle | ninguno | `critico-pixel.py --ext` |
+| Interiors | ítems de mochila, muebles, ropa, comida, herramientas, iconos | 1 px oscuro | `critico-pixel.py` (por defecto) |
+
+## 0.6 El crítico y las texturas reales (obligatorios)
+
+* `python3 scripts/critico-pixel.py pieza.png [--celda 32 --k 3,4] [--ext]` mide **plano**
+  (% de píxeles lisos: mediana del pack ≈ 9 %, techo 32 %), **variedad** local y colores contra
+  el pack, y deja una lámina con tus 7 vecinos más parecidos. **Hay que mirarla (`Read`).**
+  Mis iconos de ropa dieron 35-52 % de plano: demasiado lisos, y la lámina lo mostraba.
+* Las superficies grandes no se rellenan con una rampa: se sintetizan con
+  `scripts/lib/materiales.py` (Image Quilting sobre cuadros reales del pack, con la
+  luminancia de tu forma como guía). Sale con el grano, las juntas y la paleta del pack.
+* Para trabajar con método: el subagente **`pixel-artist`** (`.claude/agents/pixel-artist.md`)
+  hace todo este ciclo.
+
 ## 1. Las reglas, con su medición al lado
 
 | regla | de dónde sale |

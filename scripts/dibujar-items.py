@@ -136,6 +136,68 @@ def monton(l, cx, cy, tonos, n=3):
         l.elipse(cx, cy - 3, 4, 3, tonos[-1])
 
 
+# — ROPA Y ARMADURA (1 oct 2026): las pieles y la lana se visten. No hay iconos de prendas
+#   sueltas en ningún pack: la tienda de ropa de Modern Interiors son perchas y maniquíes
+#   (escenas), no fichas de inventario.
+LANA = (224, 214, 192)
+
+
+def _gorro_cuero(l):
+    """Un gorro de cuero: cúpula + faldón con ribete de lana. Redondo, sin esquinas."""
+    t = rampa(CUERO, 4)
+    w = rampa(LANA, 3)
+    m = t[len(t) // 2]
+    l.elipse(16, 15, 10, 9, m)
+    l.rect(6, 16, 21, 7, m)
+    l.elipse(12, 11, 5, 3, t[-1])
+    l.rect(6, 21, 21, 4, w[len(w) // 2])
+    l.rect(6, 21, 21, 1, w[-1])
+    l.rect(9, 6, 3, 3, w[-1])
+    l.contorno(t[0])
+
+
+def _chaleco_cuero(l):
+    """Un chaleco: dos paños con el escote en V, costura al medio y dos botones."""
+    t = rampa(CUERO, 4)
+    m, osc, cl = t[len(t) // 2], t[1], t[-1]
+    l.poligono([(9, 6), (14, 6), (16, 12), (18, 6), (23, 6), (28, 11), (25, 17), (23, 16), (23, 27), (9, 27), (9, 16), (7, 17), (4, 11)], m)
+    l.poligono([(14, 6), (16, 12), (18, 6)], osc)
+    l.rect(16, 12, 1, 15, osc)
+    l.rect(10, 8, 3, 8, cl)
+    l.rect(15, 16, 3, 2, rampa(ORO, 3)[-1])
+    l.rect(15, 21, 3, 2, rampa(ORO, 3)[-1])
+    l.contorno(t[0])
+
+
+def _abrigo_lana(l):
+    """Un abrigo largo de lana: cuello alto de cuero, mangas y dos botones."""
+    w = rampa(LANA, 4)
+    c = rampa(CUERO, 3)
+    m, osc, cl = w[len(w) // 2], w[1], w[-1]
+    l.poligono([(8, 7), (13, 6), (16, 9), (19, 6), (24, 7), (28, 12), (28, 24), (24, 24), (24, 28), (8, 28), (8, 24), (4, 24), (4, 12)], m)
+    l.rect(4, 12, 4, 12, osc)
+    l.rect(24, 12, 4, 12, osc)
+    l.rect(9, 8, 4, 12, cl)
+    l.poligono([(11, 6), (16, 12), (21, 6), (19, 5), (16, 8), (13, 5)], c[len(c) // 2])
+    l.rect(16, 12, 1, 16, osc)
+    l.rect(18, 16, 3, 3, c[1])
+    l.rect(18, 22, 3, 3, c[1])
+    l.contorno(w[0])
+
+
+def _botas_cuero(l):
+    """Un par de botas de lado: caña, empeine y suela más oscura."""
+    t = rampa(CUERO, 4)
+    m, osc, cl = t[len(t) // 2], t[0], t[-1]
+    for ox in (0, 12):
+        l.rect(5 + ox, 6, 8, 14, m)
+        l.rect(5 + ox, 6, 2, 14, cl)
+        l.poligono([(5 + ox, 18), (13 + ox, 18), (16 + ox, 22), (16 + ox, 26), (5 + ox, 26)], m)
+        l.rect(5 + ox, 26, 12, 3, osc)
+        l.rect(5 + ox, 6, 8, 3, t[1])
+    l.contorno(t[0])
+
+
 # — las recetas ————————————————————————————————————————————————————
 
 
@@ -394,6 +456,10 @@ RECETAS = {
     "items/sand": ("Arena", _sand),
     "items/snow": ("Nieve", _snow),
     "items/leather": ("Cuero", _leather),
+    "items/leather_cap": ("Gorro de cuero", _gorro_cuero),
+    "items/leather_vest": ("Chaleco de cuero", _chaleco_cuero),
+    "items/wool_coat": ("Abrigo de lana", _abrigo_lana),
+    "items/leather_boots": ("Botas de cuero", _botas_cuero),
     "items/iron_ingot": ("Lingote de hierro", _iron_ingot),
     "items/gold_ingot": ("Lingote de oro", _gold_ingot),
     "items/gem_red": ("Gema roja", _gem_red),

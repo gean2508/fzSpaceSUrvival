@@ -19,6 +19,11 @@ pub struct Sitio {
     pub plaza: (f32, f32),
     pub pozo: (f32, f32),
     pub altar: (f32, f32),
+    /// Dónde se juega: el parque más cercano (o un rincón libre de la plaza), nunca contra una pared.
+    pub parque: (f32, f32),
+    /// A qué distancia de `casa` ya está "en casa" (0 = el valor de cada anuncio). Una casa con
+    /// puerta necesita un radio corto: a 2,5 m de la cama todavía se está en la calle.
+    pub casa_uso: f32,
 }
 
 /// Foto de un vecino, lo que se ve desde afuera (y lo que sabe la fama).
@@ -58,14 +63,14 @@ pub fn anuncios_sitio(s: &Sitio, fase: f32, comida: bool, creyente: bool, out: &
             .gana(Motivo::Sueno, 0.0006)
             .dur(1600.0)
             .alcance(400.0)
-            .uso(2.5)
+            .uso(if s.casa_uso > 0.0 { s.casa_uso } else { 2.5 })
             .hasta_dia(),
     );
     if comida {
-        out.push(Anuncio::nuevo(Actividad::Comer, s.casa.0, s.casa.1).gana(Motivo::Hambre, 0.03).dur(25.0).alcance(400.0));
+        out.push(Anuncio::nuevo(Actividad::Comer, s.casa.0, s.casa.1).gana(Motivo::Hambre, 0.03).dur(25.0).alcance(400.0).uso(if s.casa_uso > 0.0 { s.casa_uso } else { 1.5 }));
     }
     out.push(Anuncio::nuevo(Actividad::Beber, s.pozo.0, s.pozo.1).gana(Motivo::Sed, 0.08).dur(10.0).alcance(150.0).uso(2.5));
-    out.push(Anuncio::nuevo(Actividad::Beber, s.casa.0, s.casa.1).gana(Motivo::Sed, 0.03).dur(12.0).alcance(400.0));
+    out.push(Anuncio::nuevo(Actividad::Beber, s.casa.0, s.casa.1).gana(Motivo::Sed, 0.03).dur(12.0).alcance(400.0).uso(if s.casa_uso > 0.0 { s.casa_uso } else { 1.5 }));
     out.push(
         Anuncio::nuevo(Actividad::Trabajar, s.trabajo.0, s.trabajo.1)
             .gana(Motivo::Trabajo, 0.004)
@@ -83,7 +88,7 @@ pub fn anuncios_sitio(s: &Sitio, fase: f32, comida: bool, creyente: bool, out: &
             .uso(4.0)
             .bono(if hora_de_plaza(fase) { 0.5 } else { 0.0 }),
     );
-    out.push(Anuncio::nuevo(Actividad::Jugar, s.casa.0 + 9.0, s.casa.1 + 4.0).gana(Motivo::Ocio, 0.02).dur(40.0));
+    out.push(Anuncio::nuevo(Actividad::Jugar, s.parque.0, s.parque.1).gana(Motivo::Ocio, 0.02).dur(40.0));
     if creyente {
         out.push(
             Anuncio::nuevo(Actividad::Rezar, s.altar.0, s.altar.1)
@@ -361,6 +366,8 @@ mod tests {
                     plaza,
                     pozo: (plaza.0 - 4.0, plaza.1 + 3.0),
                     altar: (plaza.0 + 8.0, plaza.1 - 8.0),
+                    parque: (plaza.0 + 5.0, plaza.1 + 5.0),
+                    casa_uso: 0.0,
                 };
                 Agente { uid, pos: casa, vida: Vida::nueva_con(uid, tendencia), salud: 1.0, sitio }
             })

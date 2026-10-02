@@ -135,6 +135,7 @@ fn spawn_player(
         survival: ha_shared::SurvivalStats::default(),
         prev_action: false,
         prev_jump: false,
+        armadura: 0.0,
     };
     let mut visual = PlayerVisual {
         radius: ha_shared::topdown::PLAYER_RADIUS,

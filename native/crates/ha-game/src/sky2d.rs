@@ -685,9 +685,26 @@ fn sync_sky(
     //
     // El recurso sigue existiendo porque el botón LAMP decide si el ítem emite;
     // lo que se fue es el atajo que saltaba el sistema de luces.
+    if crate::flags::var("HA_PERFLOG").is_ok() {
+        // Caza del parpadeo (1 oct 2026): un cuadro de pantalla "de día" en plena noche.
+        static ULTIMO: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let antes = f32::from_bits(ULTIMO.swap(night_alpha.to_bits(), std::sync::atomic::Ordering::Relaxed));
+        if (night_alpha - antes).abs() > 0.15 {
+            eprintln!(
+                "ha-veil: salto de alfa {antes:.3} -> {night_alpha:.3} space_f={space_f:.2} day={day:.2} cover={cover:.2} sky_blend={:.2} region={:?}",
+                trans.sky_blend, region.active
+            );
+        }
+    }
+    // Sólo se escribe si CAMBIÓ: `Assets::get_mut` marca el material como modificado y obliga
+    // al render a rehacer su bind group, a 60 veces por segundo (y es de donde sospechamos el
+    // cuadro de pantalla "de día" en plena noche).
+    let color_velo = Vec4::new(veil.x, veil.y, veil.z, night_alpha);
     if let Some(vh) = veil_mat.as_ref() {
-        if let Some(mat) = veil_assets.get_mut(&vh.0) {
-            mat.uniform.color = Vec4::new(veil.x, veil.y, veil.z, night_alpha);
+        if veil_assets.get(&vh.0).is_some_and(|m| m.uniform.color != color_velo) {
+            if let Some(mat) = veil_assets.get_mut(&vh.0) {
+                mat.uniform.color = color_velo;
+            }
         }
     }
     for mut tf in &mut overlay {

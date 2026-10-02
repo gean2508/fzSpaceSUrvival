@@ -397,10 +397,13 @@ fn dibujar_cascara(
                     .chain((0..ev.ed.pisos()).map(|_| (PISOS, ALTO_PISO)))
                     .chain(std::iter::once((AZOTEAS, ALTO_AZOTEA)));
                 for (piso, (tabla, celdas)) in pila.enumerate() {
-                    let clave = art.resolved_key(
-                        variante(tabla, x0, tramo.tz, m as usize + piso),
-                        Some(tema),
-                    );
+                    // Pisos y azotea iguales en todo el frente (ver `building::spawn_fachada_apilada`).
+                    let pieza = if piso == 0 {
+                        variante(tabla, x0, tramo.tz, m as usize)
+                    } else {
+                        variante(tabla, tramo.tx, tramo.tz, 0)
+                    };
+                    let clave = art.resolved_key(pieza, Some(tema));
                     // La banda mide UNA CELDA DEL PACK POR TILE: es una pieza que
                     // embaldosa a lo largo del frente, igual que una pared
                     // (`ArtLibrary::medida_de_obra`). Con la escala de objeto

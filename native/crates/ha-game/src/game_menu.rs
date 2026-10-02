@@ -374,6 +374,9 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 menu_button(bar, "MENÚ PRINCIPAL", C::SalirAlMenu);
                 menu_button(bar, "CERRAR", C::CloseMenu);
             });
+            menu_row(root, |bar| {
+                menu_button(bar, "MULTIJUGADOR", crate::multijugador::BotonMultijugador);
+            });
 
             // ── Barra de EDICIÓN de UI (oculta salvo en modo EDITAR UI). Estos
             // botones eligen QUÉ control reposicionar y su escala — no controlan
@@ -392,7 +395,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             ))
             .with_children(|col| {
                 col.spawn((
-                    Text::new("EDITAR UI - elegi un control y movelo/escalalo:"),
+                    Text::new("EDITAR UI · elegí un control y movelo/escalalo:"),
                     TextFont {
                         font_size: 13.0,
                         ..default()

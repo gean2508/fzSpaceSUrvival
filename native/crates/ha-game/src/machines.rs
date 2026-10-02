@@ -298,6 +298,7 @@ fn tick_machines(
     mut persist: ResMut<InventoryPersistState>,
     mut sprites: Query<(&MachineEntity, &mut Sprite)>,
 ) {
+    let _p = crate::debug::probe("fx_tick_machines");
     let dt = fixed_delta_secs(&time);
     let player_body = ctx.body();
     let mut any_flash = false;

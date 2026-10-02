@@ -931,55 +931,43 @@ fn sync_terrain_lod(
     let center = quantize(p, tile_m);
 
     // Cambiar de CUERPO sí cancela lo que haya en curso: la malla a medio cocinar
-    // es de un planeta que ya no estás mirando y no sirve para nada.
+    // es de un planeta que ya no estás mirando y no sirve para nada (soltar la tarea la cancela).
     if job.0.as_ref().is_some_and(|j| j.body != body) {
         job.0 = None;
     }
 
-    // **UN trabajo a la vez, y se lo deja terminar.** Medido en el Redmi con
-    // `ha-sys`: encolando de nuevo en cuanto el objetivo se movía, subir volando
-    // reiniciaba el horneado casi cada frame —`lod_tile_m` cambia de escalón más
-    // rápido de lo que la malla tarda en cocinarse— y se pagaba el armado de
-    // `LodBake::new` (los 37 000 quads del recorte) una y otra vez sin terminar
-    // ninguno: `sync_terrain_lod=400.7 ms/frame`, el frame entero.
-    //
-    // Dejándolo terminar, la malla queda a lo sumo un escalón atrasada durante
-    // una fracción de segundo y el siguiente trabajo arranca al frame siguiente.
-    // La comparación va contra `state`, que describe la malla que SE VE.
+    // **UN trabajo a la vez, y se lo deja terminar.** Encolar de nuevo en cuanto el objetivo
+    // se movía reiniciaba el horneado sin terminar ninguno. La comparación va contra `state`,
+    // que describe la malla que SE VE.
     if job.0.is_none() {
         let needs_rebuild = state.body != Some(body)
             || state.tile_m != tile_m
             || state.version != tiles.version
             || (p - state.center).length() > span * 0.25;
         if needs_rebuild {
-            job.0 = Some(LodBake::new(body, center, tile_m, tiles.version));
+            let version = tiles.version;
+            let copia = tiles.copia_para_lod();
+            let pool = bevy::tasks::AsyncComputeTaskPool::get_or_init(bevy::tasks::TaskPool::default);
+            let tarea = pool.spawn(async move {
+                let mut bake = LodBake::new(body, center, tile_m, version);
+                while !bake.step(&copia, 512) {}
+                bake
+            });
+            job.0 = Some(LodTask { body, center, tile_m, version, tarea });
         }
     }
 
-    // Avanzar el trabajo en curso. Mientras tanto la malla VIEJA sigue en
-    // pantalla — que es todo el punto: un cambio de escalón deja de ser un frame
-    // de 318 ms y pasa a ser un puñado de frames que nadie nota.
-    let finished = match job.0.as_mut() {
-        Some(j) => {
-            // **El reloj manda, la tanda es chica.** Ver `LodBake::step`: contar
-            // filas no acota nada desde que una muestra del mundo pasa por
-            // ciudades. Medido en el Redmi el 24 ago 2026, con el presupuesto en
-            // filas: `sync_terrain_lod` = 1.950-2.450 ms. Con esto, el plazo.
-            let plazo = std::time::Duration::from_secs_f32(LOD_MS_PER_FRAME / 1000.0);
-            let reloj = std::time::Instant::now();
-            loop {
-                let listo = j.step(&tiles, LOD_VERTS_POR_TANDA);
-                if listo || reloj.elapsed() >= plazo {
-                    break listo;
-                }
-            }
-        }
-        None => false,
+    let terminado: Option<LodBake> = match job.0.as_mut() {
+        Some(j) => bevy::tasks::block_on(bevy::tasks::futures_lite::future::poll_once(&mut j.tarea)),
+        None => None,
     };
+    if terminado.is_some() {
+        job.0 = None;
+    }
+    let finished = terminado.is_some();
 
     if let Ok((_, mesh, mat)) = lod.get_single_mut() {
-        if finished {
-            let j = job.0.take().expect("finished implica trabajo en curso");
+        if let Some(j) = terminado {
             *state = TerrainLodState {
                 body: Some(j.body),
                 center: j.center,
@@ -997,10 +985,9 @@ fn sync_terrain_lod(
     // Todavía no hay malla: se espera a que el primer trabajo termine antes de
     // spawnear. No deja hueco — por debajo de `FINE_FADE_VIEW_H` los tiles finos
     // están opacos y son ellos los que se ven.
-    if !finished {
+    let Some(j) = terminado else {
         return;
-    }
-    let j = job.0.take().expect("finished implica trabajo en curso");
+    };
     let (jb, jc, jt, jv) = (j.body, j.center, j.tile_m, j.version);
     commands.spawn((
         TerrainLod,
@@ -1228,7 +1215,20 @@ const LOD_VERTS_POR_TANDA: usize = 48;
 
 /// El horneado de la malla adaptativa en curso, si hay uno.
 #[derive(Resource, Default)]
-struct TerrainLodJob(Option<LodBake>);
+struct TerrainLodJob(Option<LodTask>);
+
+/// El horneado en un HILO DE FONDO, con su propia copia de las ediciones. Cada vértice son
+/// ~1,7 ms en el Redmi y la malla tiene decenas de miles: repartirlo por frames en el hilo
+/// principal no acota nada (una sola tanda ya eran ~80 ms: `sync_terrain_lod` = 82-88 ms
+/// por cuadro volando, medido el 1 oct 2026). La malla vieja sigue en pantalla hasta que la
+/// nueva llega entera.
+struct LodTask {
+    body: CelestialBody,
+    center: Vec2,
+    tile_m: f32,
+    version: u64,
+    tarea: bevy::tasks::Task<LodBake>,
+}
 
 /// Malla de `LOD_QUADS²` quads de `tile_m` metros centrada en `center`, cocinada
 /// **de una sola pasada**. Es la referencia contra la que se valida el horneado
@@ -1352,9 +1352,10 @@ const DISC_BAKE_ROWS_PER_FRAME: usize = 8;
 /// **Píxeles del disco entre dos miradas al reloj.** Chico a propósito: lo que
 /// acota el fotograma es el plazo, y una tanda gorda le vuelve a poner un piso
 /// que el plazo no puede bajar (ver [`bake_body_textures`]). Con la muestra más
-/// cara medida —~250 µs en el Redmi— treinta y dos píxeles son ~8 ms en el peor
+/// cara medida (una ciudad sin atajo: ~2 ms por tile) 32 píxeles eran 100-370 ms;
+/// hoy los cascos se muestrean en mosaico barato y cuatro píxeles son ~8 ms en el peor
 /// caso y ~0 en el mejor; el reloj corta en cuanto se pasa.
-const PX_POR_TANDA: usize = 32;
+const PX_POR_TANDA: usize = 4;
 
 const DISCO_TAPADO_SOBRE: f32 = 12.0;
 
@@ -1397,6 +1398,10 @@ struct DiscBake {
     /// [`bake_body_textures`]: una fila entera es una unidad demasiado gorda para
     /// que un plazo de 4 ms signifique algo.
     next_px: usize,
+    /// El horneado en un hilo de fondo (ver `LodTask`): una muestra cuesta ms en el celu y el
+    /// disco son 262 144 píxeles, así que repartirlo por cuadros en el hilo principal nunca
+    /// dejó de costar (`bake_body_textures` = 24 ms por cuadro volando, 1 oct 2026).
+    tarea: Option<bevy::tasks::Task<Vec<u8>>>,
 }
 
 /// Cola de texturas de disco pendientes (una en curso + las que esperan).
@@ -1422,8 +1427,9 @@ impl DiscBakeQueue {
         self.jobs.push(DiscBake {
             body,
             material,
-            data: vec![0u8; DISC_TEX_N * DISC_TEX_N * 4],
+            data: Vec::new(),
             next_px: 0,
+            tarea: None,
         });
     }
 }
@@ -1455,19 +1461,23 @@ fn bake_body_textures(
     // caso entre dos miradas al reloj son unos pocos píxeles. El disco tarda más
     // en estar listo; el fotograma deja de pagarlo.
     let total = n * n;
-    let plazo = std::time::Duration::from_secs_f32(rows.ms.max(0.5) / 1000.0);
-    let reloj = std::time::Instant::now();
-    while job.next_px < total {
-        let hasta = (job.next_px + PX_POR_TANDA).min(total);
-        fill_disc_span(&mut job.data, &tiles, job.body, job.next_px, hasta);
-        job.next_px = hasta;
-        if reloj.elapsed() >= plazo {
-            break;
-        }
+    let _ = &rows;
+    if job.tarea.is_none() {
+        let copia = tiles.copia_para_lod();
+        let body = job.body;
+        let pool = bevy::tasks::AsyncComputeTaskPool::get_or_init(bevy::tasks::TaskPool::default);
+        job.tarea = Some(pool.spawn(async move {
+            let mut data = vec![0u8; total * 4];
+            fill_disc_span(&mut data, &copia, body, 0, total);
+            data
+        }));
     }
-    if job.next_px < total {
+    let Some(tarea) = job.tarea.as_mut() else { return };
+    let Some(data) = bevy::tasks::block_on(bevy::tasks::futures_lite::future::poll_once(tarea)) else {
         return;
-    }
+    };
+    job.data = data;
+    job.next_px = total;
     let mut job = queue.jobs.remove(0);
     // Desenfoque de caja sobre el RGB (respetando el alfa del recorte). El
     // promediado por texel ya baja el ruido, pero a la escala del disco un píxel

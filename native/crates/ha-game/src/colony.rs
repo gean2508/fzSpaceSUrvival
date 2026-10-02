@@ -57,6 +57,7 @@ fn tick_colony(
     time: Res<Time<Fixed>>,
     mut colony: ResMut<ColonyRuntime>,
 ) {
+    let _p = crate::debug::probe("fx_tick_colony");
     if is_app_paused() || colony.state.colonists == 0 {
         return;
     }

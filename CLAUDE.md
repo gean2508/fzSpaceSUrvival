@@ -18,6 +18,7 @@ corresponda:
 | build / publicar el APK | §9 |
 | render, streaming, FPS, tirones | **§10 — obligatorio antes de optimizar** |
 | tests y drivers de QA | §11 |
+| idioma, multijugador (LAN/online) | §15 |
 | algo se rompió | §12 |
 | qué falta hacer | §13 |
 | "¿por qué no hacemos X?" | §14 (cementerio) |
@@ -47,6 +48,29 @@ npm run qa:suite          # drivers de QA
 ```
 
 ## Reglas (detalle en biblia §2)
+
+**Regla de procesos — no dejar nada vivo.** Todo proceso que lance (ha-game de QA,
+cargo, gradle, `adb connect`, `leo-celu`, esperas en background) lo lanzo con
+`timeout`, y antes de cerrar el turno verifico con `ps` que no quedó ninguno
+(PC y celu: `adb shell pidof com.hungerarena.app` sólo si lo estoy probando).
+Un comando que se cuelga se mata, no se deja en background. Nunca dos builds o
+tests de cargo a la vez, y con el disco bajo 5 GB no se arranca ninguno.
+**El celu es del usuario: se prueba SÓLO cuando avisa que lo conectó**, con ráfagas cortas, con
+la guarda de primer plano (`dumpsys window | grep mCurrentFocus` = el juego) y limpiando
+`debug.ha.*` al terminar (`setprop debug.ha.x ""`: un `0` cuenta como prendido).
+**Con el celu enchufado NUNCA `adb kill-server`, `adb disconnect` ni `adb connect` a otra
+IP**: reinician el USB y el celu vuelve a pedir el modo de conexión y las huellas. El
+servidor de adb se deja vivo (es el único proceso permitido) y se opera con
+`adb -s <serie>`.
+
+
+**Regla de cola — un pedido nuevo NO frena lo en curso.** Se apila en la lista de tareas, se sigue con
+lo que corre y se vacía la cola entera, sin dejar nada inconcluso (decisión del usuario, 1 oct 2026).
+
+**Regla cero — lo que se empieza se termina. Cero human in the loop.** Prohibido
+dejar algo incompleto: no hay "queda pendiente", ni "si querés sigo". Se hace
+entero (código + tests + prueba + biblia + APK publicado y probado en el celu)
+sin preguntar. Sólo corta un bloqueo físico real, y se dice tal cual (biblia §2).
 
 0. **Antes de tocar código, preguntale al grafo.** `graphify-out/` tiene el mapa
    del repo: `graphify explain "<concepto>"` / `graphify path "A" "B"` ubican el
@@ -126,3 +150,8 @@ npm run qa:suite          # drivers de QA
     siendo un fallo. Recién si el teléfono no está accesible o la instalación
     remota falla dos veces, publicás con `./build-y-publicar.sh` para bajarlo a
     mano. Detalle y modos de falla en biblia §9.
+13. **Lo que se nos escapó.** Antes de una feature de simulación o de mostrar sim en
+    pantalla, pasá el checklist de biblia §2 (*Lo que se nos escapó*): costo medido,
+    materialización con cupo por frame, verdad en un solo lugar, consola de texto
+    siempre, nombres que no prometan de más, prueba multi-semilla. Cuando algo se
+    nos escape de nuevo, agregalo ahí.

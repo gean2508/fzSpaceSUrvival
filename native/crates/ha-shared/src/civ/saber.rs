@@ -91,7 +91,13 @@ pub const SOPORTE_VITAL: u8 = 34;
 pub const ASTRONAUTICA: u8 = 35;
 pub const PROPULSION_AVANZADA: u8 = 36;
 pub const PROPULSION_PROFUNDA: u8 = 37;
-pub const N_SABERES: usize = 38;
+pub const OPTICA: u8 = 38;
+pub const METODO: u8 = 39;
+pub const CUANTICA: u8 = 40;
+pub const ARMAS_NUCLEARES: u8 = 41;
+pub const COMPUTACION_CUANTICA: u8 = 42;
+pub const FUSION: u8 = 43;
+pub const N_SABERES: usize = 44;
 
 /// Hasta dónde llega un pueblo que sabe esto. Crece con el saber.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
@@ -185,16 +191,22 @@ pub static DEFS: [Def; N_SABERES] = [
     con(d("Aviación", &[COMBUSTION, MECANICA], 300.0, 0, ef(0.0, 0.0, 1.50, 0.0, 0.0, 0.0, 0.30, 0.0)), Alcance::Aire, false, 0.0),
     d("Materiales avanzados", &[QUIMICA, ELECTRICIDAD, HIERRO], 350.0, S_ARENA, ef(0.0, 0.80, 0.30, 0.0, 0.0, 0.0, 0.0, 0.0)),
     d("Medicina moderna", &[MEDICINA, QUIMICA, ELECTRICIDAD], 250.0, 0, ef(0.0, 0.0, 0.0, 0.0, 0.60, 0.0, 0.0, 0.0)),
-    d("Energía nuclear", &[ELECTRICIDAD, QUIMICA, MATEMATICA], 500.0, S_URANIO, ef(0.0, 1.00, 2.00, 0.0, 0.0, 0.0, 0.0, 0.0)),
+    d("Energía nuclear", &[ELECTRICIDAD, QUIMICA, MATEMATICA], 500.0, S_URANIO, ef(0.0, 1.00, 0.30, 0.0, 0.0, 0.0, 0.0, 0.0)),
     con(d("Cohetería", &[COMBUSTION, MATERIALES, QUIMICA], 450.0, S_PETROLEO, ef(0.0, 0.0, 1.00, 0.0, 0.0, 0.0, 0.0, 0.0)), Alcance::Aire, true, 0.0),
     con(d("Mecánica orbital", &[ASTRONOMIA, COMPUTACION, MECANICA], 500.0, S_CIELO, ef(0.0, 0.0, 0.0, 0.30, 0.0, 0.0, 0.0, 0.0)), Alcance::Aire, true, 0.0),
     con(d("Soporte vital", &[MEDICINA_MODERNA, MATERIALES], 450.0, 0, ef(0.0, 0.0, 0.0, 0.0, 0.20, 0.0, 0.0, 0.0)), Alcance::Aire, true, 0.0),
     con(d("Astronáutica", &[COHETERIA, MECANICA_ORBITAL, SOPORTE_VITAL], 700.0, 0, ef(0.0, 0.30, 0.0, 0.30, 0.0, 0.0, 0.0, 0.0)), Alcance::Luna, true, 0.0),
     con(d("Propulsión avanzada", &[ASTRONAUTICA, NUCLEAR, COMPUTACION], 900.0, 0, ef(0.0, 0.0, 0.0, 0.20, 0.0, 0.0, 0.0, 0.0)), Alcance::Planetas, true, 0.0),
     con(d("Propulsión profunda", &[PROPULSION_AVANZADA, MATERIALES], 1400.0, 0, ef(0.0, 0.0, 0.0, 0.20, 0.0, 0.0, 0.0, 0.0)), Alcance::Exterior, true, 0.0),
+    d("Óptica", &[MATEMATICA, ALFARERIA], 90.0, S_ARENA, ef(0.0, 0.0, 0.0, 0.20, 0.05, 0.0, 0.0, 0.0)),
+    d("Método científico", &[FILOSOFIA, MATEMATICA, IMPRENTA], 160.0, 0, ef(0.05, 0.10, 0.0, 0.60, 0.05, 0.0, 0.0, 0.0)),
+    d("Mecánica cuántica", &[METODO, ELECTRICIDAD], 420.0, 0, ef(0.0, 0.20, 0.0, 0.50, 0.0, 0.0, 0.0, 0.0)),
+    d("Armas nucleares", &[NUCLEAR, POLVORA], 400.0, 0, ef(0.0, 0.0, 2.00, 0.0, 0.0, 0.0, 0.0, 0.30)),
+    d("Computación cuántica", &[COMPUTACION, CUANTICA], 650.0, 0, ef(0.0, 0.30, 0.0, 1.20, 0.10, 0.0, 0.20, 0.0)),
+    d("Fusión nuclear", &[NUCLEAR, CUANTICA, COMPUTACION], 1000.0, 0, ef(0.20, 2.00, 0.0, 0.40, 0.0, 0.0, 0.0, 0.0)),
 ];
 
-/// Un conjunto de saberes: 38 bits caben en un `u64`.
+/// Un conjunto de saberes: 44 bits caben en un `u64`.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Saberes(pub u64);
 
@@ -296,7 +308,7 @@ pub fn saberes_iniciales(rango: u8, h: u64) -> Saberes {
         ESCRITURA, MATEMATICA, BRONCE, HIERRO, NAVEGACION, MEDICINA, ARQUITECTURA, DERECHO, MONEDA, MILICIA,
     ];
     let ciudad: &[u8] = &[
-        ASTRONOMIA, FILOSOFIA, IMPRENTA, QUIMICA, POLVORA, MECANICA, VAPOR, ELECTRICIDAD, COMBUSTION,
+        ASTRONOMIA, OPTICA, FILOSOFIA, IMPRENTA, METODO, QUIMICA, POLVORA, MECANICA, VAPOR, ELECTRICIDAD, COMBUSTION,
         TELECOM, COMPUTACION, AVIACION, MATERIALES, MEDICINA_MODERNA,
     ];
     let mut s = Saberes::de(base);

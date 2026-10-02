@@ -681,6 +681,32 @@ pub use crate::geography::{building_at, building_tile, BuildingSite};
 /// (manzanas dentro de la trama urbana) — esto sólo mantiene en pie a los
 /// llamadores antiguos.
 pub fn building_site_in(body: CelestialBody, sx: i64, sz: i64) -> Option<BuildingSite> {
+    // **Memoizada por celda de asentamiento.** `prop_decor_at` la pregunta POR TILE
+    // y el barrido de abajo puede recorrer hasta 24² anillos de `building_at`
+    // (un núcleo sin edificio cerca del centro los agota): medido en el vuelo de
+    // regreso a una ciudad, ~3 ms por tile — un chunk de 256 tiles tardaba 0,8 s
+    // sólo en esto. La respuesta depende sólo del núcleo, no de quién pregunta.
+    const RANURAS: usize = 32;
+    type Clave = (u8, i64, i64, u32);
+    thread_local! {
+        static MEMO: std::cell::RefCell<[Option<(Clave, Option<BuildingSite>)>; RANURAS]> =
+            const { std::cell::RefCell::new([const { None }; RANURAS]) };
+    }
+    let clave: Clave = (body as u8, sx, sz, crate::partida::epoca());
+    let ranura = (hash_u32(sx as u32 ^ (sz as u32).wrapping_mul(0x9e37_79b1)) as usize) % RANURAS;
+    if let Some(v) = MEMO.with(|m| m.borrow()[ranura].as_ref().and_then(|(c, v)| (*c == clave).then_some(*v))) {
+        return v;
+    }
+    let v = building_site_in_sin_memo(body, sx, sz);
+    // En modo grueso (disco planetario) los edificios se deciden sin ríos: esa
+    // respuesta no vale para el chunk de a pie.
+    if !crate::grueso::activo() {
+        MEMO.with(|m| m.borrow_mut()[ranura] = Some((clave, v)));
+    }
+    v
+}
+
+fn building_site_in_sin_memo(body: CelestialBody, sx: i64, sz: i64) -> Option<BuildingSite> {
     let s = crate::geography::settlement_in(body, sx, sz)?;
     // El primer edificio que aparece barriendo en anillos desde el centro del
     // núcleo. Antes se pedía "el edificio de la manzana (0,0)", pero con parcelas
@@ -781,6 +807,33 @@ pub fn beyond_world_edge(body: CelestialBody, tx: i64, tz: i64) -> bool {
 
 /// The natural (un-edited) tile at a grid cell of a given z_level.
 pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
+    // **Memoria por celda.** El que camina pregunta por las MISMAS ~12 celdas varias
+    // veces por tick (colisión, nado, cercas) y cada respuesta recalcula ruido,
+    // lotes y obra civil: ~55 µs en la compu, x5-8 en el Redmi (medido: `tick_sim`
+    // se llevaba 12-15 ms por cuadro). La respuesta es pura dada la semilla, la
+    // época y las zonas autoradas, y las tres entran en la clave. En grueso (malla
+    // lejana, disco del planeta) no se memoriza: devuelve otra cosa a propósito.
+    if z != 0 || crate::grueso::activo() {
+        return topdown_tile_calc(body, z, tx, tz);
+    }
+    const RANURAS: usize = 2048;
+    type Clave = (u8, i64, i64, u32, u32);
+    thread_local! {
+        static MEMO: std::cell::RefCell<Vec<Option<(Clave, Tile)>>> =
+            std::cell::RefCell::new(vec![None; RANURAS]);
+    }
+    let clave: Clave = (body as u8, tx, tz, crate::partida::epoca(), crate::zonas::generacion());
+    let h = (tx as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (tz as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+    let ranura = (h >> 40) as usize % RANURAS;
+    if let Some(t) = MEMO.with(|m| m.borrow()[ranura].as_ref().and_then(|(c, t)| (*c == clave).then_some(*t))) {
+        return t;
+    }
+    let t = topdown_tile_calc(body, z, tx, tz);
+    MEMO.with(|m| m.borrow_mut()[ranura] = Some((clave, t)));
+    t
+}
+
+fn topdown_tile_calc(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
     if z == 0 {
         // MUNDO FINITO (29 jul 2026): más allá del radio caminable del cuerpo no
         // hay más mundo. El mapa es procedural pero ACOTADO — 60 km de punta a
@@ -789,6 +842,24 @@ pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
         // los cuerpos sin aire) en vez de una llanura infinita.
         if beyond_world_edge(body, tx, tz) {
             return if body_atmo_top(body) > 0.0 { Tile::Water } else { Tile::RockDark };
+        }
+        // **Desde el aire una ciudad es una mancha, no mil parcelas.** En grueso
+        // (disco del planeta, malla lejana) cada muestra dentro de un casco
+        // recalculaba lote, casa y calle sin caché (~2 ms por tile; una tanda de
+        // píxeles del disco tardaba 100-370 ms y era el tirón al reentrar volando
+        // hacia una ciudad). Se devuelve un mosaico barato de vereda y pasto.
+        if crate::grueso::activo()
+            && crate::geography::settlement_covering(body, tx, tz).is_some()
+        {
+            let nat = surface_tile(body, tx, tz);
+            if matches!(nat, Tile::Water | Tile::WaterDeep | Tile::Cliff | Tile::Slope) {
+                return nat;
+            }
+            return if hash01(0x0C1D_AD05, tx.div_euclid(3), tz.div_euclid(3)) < 0.42 {
+                Tile::Pavement
+            } else {
+                Tile::Grass
+            };
         }
         // OBRA CIVIL primero, y dentro de ella **la CALZADA es sagrada**: gana
         // sobre cualquier cosa edificada.
@@ -929,7 +1000,26 @@ pub enum Deposit {
 }
 
 /// Deterministic deposit at a walkable cell, if any.
+///
+/// **En la superficie una veta sólo asoma en terreno virgen**: no sobre calzada, vereda,
+/// lote ni casa (`civil_at`/`building_cell`), ni en el agua o la rampa. Sin esto, cada
+/// celda de la calle tenía un 0,3 % de "veta" y salían pepitas marrones sobre el asfalto y
+/// la vereda. Y no hay vetas en los pisos altos: ahí hay losas, no roca.
 pub fn deposit_at(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Deposit> {
+    if z > 0 {
+        return None;
+    }
+    if z == 0
+        && (!topdown_tile(body, 0, tx, tz).buildable_ground()
+            || building_cell(body, tx, tz).is_some()
+            || crate::geography::civil_at(body, tx, tz).is_some())
+    {
+        return None;
+    }
+    deposit_roll(body, z, tx, tz)
+}
+
+fn deposit_roll(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Deposit> {
     // Surface: sparse rocks/ore. Underground: richer, deeper = rarer gems.
     let seed = body_terrain_seed(body) ^ 0xde90_0000u32 ^ (z as u32).wrapping_mul(0x2545);
     let h = hash2(seed, tx, tz);
@@ -1054,8 +1144,19 @@ pub fn step_topdown_movement_full(
     // propio jugador avanza, así el asistente jamás se siente un empujón.
     let slack = (body.speed * speed_mult * dt).min(CORNER_SLIP);
 
+    // **Quieto no se consulta el mundo.** Sin intención de moverse y sin velocidad
+    // residual la posición no cambia, así que probar la cápsula contra el terreno
+    // (decenas de `topdown_tile` por tick en una celda sin caché) era puro costo:
+    // en el Redmi, parado en el pasto, eran 12-15 ms por cuadro (medido).
+    let quieto = !moving && body.vx.abs() < 1e-3 && body.vz.abs() < 1e-3;
+    if quieto {
+        body.vx = 0.0;
+        body.vz = 0.0;
+    }
     let new_x = body.x + body.vx * dt;
-    if free(new_x, body.z) {
+    if quieto {
+        // sin cambios de posición
+    } else if free(new_x, body.z) {
         body.x = new_x;
     } else if let Some(z) = corner_slip(body.z, slack, &|z| free(new_x, z)) {
         body.x = new_x;
@@ -1064,7 +1165,9 @@ pub fn step_topdown_movement_full(
         body.vx = 0.0;
     }
     let new_z = body.z + body.vz * dt;
-    if free(body.x, new_z) {
+    if quieto {
+        // sin cambios de posición
+    } else if free(body.x, new_z) {
         body.z = new_z;
     } else if let Some(x) = corner_slip(body.x, slack, &|x| free(x, new_z)) {
         body.z = new_z;
@@ -1601,5 +1704,37 @@ mod tests {
             .filter(|(tx, tz)| deposit_at(CelestialBody::Earth, 0, *tx, *tz).is_some())
             .count();
         assert!(deep > surf, "underground should have more deposits ({deep} vs {surf})");
+    }
+
+    #[test]
+    fn ninguna_veta_asoma_en_la_ciudad() {
+        for body in [CelestialBody::Earth, CelestialBody::Moon, CelestialBody::Mars] {
+            for tx in (-3000..3000).step_by(3) {
+                for tz in (-3000..3000).step_by(3) {
+                    if crate::geography::civil_at(body, tx, tz).is_some() {
+                        assert!(deposit_at(body, 0, tx, tz).is_none(), "veta en la ciudad {body:?} ({tx},{tz})");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod memo_tests {
+    use super::*;
+
+    #[test]
+    fn la_memoria_no_cambia_ninguna_respuesta() {
+        for (cx, cz) in [(0i64, 0i64), (-754, -1818), (3000, -900)] {
+            for dx in -12..12 {
+                for dz in -12..12 {
+                    let a = topdown_tile_calc(CelestialBody::Earth, 0, cx + dx, cz + dz);
+                    let b = topdown_tile(CelestialBody::Earth, 0, cx + dx, cz + dz);
+                    let c = topdown_tile(CelestialBody::Earth, 0, cx + dx, cz + dz);
+                    assert_eq!((a, a), (b, c), "({},{})", cx + dx, cz + dz);
+                }
+            }
+        }
     }
 }

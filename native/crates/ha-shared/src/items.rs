@@ -42,6 +42,10 @@ pub fn item_display_name(id: &str) -> &'static str {
         "potion_green" => "Green Potion",
         "potion_blue" => "Blue Potion",
         "leather" => "Leather",
+        "leather_cap" => "Leather Cap",
+        "leather_vest" => "Leather Vest",
+        "wool_coat" => "Wool Coat",
+        "leather_boots" => "Leather Boots",
         "wheat_seeds" => "Wheat Seeds",
         "wheat" => "Wheat",
         "carrot" => "Carrot",
@@ -64,6 +68,10 @@ pub fn item_display_name(id: &str) -> &'static str {
         "supply" => "Supply Pack",
         "map_small" => "Small Map",
         "map_large" => "Large Map",
+        // Ropa encontrable (Rust-only, ver `armadura::es_hallable`).
+        id if id.starts_with("ropa_") => "Clothes",
+        id if id.starts_with("gorra_") || id.starts_with("gorro_") => "Cap",
+        id if id.starts_with("botas_") => "Footwear",
         _ => "Item",
     }
 }

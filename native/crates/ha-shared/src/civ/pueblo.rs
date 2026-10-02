@@ -84,6 +84,7 @@ pub enum Obra {
     Escuela,
     Muralla,
     Nave,
+    Refugio,
 }
 
 impl Obra {
@@ -93,6 +94,7 @@ impl Obra {
             Obra::Escuela => "escuela",
             Obra::Muralla => "muralla",
             Obra::Nave => "nave",
+            Obra::Refugio => "refugio antiatómico",
         }
     }
 }
@@ -150,6 +152,22 @@ pub struct Pueblo {
     pub vivo: bool,
     pub bajas: f32,
     pub vecinos: Vec<u32>,
+    /// Lo que la gente cree de las leyes del universo (contra la verdad en `fisica`).
+    #[serde(default)]
+    pub creencias: super::fisica::Creencias,
+    /// Ojivas nucleares listas.
+    #[serde(default)]
+    pub arsenal: u16,
+    /// 0..1: lluvia radiactiva que todavía envenena el lugar.
+    #[serde(default)]
+    pub radiacion: f32,
+    /// Nivel de refugios antiatómicos (0..3).
+    #[serde(default)]
+    pub refugio: u8,
+    #[serde(default)]
+    pub golpeado: u64,
+    #[serde(default)]
+    pub golpeado_por: u32,
 }
 
 impl Pueblo {
@@ -197,6 +215,12 @@ impl Pueblo {
             vivo: true,
             bajas: 0.0,
             vecinos: Vec::new(),
+            creencias: super::fisica::Creencias::default(),
+            arsenal: 0,
+            radiacion: 0.0,
+            refugio: 0,
+            golpeado: 0,
+            golpeado_por: 0,
         }
     }
 

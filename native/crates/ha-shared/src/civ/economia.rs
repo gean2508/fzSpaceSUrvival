@@ -23,6 +23,7 @@ pub fn carga_efectiva(p: &Pueblo) -> f32 {
 impl Mundo {
     pub(crate) fn economia_dia(&mut self) {
         let ids: Vec<u32> = self.pueblos.keys().copied().collect();
+        let invierno = self.invierno;
         let anio_malo = {
             // sequía / plaga: una por año a lo sumo, por pueblo, sorteada el primer día
             self.dia % DIAS_ANIO == 1
@@ -42,6 +43,9 @@ impl Mundo {
             let hab = if p.cuerpo == 0 { 1.0 } else { p.habit * if soporte { 1.0 } else { 0.1 } };
             let clima = 1.0 + 0.08 * ((self.dia % DIAS_ANIO) as f32 / DIAS_ANIO as f32 * std::f32::consts::TAU).sin();
             let mut prod = p.pob * (0.7 + 0.4 * cap.comida.min(2.6)) * fert * hab * clima;
+            // Saber medir el año rinde cosechas; la lluvia radiactiva y el invierno nuclear las matan.
+            prod *= 1.0 + 0.08 * (1.0 - p.creencias.mag(super::fisica::CALENDARIO) / 0.6).max(0.0);
+            prod *= (1.0 - 0.6 * p.radiacion).max(0.1) * if p.cuerpo == 0 { 1.0 - 0.7 * invierno } else { 1.0 };
             if en_guerra {
                 prod *= 0.85;
             }
@@ -55,12 +59,14 @@ impl Mundo {
             if p.comida <= 0.0 {
                 p.pob *= 0.996;
             } else if p.hambre < 0.3 {
-                let r = 0.0005 * (1.0 + 0.3 * cap.salud.min(1.5));
+                // un pueblo diezmado se recupera de a saltos: hay sitio, comida y muchas ganas
+                let r = 0.0005 * (1.0 + 0.3 * cap.salud.min(1.5)) * if p.pob < 0.3 * k { 4.0 } else { 1.0 };
                 p.pob += r * p.pob * (1.0 - p.pob / k);
             } else if p.pob > k {
                 p.pob *= 0.9995;
             }
-            p.pob = p.pob.max(8.0);
+            let catastrofe = p.radiacion > 0.02 || (p.cuerpo == 0 && invierno > 0.05);
+            p.pob = p.pob.max(if catastrofe { 0.0 } else { 8.0 });
             p.mat = (p.mat + p.pob * 0.05 * (0.6 + cap.mat.min(3.0)) * hab.max(0.1)).min(p.pob * 40.0 + 200.0);
             let soldados = p.pob * p.leyes.servicio * 0.10;
             let ingreso = p.pob * p.leyes.impuesto * 0.05 * (1.0 + cap.com.min(2.0));
@@ -95,7 +101,7 @@ impl Mundo {
         }
         let cap = p.capacidad();
         let soldados = p.pob * (0.02 + 0.08 * p.leyes.servicio);
-        let base = soldados * (1.0 + cap.mil);
+        let base = soldados * (1.0 + cap.mil) + p.arsenal as f32 * 6.0;
         let muro = if defendiendo { 1.0 + 0.25 * p.muralla as f32 + cap.defensa } else { 1.0 };
         let lider = p
             .gobernante

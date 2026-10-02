@@ -107,9 +107,14 @@ impl Mundo {
                 - fatiga
                 + self.rng.campana() * 0.3;
             let mut prob = sigmoide((s - 1.0) * 3.0) * 0.3;
-            let nucleares = pa.saberes.tiene(NUCLEAR) && pb.saberes.tiene(NUCLEAR);
-            if nucleares {
-                prob *= 0.03; // la disuasión mutua es física, no diplomacia
+            if pa.arsenal > 0 && pb.arsenal > 0 {
+                prob *= 0.04; // la destrucción mutua asegurada disuade: es física, no diplomacia
+            } else if pb.arsenal > 0 {
+                prob *= 0.25; // nadie ataca a la ligera a quien tiene la bomba
+            } else if pa.arsenal > 0 {
+                prob *= 1.6; // quien la tiene y el otro no, se siente impune
+            } else if pa.saberes.tiene(NUCLEAR) && pb.saberes.tiene(NUCLEAR) {
+                prob *= 0.15;
             }
             if !self.rng.p(prob) {
                 continue;
@@ -196,6 +201,7 @@ impl Mundo {
                 let quien = if ratio > 0.5 { &na } else { &nb };
                 self.hecho(Tipo::Batalla, g.bando_a[0], g.bando_b[0], format!("Batalla entre {na} y {nb}: {quien} se lleva la mejor parte."));
             }
+            self.uso_nuclear(idx);
             // saqueo cuando alguien va ganando de sobra
             let av = self.guerras[idx].avance;
             if av.abs() > 0.55 && self.rng.p(0.08) {
@@ -231,6 +237,9 @@ impl Mundo {
             if quema {
                 p.archivo = Saberes::NADA;
                 p.biblioteca = 0;
+                for e in p.creencias.err.iter_mut() {
+                    *e = e.signum() * (e.abs() + (0.6 - e.abs()) * 0.25);
+                }
             }
         }
         self.pueblos.get_mut(&ganador).unwrap().tesoro += botin;

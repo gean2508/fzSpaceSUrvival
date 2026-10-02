@@ -338,6 +338,7 @@ fn trepar_borde(
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
     mut player: Query<&mut SimState, With<Player>>,
 ) {
+    let _p = crate::debug::probe("fx_trepar_borde");
     // El flanco se calcula SIEMPRE, incluso en los caminos que salen temprano:
     // si no, soltar el botón fuera de un borde dejaría `jump_previo` en `true` y
     // el toque siguiente no contaría como flanco.

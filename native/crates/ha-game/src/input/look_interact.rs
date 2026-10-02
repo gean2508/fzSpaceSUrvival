@@ -146,6 +146,7 @@ pub(crate) fn tick_hold_interact(
     mut hold: ResMut<HoldInteractState>,
     target: Res<LookTarget>,
 ) {
+    let _p = crate::debug::probe("fx_tick_hold_interact");
     if hold.completed || hold.cancelled {
         hold.active = false;
         return;
@@ -188,6 +189,7 @@ pub(crate) fn tick_hold_interact(
 }
 
 fn tick_ability_cooldown(time: Res<Time<Fixed>>, mut cd: ResMut<AbilityCooldown>) {
+    let _p = crate::debug::probe("fx_tick_ability_cooldown");
     let delta_ms = time.delta_secs() * 1000.0;
     cd.remaining_ms = ha_shared::tick_ability_cooldown(cd.remaining_ms, delta_ms);
 }

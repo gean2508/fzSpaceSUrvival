@@ -1226,7 +1226,7 @@ fn spawn_machine_panel(commands: &mut Commands, root: Entity, layout: &TouchLayo
                         spawn_panel_close_button(header, heart, MachinePanelCloseButton);
                     });
                 panel.spawn((
-                    Text::new("Approach a machine"),
+                    Text::new("Acercate a una máquina"),
                     TextFont {
                         font_size: (heart * 0.54).clamp(10.0, 14.0),
                         ..default()
@@ -1916,18 +1916,19 @@ fn build_interact_prompt(
         };
         return Some(format!(
             "Comiendo {} - {}%",
-            ha_shared::item_display_name(&equipped.item_id),
+            crate::granja::nombre_item(&equipped.item_id),
             pct
         ));
     }
     if target.kind.is_none()
         && !hold.active
-        && ha_shared::food_restore(&equipped.item_id).is_some()
+        && crate::equipo::es_usable(&equipped.item_id)
         && inv.qty(&equipped.item_id) > 0
     {
+        let verbo = if ha_shared::armadura::prenda(&equipped.item_id).is_some() { "vestir" } else { "comer" };
         return Some(format!(
-            "Manten para comer {}",
-            ha_shared::item_display_name(&equipped.item_id)
+            "Mantené para {verbo} {}",
+            crate::granja::nombre_item(&equipped.item_id)
         ));
     }
 
@@ -1970,64 +1971,64 @@ fn build_interact_prompt(
         // así que el cartel también.
         if kind == InteractTargetKind::Entity || kind == InteractTargetKind::Prop {
             return Some(match target_name {
-                Some(name) => format!("Manten para levantar {name}"),
-                None => "Manten para levantar".to_string(),
+                Some(name) => format!("Mantené para levantar {name}"),
+                None => "Mantené para levantar".to_string(),
             });
         }
         if kind == InteractTargetKind::Block {
             if ha_shared::is_block_item(&equipped.item_id) {
                 return Some(format!(
-                    "Manten para colocar {}",
-                    ha_shared::item_display_name(&equipped.item_id)
+                    "Mantené para colocar {}",
+                    crate::granja::nombre_item(&equipped.item_id)
                 ));
             }
             // Cavar no es picar: lo que sale de acá es un POZO por el que se baja,
             // y decirlo con la palabra justa es la única pista que tiene el jugador.
             if target.dig_down {
-                return Some("Manten para cavar".to_string());
+                return Some("Mantené para cavar".to_string());
             }
-            return Some("Manten para picar".to_string());
+            return Some("Mantené para picar".to_string());
         }
         if let Some(rule) = resolve_interaction(Some(equipped.item_id.as_str()), kind) {
             return Some(match rule.kind {
                 InteractActionKind::Gather => {
-                    format!("Manten para recoger {}", rule.item_id.unwrap_or("recurso"))
+                    format!("Mantené para recoger {}", rule.item_id.unwrap_or("recurso"))
                 }
                 InteractActionKind::Mine => {
-                    format!("Manten para picar {}", rule.item_id.unwrap_or("piedra"))
+                    format!("Mantené para picar {}", rule.item_id.unwrap_or("piedra"))
                 }
-                InteractActionKind::Collect => "Manten para recoger".to_string(),
+                InteractActionKind::Collect => "Mantené para recoger".to_string(),
                 InteractActionKind::Assemble if kind == InteractTargetKind::SpaceStationModule => {
-                    "Manten para instalar el modulo".to_string()
+                    "Mantené para instalar el módulo".to_string()
                 }
-                InteractActionKind::Assemble => "Manten para instalar el modulo de la nave".to_string(),
-                InteractActionKind::Launch => "Manten para DESPEGAR a orbita".to_string(),
+                InteractActionKind::Assemble => "Mantené para instalar el módulo de la nave".to_string(),
+                InteractActionKind::Launch => "Mantené para DESPEGAR a órbita".to_string(),
                 InteractActionKind::ReturnEarth if kind == InteractTargetKind::LunarReturn => {
-                    "Manten para volver al hub orbital".to_string()
+                    "Mantené para volver al hub orbital".to_string()
                 }
-                InteractActionKind::ReturnEarth => "Manten para reentrar a la Tierra".to_string(),
+                InteractActionKind::ReturnEarth => "Mantené para reentrar a la Tierra".to_string(),
                 InteractActionKind::TravelLuna => {
                     // Earth->Moon distance is effectively fixed (~52 km flight
                     // metres) - travel-time preview without needing the clock.
                     let secs = ha_shared::transit_cruise_secs(52_000.0);
-                    format!("Manten para viajar a la Luna - ~{secs:.0}s - requiere datos de nav")
+                    format!("Mantené para viajar a la Luna · ~{secs:.0}s · requiere datos de nav")
                 }
                 InteractActionKind::TravelBody => {
-                    "Manten para viajar al planeta - requiere datos de nav".to_string()
+                    "Mantené para viajar al planeta · requiere datos de nav".to_string()
                 }
                 InteractActionKind::LaunchProbe => {
                     if inv.qty("probe") > 0 {
-                        "Manten para lanzar la sonda".to_string()
+                        "Mantené para lanzar la sonda".to_string()
                     } else {
-                        "Falta una sonda - MOCHILA -> FABRICAR".to_string()
+                        "Falta una sonda · MOCHILA · FABRICAR".to_string()
                     }
                 }
-                InteractActionKind::Attack => "Toca para golpear".to_string(),
+                InteractActionKind::Attack => "Tocá para golpear".to_string(),
                 InteractActionKind::None => match kind {
                     InteractTargetKind::Rock
                     | InteractTargetKind::OreIron
                     | InteractTargetKind::OreGold => {
-                        "Necesitas un pico - MOCHILA -> FABRICAR".to_string()
+                        "Necesitás un pico · MOCHILA · FABRICAR".to_string()
                     }
                     _ => return None,
                 },
@@ -2037,8 +2038,8 @@ fn build_interact_prompt(
 
     if ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some() {
         return Some(format!(
-            "Manten para colocar {}",
-            ha_shared::item_display_name(&equipped.item_id)
+            "Mantené para colocar {}",
+            crate::granja::nombre_item(&equipped.item_id)
         ));
     }
 
@@ -2048,7 +2049,7 @@ fn build_interact_prompt(
         let def = require_machine(pending.machine_id);
         if inv.can_afford_machine(def) {
             return Some(format!(
-                "Manten en el suelo para armar {} - M{} P{} R{}",
+                "Mantené en el suelo para armar {} · M{} P{} R{}",
                 def.display_name, def.cost_wood, def.cost_stone, def.cost_sticks
             ));
         }
@@ -2059,10 +2060,10 @@ fn build_interact_prompt(
     }
 
     if region.active == RegionId::Space {
-        return Some("Vacio orbital - vuela con Ki hacia Tierra/Luna".to_string());
+        return Some("Vacío orbital · volá con Ki hacia Tierra/Luna".to_string());
     }
     if region.active == RegionId::Luna {
-        return Some("Superficie lunar - manten SALTAR para cargar Ki y despegar".to_string());
+        return Some("Superficie lunar · mantené SALTAR para cargar Ki y despegar".to_string());
     }
 
     // Chuleta de controles: es documentación, no juego. Sólo en CREATIVO.
@@ -2918,11 +2919,11 @@ fn spawn_build_chip(parent: &mut ChildBuilder, idx: usize, label: &str, heart: f
 /// la lista.
 fn build_group_hint(group: usize) -> &'static str {
     match build_groups().get(group).map(|(g, _)| *g) {
-        Some(BuildGroup::Pieces) => "Elegi una pieza: entra modo construir. Coloca con USE. Cavar la quita.",
+        Some(BuildGroup::Pieces) => "Elegí una pieza: entra modo construir. Colocá con USAR. Cavar la quita.",
         Some(BuildGroup::Edges) => "Se pegan al borde del piso apuntado; volver a tocar demuele.",
         Some(BuildGroup::Ceilings) => "Tapa la celda apuntada; volver a tocar la saca. El piso de arriba ya tapa solo.",
-        Some(BuildGroup::Prefabs) => "Estampa el area entera de una sola vez.",
-        Some(BuildGroup::Edificio) => "Apunta a la vereda y funda; despues ampliá, apilá plantas y abrile la puerta.",
+        Some(BuildGroup::Prefabs) => "Estampa el área entera de una sola vez.",
+        Some(BuildGroup::Edificio) => "Apuntá a la vereda y fundá; después ampliá, apilá plantas y abrile la puerta.",
         Some(BuildGroup::Fauna) => "Solo creativo: encerrala y observa como evoluciona.",
         _ => "Se coloca entera y se rodea (no se entra). Cuesta material.",
     }
@@ -4791,7 +4792,7 @@ fn update_inventory_slot_visuals(
                     let label = if stack.is_empty() {
                         String::new()
                     } else {
-                        item_display_name(stack.item_id.as_deref().unwrap_or("wood")).to_string()
+                        crate::granja::nombre_item(stack.item_id.as_deref().unwrap_or("wood"))
                     };
                     if text.0 != label {
                         text.0 = label;
@@ -5032,7 +5033,7 @@ fn equip_toast_system(
     }
     for (mut toast, mut text, mut color, mut node) in &mut q {
         if changed {
-            let name = item_display_name(&equipped.item_id);
+            let name = crate::granja::nombre_item(&equipped.item_id);
             text.0 = format!("en mano: {name}");
             toast.life = EQUIP_TOAST_HOLD + EQUIP_TOAST_FADE;
             node.display = Display::Flex;

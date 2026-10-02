@@ -10,6 +10,7 @@ import { runMigrations } from "./db/migrate.js";
 import { authRouter } from "./auth/routes.js";
 import { updatesRouter, updatesDir } from "./updates/routes.js";
 import { slog } from "./logger.js";
+import { startRelay } from "./relay.js";
 
 const PORT = Number(process.env.PORT) || 2567;
 const HOST = process.env.HOST || "0.0.0.0";
@@ -97,6 +98,8 @@ const server = defineServer({
     }
   },
 });
+
+startRelay(Number(process.env.RELAY_PORT) || 2568, HOST);
 
 server.listen(PORT, HOST, undefined, () => {
   slog("boot", "Colyseus server listening", {

@@ -24,7 +24,7 @@ impl Plugin for FpsTopePlugin {
 fn dormir_hasta_el_tope(config: Res<crate::ui_editor::UiLayoutConfig>, mut ultimo: Local<Option<Instant>>) {
     let tope = config.calibration.fps_max;
     let ahora = Instant::now();
-    if tope > 0 && !crate::flags::driver_active() {
+    if tope > 0 && !crate::flags::driver_active() && !sin_tope() {
         if let Some(antes) = *ultimo {
             let periodo = Duration::from_secs_f64(1.0 / tope as f64);
             let gastado = ahora.duration_since(antes);
@@ -34,4 +34,10 @@ fn dormir_hasta_el_tope(config: Res<crate::ui_editor::UiLayoutConfig>, mut ultim
         }
     }
     *ultimo = Some(Instant::now());
+}
+
+/// `setprop debug.ha.sin_tope 1`: sin dormir al final del cuadro (aislar el parpadeo).
+fn sin_tope() -> bool {
+    static N: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *N.get_or_init(|| crate::flags::var("HA_SIN_TOPE").is_ok())
 }

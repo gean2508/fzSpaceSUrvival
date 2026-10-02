@@ -68,6 +68,8 @@ pub const EARTH_WALKABLE_SPHERE_RADIUS_M: f32 = 6400.0;
 
 pub const HUNGER_MAX: f32 = 100.0;
 pub const THIRST_MAX: f32 = 100.0;
-pub const HUNGER_DECAY: f32 = 0.12;
-pub const THIRST_DECAY: f32 = 0.18;
+/// Ritmo de juego (1 oct 2026): antes 0,12 / 0,18 (hambre vacía en 14 min, sed en 18). Con un día de
+/// 60 min se sentía apurado; ahora ~33 min de hambre y ~48 de sed. Espejo de `constants.ts`.
+pub const HUNGER_DECAY: f32 = 0.05;
+pub const THIRST_DECAY: f32 = 0.07;
 pub const STARVE_DAMAGE: f32 = 1.5;

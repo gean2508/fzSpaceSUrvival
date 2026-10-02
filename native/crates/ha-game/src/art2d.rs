@@ -270,6 +270,9 @@ pub struct ArtLibrary {
     /// Lado de la huella más grande declarada (celdas). Lo consulta la colisión en
     /// cada paso para acotar el escaneo de vecindad — por eso está cacheado.
     footprint_reach: i64,
+    /// Lo mismo, pero sólo de lo que se SIEMBRA solo (`decor/*`: árboles y rocas). La colisión
+    /// procedural escanea con este alcance; el resto (casas autoradas) se busca por lista.
+    decor_reach: i64,
     /// Luz que emite cada slot (editor: casilla "emite luz" / pincel de LUZ del
     /// Image Lab). Vacío = ningún asset ilumina → `light2d` no cuelga nada. Ver
     /// `emission` / `emission_first`.
@@ -616,6 +619,10 @@ impl ArtLibrary {
     /// lado (lo barato, que es lo que corre en el Redmi).
     pub fn footprint_reach(&self) -> i64 {
         self.footprint_reach
+    }
+
+    pub fn decor_reach(&self) -> i64 {
+        self.decor_reach
     }
 
     /// Tamaño del slot en TILES según su recorte (una casa de 5×4 celdas mide
@@ -1425,6 +1432,9 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
             if let Some(fp) = &e.footprint {
                 if !fp.is_empty() {
                     art.footprint_reach = art.footprint_reach.max(fp.w.max(fp.h) as i64);
+                    if key.starts_with("decor/") {
+                        art.decor_reach = art.decor_reach.max(fp.w.max(fp.h) as i64);
+                    }
                     art.footprints.insert(key.clone(), fp.clone());
                 }
             }
@@ -1689,6 +1699,7 @@ impl ArtLibrary {
     pub(crate) fn test_footprint(key: &str, fp: ha_assets::CollisionFootprint) -> Self {
         let mut a = Self::default();
         a.footprint_reach = fp.w.max(fp.h) as i64;
+        a.decor_reach = a.footprint_reach;
         a.footprints.insert(key.to_string(), fp);
         a
     }
@@ -2053,6 +2064,70 @@ mod inventario_de_arte {
             mal.len(),
             mal.join("\n  ")
         );
+    }
+
+    /// **CADA LOTE RECIBE EDIFICIOS COMPLETOS DE SU CLASE.**
+    ///
+    /// El pack trae casas enteras, casas por piezas (kits modulares) y, en la
+    /// misma página, edificios enteros de clases distintas. Elegir por tamaño los
+    /// mezclaba: el hospital salía con el cartel HOTEL, una ferretería caía en el
+    /// lote de viviendas y la casa embrujada de Halloween en una cuadra de
+    /// chalets. Qué dibujo es de qué parcela se decide en
+    /// `scripts/import-edificios.py::FILTRO_POR_NOMBRE`; esto lo clava.
+    #[test]
+    fn cada_lote_solo_recibe_edificios_de_su_clase() {
+        let m = ArtManifest::from_json(MANIFEST).expect("manifest legible");
+        let firma = |k: &str| {
+            m.sprites.get(k).and_then(|e| {
+                let r = e.rect()?;
+                Some((e.png().to_string(), r.col, r.row, r.w, r.h))
+            })
+        };
+        let variantes = |slot: &str| -> Vec<String> {
+            m.sprites
+                .keys()
+                .filter(|k| k.as_str() == slot || k.starts_with(&format!("{slot}#")))
+                .cloned()
+                .collect()
+        };
+        let hotel = firma("building/hotel_y_hospital_hotel_y_hospital_1").expect("el hotel del pack");
+        let ferreteria: Vec<_> = ["building/edificios_ferreteria_tienda", "building/ferreteria_tienda"]
+            .iter()
+            .filter_map(|k| firma(k))
+            .collect();
+        let embrujadas: Vec<_> = ["building/casa_embrujada", "building/casa_embrujada_sin_farol"]
+            .iter()
+            .filter_map(|k| firma(k))
+            .collect();
+        assert!(!ferreteria.is_empty() && !embrujadas.is_empty(), "faltan claves de referencia");
+        let mut mal = Vec::new();
+        for slot in ["building/hotel", "building/hospital"] {
+            for k in variantes(slot) {
+                let es_hotel = firma(&k).as_ref() == Some(&hotel);
+                if es_hotel != (slot == "building/hotel") {
+                    mal.push(format!("{k}: {} recibió el edificio del otro", slot));
+                }
+            }
+        }
+        for k in variantes("building/duplex") {
+            if firma(&k).is_some_and(|f| ferreteria.contains(&f)) {
+                mal.push(format!("{k}: una ferretería en el lote de viviendas"));
+            }
+        }
+        for slot in [
+            "building/casa_chica",
+            "building/casa_mediana",
+            "building/casa_grande",
+            "building/casa_country",
+            "building/villa",
+        ] {
+            for k in variantes(slot) {
+                if firma(&k).is_some_and(|f| embrujadas.contains(&f)) {
+                    mal.push(format!("{k}: la casa embrujada en un barrio de chalets"));
+                }
+            }
+        }
+        assert!(mal.is_empty(), "lotes con edificio de otra clase:\n  {}", mal.join("\n  "));
     }
 
     /// **El kit modular tiene todas sus piezas, en los tres temas.**

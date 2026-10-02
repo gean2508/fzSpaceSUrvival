@@ -32,6 +32,7 @@ fn main() -> ExitCode {
         Some("sound") => sound_gui::run_sound_gui(),
         Some("mundo") => world_gui::run_world_gui(),
         Some("gym") => gym::run_gym(),
+        Some("gym-medir") => gym::run_medir(),
         Some("gym-gui") => gym_gui::run_gym_gui(),
         Some("chargen") => cmd_chargen(&args[1..]),
         Some("sound-init") => cmd_sound_init(&args[1..]),
@@ -59,6 +60,7 @@ fn print_usage() {
          \x20 sound     # editor de sonido / mini-DAW (edita assets/audio.json)\n\
          \x20 mundo     # editor de MUNDO WYSIWYG (H1: vista del mundo procedural)\n\
          \x20 gym       # entrena la fauna por neuroevolución (headless, CLI)\n\
+         \x20 gym-medir # mide el FAUNA.adn instalado contra la vara (persecución pura) en mundos nuevos\n\
          \x20 gym-gui   # visor de ADN: lista genomas .adn, evalúa/muta/cruza con preview\n\
          \x20 chargen [--root <pack>] [--out <art/>] [--npcs 20] [--seed 7] [--scale 2] [--player]\n\
          \x20           # hornea personajes por CAPAS (pack LimeZu Character_Generator)\n\

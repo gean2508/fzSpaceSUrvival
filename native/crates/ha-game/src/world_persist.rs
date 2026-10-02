@@ -109,6 +109,7 @@ fn tick_vessel_registry(
     mut timer: ResMut<VesselTickTimer>,
     mut persist: ResMut<VesselPersistState>,
 ) {
+    let _p = crate::debug::probe("fx_tick_vessel_registry");
     timer.0.tick(time.delta());
     if !timer.0.just_finished() {
         return;

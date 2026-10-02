@@ -57,8 +57,10 @@ export const LAUNCH_PAD_ZONE = { x: 28, z: -28, radius: 14 } as const;
 // ---- Survival decay (per second) ----
 export const HUNGER_MAX = 100;
 export const THIRST_MAX = 100;
-export const HUNGER_DECAY = 0.12;
-export const THIRST_DECAY = 0.18;
+// Ritmo de juego (1 oct 2026): antes 0.12 / 0.18 (hambre vacía en 14 min, sed en 18) — con un día de 60 min se
+// sentía apurado "por dos de velocidad". Ahora ~33 min de hambre y ~48 de sed (la sed va a la mitad).
+export const HUNGER_DECAY = 0.05;
+export const THIRST_DECAY = 0.07;
 /** Damage per second when hunger or thirst hit zero. */
 export const STARVE_DAMAGE = 1.5;
 

@@ -2684,3 +2684,44 @@ mod tests {
         assert_eq!(pisos_modulares("building/casa_chica", 0, 0), None);
     }
 }
+
+#[cfg(test)]
+mod tests_fachadas_solapadas {
+    use super::*;
+    use std::collections::HashSet;
+
+    /// **Dos casas no se montan una sobre otra.** Cada lote dibuja su fachada sobre el
+    /// rectángulo `roofed_rect`; si dos de esos rectángulos se pisan, una fachada tapa a la otra.
+    #[test]
+    fn ninguna_fachada_pisa_a_otra() {
+        let body = CelestialBody::Earth;
+        let mut pueblos = 0;
+        let mut malos = Vec::new();
+        for sz in -12..12 {
+            for sx in -12..12 {
+                let Some(s) = crate::geography::settlement_in(body, sx, sz) else { continue };
+                pueblos += 1;
+                let radio = s.radius.clamp(24, 120);
+                let mut rects: HashSet<(i64, i64, i64, i64)> = HashSet::new();
+                for tz in (s.center.1 - radio..=s.center.1 + radio).step_by(2) {
+                    for tx in (s.center.0 - radio..=s.center.0 + radio).step_by(2) {
+                        if let Some((x, z, w, d, _)) = roofed_rect(body, &s, tx, tz) {
+                            rects.insert((x, z, w, d));
+                        }
+                    }
+                }
+                let v: Vec<_> = rects.into_iter().collect();
+                for i in 0..v.len() {
+                    for j in i + 1..v.len() {
+                        let (a, b) = (v[i], v[j]);
+                        if a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3 {
+                            malos.push((s.center, a, b));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(pueblos > 0);
+        assert!(malos.is_empty(), "{} pares de fachadas se pisan; primeros: {:?}", malos.len(), &malos[..malos.len().min(5)]);
+    }
+}

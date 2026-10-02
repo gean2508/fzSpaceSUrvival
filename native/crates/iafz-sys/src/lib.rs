@@ -76,6 +76,39 @@ pub fn save(id: i32, path: &str) -> bool {
     unsafe { save_iafz_64(id, c.as_ptr()) != 0 }
 }
 
+/// Offset y largo de las 64 salidas de acción dentro de un genoma (`Brain64`): van después de
+/// las dos capas binarias (2 × 64 × 9 B). Es el equivalente de `iafz::salidas_en_cero` del
+/// proyecto dron (`~/Documents/mods/dron`), pero para el kernel de 1 salida de este juego.
+pub const SALIDAS_INICIO: usize = 2 * 64 * 9;
+pub const SALIDAS_LARGO: usize = 64 * 4;
+
+/// Pone en cero las salidas de acción de un genoma volcado: la red emite exactamente 0 y la
+/// conducta es la del código determinista que la rodea (la «vara honesta»). Es la semilla de un
+/// residuo: la evolución arranca EN el clásico y sólo puede sumarle (bitácora 7.54 del dron).
+pub fn salidas_en_cero(bytes: &mut [u8]) {
+    if bytes.len() >= SALIDAS_INICIO + SALIDAS_LARGO {
+        bytes[SALIDAS_INICIO..SALIDAS_INICIO + SALIDAS_LARGO].fill(0);
+    }
+}
+
+/// Los 9600 bytes del genoma de `id` (vía un archivo temporal: el kernel sólo sabe guardar a
+/// disco). `None` si falla.
+pub fn dump(id: i32) -> Option<Vec<u8>> {
+    let tmp = std::env::temp_dir().join(format!("iafz_dump_{}_{id}.adn", std::process::id()));
+    let ruta = tmp.to_str()?;
+    let ok = save(id, ruta);
+    let bytes = if ok { std::fs::read(&tmp).ok() } else { None };
+    let _ = std::fs::remove_file(&tmp);
+    bytes.filter(|b| b.len() == BRAIN_BYTES)
+}
+
+/// Deja a `id` con las salidas en cero (conserva las capas binarias y la memoria).
+pub fn poner_salidas_en_cero(id: i32) -> bool {
+    let Some(mut b) = dump(id) else { return false };
+    salidas_en_cero(&mut b);
+    load_bytes(id, &b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +134,19 @@ mod tests {
         assert!(save(1, tmp), "save");
         assert!(load(2, tmp), "load del guardado");
         let _ = std::fs::remove_file(tmp);
+    }
+
+    #[test]
+    fn con_las_salidas_en_cero_la_red_emite_cero() {
+        init(7, 99);
+        assert!(poner_salidas_en_cero(7));
+        reset_echo(7);
+        for k in 0..64u32 {
+            assert_eq!(think(7, k.wrapping_mul(2654435761)), 0.0);
+        }
+        // Y sigue siendo un genoma válido que se puede mutar hacia algo distinto de cero.
+        mutate(7, 8, 1.0);
+        reset_echo(8);
+        assert!((0..64u32).any(|k| think(8, k.wrapping_mul(2654435761)) != 0.0));
     }
 }

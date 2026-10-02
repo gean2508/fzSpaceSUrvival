@@ -184,6 +184,8 @@ enum CalAdjust {
     MusicUp,
     FpsDown,
     FpsUp,
+    IdiomaDown,
+    IdiomaUp,
 }
 
 #[derive(Component)]
@@ -224,7 +226,7 @@ pub enum UiEditorCommand {
 const EDITOR_PANEL_W: f32 = 116.0;
 const EDITOR_PANEL_H: f32 = 436.0;
 const SETTINGS_PANEL_W: f32 = 168.0;
-const SETTINGS_PANEL_H: f32 = 168.0;
+const SETTINGS_PANEL_H: f32 = 184.0;
 
 fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
     let mut panel_entity = Entity::PLACEHOLDER;
@@ -258,7 +260,7 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                     ))
                     .with_children(|header| {
                         header.spawn((
-                            Text::new("CALIBRATION"),
+                            Text::new("AJUSTES"),
                             TextFont {
                                 font_size: 11.0,
                                 ..default()
@@ -267,13 +269,14 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                         ));
                         spawn_editor_button(header, "X", UiEditorCommand::CloseSettings);
                     });
-                spawn_cal_row(panel, "Camera", CalAdjust::CamSensDown, CalAdjust::CamSensUp);
-                spawn_cal_row(panel, "Move", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp);
-                spawn_cal_row(panel, "Curve", CalAdjust::CurveDown, CalAdjust::CurveUp);
-                spawn_cal_row(panel, "Render", CalAdjust::RenderDown, CalAdjust::RenderUp);
-                spawn_cal_row(panel, "SFX", CalAdjust::SfxDown, CalAdjust::SfxUp);
-                spawn_cal_row(panel, "Music", CalAdjust::MusicDown, CalAdjust::MusicUp);
+                spawn_cal_row(panel, "Cámara", CalAdjust::CamSensDown, CalAdjust::CamSensUp);
+                spawn_cal_row(panel, "Movimiento", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp);
+                spawn_cal_row(panel, "Curva", CalAdjust::CurveDown, CalAdjust::CurveUp);
+                spawn_cal_row(panel, "Resolución", CalAdjust::RenderDown, CalAdjust::RenderUp);
+                spawn_cal_row(panel, "Efectos", CalAdjust::SfxDown, CalAdjust::SfxUp);
+                spawn_cal_row(panel, "Música", CalAdjust::MusicDown, CalAdjust::MusicUp);
                 spawn_cal_row(panel, "FPS", CalAdjust::FpsDown, CalAdjust::FpsUp);
+                spawn_cal_row(panel, "Idioma", CalAdjust::IdiomaDown, CalAdjust::IdiomaUp);
             })
             .id();
     });
@@ -419,6 +422,7 @@ fn spawn_cal_button(parent: &mut ChildBuilder, label: &str, adjust: CalAdjust) {
 fn calibration_button_system(
     mut config: ResMut<UiLayoutConfig>,
     mut audio: ResMut<crate::audio::AudioSettings>,
+    mut idioma: ResMut<crate::i18n::Idioma>,
     mut buttons: Query<(&Interaction, &CalAdjust, &mut BackgroundColor), Changed<Interaction>>,
 ) {
     for (interaction, adjust, mut bg) in &mut buttons {
@@ -429,6 +433,7 @@ fn calibration_button_system(
                 CalAdjust::SfxUp => audio.sfx = (audio.sfx + 0.1).clamp(0.0, 1.0),
                 CalAdjust::MusicDown => audio.music = (audio.music - 0.1).clamp(0.0, 1.0),
                 CalAdjust::MusicUp => audio.music = (audio.music + 0.1).clamp(0.0, 1.0),
+                CalAdjust::IdiomaDown | CalAdjust::IdiomaUp => *idioma = idioma.otro(),
                 other => {
                     let cal = &mut config.calibration;
                     match other {
@@ -461,8 +466,9 @@ fn calibration_button_system(
     }
 }
 
-fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration, audio: &crate::audio::AudioSettings) -> String {
+fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration, audio: &crate::audio::AudioSettings, idioma: crate::i18n::Idioma) -> String {
     match adjust {
+        CalAdjust::IdiomaUp | CalAdjust::IdiomaDown => idioma.nombre().to_string(),
         CalAdjust::CamSensUp | CalAdjust::CamSensDown => {
             format!("{:.2}", cal.camera_sensitivity)
         }
@@ -488,13 +494,14 @@ fn update_settings_labels(
     state: Res<UiEditorState>,
     config: Res<UiLayoutConfig>,
     audio: Res<crate::audio::AudioSettings>,
+    idioma: Res<crate::i18n::Idioma>,
     mut labels: Query<(&CalLabel, &mut Text)>,
 ) {
     if !state.menu_open {
         return;
     }
     for (label, mut text) in &mut labels {
-        let line = cal_label_for(label.0, &config.calibration, &audio);
+        let line = cal_label_for(label.0, &config.calibration, &audio, *idioma);
         if text.0 != line {
             text.0 = line;
         }

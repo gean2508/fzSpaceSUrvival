@@ -10,6 +10,13 @@ use core::f32::consts::TAU;
 use crate::celestial_bodies::CelestialBody;
 use crate::topdown::{topdown_tile, Tile};
 
+/// **Versión del código de sensores.** Hay que subirla cada vez que cambie el significado de los
+/// bits de `sense()` (o de `Campo::sense_bits` en el juego). Un genoma entrenado con otros bits
+/// lee basura y, como la locomoción es determinista, no se cae: sólo se mueve peor, en silencio.
+/// Eso le pasó al dron (`~/Documents/mods/dron`, `SENSORES_VERSION`). El gym escribe esta cifra
+/// junto al genoma (`FAUNA.adn.sensores`) y una prueba de `ha-game` exige que coincidan.
+pub const SENSE_VERSION: u32 = 1;
+
 pub fn solid_at(body: CelestialBody, x: f32, z: f32) -> bool {
     topdown_tile(body, 0, x.floor() as i64, z.floor() as i64).solid()
 }

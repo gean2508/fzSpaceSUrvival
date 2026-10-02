@@ -57,6 +57,21 @@ pub struct Mundo {
     pub hallazgos: bool,
     #[serde(default)]
     pub bajas: Vec<super::jugador::Baja>,
+    /// Mejor precisión alcanzada por alguien en el mundo, por ley (nivel de `fisica::NIVELES`).
+    #[serde(default)]
+    pub hitos_fisica: [u8; super::fisica::N_LEYES],
+    /// 0..1: invierno nuclear (humo en la atmósfera) que enfría y achica las cosechas.
+    #[serde(default)]
+    pub invierno: f32,
+    #[serde(default)]
+    pub detonaciones: u32,
+    /// Día de la última bomba: la memoria del horror enfría el dedo en el botón.
+    #[serde(default)]
+    pub ultima_bomba: u64,
+    #[serde(default)]
+    pub refugios: Vec<super::catastrofe::Refugio>,
+    #[serde(default)]
+    pub sig_refugio: u32,
 }
 
 impl Mundo {
@@ -83,6 +98,12 @@ impl Mundo {
             saberes_mundo: Saberes::NADA,
             hallazgos: true,
             bajas: Vec::new(),
+            hitos_fisica: [0; super::fisica::N_LEYES],
+            invierno: 0.0,
+            detonaciones: 0,
+            ultima_bomba: 0,
+            refugios: Vec::new(),
+            sig_refugio: 1,
         }
     }
 
@@ -132,6 +153,7 @@ impl Mundo {
         };
         p.carga = carga;
         p.saberes = saberes_iniciales(s.rango, h);
+        p.creencias = super::fisica::Creencias::inicial(p.saberes, h);
         p.pob = (super::economia::carga_efectiva(&p) * (ini + 0.25)).max(30.0);
         p.comida = p.pob * 6.0;
         p.tesoro = p.pob * 2.0;
@@ -283,6 +305,9 @@ impl Mundo {
     // --- relaciones -----------------------------------------------------------
 
     pub fn reindexar(&mut self) {
+        for p in self.pueblos.values_mut() {
+            p.sin_portador.resize(N_SABERES, 0);
+        }
         self.idx_rel.clear();
         for (i, r) in self.relaciones.iter().enumerate() {
             self.idx_rel.insert((r.a, r.b), i);
@@ -369,6 +394,11 @@ impl Mundo {
             par.pareja = None;
         }
         self.heredar(&p);
+        if p.refugio != 0 {
+            if let Some(r) = self.refugios.iter_mut().find(|r| r.id == p.refugio) {
+                r.gente.retain(|x| *x != id);
+            }
+        }
         if p.npc != 0 {
             self.bajas.push(super::jugador::Baja { persona: id, npc: p.npc, causa: causa.to_string() });
         }
@@ -403,6 +433,7 @@ impl Mundo {
         let tradicion = pu.pob >= 25.0;
         let mut nuevo = pu.saberes;
         let mut sin = pu.sin_portador.clone();
+        sin.resize(N_SABERES, 0);
         let mut olvidados = Vec::new();
         for s in 0..N_SABERES as u8 {
             let en_pie = sostenido.tiene(s) || (tradicion && DEFS[s as usize].costo <= 25.0 && pu.saberes.tiene(s));
@@ -436,8 +467,10 @@ impl Mundo {
         self.dia += 1;
         let d = self.dia;
         self.economia_dia();
+        self.catastrofe_dia();
         self.gente_dia();
         self.ciencia_dia();
+        self.fisica_dia();
         self.obras_dia();
         self.expediciones_dia();
         self.justicia_dia();
@@ -455,6 +488,8 @@ impl Mundo {
 
     fn anual(&mut self) {
         self.ciencia_anual();
+        self.fisica_anual();
+        self.catastrofe_anual();
         self.gente_anual();
         self.gobierno_anual();
         self.diplomacia_anual();

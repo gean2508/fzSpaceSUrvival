@@ -34,6 +34,18 @@ pueblos y convivir con ellos → cargar Ki y volar a otro cuerpo → repetir all
 
 Romper una de éstas es una regresión, no una decisión de diseño.
 
+0. **REGLA CERO — LO QUE SE EMPIEZA SE TERMINA. Cero human in the loop.**
+   (decretada por el usuario el 30 sep 2026, por encima de todas las demás)
+   Está **prohibido** dejar algo a medias: ni "queda pendiente", ni "si querés
+   sigo", ni una lista de faltantes entregada como si fuera un resultado. Si
+   pedís algo, se hace **entero**: código + tests + probar + documentar +
+   publicar el APK y probarlo en el celu. Si aparece un faltante en el camino,
+   se hace en la misma tanda, no se anota para después. No se pregunta, no se
+   espera visto bueno: se decide y se ejecuta hasta el final. Lo único que
+   corta el trabajo es un bloqueo físico real (el celu apagado, sin red) y en
+   ese caso se dice tal cual, con lo que SÍ quedó hecho. §13 no es una bolsa de
+   excusas: cada ítem de ahí es trabajo por hacer YA, no un "más adelante".
+
 1. **NO 3D.** Ni cámara en primera persona, ni esferas caminables, ni shaders
    custom de iluminación 3D, ni toon/outline, ni domo de cielo. Se borró a
    propósito: costaba 80–180 ms de GPU por frame en el Redmi.
@@ -114,6 +126,47 @@ Romper una de éstas es una regresión, no una decisión de diseño.
   transiciones de vuelo.
 
 Validar la arquitectura: `npm run validate:arch`.
+
+### Lo que se nos escapó — chequeos antes de empezar (29 sep 2026)
+
+Origen: una revisión externa (Gemini) de la capa de civilización. Se la pesó contra
+el código; esto es lo que **sirvió** y quedó como regla, y lo que se descartó.
+
+**Checklist antes de una feature de simulación o de mostrar sim en pantalla:**
+
+1. **¿Cuánto cuesta y dónde se mide?** Costo por día simulado (`paso_dia`) y por frame
+   de proyección, medido — no supuesto. La capa agregada tiene que entrar en el
+   presupuesto del Redmi *antes* de sumar despliegue visual encima.
+2. **¿Qué pasa si el jugador llega de golpe?** Todo lo que se materializa cerca del
+   jugador (elección en la plaza, campamento, presos) entra por un cupo por frame y
+   un tope de figurantes por escena, con histéresis como el streaming de gente
+   (`VIRT_IN_R`/`VIRT_OUT_R` en `society.rs`). Nunca 50 spawns en un frame.
+3. **¿La verdad vive en un solo lugar?** La sim agregada (`ha-shared/civ`) es la verdad;
+   los cuerpos en pantalla son una proyección descartable. Nada de estado que exista
+   sólo en el cuerpo.
+4. **¿Hay vía de depuración en texto?** El panel MUNDO se queda siempre. Un objeto
+   dentro del mundo (registro, computadora) es una vía *adicional*, jamás la única
+   para ver datos de gestión.
+5. **¿El nombre promete más de lo que hace?** No escribir en biblia ni en la UI que los
+   NPCs "hacen ciencia real". Lo que hay es un modelo: constantes ocultas del mundo,
+   creencias con error que se achica al observar y al tener instrumentos, y
+   consecuencias que dependen de la verdad y no de la creencia. Hay que tener un test
+   que pruebe que la verdad importa (un cohete con `g` mal creída falla).
+6. **¿Se probó en muchas semillas?** Una semilla que anda no prueba nada: distribución
+   de desenlaces (ni siempre extinción ni nunca bomba), sin NaN, poblaciones acotadas.
+7. **Figurantes baratos:** máquinas de pocos estados con puntos de ruta; sin pathfinding
+   recalculado por frame; animaciones del set existente.
+
+**Descartado de la revisión (y por qué):**
+
+- *"Que todos los NPCs sean persistentes siempre, sin cerca/lejos"*: imposible en el
+  Redmi; el juego ya virtualiza con histéresis y eso es lo correcto. El riesgo real era
+  la ráfaga de materialización (punto 2).
+- *"Aceptá que no hay ciencia, dejá el árbol tecnológico explícito"*: contradice el pedido
+  del usuario (física del mundo simulado, emergente, sin techo). Se mantiene, con la
+  honestidad del punto 5.
+- *"Menú de dios"*: el jugador no es dios, es una persona más; el panel MUNDO es consola
+  de depuración, no poder.
 
 ---
 
@@ -3495,10 +3548,17 @@ bloqueado como siempre). Driver: `HA_CIVSHOT=/tmp/civ HA_CIVDIAS=400 HA_AUTOPLAY
 `la_historia_se_produce_sola` exige elecciones, sucesiones, guerras, paces y
 descubrimientos en 4 semillas x 300 años.
 
-**Pendiente:** gente reunida en la plaza el día de elección; cárcel/destierro
-visibles en el mundo; pueblos-colonia como NPCs jugables en otros cuerpos; que la
-guerra entre pueblos cercanos se vea (soldados). Retunear frecuencia de guerras si
-molesta (`guerra.rs`: `sigmoide((s-1)*3) * 0.3`).
+**La civilización SE VE** (`ha-game/src/civ_vida.rs`, lo que antes figuraba como pendiente):
+votantes en la plaza el día de elección, soldados y fogata de campamento hacia el enemigo mientras
+dura una guerra, presos y desterrados cuando la justicia dicta, pobladores caminando por los
+pueblos que nacieron de un refugio, el **Registro** (objeto de la plaza que evoluciona con los
+saberes del pueblo), bombas/cohetes/lluvia radiactiva. Figurantes livianos, tope global
+(`MAX_FIGURANTES` 28), sin cerebro y sin apuntar jamás al jugador.
+**Colonias en otros cuerpos** (1 oct 2026): las escenas y el Registro se arman con los pueblos del
+cuerpo que tenés debajo (`Society::active_body`, mismos ids 0-11 que `civ::CUERPOS`), y el jugador
+se inscribe en el pueblo de ese cuerpo (`Civ::cuerpo`). Una colonia nace en (0, 0) del cuerpo.
+Bombas y refugios siguen siendo de la Tierra. **Retunear** la frecuencia de guerras si molesta:
+`guerra.rs`: `sigmoide((s-1)*3) * 0.3`.
 
 ### IA frugal (IAFZ-64) y evolución
 
@@ -6417,6 +6477,33 @@ app en el celu actualiza sola.
 
 Escrito para leerse en frío. Objetivo: **60 FPS sin tirones en el Redmi**.
 
+### RESUELTO (30 sep 2026) — "salgo del planeta, voy a una ciudad y reingreso volando: demasiado lag"
+
+Medido con `HA_STAGES=1 HA_FLYTEST=1 HA_AUTOPLAY=1 HA_PARTIDA_NUEVA=1` y **semilla
+fija** (`HA_SEMILLA=54217`: sin fijarla cada corrida es otro mundo y las
+comparaciones mienten). Cuatro cambios:
+
+1. **Causa raíz de los chunks de 450-750 ms sobre una ciudad:**
+   `topdown::building_site_in` NO tenía memoria y `prop_decor_at` la llama POR
+   CELDA (~3 ms cada una, ~0,8 s por chunk con barrio). Ahora memoiza 32 ranuras por
+   `(cuerpo, sx, sz, época)` (no se escribe en `grueso`). Chunk p90 459 → 51 ms,
+   máximo 745 → 115 ms. Descartadas por medición: `building_tile` frío, `retiro`,
+   `casa_mojada`, agua — la lógica de lotes en frío cuesta 2-4 ms por chunk.
+2. **Disco del planeta:** `universe::PX_POR_TANDA` 32 → 4 (el horneado por filas
+   pasó de ~150 ms a ≤32 ms por frame) y `geography::settlement_in` escribe siempre
+   la memoria `SITIOS` también en `grueso` (sin eso `sync_terrain_lod` llegó a
+   9 s/frame). Atajo `grueso` en `topdown_tile` para celdas cubiertas por un pueblo.
+3. **Flora chica diferida:** `spawn_chunk_decor` ya no llama a
+   `spawn_chunk_small_decor` sino que la encola en `SmallDecorQueue`; `stream_tile_chunks`
+   la vacía con lo que sobre del plazo (más cercano primero, al menos un chunk por
+   frame). `ChunkBacklog` la cuenta, así que la cortina de carga sigue esperándola.
+   Aterrizar sobre una ciudad ya no arma 25 chunks `Full` de golpe en un frame.
+4. **Lo que queda (desktop, GPU floja):** el primer barrido de `building_site_in` por
+   pueblo (~115 ms) y frames de ~300 ms que son de GPU/presentación (`resto`), no de
+   CPU. **En el Redmi no está medido** — el celu no estaba conectado. Ver el
+   hardware en la memoria `redmi-10-2022-hardware` (Helio G88, Mali-G52 MC2): el
+   hilo principal cuesta ~3-5× el de la compu.
+
 ### RESUELTO (27 sep 2026) — "salgo del planeta: lag y no me puedo mover"
 
 Reporte del usuario. Medido en la compu con `HA_FLYTEST` + `HA_STAGES` y, como la
@@ -6762,8 +6849,8 @@ Lo que NO cambia y sigue pendiente: un disco son 512² × 4 = **un millón de
 muestras de terreno**, y las muestras están a metros unas de otras, así que la
 caché de celdas no las ayuda (cada tap es un fallo). Repartirlo bien evita el
 tirón; no baja el trabajo. Las salidas, por orden de menos a más invasiva:
-hornear en `AsyncComputeTaskPool`, bajar los 2×2 taps a 1 (el `box_blur_rgb` ya
-suaviza) o bajar `DISC_TEX_N`.
+hornear en `AsyncComputeTaskPool` (**hecho el 1 oct 2026**: ya no corre en el hilo principal), bajar
+los 2×2 taps a 1 (el `box_blur_rgb` ya suaviza) o bajar `DISC_TEX_N`.
 
 ### El costo de construir un chunk — la ganancia grande que queda
 
@@ -6869,6 +6956,175 @@ activo y **no** limpia con escala 1.0.
 cámara de blit se crea siempre (con escala 1.0 sólo se salta el quad), así que la UI
 siempre tiene dueño. Si alguna vez se elimina ese módulo, hay que devolverle
 `IsDefaultUiCamera` a `GameCamera`.
+
+### MEDIDO EN EL REDMI (1 oct 2026) — costos reales por escenario (APK 1.0.404 → 1.0.407)
+
+Método: `setprop debug.ha.perflog 1` + `stages 1` (no corren sin la propiedad), 4 muestras de
+`ha-fps` y la línea `ha-stages`/`ha-sys` de cada una. **Nunca `adb kill-server`/`disconnect`
+con el celu enchufado** (lo desconectaba) y nunca mandarle toques si el usuario lo está usando.
+
+| escenario | antes | después | causa y arreglo |
+|---|---|---|---|
+| parado en el pasto | 23-28 fps, `fx_tick_sim` 12-15 ms | ~30 (tope), `fx_tick_sim` 0,0 | colisión del jugador aun quieto: ahora no consulta el mundo (`topdown.rs::quieto`) |
+| caminando | 28 fps, `ob_decor` 9,2 ms | 29,9 parejo, p95 40 ms | `surface_decor_at` memoizado por celda (`worldgen.rs`) + `topdown_tile` memoizado (`topdown.rs`) |
+| ciudad a pie (vecinos) | `tick_society` 56 ms | 0,8-1,6 ms | `decor_hits_box` escaneaba ~300 celdas por pregunta (alcance de la casa autorada más grande); ahora el alcance es el de árboles/rocas y lo autorado va por lista |
+| ciudad al amanecer/noche | 9 fps (`resto` 55-74 ms) | 26-29 fps con 6-8 luces | el velo y la aditiva recorren TODAS las luces por píxel: cada luz ~4 ms de GPU. `light2d::presupuesto_de_luces()` = 8 en Android (`HA_LUCES=n` para medir) |
+| vuelo Ki (a mano, mantener SALTAR) | 8,7 fps, `sync_terrain_lod` 82-88 ms | **23,5 fps parejos** (p50 42,5 ms, hilo principal 7 ms) | el horneado de la malla lejana y del disco del planeta pasó a un hilo de fondo (`AsyncComputeTaskPool`, copia liviana de las ediciones: `TileWorld::copia_para_lod`). Lo que queda es GPU (`resto` ~22 ms): la malla de 37 000 quads + sprites |
+
+Notas: el mundo arranca a las 06:47 (amanecer), o sea que **todas las partidas nuevas empiezan
+con las luces de la ciudad encendidas**. `sync_terrain_lod` (60-70 ms) sólo aparece en la
+pasada alta del driver `HA_VISTA` (vuela a 30 m): no es a pie.
+
+### RESUELTO (1 oct 2026) — "el mundo parpadea y a veces la UI también"
+
+**Síntoma**: cada ~6 s, un solo cuadro de pantalla sin NINGÚN sprite (ni jugador, ni árboles, ni
+sombras, ni velo nocturno): sólo el suelo y la UI. De noche era un cuadro "de día" con la UI a
+pleno brillo (brillo medio 75 → 137 → 75).
+
+**Cómo se cazó** (sin adivinar): `screenrecord` en el celu (10-20 s) → cuadros con ffmpeg
+(`imageio-ffmpeg` en un venv) → destello = cuadro que difiere mucho de sus DOS vecinos mientras
+estos se parecen entre sí. Con eso cada hipótesis se descartó midiendo cuántos destellos salían
+en 15-20 s (base: 2-3):
+
+| hipótesis | resultado |
+|---|---|
+| luces / velo (`HA_NO_LIGHTS`, valores del velo, `toggle_light_passes`) | sigue (y de día también) |
+| visibilidad del juego, ítems de la fase `Transparent2d`, sprites extraídos | normales durante el destello |
+| pipelines compilándose (`PipelineCache::waiting_pipelines`) | ninguno en la ventana |
+| `PresentMode` (mailbox/immediate/fifo), `desired_maximum_frame_latency`, sin render paralelo, sin tope de FPS | sigue |
+| backend Vulkan vs GL | GL no arranca; Vulkan sigue |
+| **una sola cámara** (UI colgada de la del mundo, sin `BlitCamera`) | **0 destellos en 15 s** |
+
+**Causa**: la cámara de mundo + la de blit/UI sobre la MISMA ventana (en Android el blit está
+descartado, así que la segunda cámara sólo dibujaba la UI). La composición de las dos dejaba un
+cuadro con la fase transparente del mundo vacía. **Arreglo**: `camera::una_sola_camara()` — en
+Android no se crea `BlitCamera` y la UI cuelga de `GameCamera` (`IsDefaultUiCamera`). Además dejó
+el ritmo más parejo (0 cuadros de >50 ms en reposo contra 11-52). `HA_DOS_CAMARAS=1` las devuelve.
+Escritorio sigue con las dos cuando hay escala de render.
+
+Instrumentación que quedó (sólo con `setprop debug.ha.perflog 1`): `ha-veil` (saltos del velo),
+`ha-vis`/`ha-cam` (cámaras y cuentas de render cada 5 s), `ha-fase`, `ha-pipelines`. Interruptores
+de aislamiento: `debug.ha.present`, `latencia`, `sin_tope`, `sin_pipeline`, `backend`, `sync_pipe`.
+
+### Controles táctiles de objetos y compañero (1 oct 2026)
+
+- **Botón USAR contextual** (`input/actions.rs`): junto a SALTAR aparece un botón que sólo existe
+  si lo que tenés en la mano se "usa": **COMER** (comida), **BEBER** (cubos de agua/leche),
+  **VESTIR** (prendas); volando sigue siendo **BAJAR**. Mantenerlo arranca el mismo "mantener"
+  de comer/vestirse y soltarlo lo cancela. NO compite con el mantener del mundo (cavar, talar,
+  picar). La etiqueta sale de `equipo::etiqueta_de_uso`. Verificado en el Redmi: manzanas 7→6 y
+  el hambre sube.
+- **Con comida o ropa en la mano ya no se cava** (`targeting::can_dig_down`): antes
+  `resolve_interaction` caía a la regla de la MANO y una manzana "picaba" el suelo, así que
+  comer por toque nunca funcionó (mantener con el gorro abría un pozo).
+- **Menú del compañero** (`npc_menu.rs`): un toque sobre él abre su panel (estado, orden vigente,
+  SEGUIRME / EXPLORAR / REZAR / CHARLAR / CERRAR). Antes `CompanionOrder` no tenía ninguna UI.
+  Va a la izquierda para no tapar SALTAR/COMER. Verificado en el Redmi.
+- Los nombres de objeto del HUD salen en castellano (`granja::nombre_item`): "en mano: Gorro de cuero".
+
+### Conexión del celu: el hub USB de la PC se reinicia (1 oct 2026)
+
+`journalctl -k` muestra `usb 1-4: USB disconnect` cada ~12 min y `device descriptor read/64,
+error -32` en `1-4.2` (el Redmi detrás de un hub). El celu vuelve a pedir "Utilizar USB para…"
+y a veces se cuelga `adb`. **No es de los comandos**: el hub tiene `power/control = auto`.
+Arreglo (requiere sudo, lo corre el usuario):
+`echo on | sudo tee /sys/bus/usb/devices/1-4/power/control` y, para que persista,
+`usbcore.autosuspend=-1` en el kernel o una regla udev. Recuperar sin reiniciar el servidor:
+`adb reconnect offline` (NUNCA `kill-server`). Medición automática: `scripts/` no tiene driver; las
+ráfagas cortas con guarda de primer plano viven en el scratchpad de la sesión.
+
+### Ritmo del juego (1 oct 2026) — "que no se sienta apurado, como por dos de velocidad"
+
+Todo lo que corre solo, en un lugar: día de 3600 s (`sky2d::DAY_SECS`); **hambre del jugador 0,05/s
+(~33 min a vacío) y sed 0,07/s ×0,5 (~48 min)** — antes 0,12 y 0,18, que con un día de 60 min eran
+14 y 18 minutos (`constants.rs` y su espejo `constants.ts`: se cambian JUNTOS); fauna `VEL` 1,7 m/s y
+metabolismo ×0,25 (ver "los animales corren…"); NPC 2,2 m/s; jugador a pie 5,2; cultivo
+`MADURAR_SECS` 0,8 día; cría 30 s de celo / 5 min de descanso / 20 min de crecimiento; frutal
+10 min. Si algo vuelve a sentirse apurado, se toca ACÁ y no se compensa en otro lado.
+
+### Auditoría completos vs kit (1 oct 2026)
+
+`python3 scripts/auditar-completos-vs-modulares.py [--estricto]` pasa el manifest y
+`edificios-import-index.json` por las MISMAS marcas del importador y dice: (1) si algún lote se
+alimenta de una pieza de kit (hoy 0), (2) qué edificios COMPLETOS importados no usa ningún lote
+(112 candidatos de >=5x5 celdas: sobre todo variantes de mercado, kioscos, casas rodantes y
+condominios — material para sumar variantes, no para olvidar). Complementa los tests
+`ninguna_tabla_siembra_piezas_de_kit` y `cada_lote_solo_recibe_edificios_de_su_clase`.
+
+### Pieles, ropa y armadura (1 oct 2026)
+
+- **Botín de la fauna** (`fauna.rs::botin`): todo animal de cría suelta carne **y piel** (vaca
+  1-2, cabra 1-2, burro 1-3, cerdo/oveja/conejo 0-1), además de lana, plumas y huesos. El
+  perro no suelta nada.
+- **Prendas** (`ha_shared::armadura`, recetas 31-34): gorro de cuero (cabeza, 10 %), chaleco de
+  cuero (torso, 25 %), abrigo de lana (torso, 20 %), botas de cuero (pies, 10 %). Tope 50 %.
+  Protegen de mordidas (`fauna.rs`) y radiación (`civ_vida.rs`), no de hambre, sed ni asfixia.
+- **Vestirse** (`equipo.rs`): con la prenda en la mano, mantener sin objetivo (igual que
+  comer). La que ocupaba la ranura vuelve a la mochila. Se guarda en `equipo.json`.
+- **Se ve en el personaje**: el sprite se recompone con las capas del pack (`chargen`): el
+  gorro de cuero es `SOMBRERO DETECTIVE`, el chaleco `ROPA 16` y el abrigo `ROPA 23` (se
+  buscan por nombre de estilo). Las botas no tienen capa propia: sólo protegen.
+- **Arte**: los 4 iconos NO existen en ningún pack (la tienda de ropa de Modern Interiors son
+  perchas y maniquíes). Se dibujaron con `scripts/dibujar-items.py` (corsé de `lib/pixel.py`).
+- Para probar sin cazar: `setprop debug.ha.dame leather_cap=1,leather_vest=1,apple=2`.
+
+### Comida y agua (1 oct 2026)
+
+- **Beber con la mano**: con las manos vacías, mantener sobre un lago/río da un trago
+  (+25 de sed, `cubo.rs::TRAGO`). Antes el agua exigía el cubo (3 lingotes de hierro).
+- **Frutales** (`frutales.rs`): un tercio de los árboles (`id % 3 == 0`, la regla que ya daba
+  la manzana suelta) NO se talan con la mano: se sacuden, dan 2 manzanas y rebrotan a los 10
+  min. Con hacha se talan como siempre.
+- Cadena completa que ya existía: huerta (semillas de plantas y de gallinas) → trigo →
+  pan/pastel (recetas), carne de la granja, leche con cubo, huevos.
+
+### RESUELTO (30 sep 2026) — "los animales corren para todo lado, como por dos de velocidad"
+
+Eran dos cosas en `fauna.rs`, no una:
+
+- **Metabolismo de minuto**: el herbívoro ganaba 0,02 de hambre/s y 0,018 de sed/s
+  y perdía 0,02 de energía/s, o sea que a los ~50 s volvía a tener hambre y sed y
+  se pasaba la vida yendo a comer y a beber. Ahora todo va × `METABOLISMO` (0,25):
+  un ciclo de ~3-4 minutos. Un día del juego son 60 min (`sky2d::DAY_SECS`).
+- **Velocidad**: `VEL` 2,6 m/s de paseo y ×1,9 corriendo = 4,9, **más que el
+  jugador a pie (4,0)**. Ahora `VEL` = 1,7 (corriendo ~3,2, con prisa de granja
+  ~3,2). Guarda de compilación: `VEL * 1.9 < 4.0 && METABOLISMO <= 0.3`.
+
+Tiempos revisados de paso (no tocados): día 3600 s, madurar cultivo 0,8 día,
+cría de granja 30 s de celo / 5 min de descanso / 20 min de crecimiento,
+hambre del jugador 14 min a vacío y sed 18 min (constantes compartidas con el
+servidor TS: no se tocan sin cambiar los dos), NPC a 2,2 m/s, jugador 4,0.
+
+### EN CURSO (30 sep 2026) — Redmi parado en el pasto: 23-28 fps, y el 40 % del frame es `tick_sim`
+
+Primera medición del celu con número y sin tocar el APK de producción. Método:
+`scripts/celu-fps.py` no sirve (SurfaceFlinger no registra los frames del
+SurfaceView de Bevy), así que el APK trae un **medidor opt-in**:
+`adb shell setprop debug.ha.perflog 1` registra `ha-fps` (fps, p50/p95/p99/máx y
+frames >33/>50 ms cada 5 s), la sonda de etapas y la ablación. Sin la propiedad no
+se registra NADA. **Apagar con `setprop debug.ha.X '""'`** — un `0` cuenta como
+prendido (`flags::var` sólo ignora el valor vacío).
+
+```text
+cap 30:  fps=28  p50=34 ms  p99=90 ms  (hitches de 90 ms cada pocos segundos)
+cap 60:  fps=17.8 p50=55 ms              (el costo natural es ~50 ms por cuadro)
+ha-stages: fixed=12-15  update=7  post=4  last=5(sleep del tope)  resto=2 (ms/frame)
+ha-sys:    fx_tick_sim=11.8-15.0   tick_fauna=0.7   stream_tile_chunks=0.4
+```
+
+- **No es la luz ni el fill-rate**: `HA_NO_LIGHTS` y `HA_RES=960x432` dan el
+  MISMO 42,6 ms (el cap + el vsync de 90 Hz los emparejan).
+- **Culpable: `sim::tick_sim`**, aun sin tocar la pantalla. `step_topdown_movement_full`
+  evalúa la cápsula contra el terreno en cada tick (TICK_RATE 20), y cada
+  `topdown_tile` sin caché cuesta ~55 µs en la compu (x5-8 en el Redmi).
+- **Arreglos aplicados (1.0.403, sin verificar en el celu todavía)**: (1) quieto y sin
+  velocidad residual no se consulta el mundo (`topdown.rs`, `quieto`) y `encimado`
+  sólo se calcula si hay intención de moverse (`sim.rs`); (2) **memoria por celda de
+  `topdown_tile`** (2048 ranuras por hilo; clave = cuerpo, celda, época de semilla y
+  generación de zonas; en modo grueso no se memoriza), con test de equivalencia.
+  Las sondas `ob_*` de `obstaculos.rs` quedan para medir caminando.
+- Pendiente de la pasada de rendimiento pedida: caminar, ciudad, vuelo Ki, noche,
+  mochila abierta, cada uno con `ha-fps`/`ha-sys`.
 
 ### RESUELTO (29 sep 2026) — "bomba de lag, drena batería, se cuelga el celu"
 
@@ -7141,6 +7397,38 @@ marco rompió la Luna por no ver que la cámara asumía el marco estático.
 ---
 
 ## §12 Troubleshooting
+
+- **Cubitos marrones en vereda/pasto y fachadas "una casa sobre otra" (30 sep 2026).**
+  - **Cubitos**: eran (a) vetas de mena sembradas DENTRO del casco (`deposit_at` no
+    miraba `civil_at` / `building_cell` / `buildable_ground`), y (b) `world2d.rs` usaba
+    `tile_has_art` (sólo true para poses/anims) para decidir si una veta tenía sprite,
+    así que caía al `vetear` de pepitas planas aun teniendo `decor/ore_*`. Ahora
+    `deposit_at` (shared, vale para TODOS los cuerpos) devuelve `None` en suelo civil,
+    y el cliente usa `art.get(key)`. Test: `ninguna_veta_asoma_en_la_ciudad`.
+  - **Cuadraditos rojos en el pasto**: el forraje de la fauna (`FoodDot`) salía de
+    `free_spot` (cualquier celda) y se dibujaba como quad plano. Ahora `fauna::forage_spot`
+    sólo elige suelo natural y dibuja `prop/hongos_rojo`.
+  - **Fachada apilada con aspecto de dos casas**: `spawn_fachada_apilada` (ciudad) y
+    `edificios.rs` (obra del jugador) elegían la variante de pieza por módulo también en
+    los pisos altos y la azotea. Ahora sólo la planta baja varía por módulo; pisos y
+    azotea son uniformes en todo el edificio.
+
+- **Casas con el interior a la vista, props sueltos y árboles sobre la vereda (30 sep 2026).**
+  - **Interior visible desde afuera**: las fachadas de un solo sprite tienen márgenes
+    transparentes (el recorte del pack es de celdas enteras, no del bbox opaco), y por
+    ahí se veían paredes y pisos. `building::stream_roofs` ahora SIEMPRE apoya una
+    azotea de respaldo (`spawn_azotea_de_respaldo`, gris hormigón, banda de fachada
+    menos un `HAIR`) bajo el paño; la fachada va apoyada en el FRENTE de la huella.
+    El kit apilado (`spawn_fachada_apilada`) también respalda si queda corto.
+  - **Puerta dibujada != celda `Door`**: el paño se corre hasta ±1,5 tiles para que el
+    batiente dibujado (`puerta_en_sprite`) caiga sobre `city::puerta_del_frente`.
+  - **Fuentes, estatuas, arcos de seto y macetas tiradas por el pasto**: salían de la
+    tabla PARQUE en `nature_decor_at` para todo el casco. Ahora `jardin_del_pueblo`
+    sólo deja mobiliario de plaza dentro de un lote `lot/plaza`, y nunca macetas.
+  - **Árboles sobre vereda/calzada**: `surface_decor_at` mira una copa de 5×10 celdas
+    (`civil_at`) antes de sembrar un árbol.
+  - Pendiente: recortar los sprites al bbox opaco en el importador para no necesitar
+    la losa de respaldo (hoy se ve como una terraza gris alrededor de la casa).
 
 - **Segunda ronda de "todo roto" en el celu (29 sep 2026) — qué era cada cosa.**
   - **Ítems sobre el borde de madera del inventario**: los marcos del kit (9-slice)
@@ -7461,9 +7749,12 @@ volaba en cámara lenta). Estos dos últimos están commiteados pero NO en el AP
   la tecla **E**, con el jugador a ≤ 3,2 m. Vale para las tres clases de puerta
   (`DoorArt`, `WallDoor`, `PuertaDeFachada`, todas `#[require(Abrible)]`), y
   **la puerta queda como la dejaste** — ya no se cierra sola (pedido del
-  usuario). Todavía NO bloquea el paso cerrada: la celda `Door` sigue siendo
-  transitable en la sim (`ha-shared`), cambiar eso es tocar la sim determinista.
-  `HA_BARRIOTEST` abre las puertas antes de cada retrato.
+  usuario). **Cerrada FRENA al jugador** (30 sep 2026): el estado `open`
+  vive en el cliente, así que `puertas::PuertasQueFrenan` (SystemParam) se
+  consulta desde `wall_hit` en `sim.rs`, por metros, sin tocar la sim compartida.
+  Los NPCs de la sim las cruzan igual. `HA_BARRIOTEST` mide el paso
+  (`ha-puerta: CERRADA … FRENA` / `ABIERTA … PASA`) y abre las puertas antes de
+  cada retrato.
 - **E6c · CONTINUIDAD, NIEVE, VUELO Y MOCHILA** — ✅ (28 sep 2026, pedidos del
   usuario en la misma sesión):
   1. **La cascada es parte del acantilado**: al costado del salto el borde que
@@ -7742,13 +8033,13 @@ todavía no está medido.
 |---|---|---|
 | S1 | Persistencia sana (un solo camino de guardado, `.adn` huérfanos, `Religion`, `home_x/z`, poda de `family_rep`) | ✅ |
 | S2 | Higiene de gameplay (salud y alcance del golpe, cooldowns, testigos, cierre del menú por distancia, zonas de stick) | ✅ |
-| S3 | Presentación (presupuesto de burbujas, nombre + apellido, **poses direccionales de NPC**) | ◐ falta `dir4(heading)` en `spawn_npc` |
+| S3 | Presentación (presupuesto de burbujas, nombre + apellido, **poses direccionales de NPC**) | ✅ `society.rs` usa `fauna::dir4` |
 | S4 | Censo, `center` fijo, siembra, `body_rep` | ✅ |
-| S5 | **Rutina diaria + necesidades + luces del pueblo al atardecer** | ☐ |
-| S6 | Tick abstracto de colonia, roles por escasez, obras, comercio real | ◐ falta obras (`Builder` colocando estructura real), humor de colonia, migración |
-| S7 | Refactor `persistent_agents.rs` (fauna + residentes + NPCs comparten patrón) | ☐ |
-| S8 | Linaje: parejas, `crossover`, etapas, `traits`, hijos NPC×NPC | ☐ |
-| S9 | Hijos del jugador, herencia, cultos múltiples, migración | ☐ |
+| S5 | **Rutina diaria + necesidades + luces del pueblo al atardecer** | ✅ rutina vía `sims` + `luces_de_casas` |
+| S6 | Tick abstracto de colonia, roles por escasez, obras, comercio real | ✅ obras (`Builder`), humor de colonia, comercio con reputación (`TRADE_REP_GAIN`); la migración entre pueblos vive sólo en `civ/guerra.rs::migrar` (sim Rust-only) |
+| S7 | Refactor `persistent_agents.rs` (fauna + residentes + NPCs comparten patrón) | ✅ `cargar_json`/`guardar_json` atómicos (`.tmp` + rename), usados por fauna, vivario, ecología y sociedad |
+| S8 | Linaje: parejas, `crossover`, etapas, `traits`, hijos NPC×NPC | ✅ `ha_shared::linaje` + `parejas_del_pueblo` + nacimientos (`Personalidad::cruzar`, `Vida::hija_de_pareja`); niño no trabaja, anciano más lento, escala por edad |
+| S9 | Hijos del jugador, herencia, cultos múltiples, migración | ✅ el jugador puede ser pareja (SER PAREJA, rep ≥ 0,3) y tener hijos; la **casa se hereda** (`repartir_herencias`: pareja, si no hijo adulto, sólo si no tiene casa); cultos múltiples vía `credos`. La migración entre pueblos es de la sim `civ/guerra.rs::migrar` y se refleja en el mundo cuando el pueblo destino se materializa — no hay NPC encarnado que cruce el mapa a pie |
 
 ### Construcción — el refugio propio (plan activo, 1 ago 2026)
 
@@ -7788,8 +8079,8 @@ el hospital, el aeropuerto) para que el pueblo se juegue y no sólo se mire. Ya
 tiene debajo lo que necesitaba: locales con interior, mobiliario que se coloca
 donde corresponde y puertas que se abren.
 
-⚠ **Falta el pixel.** Las tres claves nuevas (`ceiling/madera`, `roof/teja`,
-`roof/chapa`) y las poses de rumbo de los muebles (`sur`/`oeste`/`norte`/`este`)
+✅ (2 oct 2026) `ceiling/madera`, `roof/teja` y `roof/chapa` YA tienen arte (celdas 17/21/22 de
+`construccion.png`); esta nota estaba vieja. Siguen sin dibujo propio las poses de rumbo de los muebles (`sur`/`oeste`/`norte`/`este`)
 existen como slots vacíos: hasta que se les asigne arte en HA Studio, el techo es
 un cuadrado de color y los muebles no cambian de dibujo al girar (sí de huella).
 Es el flujo de siempre (§8, regla 7): el código crea el slot, el pixel lo ponés
@@ -7915,3 +8206,171 @@ Sistemas de la versión combate/OASIS que siguen en el repo por reuso futuro
 (fauna/peligro): clases scout/warrior/mage, habilidades, oleadas survival, AI
 hostiles (`packages/shared/src/sim/`), schema Colyseus. No son parte del concepto
 actual pero no se borran.
+
+---
+
+## §15 Idioma y multijugador (1 oct 2026)
+
+### Idioma: español e inglés (`ha-game/src/i18n.rs`)
+
+* AJUSTES → **IDIOMA** (menú principal: botón entre PANTALLA COMPLETA y la versión; en
+  juego: fila "Idioma"). Se guarda en `idioma.cfg` (`HA_IDIOMA_FILE` lo mueve).
+* **El español sigue siendo la fuente de verdad.** No se reescribió cada sitio que arma
+  un texto: `traducir_textos` (PostUpdate) mira los `Text`/`Text2d` que cambian y, en
+  inglés, los pasa por `FRASES` (exacto → por tramos ` · ` / ` | ` / saltos de línea →
+  reemplazo de frases ≥5 letras). El original queda en `TextoEs` para volver al español
+  sin reconstruir la UI. Lo que no está en `FRASES` sigue en castellano: nunca roto.
+* **Agregar un texto = una línea en `FRASES`.** Nombres de ítems/máquinas ya están.
+  Los textos con números (`página 2 de 5`, `día 3`, `hace 4 días`) tienen plantillas
+  en `traducir`.
+* La fuente tiene que dibujar el inglés también: el test
+  `la_fuente_dibuja_todo_el_texto_de_la_ui` revisa `i18n.rs`. Sin flechas `→`.
+* Falta: reglas para frases dinámicas largas de la civilización (`civilizacion.rs`) y los
+  diálogos de NPC (`society.rs`) — quedan en español hasta sumarlas a `FRASES`.
+
+### Multijugador LAN y online (`red.rs`, `multijugador.rs`, `server/src/relay.ts`)
+
+* **Diseño: cada cliente corre su mundo determinista con la MISMA semilla; la red sólo
+  lleva lo que la semilla no deduce** — quién está, dónde, hacia dónde mira, en qué
+  cuerpo celeste, y el chat. No hay sim compartida que bifurcar (regla 3).
+* Protocolo: JSON por línea sobre TCP, puerto **2568** (`red::PUERTO`). Mensajes
+  `hola/id/ent/est/chat/chau`. El hub asigna ids, guarda el último `est` de cada uno
+  para el que llega tarde, limpia nombres/chat y corta líneas >2 KB. No simula nada.
+* **LAN**: en el juego, MENÚ → MULTIJUGADOR → ANFITRIÓN LAN levanta un `Hub` dentro del
+  propio juego y avisa por UDP broadcast (puerto 2569) cada 2 s. Los demás lo ven en
+  menú principal → MULTIJUGADOR (riel izquierdo) → UNIRSE: se conecta, toma la semilla
+  de la sala, abre (o crea) el mundo con ESA semilla y entra. El panel en juego muestra
+  la IP:puerto por si el broadcast no pasa.
+* **Online**: `server/src/relay.ts` es el mismo hub en Node (`RELAY_PORT`, 2568), siempre
+  prendido junto a Colyseus. El cliente lo ve como "SERVIDOR ONLINE" si hay dirección:
+  `HA_SERVIDOR=host[:puerto]` (prop `debug.ha.servidor` en Android), el host horneado al
+  compilar (`HA_SERVER_HOST`) o `servidor.cfg`. Sala vacía: el primero que entra pone la
+  semilla; con `semilla 0` el relay sortea una.
+* En pantalla: los demás jugadores son sprites `npc/char_N` (N sale del hash del nombre),
+  suavizados a 12/s, con etiqueta de nombre; se ocultan si están en otro cuerpo
+  celeste. Chat por frases rápidas (HOLA/VENÍ/AYUDA/GRACIAS); burbuja con `say_from`.
+* **Honestidad de alcance (v1):** presencia + chat. NO hay edición de mundo compartida,
+  combate PvP ni NPC/fauna sincronizados — cada cliente simula los suyos, así que dos
+  jugadores ven animales distintos. Pasar el mundo a autoritativo (servidor Colyseus
+  con la sim de `ha-shared` o el host como árbitro) es la siguiente fase.
+* Pruebas: `red::tests` (hub real por loopback), `multijugador::tests`, y el relay de
+  Node con `npx tsx` (ver el smoke del 1 oct). En el celu: pendiente de que el usuario
+  lo conecte.
+
+---
+
+## §16 Gameplay: qué hacer en el mundo (1 oct 2026)
+
+**Pilares (del usuario):** el **OASIS** de Ready Player One (universo compartido, avatares,
+viaje entre mundos, llaves/logros/ranking) + **Project Zomboid** (supervivencia profunda:
+escasez, heridas, amenazas nocturnas, fortificar la base, habilidades por uso, saqueo).
+Investigación de diseño (sandbox/survival): el bucle que engancha es *recolectar → fabricar →
+herramienta mejor → recolectar más profundo*, con metas visibles que enseñan el circuito,
+peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los busque.
+
+**Hecho**
+* `metas.rs`: cadena de 13 metas (madera → pico → piedra → antorcha → cuero → ropa → hierro →
+  trigo → pan → pareja → espacio → Luna), una activa y siempre visible arriba al centro, con
+  barra, premio en ítems y rango (Novato/Explorador/Pionero/Leyenda). Se guarda por partida
+  (`metas.json`) y en multijugador se anuncia a la sala.
+
+* `npc_menu.rs` ENCARGO: el aldeano pide un ítem (sale de su uid), entregarlo da fama de su
+  familia (+0,15) y premio (manzanas o gema azul); después descansa 4 min.
+* `infectados.rs`: de noche, en la superficie de la Tierra, salen infectados (≤2 + día, tope 8,
+  +2 por jugador extra en la sala). Lentos (2,1–2,6 m/s vs ~4,5 del jugador), muerden 7 de daño
+  cada 1,2 s (reducido por armadura), los frenan paredes/cercas/puertas cerradas (mismo
+  `Obstaculos` que todo), se queman de día. Un toque a ≤2,8 m es un golpe con el daño de lo
+  que tengas en la mano (`fauna::dano_de`). Sueltan comida/cuero/huesos; `Bajas` cuenta.
+* `habilidades.rs`: Tala, Minería, Caza y Huerta (nivel 0–10, 4·n² XP) suben con lo que entra
+  a la mochila; cada nivel da +4 % de unidad extra al juntar. Se guarda por partida.
+
+* `estados.rs`: heridas. Un golpe ≥5 de vida abre sangrado (35 %): −0,6 vida/s durante 20 s sin
+  matar; con lana en la mochila te vendás a los 3 s y gastás una. Cartel de una línea, sin botón.
+* **Barricadas = construcción existente**: paredes, ventanas y puertas CERRADAS frenan a los
+  infectados porque comparten `Obstaculos`. (Pendiente fino: que golpeen y rompan puertas.)
+* **Saqueo** ya existía: los muebles abiertos de las casas (`amueblado.rs`) dan botín.
+* **Ranking OASIS**: `Msg::Est` lleva `pts` (metas) y `baj` (infectados abatidos); el panel
+  MULTIJUGADOR ordena a la sala por puntos y muestra el total de bajas de todos (meta de grupo).
+
+* **Ropa del creador en el mundo** (`import-ropa.py`): 43 prendas (`ropa_01..33`, gorras, botas)
+  con ícono del pack (Clothing Store de Interiors), en `ha-assets/src/ropa_items.rs`. Se
+  encuentran en roperos (70 %) y cómodas (20 %) y en cadáveres (35 %), se visten con `equipo.rs`
+  y la prenda `ropa_NN` se ve en el personaje (es el estilo NN del creador).
+* **Cadáveres** (`infectados.rs` + `chests.rs`): el infectado muerto deja un cuerpo con SU
+  inventario (`botin_de`: comida, material, ropa, rara vez gemas); se abre con el panel del
+  cofre (título CADÁVER), se descompone a los 7 min y no se guarda con la partida.
+* **Hordas y ruido**: cada 3ª noche (día 2, 5, 8…) el cupo se duplica y salen 2,5× más seguido;
+  correr o volar los atrae desde 1,6× más lejos, quedarse quieto desde 0,6×.
+* **Frío** (`estados.rs`): de noche a la intemperie en la Tierra, sin abrigo (armadura <15 %) ni
+  antorcha/farol, baja la vida despacio (−0,12/s, piso 25). Cartel FRÍO.
+* **Llaves del OASIS** (`metas.rs`): COBRE (10 infectados), JADE (nivel 3 en un oficio) y
+  CRISTAL (40 infectados); premio de gemas/lingotes y anuncio a la sala.
+* Inglés: agregados fragmentos de civilización y diálogos de pueblo a `i18n.rs`.
+
+* **Fatiga** (`estados.rs`): 20 min despierto = agotado; quedarte quieto 4 s empieza a descansar
+  (2,5 min para recuperarte). Cansado (≥80) gasta más hambre; agotado pierde vida despacio (piso 25).
+* **Paredes de madera que ceden** (`infectados::romper_paredes`): tras 6 s empujando, un infectado
+  le saca 1 de 3 a la pared/ventana/baranda de madera más cercana; piedra, fachadas y puertas no
+  ceden por acá (las puertas se abren). Defender con piedra vale la pena.
+* **Alijos** (`alijos.rs`): un tesoro escondido por sector de 200 m (determinista por semilla), con
+  cofre de botín rico y 2-3 guardias infectados que no se queman de día; brújula `ALIJO a 120 m · NE`
+  y metas "Abrí un alijo" / "Cinco alijos". Es la versión caminable de los dungeons del OASIS.
+* **Economía** (`npc_menu.rs`): VENDER cambia comida/material/cuero por lingotes de oro
+  (`unidades_por_oro`), COMPRAR gasta 2 lingotes en una prenda al azar. Cierra el bucle
+  saquear → vender → vestirse.
+* Textos con acentos y signos de apertura corregidos en toda la UI (regla 6).
+
+**Falta (honesto) — todo lo que sigue necesita ver la pantalla o el hardware, por eso no se hizo a ciegas**
+* Componer el cuerpo de los aldeanos (§13 Perf): la hoja compuesta (28×3 celdas) no tiene el
+  mismo layout que `npc/char_N`, y el sistema de poses de `NpcPose` lee rects de esa hoja; hay
+  que verlo en pantalla antes de cambiarlo.
+* Panel 9-slice en el HUD, interior de C8, ciudad generada con el kit, tiendas/carteles, gym
+  de fauna con agua+amenaza (reentrenar `FAUNA.adn`), origen flotante: cada uno toca render o
+  entrenamiento largo y se valida con ojo.
+* **Nada de esto está probado en el celu**: por orden del usuario (2 oct) se prueba AL FINAL.
+
+### Arte con IA (idea, 1 oct 2026 — en cola)
+Entrenar en la laptop no es viable (Intel HD 520; la 940M está apagada y tiene 2 GB). Camino:
+LoRA de pixel art sobre un modelo base, entrenado en GPU alquilada (~1–3 USD) con recortes del
+pack + descripciones; generar en CPU/iGPU; pasar por el corsé `scripts/lib/pixel.py` (rejilla y
+paleta del pack); revisar a ojo. Sirve para props/muebles/fachadas sueltas, NO para autotiles.
+Antes de entrenar: leer la licencia de LimeZu. Dataset: `python3 scripts/armar-dataset-lora.py` (salida a `~/ia-arte/`, fuera del repo). Licencia leída (LICENSE.txt de Interiors): se puede editar y usar en proyectos propios con crédito a LimeZu; NO redistribuir el pack ni versiones editadas → el dataset y el LoRA son PRIVADOS, no se publican.
+
+---
+
+## §17 Reglas de un universo simulado con vida digital (2 oct 2026)
+
+Fuentes: Taylor et al., *Requirements for Open-Ended Evolution* (arXiv 1507.07403); Bedau
+(actividad evolutiva); Maturana y Varela (autopoiesis); Friston (inferencia activa);
+Park et al., *Generative Agents* (2304.03442); Altera, *Project Sid*; Cronin (teoría del
+ensamblaje, discutida); Tierra/Avida/Lenia/Polyworld. Lo de abajo es diseño propio, no
+resultados: no hay evidencia de conciencia en estos sistemas.
+
+1. **Contabilidad conservada**: toda creación sale de una fuente y toda pérdida va a un
+   sumidero. Los botines actuales salen de tablas, no de un presupuesto → inflación posible.
+2. **Metabolismo con muerte real**: variables esenciales que hay que mantener (hambre, sed,
+   frío, fatiga). Sin riesgo de morir no hay vida.
+3. **Evolución abierta**: reproducción robusta, medio de diversidad ilimitada, posibilidad de
+   más complejidad, caminos de mutación viables y un impulso continuo (coevolución).
+4. **Medir la novedad**: actividad evolutiva con modelo nulo y varias semillas (regla 3.20
+   del dron; checklist de §2). El genoma de fauna que «aportaba +20» y daba −108 al confirmar
+   es el ejemplo de falso positivo.
+5. **Causalidad local, determinismo y rastro causal** de cada evento.
+6. **Cognición por niveles con presupuesto**: instinto (IAFZ) para casi todos, hábito (Sims)
+   para algunos, deliberación para pocos héroes.
+7. **Escasez + interdependencia + memoria social** como condición de oficios, comercio y leyes;
+   las instituciones tienen costo porque aparecen tramposos.
+8. **Transiciones de individualidad** (familia → pueblo → estado → culto).
+9. **Reciclaje y olvido**: la muerte devuelve materia; la cultura se pierde si no se enseña.
+10. **Complejidad = profundidad de ensamblaje**: medir la profundidad del árbol de recetas y
+    exigir memoria cultural en cada paso.
+11. **Instrumentos y ética**: vista de dios, crónica; política escrita sobre qué hacer si una
+    entidad con modelo propio del mundo parece sufrir.
+12. **Resolución a demanda**: lo no observado se simula grueso conservando invariantes
+    (`grueso::activo`), no trayectorias.
+
+**Conexión con el dron**: «el residuo nace en cero» (bitácora 7.54) = prior homeostático: la
+vida es una base programada más una corrección aprendida; por eso la fauna arranca en la vara.
+
+**Cola derivada** (sin frenar lo en curso): test de conservación de flujos (1), contador de
+actividad evolutiva con modelo nulo (4), presupuesto cognitivo explícito (6), rastro causal (5).

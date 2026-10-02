@@ -25,9 +25,15 @@ use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 use crate::targeting::LookTarget;
 use crate::world2d::{active_surface_body, ActivePlanet, TileWorld};
 
+/// **La mano también cuenta**: con las manos vacías se bebe de un lago o un río. Sin esto el
+/// agua dependía de tres lingotes de hierro (el cubo) y en los primeros minutos no había forma
+/// de calmar la sed (reporte del 1 oct 2026: *"no hay forma de conseguir alimento"*).
 pub fn es_cubo(item: &str) -> bool {
-    matches!(item, "bucket" | "water_bucket" | "lava_bucket")
+    matches!(item, "bucket" | "water_bucket" | "lava_bucket" | "hand")
 }
+
+/// Cuánta sed calma un trago a mano (el cubo de agua da 40; un trago es menos).
+pub const TRAGO: f32 = 25.0;
 
 fn es_liquido(t: Tile) -> bool {
     matches!(t, Tile::Water | Tile::WaterDeep)
@@ -36,7 +42,7 @@ fn es_liquido(t: Tile) -> bool {
 /// ¿Tiene sentido usar este cubo sobre esta celda?
 pub fn celda_valida(item: &str, t: Tile) -> bool {
     match item {
-        "bucket" => es_liquido(t),
+        "bucket" | "hand" => es_liquido(t),
         "water_bucket" | "lava_bucket" => t.buildable_ground(),
         _ => false,
     }
@@ -46,6 +52,7 @@ pub fn celda_valida(item: &str, t: Tile) -> bool {
 pub fn ayuda(item: &str) -> Option<&'static str> {
     Some(match item {
         "bucket" => "Mantené para llenar el cubo",
+        "hand" => "Mantené para beber",
         "water_bucket" => "Mantené para volcar el agua",
         "lava_bucket" => "Mantené para volcar la lava",
         _ => return None,
@@ -86,6 +93,7 @@ fn usar_cubo(
     mut inv: ResMut<PlayerInventory>,
     mut inv_ui: ResMut<InventoryUiState>,
     mut persist: ResMut<InventoryPersistState>,
+    mut player: Query<&mut crate::sim::SimState, With<crate::sim::Player>>,
 ) {
     if !hold.completed || !hold.usar_cubo {
         return;
@@ -95,12 +103,26 @@ fn usar_cubo(
     let Some((tx, tz, _)) = target.place_cell else { return };
     let (tx, tz) = (tx as i64, tz as i64);
     let item = equipped.item_id.clone();
-    if inv.qty(&item) == 0 {
-        return;
-    }
     let body = active_surface_body(&ctx, &planet);
     let t = tiles.tile_at(body, tx, tz);
     let (x, z) = (tx as f32 + 0.5, tz as f32 + 0.5);
+    if item == "hand" {
+        if !es_liquido(t) {
+            return;
+        }
+        if liquido_de(body) != Some("water_bucket") {
+            crate::granja::globo(&mut commands, x, z, "Esto no se puede beber".into());
+            return;
+        }
+        if let Ok(mut sim) = player.get_single_mut() {
+            sim.survival.thirst = (sim.survival.thirst + TRAGO).min(ha_shared::THIRST_MAX);
+        }
+        crate::granja::globo(&mut commands, x, z, "Bebiste agua".into());
+        return;
+    }
+    if inv.qty(&item) == 0 {
+        return;
+    }
     let (sale, mensaje): (&str, String) = match item.as_str() {
         "bucket" if es_liquido(t) => {
             let Some(lleno) = liquido_de(body) else {
@@ -145,13 +167,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn con_la_mano_vacia_se_bebe_del_agua_y_de_nada_mas() {
+        assert!(es_cubo("hand"));
+        assert!(celda_valida("hand", Tile::Water));
+        assert!(celda_valida("hand", Tile::WaterDeep));
+        assert!(!celda_valida("hand", Tile::Grass));
+        assert_eq!(ayuda("hand"), Some("Mantené para beber"));
+    }
+
+    #[test]
     fn el_cubo_sabe_que_hacer_en_cada_celda() {
         assert!(celda_valida("bucket", Tile::Water));
         assert!(celda_valida("bucket", Tile::WaterDeep));
         assert!(!celda_valida("bucket", Tile::Grass));
         assert!(celda_valida("water_bucket", Tile::Grass));
         assert!(!celda_valida("water_bucket", Tile::Water));
-        assert!(!celda_valida("hand", Tile::Water));
     }
 
     #[test]

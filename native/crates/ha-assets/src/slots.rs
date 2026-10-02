@@ -138,6 +138,10 @@ const ITEM_IDS: &[(&str, &str)] = &[
     ("jetpack", "Mochila cohete"),
     ("lantern", "Farol"),
     ("leather", "Cuero"),
+    ("leather_cap", "Gorro de cuero"),
+    ("leather_vest", "Chaleco de cuero"),
+    ("wool_coat", "Abrigo de lana"),
+    ("leather_boots", "Botas de cuero"),
     ("meat", "Carne"),
     ("wheat_seeds", "Semillas de trigo"),
     ("wheat", "Trigo"),
@@ -10364,7 +10368,7 @@ pub fn game_slots() -> Vec<SlotDef> {
         out.push(s(k, l, "backgrounds"));
     }
     // Ítems (íconos + sprite de máquina).
-    for &(id, label) in ITEM_IDS {
+    for &(id, label) in ITEM_IDS.iter().chain(crate::ropa_items::ROPA_IDS.iter()) {
         out.push(SlotDef {
             key: leak(format!("items/{id}")),
             label,

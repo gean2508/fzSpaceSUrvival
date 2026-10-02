@@ -284,7 +284,7 @@ fn sync_telemetry_panel(
             ))
             .with_children(|b| {
                 b.spawn((
-                    Text::new("RETURN TO PLAYER"),
+                    Text::new("VOLVER AL JUGADOR"),
                     TextFont {
                         font_size: 14.0,
                         ..default()

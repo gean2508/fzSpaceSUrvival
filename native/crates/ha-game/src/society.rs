@@ -24,6 +24,8 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use ha_shared::credos::{Credos, CREDO_KI};
+use ha_shared::hogares::{self, Huella};
+use ha_shared::linaje::{self, Etapa, Parentesco};
 use ha_shared::sims::{self, Actividad, Clase, Motivo, Vida};
 use ha_shared::sociedad::{self, Sitio, Vecino};
 use ha_shared::CelestialBody;
@@ -52,6 +54,8 @@ fn tier_population(tier: ha_shared::geography::SettlementTier) -> u32 {
     }
 }
 const NPC_VEL: f32 = 2.2;
+/// Radio del cuerpo de un vecino al chocar con el mundo (el del jugador mide 0,34).
+const NPC_RADIO: f32 = 0.3;
 const NPC_TURN: f32 = 2.0;
 const RENDER_R: f32 = 80.0; // render/sim sólo cerca (como los residentes)
 /// STREAMING de gente. Los 48 cerebros de `MAX_NPCS` son un presupuesto GLOBAL, y antes se
@@ -110,6 +114,62 @@ pub(crate) const CONVERT_COOLDOWN: f32 = 60.0; // s de mundo entre intentos de C
 pub(crate) const CONVERT_MIN_REP: f32 = AGGRO_THRESHOLD;
 pub(crate) const TALK_RANGE: f32 = 6.0; // D6: el menú se cierra si te alejás más que esto
 
+/// **De noche, las casas con alguien despierto adentro tienen la luz encendida.** Una sola luz
+/// cálida en la puerta por casa; se apaga sola cuando todos se van o se duermen. Sólo las de
+/// alrededor del jugador: más lejos no se ven y no valen el costo.
+fn luces_de_casas(
+    time: Res<Time>,
+    day: Res<crate::sky2d::DayClock>,
+    mut commands: Commands,
+    npcs: Query<&Npc>,
+    player: Query<&Transform, With<Player>>,
+    luces: Query<(Entity, &LuzDeCasa)>,
+    mut acc: Local<f32>,
+) {
+    *acc += time.delta_secs();
+    if *acc < 1.0 {
+        return;
+    }
+    *acc = 0.0;
+    let Ok(pt) = player.get_single() else { return };
+    let (px, pz) = (pt.translation.x, -pt.translation.y);
+    let noche = matches!(day.phase_name(), "NOCHE" | "ATARDECER");
+    let mut deben: Vec<Huella> = Vec::new();
+    if noche {
+        for n in &npcs {
+            let Some(c) = n.vivienda.casa else { continue };
+            let dormido = n.vida.actividad() == Actividad::Dormir;
+            if !dormido && c.dentro(n.x, n.z) && !deben.contains(&c) && (c.puerta.0 as f32 - px).abs() < 60.0 && (c.puerta.1 as f32 - pz).abs() < 60.0 {
+                deben.push(c);
+            }
+        }
+    }
+    for (e, l) in &luces {
+        if !deben.iter().any(|c| c.min == l.min) {
+            commands.entity(e).despawn_recursive();
+        }
+    }
+    for c in deben {
+        if luces.iter().any(|(_, l)| l.min == c.min) {
+            continue;
+        }
+        let u = c.umbral();
+        let r = render_xy(u.0, u.1);
+        commands.spawn((
+            LuzDeCasa { min: c.min },
+            crate::light2d::Light2d {
+                color: Color::srgb(1.0, 0.82, 0.48),
+                radius: 3.6,
+                intensity: 0.9,
+                flicker: 0.08,
+                ..default()
+            },
+            Transform::from_xyz(r.x, r.y, sort_z(u.1)),
+            Visibility::default(),
+        ));
+    }
+}
+
 // --- S5/S6: economía de colonia (necesidades reales + roles por escasez) ---
 /// Cada cuánto tiempo de MUNDO corre el tick abstracto de colonia (LOD 2 del plan: la
 /// producción/consumo/roles avanzan aunque no estés parado en ese cuerpo — sólo el
@@ -143,21 +203,73 @@ fn workplace_of(home_x: f32, home_z: f32, uid: u64, family: u32) -> (f32, f32) {
     (home_x + a.cos() * WORK_DIST, home_z + a.sin() * WORK_DIST)
 }
 
+/// Los EDIFICIOS de una vida: la casa donde duerme, el puesto donde trabaja y el parque donde
+/// juega. Salen de la ciudad de verdad (`ha_shared::hogares`): con puerta, con pared, con calle.
+/// Un vecino sin casa (colono lunar, partida vieja sin migrar) cae a puntos sueltos.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Vivienda {
+    pub casa: Option<Huella>,
+    pub puesto: Option<Huella>,
+    pub parque: Option<(f32, f32)>,
+}
+
+impl Vivienda {
+    /// Los edificios propios (0, 1 o 2), en un arreglo fijo: se consulta cada tick.
+    fn huellas(&self) -> ([Huella; 2], usize) {
+        let vacia = Huella { min: (0, 0), w: 0, h: 0, puerta: (0, 0) };
+        let mut out = [vacia; 2];
+        let mut n = 0;
+        for h in [self.casa, self.puesto].into_iter().flatten() {
+            out[n] = h;
+            n += 1;
+        }
+        (out, n)
+    }
+}
+
+/// Lo que una ciudad ofrece para poblarla: casas, puestos y un parque, todo con puerta real.
+/// Se arma en un hilo aparte (`discover_settlements`): barrer lotes cuesta decenas de ms.
+#[derive(Clone, Default)]
+pub(crate) struct Barrio {
+    casas: Vec<Huella>,
+    puestos: Vec<Huella>,
+    parque: Option<(f32, f32)>,
+}
+
+fn barrio_de(body: CelestialBody, s: ha_shared::geography::Settlement, hogares_n: usize) -> Barrio {
+    let radio = s.radius.clamp(24, 160);
+    let edificios = hogares::edificios_alrededor(body, &s, radio, hogares_n, 4);
+    Barrio {
+        casas: edificios.iter().filter(|e| e.es_hogar()).map(|e| e.huella).collect(),
+        puestos: edificios.iter().filter(|e| e.es_puesto()).map(|e| e.huella).collect(),
+        parque: hogares::parque_cerca(body, &s, radio.min(60)),
+    }
+}
+
 /// Los lugares de una vida: casa, puesto, plaza, fuente (a un costado de la plaza) y santuario.
-fn sitio_de(home: (f32, f32), town: (f32, f32), uid: u64, family: u32) -> Sitio {
-    Sitio {
-        casa: home,
-        trabajo: workplace_of(home.0, home.1, uid, family),
-        plaza: town,
-        pozo: (town.0 - 4.0, town.1 + 3.0),
-        altar: shrine_of(town.0, town.1),
+fn sitio_de(home: (f32, f32), town: (f32, f32), uid: u64, family: u32, viv: &Vivienda) -> Sitio {
+    let plaza = town;
+    let pozo = (town.0 - 4.0, town.1 + 3.0);
+    let altar = shrine_of(town.0, town.1);
+    let parque = viv.parque.unwrap_or((town.0 + 3.0, town.1 + 4.0));
+    match viv.casa {
+        Some(c) => Sitio {
+            casa: c.adentro(uid),
+            casa_uso: 1.0,
+            trabajo: viv.puesto.map_or_else(|| workplace_of(c.escalon().0, c.escalon().1, uid, family), |p| p.escalon()),
+            plaza,
+            pozo,
+            altar,
+            parque,
+        },
+        None => Sitio { casa: home, casa_uso: 0.0, trabajo: workplace_of(home.0, home.1, uid, family), plaza, pozo, altar, parque },
     }
 }
 
 /// LOD LEJANO: sin cerebro, sin colisión y sin trato con vecinos, pero la misma cabeza — sigue
 /// eligiendo entre lo que el pueblo ofrece y camina en línea recta. Si te vas al mediodía y
 /// volvés de noche, están en sus casas con las barras que les tocaban. Devuelve la posición.
-fn avanzar_lejos(v: &mut Vida, pos: (f32, f32), sitio: &Sitio, fase: f32, comida: bool, dt: f32) -> (f32, f32) {
+fn avanzar_lejos(v: &mut Vida, pos: (f32, f32), sitio: &Sitio, viv: &Vivienda, fase: f32, comida: bool, dt: f32) -> (f32, f32) {
     v.tick(Clase::Aldeano, fase, dt, pos);
     if v.necesita_decidir(Clase::Aldeano, fase) {
         let mut ads = Vec::with_capacity(8);
@@ -166,6 +278,8 @@ fn avanzar_lejos(v: &mut Vida, pos: (f32, f32), sitio: &Sitio, fase: f32, comida
     }
     match v.destino() {
         Some((tx, tz, false)) => {
+            let (hs, nh) = viv.huellas();
+            let (tx, tz) = hogares::siguiente_punto(pos, (tx, tz), &hs[..nh]);
             let (dx, dz) = (tx - pos.0, tz - pos.1);
             let d = (dx * dx + dz * dz).sqrt().max(1e-3);
             let step = (NPC_VEL * 0.75 * dt).min(d);
@@ -209,6 +323,9 @@ pub(crate) struct Stock {
     pub(crate) food: f32,
     pub(crate) wood: f32,
     pub(crate) stone: f32,
+    /// Piezas que los constructores del pueblo llevan colocadas (mobiliario real del parque).
+    #[serde(default)]
+    pub(crate) obras: u16,
 }
 
 /// `0..1`: cuánta reserva de comida tiene la colonia relativa a su población — la
@@ -280,7 +397,11 @@ pub(crate) struct Npc {
     pub(crate) family: u32,
     pub(crate) uid: u64,
     energy: f32,
-    age: f32, // F6.3: edad (s de sim) → muerte por vejez = recambio generacional
+    pub(crate) age: f32, // edad (s de sim): define la etapa (niño / adulto / anciano), ver `ha_shared::linaje`
+    /// Uid de su pareja (0 = soltero) y de sus padres (0 = fundador: sembrado, no nacido aquí).
+    pub(crate) pareja: u64,
+    pub(crate) padre: u64,
+    pub(crate) madre: u64,
     // --- Religión + propósito (runtime; se reconstruye cerca del ídolo) ---
     pub(crate) faith: f32,      // 0..1 devoción hacia el fundador; sube cerca del ídolo
     pub(crate) converted: bool, // fiel: sigue/venera al ídolo (fundador)
@@ -304,6 +425,81 @@ pub(crate) struct Npc {
     pub(crate) vida: Vida,
     /// Segundos hasta poder avisar otra vez de que se topó con algo (evita rendirse al toque).
     bump: f32,
+    /// Dónde duerme, dónde trabaja y dónde juega: edificios con puerta de la ciudad.
+    pub(crate) vivienda: Vivienda,
+    /// Camino A* vigente (puntos de mundo, en orden) cuando un edificio ajeno le cortó el paso.
+    ruta: Vec<(f32, f32)>,
+    /// El destino del plan para el que se calculó `ruta`: si el plan cambia, la ruta se tira.
+    ruta_meta: (f32, f32),
+    /// Chocó y espera que el buscador le arme un camino (no camina mientras tanto).
+    pide_ruta: bool,
+    /// Ticks seguidos sin poder avanzar ni por búsqueda: pasado el tope, se lo saca del apuro.
+    atasco: u16,
+}
+
+/// El resultado de mirar a todos los vecinos de golpe (lo usa el driver `HA_ECOTEST`).
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct AuditoriaNpc {
+    pub total: usize,
+    pub con_casa: usize,
+    pub dentro_de_casa: usize,
+    pub con_ruta: usize,
+    pub atascados: usize,
+}
+
+/// Cuenta, entre los vecinos a menos de `radio` de `(px, pz)`, cuántos tienen casa, cuántos
+/// están adentro de ella, cuántos siguen una ruta A* y cuántos están trabados.
+pub(crate) fn auditar(world: &mut World, px: f32, pz: f32, radio: f32) -> AuditoriaNpc {
+    let mut a = AuditoriaNpc::default();
+    let mut q = world.query::<&Npc>();
+    for n in q.iter(world) {
+        if (n.x - px).powi(2) + (n.z - pz).powi(2) > radio * radio {
+            continue;
+        }
+        a.total += 1;
+        if let Some(c) = n.vivienda.casa {
+            a.con_casa += 1;
+            if c.contiene(n.x, n.z, 0.0) {
+                a.dentro_de_casa += 1;
+            }
+        }
+        if !n.ruta.is_empty() {
+            a.con_ruta += 1;
+        }
+        if n.atasco >= 30 {
+            a.atascados += 1;
+        }
+    }
+    a
+}
+
+/// Para el QA: le da madera de sobra al pueblo activo y nombra Constructor a un vecino.
+pub(crate) fn forzar_constructor(world: &mut World) {
+    let body = {
+        let ctx = world.resource::<WorldContextRuntime>();
+        let planet = world.resource::<ActivePlanet>();
+        active_surface_body(ctx, planet) as u8
+    };
+    let mut stock = world.resource::<Society>().stock(body);
+    stock.wood = 500.0;
+    world.resource_mut::<Society>().stock.insert(body, stock);
+    let mut q = world.query::<&mut Npc>();
+    if let Some(mut n) = q.iter_mut(world).next() {
+        n.role = Role::Builder;
+    }
+}
+
+/// Qué pose lleva puesta un vecino (caché para no rearmar el sprite cada tick).
+#[derive(Component, Default)]
+pub(crate) struct NpcPose {
+    pedida: String,
+    aplicada: String,
+}
+
+/// La luz encendida de una casa donde hay alguien despierto de noche.
+#[derive(Component)]
+pub(crate) struct LuzDeCasa {
+    min: (i64, i64),
 }
 
 /// Registro persistente de un NPC (posición/familia/edad); vive como dato en todos los
@@ -319,6 +515,12 @@ struct NpcRecord {
     energy: f32,
     #[serde(default)]
     age: f32,
+    #[serde(default)]
+    pareja: u64,
+    #[serde(default)]
+    padre: u64,
+    #[serde(default)]
+    madre: u64,
     #[serde(default)]
     faith: f32,
     #[serde(default)]
@@ -349,6 +551,10 @@ struct NpcRecord {
     /// se siembra de su uid al despertarlos.
     #[serde(default)]
     vida: Option<Vida>,
+    /// Su casa, su puesto y su parque (edificios reales). Los saves viejos no lo traen: se
+    /// les asigna al pisar su pueblo (`asignar_viviendas`).
+    #[serde(default)]
+    vivienda: Vivienda,
 }
 
 fn full_health() -> f32 {
@@ -416,6 +622,15 @@ pub(crate) struct Society {
     /// normal (p. ej. una muerte) y todavía no se volcó a disco. `save_society_periodic`
     /// es el ÚNICO camino de escritura; esto le pide un flush inmediato con `live` incluido.
     dirty: bool,
+    /// Muertes sin repartir: `(uid, pareja, vivienda)`. Las procesa `repartir_herencias`.
+    herencias: Vec<(u64, u64, Vivienda)>,
+    /// Casas, puestos y parque de cada asentamiento `(cuerpo, cx, cz)`, ya calculados.
+    barrios: HashMap<(u8, i64, i64), Barrio>,
+    /// Barrios que se están calculando en un hilo aparte.
+    barrios_en_curso: HashMap<(u8, i64, i64), bevy::tasks::Task<Barrio>>,
+    /// La búsqueda de camino en curso (una a la vez, por tramos): de quién es, el buscador,
+    /// desde dónde salió y el destino del plan.
+    busqueda: Option<(u64, ha_shared::ruta::Buscador, (f32, f32), (f32, f32))>,
 }
 
 /// Lo que pasó en la sociedad desde que abriste el juego.
@@ -428,6 +643,9 @@ pub(crate) struct SocStats {
     ayudas: u32,
     conversiones: u32,
     fundados: u32,
+    pub(crate) parejas: u32,
+    nacimientos: u32,
+    herencias: u32,
 }
 
 impl Default for Society {
@@ -436,6 +654,7 @@ impl Default for Society {
             family_rep: HashMap::new(),
             records: Vec::new(),
             free_ids: (NPC_ID_BASE..NPC_ID_BASE + MAX_NPCS as i32).rev().collect(),
+            herencias: Vec::new(),
             next_uid: 1,
             next_family: 1,
             loaded: false,
@@ -447,6 +666,9 @@ impl Default for Society {
             credos: Credos::default(),
             stats: SocStats::default(),
             dirty: false,
+            barrios: HashMap::new(),
+            barrios_en_curso: HashMap::new(),
+            busqueda: None,
         }
     }
 }
@@ -574,26 +796,26 @@ pub(crate) fn npc_line(
         // SU santuario, que es donde va a estar cuando lo busques.
         let v = [
             format!("Alabado sea {name}!"),
-            "El Profeta nos enseno, el resto es nuestro.".to_string(),
+            "El Profeta nos enseñó, el resto es nuestro.".to_string(),
             "Uno con el Ki.".to_string(),
             format!("Somos {name}."),
-            "Al mediodia rezamos en el santuario.".to_string(),
+            "Al mediodía rezamos en el santuario.".to_string(),
         ];
         return v[(variant as usize) % v.len()].clone();
     }
     if rep <= AGGRO_THRESHOLD {
-        let v = ["No te queremos aqui.", "Pagaras por lo que hiciste.", "Vete!"];
+        let v = ["No te queremos aquí.", "Pagarás por lo que hiciste.", "Vete!"];
         return v[(variant as usize) % v.len()].to_string();
     }
     if rep < -0.15 {
-        let v = ["No me fio de ti.", "Mantente lejos.", "Te estoy vigilando."];
+        let v = ["No me fío de ti.", "Mantente lejos.", "Te estoy vigilando."];
         return v[(variant as usize) % v.len()].to_string();
     }
     if founded && faith > 0.2 {
         let v = [
             format!("Que es {name}?"),
             "Ese forastero tiene algo...".to_string(),
-            "Siento el Ki en el.".to_string(),
+            "Siento el Ki en él.".to_string(),
         ];
         return v[(variant as usize) % v.len()].clone();
     }
@@ -605,6 +827,13 @@ pub(crate) fn npc_line(
         "Lindo dia.".to_string(),
     ];
     v[(variant as usize) % v.len()].clone()
+}
+
+impl Society {
+    /// Parejas formadas en el pueblo (lo lee `metas.rs`).
+    pub fn stats_parejas(&self) -> u32 {
+        self.stats.parejas as u32
+    }
 }
 
 pub struct SocietyPlugin;
@@ -627,9 +856,12 @@ impl Plugin for SocietyPlugin {
                     stream_npcs,
                     discover_settlements,
                     tick_society,
+                    parejas_del_pueblo,
                     tick_society_remote,
                     harm_events,
+                    repartir_herencias,
                     tick_colony_economy,
+                    constructor_obra,
                     save_society_periodic,
                 )
                     .chain()
@@ -638,7 +870,7 @@ impl Plugin for SocietyPlugin {
             .add_systems(Startup, (spawn_society_overlay, force_creative_debug))
             .add_systems(
                 Update,
-                (update_society_overlay, update_npc_sightings)
+                (update_society_overlay, update_npc_sightings, luces_de_casas)
                     .run_if(crate::game_phase::world_active),
             );
     }
@@ -655,17 +887,13 @@ fn society_json() -> PathBuf {
 }
 
 fn load_society() -> SocietySave {
-    match std::fs::read_to_string(society_json()) {
-        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-        Err(_) => SocietySave::default(),
-    }
+    crate::persistent_agents::cargar_json(&society_json()).unwrap_or_default()
 }
 
 /// Guarda TODO: registros de otros cuerpos + snapshot de los NPCs vivos del cuerpo actual
 /// + la memoria (reputación) + la religión (A3). Barato (≤ `MAX_NPCS`). Único camino de
 /// escritura (A1) — quien quiera persistir marca `soc.dirty` y espera este flush.
 fn save_society(soc: &Society, live: &[NpcRecord], religion: &Religion) {
-    let _ = std::fs::create_dir_all(society_dir());
     let mut npcs = soc.records.clone();
     npcs.extend_from_slice(live);
     // E6: podar del archivo la reputación de familias que ya no tienen ni un registro
@@ -687,9 +915,7 @@ fn save_society(soc: &Society, live: &[NpcRecord], religion: &Religion) {
         stock: soc.stock.iter().map(|(&b, &s)| (b, s)).collect(),
         credos: soc.credos.clone(),
     };
-    if let Ok(json) = serde_json::to_string(&save) {
-        let _ = std::fs::write(society_json(), json);
-    }
+    crate::persistent_agents::guardar_json(&society_json(), &save);
 }
 
 fn spawn_npc(
@@ -716,6 +942,9 @@ fn spawn_npc(
                 uid: rec.uid,
                 energy: rec.energy,
                 age: rec.age,
+                pareja: rec.pareja,
+                padre: rec.padre,
+                madre: rec.madre,
                 faith: rec.faith,
                 converted: rec.converted,
                 // B1: el hogar es la identidad del NPC, no su posición actual — sólo cae a
@@ -732,7 +961,13 @@ fn spawn_npc(
                 role: rec.role,
                 vida: rec.vida.unwrap_or_else(|| Vida::nueva(rec.uid)),
                 bump: 0.0,
+                vivienda: rec.vivienda,
+                ruta: Vec::new(),
+                ruta_meta: (0.0, 0.0),
+                pide_ruta: false,
+                atasco: 0,
             },
+            NpcPose::default(),
             sprite,
             Transform::from_xyz(r.x, r.y, sort_z(rec.z)),
         ));
@@ -822,7 +1057,7 @@ fn manage_society(
             && colony.state.colonists > 0
             && !already_seeded(&soc, nb, 0.0, 0.0)
         {
-            recs = seed_society(nb, colony.state.colonists, Some(&machines), 0.0, planet_temperament_disposition(CelestialBody::Moon), (0.0, 0.0), &mut soc);
+            recs = seed_society(nb, colony.state.colonists, Some(&machines), 0.0, planet_temperament_disposition(CelestialBody::Moon), (0.0, 0.0), None, &mut soc);
             soc.centers.push((nb, 0.0, 0.0));
         }
         // Los registros del cuerpo ya se sacaron de `soc.records` (arriba). Si se acaban los
@@ -855,6 +1090,9 @@ fn record_from(n: &Npc, body: u8) -> NpcRecord {
         heading: n.heading,
         energy: n.energy,
         age: n.age,
+        pareja: n.pareja,
+        padre: n.padre,
+        madre: n.madre,
         faith: n.faith,
         converted: n.converted,
         home_x: Some(n.home_x),
@@ -865,6 +1103,7 @@ fn record_from(n: &Npc, body: u8) -> NpcRecord {
         health: n.health,
         role: n.role,
         vida: Some(n.vida),
+        vivienda: n.vivienda,
     }
 }
 
@@ -955,8 +1194,10 @@ fn discover_settlements(
     region: Res<RegionRuntime>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
+    tiles: Res<TileWorld>,
     mut soc: ResMut<Society>,
     player: Query<&Transform, With<Player>>,
+    mut live: Query<&mut Npc>,
     mut acc: Local<f32>,
 ) {
     *acc += time.delta_secs();
@@ -980,6 +1221,38 @@ fn discover_settlements(
         return; // fuera de todo pueblo: el mundo salvaje está vacío de gente, y así debe ser
     };
     let (cx, cz) = (s.center.0 as f32, s.center.1 as f32);
+    // Las casas de la ciudad se calculan en un hilo aparte (barrer lotes cuesta decenas de ms);
+    // hasta que vuelvan no se siembra ni se migra a nadie: unos segundos, sin tirón.
+    let key = (nb, s.center.0, s.center.1);
+    if !soc.barrios.contains_key(&key) {
+        if let Some(tarea) = soc.barrios_en_curso.get_mut(&key) {
+            let Some(b) = bevy::tasks::block_on(bevy::tasks::futures_lite::future::poll_once(tarea)) else {
+                return;
+            };
+            soc.barrios_en_curso.remove(&key);
+            soc.barrios.insert(key, b);
+        } else {
+            let pool = bevy::tasks::AsyncComputeTaskPool::get_or_init(bevy::tasks::TaskPool::default);
+            let hogares_n = (tier_population(s.tier) as usize).div_ceil(FAMILY_SIZE as usize) + 2;
+            soc.barrios_en_curso.insert(key, pool.spawn(async move { barrio_de(body, s, hogares_n) }));
+            return;
+        }
+    }
+    // Sólo se usan las casas cuyo escalón se puede pisar: una puerta clavada contra un muro o
+    // un árbol dejaría a la familia entera encerrada afuera.
+    let pisable = |h: &Huella| {
+        let (ex, ez) = h.escalon();
+        !tiles.walk_blocked(body, ex.floor() as i64, ez.floor() as i64)
+    };
+    let barrio = {
+        let b = &soc.barrios[&key];
+        Barrio {
+            casas: b.casas.iter().copied().filter(|h| pisable(h)).collect(),
+            puestos: b.puestos.iter().copied().filter(|h| pisable(h)).collect(),
+            parque: b.parque,
+        }
+    };
+    asignar_viviendas(&mut live, &barrio, (cx, cz));
     if already_seeded(&soc, nb, cx, cz) {
         return;
     }
@@ -991,7 +1264,7 @@ fn discover_settlements(
     if count == 0 {
         return;
     }
-    let recs = seed_society(nb, count, None, disp, planet_temperament_disposition(body), (cx, cz), &mut soc);
+    let recs = seed_society(nb, count, None, disp, planet_temperament_disposition(body), (cx, cz), Some(&barrio), &mut soc);
     soc.centers.push((nb, cx, cz));
     let name = s.name.unwrap_or(match s.tier {
         ha_shared::geography::SettlementTier::City => "ciudad",
@@ -1005,6 +1278,25 @@ fn discover_settlements(
         spawn_npc(&mut commands, &art, &rec, brain);
     }
     soc.dirty = true;
+}
+
+/// Los vecinos de este pueblo que todavía no tienen casa (partidas viejas, o nacidos antes de
+/// que hubiera barrio) la reciben: una por familia, un puesto por cabeza.
+fn asignar_viviendas(live: &mut Query<&mut Npc>, barrio: &Barrio, centro: (f32, f32)) {
+    if barrio.casas.is_empty() {
+        return;
+    }
+    for mut n in live.iter_mut() {
+        if n.vivienda.casa.is_some() || (n.town_x - centro.0).abs() > 1.0 || (n.town_z - centro.1).abs() > 1.0 {
+            continue;
+        }
+        let casa = barrio.casas[n.family as usize % barrio.casas.len()];
+        let puesto = (!barrio.puestos.is_empty()).then(|| barrio.puestos[n.uid as usize % barrio.puestos.len()]);
+        n.vivienda = Vivienda { casa: Some(casa), puesto, parque: barrio.parque };
+        let e = casa.escalon();
+        n.home_x = e.0;
+        n.home_z = e.1;
+    }
 }
 
 /// Disposición base de los nativos de un planeta según su carácter (espejo del
@@ -1022,6 +1314,103 @@ fn planet_temperament_disposition(body: CelestialBody) -> f32 {
     }
 }
 
+/// **El humor de la colonia** (`colony_health`, 0..1) empuja el ánimo de cada vecino en cada
+/// tick de economía: con la despensa vacía la gente se siente insegura y agobiada; con la
+/// despensa llena, tranquila. No manda en nadie — sólo mueve motivos, y son los motivos los
+/// que deciden qué hace cada uno.
+fn aplicar_humor(v: &mut Vida, humor: f32) {
+    let delta = if humor < 0.35 {
+        -0.08 * (0.35 - humor) / 0.35
+    } else if humor > 0.8 {
+        0.03 * (humor - 0.8) / 0.2
+    } else {
+        0.0
+    };
+    if delta != 0.0 {
+        for m in [Motivo::Seguridad, Motivo::Ocio] {
+            v.m.set(m, (v.m.get(m) + delta).clamp(0.0, 1.0));
+        }
+    }
+}
+
+/// Cada cuánto (s) un constructor mira si puede colocar otra pieza.
+const OBRA_CADA_S: f32 = 8.0;
+/// Tope de piezas por planeta: el mundo no se llena de mobiliario sin fin.
+const OBRAS_MAX: u16 = 24;
+/// Lo que un constructor sabe hacer: mobiliario de parque, por id del catálogo de colocables.
+const OBRAS_ID: [&str; 4] = ["calle_banco", "calle_mesa_picnic", "calle_barril", "calle_farol"];
+
+/// **El Constructor construye de verdad.** Cuando el pueblo juntó madera y hay un Constructor
+/// despierto en la zona, gasta [`BUILD_WOOD_COST`] y coloca una pieza real (`BuiltStructures`,
+/// la misma que coloca el jugador: colisiona, persiste y se dibuja) alrededor del parque de su
+/// pueblo, en una posición libre. El sitio sale de una espiral por número de obra: determinista.
+#[allow(clippy::too_many_arguments)]
+fn constructor_obra(
+    time: Res<Time>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    obs: crate::obstaculos::Obstaculos,
+    mut soc: ResMut<Society>,
+    npcs: Query<&Npc>,
+    mut commands: Commands,
+    mut acc: Local<f32>,
+) {
+    *acc += time.delta_secs();
+    if *acc < OBRA_CADA_S {
+        return;
+    }
+    *acc = 0.0;
+    let body = active_surface_body(&ctx, &planet);
+    let body_u8 = body as u8;
+    let mut stock = soc.stock(body_u8);
+    if stock.wood < BUILD_WOOD_COST || stock.obras >= OBRAS_MAX || obs.capa() != 0 {
+        return;
+    }
+    let Some(constructor) = npcs.iter().find(|n| n.role == Role::Builder && n.vida.plan.map_or(true, |p| p.act != Actividad::Dormir)) else {
+        return;
+    };
+    let centro = constructor.vivienda.parque.unwrap_or((constructor.town_x + 3.0, constructor.town_z + 4.0));
+    let k = stock.obras as u32 + constructor.uid as u32;
+    let id = OBRAS_ID[k as usize % OBRAS_ID.len()];
+    let Some(a) = ha_shared::topdown::LARGE_ASSETS.iter().find(|a| a.id == id) else {
+        return;
+    };
+    // Espiral alrededor del centro: se prueban 16 sitios y se toma el primero libre.
+    for i in 0..16u32 {
+        let ang = (k + i) as f32 * 2.399_963_2;
+        let r = 2.5 + ((k + i) % 5) as f32 * 1.6;
+        let min = ((centro.0 + ang.cos() * r).floor() as i64, (centro.1 + ang.sin() * r).floor() as i64);
+        let celdas = || (0..a.w).flat_map(|dx| (0..a.h).map(move |dz| (min.0 + dx, min.1 + dz)));
+        if celdas().any(|(tx, tz)| obs.solido(body, tx, tz)) {
+            continue;
+        }
+        let (mx, mz) = (min.0 as f32 + a.w as f32 * 0.5, min.1 as f32 + a.h as f32 * 0.5);
+        if !obs.libre(body, mx, mz, 0.4) {
+            continue;
+        }
+        let ya = obs.estructuras().list.iter().any(|s| s.body == body_u8 && s.z == 0 && (s.cx - min.0).abs() < 3 && (s.cz - min.1).abs() < 3);
+        if ya {
+            continue;
+        }
+        let pieza = crate::structures::PlacedStructure {
+            body: body_u8,
+            z: 0,
+            cx: min.0,
+            cz: min.1,
+            w: a.w,
+            h: a.h,
+            art: a.art.to_string(),
+            solid: Vec::new(),
+            rot: 0,
+        };
+        commands.queue(move |w: &mut World| w.resource_mut::<crate::structures::BuiltStructures>().add(pieza));
+        stock.wood -= BUILD_WOOD_COST;
+        stock.obras += 1;
+        soc.stock.insert(body_u8, stock);
+        return;
+    }
+}
+
 /// Funda una sociedad: `count` NPCs en familias de `FAMILY_SIZE`. Con `machines` = cerca de
 /// los hábitats (colonos lunares); sin `machines` = nativos dispersos alrededor del origen.
 /// `base_rep != 0` fija la disposición inicial de cada familia (culturas de F6.4).
@@ -1032,8 +1421,10 @@ fn seed_society(
     base_rep: f32,
     tendency: f32,
     origin: (f32, f32),
+    barrio: Option<&Barrio>,
     soc: &mut Society,
 ) -> Vec<NpcRecord> {
+    let barrio = barrio.filter(|b| !b.casas.is_empty());
     // La primera despensa: una colonia nueva llega con víveres para no arrancar en hambruna.
     soc.add_stock(body, count as f32 * RATION * 8.0, 0.0, 0.0);
     let anchors: Vec<(f32, f32)> = machines
@@ -1051,8 +1442,18 @@ fn seed_society(
         let ring = (i / n_anchor) as f32;
         let ang = i as f32 * 2.399_963_2;
         let rad = if machines.is_some() { 1.5 + ring * 1.2 } else { 6.0 + ring * 2.5 };
-        let wx = bx + ang.cos() * rad;
-        let wz = bz + 1.0 + ang.sin() * rad;
+        let mut wx = bx + ang.cos() * rad;
+        let mut wz = bz + 1.0 + ang.sin() * rad;
+        // Con barrio: cada familia nace en el escalón de SU casa, una casa por familia.
+        let mut vivienda = Vivienda::default();
+        if let Some(b) = barrio {
+            let casa = b.casas[(i / FAMILY_SIZE) as usize % b.casas.len()];
+            let e = casa.escalon();
+            wx = e.0 + ((i % FAMILY_SIZE) as f32 - 1.0) * 0.35;
+            wz = e.1;
+            let puesto = (!b.puestos.is_empty()).then(|| b.puestos[i as usize % b.puestos.len()]);
+            vivienda = Vivienda { casa: Some(casa), puesto, parque: b.parque };
+        }
         // Familias: grupos contiguos de `FAMILY_SIZE`; fijá su disposición cultural.
         if i % FAMILY_SIZE == 0 {
             soc.next_family = soc.next_family.wrapping_add(1);
@@ -1073,6 +1474,9 @@ fn seed_society(
             heading: ang,
             energy: 1.0,
             age: 0.0,
+            pareja: 0,
+            padre: 0,
+            madre: 0,
             faith: 0.0,
             converted: false,
             home_x: Some(wx),
@@ -1085,6 +1489,7 @@ fn seed_society(
             health: 1.0,
             role: Role::Wanderer,
             vida: Some(Vida::nueva_con(uid, tendency)),
+            vivienda,
         });
     }
     out
@@ -1133,7 +1538,8 @@ fn tick_society(
     time: Res<Time>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
-    tiles: Res<TileWorld>,
+    obs: crate::obstaculos::Obstaculos,
+    mut pedidos: ResMut<crate::puertas::PedidosDePuerta>,
     mut commands: Commands,
     art: Res<crate::art2d::ArtLibrary>,
     mut soc: ResMut<Society>,
@@ -1141,7 +1547,7 @@ fn tick_society(
     day: Res<crate::sky2d::DayClock>,
     mut speech: ResMut<crate::dialog::SpeechQueue>,
     player: Query<&Transform, (With<Player>, Without<Npc>)>,
-    mut npcs: Query<(Entity, &mut Npc, &mut Transform, &mut Sprite, &mut Visibility)>,
+    mut npcs: Query<(Entity, &mut Npc, &mut Transform, &mut Sprite, &mut Visibility, &mut NpcPose)>,
     selected: Res<crate::game_phase::SelectedCharacter>,
     mut acc: Local<f32>,
     mut ads: Local<Vec<sims::Anuncio>>,
@@ -1168,9 +1574,12 @@ fn tick_society(
     // Foto de los vecinos de este tick: es lo que cada uno ve de los demás.
     let mut vecinos: Vec<Vecino> = Vec::with_capacity(MAX_NPCS);
     let mut ents: Vec<(u64, Entity)> = Vec::with_capacity(MAX_NPCS);
+    // Lo que hace falta de cada uno para saber si una pareja puede tener un hijo.
+    let mut padres_posibles: HashMap<u64, (f32, f32, Vida, f32, bool)> = HashMap::with_capacity(MAX_NPCS);
     for (e, n, ..) in npcs.iter() {
         vecinos.push(Vecino::de(n.uid, n.x, n.z, &n.vida, n.health));
         ents.push((n.uid, e));
+        padres_posibles.insert(n.uid, (n.x, n.z, n.vida, n.age, n.padre != 0 || n.madre != 0));
     }
     // Los que ya creen en el Ki predican a sus vecinos: la fe del jugador crece de boca en
     // boca dentro del pueblo, sin que el jugador esté presente.
@@ -1183,14 +1592,14 @@ fn tick_society(
     let mut followers = 0u32;
     // Tratos que se cerraron este tick: (actor, actividad, otro).
     let mut eventos: Vec<(u64, Actividad, u64)> = Vec::new();
-    // x, z, cerebro del padre, familia, plaza del pueblo, la cabeza del padre.
-    let mut births: Vec<(f32, f32, i32, u32, (f32, f32), Vida)> = Vec::new();
+    // x, z, familia, plaza del pueblo, la cabeza de la madre, la del padre, uids (madre, padre), vivienda.
+    let mut births: Vec<(f32, f32, u32, (f32, f32), Vida, Vida, (u64, u64), Vivienda)> = Vec::new();
 
     // ¿Está el jugador fuera de la superficie? Entonces no ve al pueblo: arriba caminarían
     // por encima de tu losa, y abajo sobre la tierra maciza de la galería. La vida sigue
     // corriendo en barato, así que el pueblo no se congela por bajar a la mina.
-    let off_layer = tiles.z != 0;
-    for (e, mut n, mut tf, mut sprite, mut vis) in &mut npcs {
+    let off_layer = obs.capa() != 0;
+    for (e, mut n, mut tf, mut sprite, mut vis, mut pose) in &mut npcs {
         let n = &mut *n;
         let dr2 = (n.x - px) * (n.x - px) + (n.z - pz) * (n.z - pz);
         n.vida.mala_fama = n.vida.mala_fama.clamp(0.0, 1.0);
@@ -1199,9 +1608,12 @@ fn tick_society(
                 *vis = Visibility::Hidden;
             }
             n.age += dt;
-            let sitio = sitio_de((n.home_x, n.home_z), (n.town_x, n.town_z), n.uid, n.family);
+            let sitio = sitio_de((n.home_x, n.home_z), (n.town_x, n.town_z), n.uid, n.family, &n.vivienda);
             sociedad::vivir_credo(&mut n.vida, &soc.credos, dt);
-            let (nx, nz) = avanzar_lejos(&mut n.vida, (n.x, n.z), &sitio, fase, comida, dt);
+            let viv = n.vivienda;
+            let (nx, nz) = avanzar_lejos(&mut n.vida, (n.x, n.z), &sitio, &viv, fase, comida, dt);
+            n.ruta.clear();
+            n.pide_ruta = false;
             n.x = nx;
             n.z = nz;
             if n.converted {
@@ -1209,8 +1621,14 @@ fn tick_society(
             }
             continue;
         }
-        if *vis != Visibility::Visible {
-            *vis = Visibility::Visible;
+        // Adentro de su casa o de su puesto sólo se lo ve si vos también estás adentro: la casa
+        // cerrada no deja ver lo que pasa en el interior.
+        let (hs, nh) = n.vivienda.huellas();
+        let hs = &hs[..nh];
+        let oculto = hs.iter().any(|h| h.dentro(n.x, n.z) && !h.dentro(px, pz));
+        let quiero = if oculto { Visibility::Hidden } else { Visibility::Visible };
+        if *vis != quiero {
+            *vis = quiero;
         }
         // Los NPCs NO se esfuman de viejos: sólo mueren por una causa VISIBLE (el jugador, una
         // pelea del pueblo, el hambre de verdad). La edad se cuenta por si luego querés ancianos.
@@ -1240,7 +1658,7 @@ fn tick_society(
                         e,
                         n.x,
                         n.z,
-                        format!("Creo en {}!", religion.name),
+                        format!("¡Creo en {}!", religion.name),
                         Color::srgb(1.0, 0.85, 0.3),
                         false,
                     );
@@ -1273,7 +1691,7 @@ fn tick_society(
         }
         if n.vida.necesita_decidir(Clase::Aldeano, fase) {
             ads.clear();
-            let sitio = sitio_de((n.home_x, n.home_z), (n.town_x, n.town_z), n.uid, n.family);
+            let sitio = sitio_de((n.home_x, n.home_z), (n.town_x, n.town_z), n.uid, n.family, &n.vivienda);
             sociedad::anuncios_sitio(&sitio, fase, comida, n.vida.credo != 0, &mut ads);
             sociedad::anuncios_vecinos(&n.vida, n.uid, (n.x, n.z), &vecinos, &soc.credos, &mut ads);
             n.vida.decidir(Clase::Aldeano, (n.x, n.z), fase, &ads);
@@ -1289,7 +1707,7 @@ fn tick_society(
         // jugador es quien te ODIA, y eso es una consecuencia de matarle a la familia.
         let aggro = has_player && rep <= AGGRO_THRESHOLD && dr2 < 24.0 * 24.0;
         let flee = has_player && rep < -0.15 && rep > AGGRO_THRESHOLD && dr2 < 20.0 * 20.0;
-        let (goal, gain, mut speed): (Option<f32>, f32, f32) = if aggro {
+        let (goal, gain, speed): (Option<f32>, f32, f32) = if aggro {
             (Some(toward_p), 1.0, NPC_VEL * 1.9) // te encara
         } else if flee {
             (Some(toward_p + PI), 0.9, NPC_VEL * 1.6) // huye
@@ -1323,43 +1741,122 @@ fn tick_society(
                 }
             }
         };
-        if let Some(g) = goal {
+        // Un plan con destino camina por la calle de verdad: por la puerta de su edificio, rodeando
+        // los ajenos. Todo lo demás (deambular, encarar, huir) sigue el rumbo con giro suave.
+        let destino = if aggro || flee {
+            None
+        } else {
+            match n.vida.destino() {
+                Some((tx, tz, false)) => Some((tx, tz)),
+                _ => None,
+            }
+        };
+        let mut rumbo_directo = None;
+        if let Some((tx, tz)) = destino {
+            let mut wp = hogares::siguiente_punto((n.x, n.z), (tx, tz), hs);
+            if !n.ruta.is_empty() {
+                let (mx, mz) = (n.ruta_meta.0 - tx, n.ruta_meta.1 - tz);
+                if mx * mx + mz * mz > 4.0 {
+                    n.ruta.clear();
+                } else {
+                    while n.ruta.first().is_some_and(|p| (p.0 - n.x).powi(2) + (p.1 - n.z).powi(2) < 0.2) {
+                        n.ruta.remove(0);
+                    }
+                    if let Some(&p) = n.ruta.first() {
+                        wp = p;
+                    }
+                }
+            }
+            // A punto de cruzar una puerta propia: se la pide antes de llegar, así no se frena.
+            for h in hs {
+                let u = h.umbral();
+                if (u.0 - n.x).powi(2) + (u.1 - n.z).powi(2) < 2.6 && h.dentro(n.x, n.z) != h.dentro(tx, tz) {
+                    pedidos.0.push(u);
+                }
+            }
+            rumbo_directo = Some(((wp.1 - n.z).atan2(wp.0 - n.x), wp));
+        }
+        if let Some((a, _)) = rumbo_directo {
+            n.heading = a;
+        } else if let Some(g) = goal {
             let diff = (g - n.heading + PI).rem_euclid(TAU) - PI;
             n.heading += diff.clamp(-1.0, 1.0) * NPC_TURN * dt * gain.max(0.5);
         }
-        if speed > 0.0 {
-            let (nx, nz) = (n.x + n.heading.cos() * speed * dt, n.z + n.heading.sin() * speed * dt);
-            if tiles.solid_at(body, nx.floor() as i64, nz.floor() as i64) {
+        let mut se_movio = false;
+        if speed > 0.0 && !n.pide_ruta {
+            let etapa = linaje::etapa(n.age, n.padre != 0 || n.madre != 0);
+            let paso = speed * dt * if etapa == Etapa::Anciano { 0.7 } else { 1.0 };
+            let (nx, nz) = (n.x + n.heading.cos() * paso, n.z + n.heading.sin() * paso);
+            let libre = |x: f32, z: f32| obs.libre(body, x, z, NPC_RADIO);
+            if libre(nx, nz) {
+                (n.x, n.z, se_movio) = (nx, nz, true);
+                n.atasco = 0;
+            } else if libre(nx, n.z) && (nx - n.x).abs() > 1e-4 {
+                (n.x, se_movio) = (nx, true);
+            } else if libre(n.x, nz) && (nz - n.z).abs() > 1e-4 {
+                (n.z, se_movio) = (nz, true);
+            } else if obs.puerta_cerrada_en(nx, nz, NPC_RADIO) {
+                // Una puerta cerrada no es un muro: se la pide y se espera a que abra.
+                pedidos.0.push((nx, nz));
+            } else if let Some((tx, tz)) = destino {
+                // Un edificio ajeno o un obstáculo en la calle: que el buscador arme un camino.
+                n.ruta.clear();
+                n.pide_ruta = true;
+                n.ruta_meta = (tx, tz);
+            } else {
                 n.heading += 1.3;
+                n.atasco = n.atasco.saturating_add(1);
                 if n.bump <= 0.0 {
                     n.vida.trabar();
                     n.bump = 2.5;
                 }
-            } else {
-                n.x = nx;
-                n.z = nz;
             }
         }
-        speed = 0.0;
-        let _ = speed;
+        if n.atasco >= 45 {
+            // Se lo saca del apuro: el punto libre más cercano, o el escalón de su casa.
+            n.atasco = 0;
+            n.ruta.clear();
+            let salida = (1..=8).flat_map(|r| (0..8).map(move |k| (r as f32, k as f32 * TAU / 8.0))).find_map(|(r, a)| {
+                let (x, z) = (n.x + a.cos() * r, n.z + a.sin() * r);
+                obs.libre(body, x, z, NPC_RADIO).then_some((x, z))
+            });
+            if let Some((x, z)) = salida.or_else(|| n.vivienda.casa.map(|c| c.escalon())) {
+                (n.x, n.z) = (x, z);
+            }
+        }
         n.energy = (n.energy + dt * 0.006).clamp(0.0, 1.0);
 
-        // Reproducción: la cría hereda la FAMILIA (memoria), el carácter (con deriva) y la fe de
-        // la casa. Hace falta estar bien de ánimo Y que la colonia tenga con qué alimentar a
-        // alguien más (B4).
-        if n.energy >= NPC_REPRO_ENERGY
+        // Reproducción: la tiene la MUJER adulta que está con su PAREJA (los dos adultos, cerca).
+        // La cría cruza el carácter de los dos, hereda la familia de la madre y su credo. Hace
+        // falta estar bien de ánimo Y que la colonia tenga con qué alimentar a alguien más (B4).
+        let nacido = n.padre != 0 || n.madre != 0;
+        if linaje::es_mujer(n.uid)
+            && n.pareja != 0
+            && linaje::etapa(n.age, nacido) == Etapa::Adulto
+            && n.energy >= NPC_REPRO_ENERGY
             && n.vida.m.bienestar(Clase::Aldeano) > 0.45
             && soc.alive + births.len() < MAX_NPCS
             && soc.free_ids.len() > births.len()
             && soc.body_health(body_u8, soc.alive as u32) >= BIRTH_MIN_HEALTH
         {
-            n.energy -= NPC_REPRO_COST;
-            births.push((n.x, n.z, n.brain, n.family, (n.town_x, n.town_z), n.vida));
+            // Con el JUGADOR de pareja: el hijo nace si estás cerca; no hay edad que comprobar.
+            let otro = if n.pareja == JUGADOR_UID {
+                has_player.then(|| (px, pz, Vida::nueva(JUGADOR_UID), 0.0, false))
+            } else {
+                padres_posibles.get(&n.pareja).copied()
+            };
+            if let Some((px_, pz_, pv, page, pnacido)) = otro {
+                let cerca = (px_ - n.x).powi(2) + (pz_ - n.z).powi(2) <= linaje::RADIO_PAREJA * linaje::RADIO_PAREJA;
+                if cerca && linaje::etapa(page, pnacido) == Etapa::Adulto {
+                    n.energy -= NPC_REPRO_COST;
+                    births.push((n.x, n.z, n.family, (n.town_x, n.town_z), n.vida, pv, (n.uid, n.pareja), n.vivienda));
+                }
+            }
         }
 
         // --- CHAT ambiental por CONTEXTO ---
         n.say_cd -= dt;
-        if n.say_cd <= 0.0 && dr2 < 30.0 * 30.0 && act != Actividad::Dormir {
+        if n.say_cd <= 0.0 && dr2 < 30.0 * 30.0 && act != Actividad::Dormir && !oculto {
             n.say_cd = SAY_COOLDOWN + (n.uid % 5) as f32;
             let line = frase_de(n, &soc, &religion, &player_name, rep);
             let col = if n.converted {
@@ -1376,7 +1873,29 @@ fn tick_society(
         // Render: la SKIN se ve natural; un tinte SUAVE marca disposición (fiel → dorado,
         // secta → su color, malhechor conocido → rojizo, rencor → rojizo).
         let r = render_xy(n.x, n.z);
-        tf.translation = Vec3::new(r.x, r.y, sort_z(n.z));
+        // La edad se ve: el niño es más bajo (escala desde el centro → se baja para que los pies
+        // queden donde estaban) y el anciano se nota en el color más abajo.
+        let k = linaje::escala_por_edad(n.age, n.padre != 0 || n.madre != 0);
+        if (tf.scale.x - k).abs() > 0.005 {
+            tf.scale = Vec3::new(k, k, 1.0);
+        }
+        tf.translation = Vec3::new(r.x, r.y - NPC_SIZE.y * 0.5 * (1.0 - k), sort_z(n.z));
+        // La pose sale de lo que hace: llegó al lugar → duerme / reza / pelea; si no, camina o respira.
+        let llego = matches!(n.vida.destino(), Some((_, _, true)));
+        let dir = crate::fauna::dir4(n.heading);
+        let pedida = match (llego, act) {
+            (true, Actividad::Dormir) => "sleep_down".to_string(),
+            (true, Actividad::Rezar) => format!("sit_floor_{dir}"),
+            (true, Actividad::Atacar) => format!("punch_{dir}"),
+            (true, Actividad::Robar) => format!("pick_up_{dir}"),
+            _ if se_movio => format!("walk_{dir}"),
+            _ => format!("idle_{dir}"),
+        };
+        if pose.pedida != pedida {
+            let clave = format!("npc/char_{}", (n.uid % NUM_SKINS) + 1);
+            crate::fauna::apply_pose(&mut commands, e, &art, &clave, &pedida, &mut sprite, &mut pose.aplicada);
+            pose.pedida = pedida;
+        }
         sprite.color = if n.converted {
             Color::srgb(1.0, 0.94, 0.7)
         } else if n.vida.mala_fama > 0.5 {
@@ -1385,11 +1904,44 @@ fn tick_society(
             tinte_credo(n.vida.credo)
         } else if rep < 0.0 {
             Color::srgb(1.0, 0.7 + 0.3 * (1.0 + rep), 0.65 + 0.3 * (1.0 + rep))
+        } else if linaje::etapa(n.age, n.padre != 0 || n.madre != 0) == Etapa::Anciano {
+            Color::srgb(0.86, 0.86, 0.92)
         } else {
             Color::WHITE
         };
     }
     religion.followers = followers;
+
+    // --- CAMINOS: una búsqueda a la vez, unos cuantos nodos por tick (sin tirones) ---
+    if soc.busqueda.is_none() {
+        if let Some((_, n, ..)) = npcs.iter().find(|(_, n, ..)| n.pide_ruta) {
+            let desde = (n.x, n.z);
+            let (hs, nh) = n.vivienda.huellas();
+            let meta = hogares::siguiente_punto(desde, n.ruta_meta, &hs[..nh]);
+            soc.busqueda = Some((n.uid, ha_shared::ruta::Buscador::nuevo(desde, meta), desde, n.ruta_meta));
+        }
+    }
+    if let Some((uid, mut b, desde, plan)) = soc.busqueda.take() {
+        let mut libre = |tx: i64, tz: i64| obs.libre(body, tx as f32 + 0.5, tz as f32 + 0.5, NPC_RADIO);
+        match b.paso(60, &mut libre) {
+            ha_shared::ruta::Estado::Buscando => soc.busqueda = Some((uid, b, desde, plan)),
+            fin => {
+                let camino = b.camino(desde, &mut libre);
+                if let Some((_, mut n, ..)) = npcs.iter_mut().find(|(_, n, ..)| n.uid == uid) {
+                    n.pide_ruta = false;
+                    n.ruta_meta = plan;
+                    if fin == ha_shared::ruta::Estado::Encontrada && !camino.is_empty() {
+                        n.ruta = camino;
+                    } else {
+                        // Sin camino: que se busque otra cosa que hacer.
+                        n.vida.trabar();
+                        n.bump = 2.5;
+                        n.atasco = n.atasco.saturating_add(15);
+                    }
+                }
+            }
+        }
+    }
 
     // --- TRATOS entre vecinos: robo, pelea, ayuda, prédica, detención ---
     let mut muertos: Vec<Entity> = Vec::new();
@@ -1443,7 +1995,7 @@ fn tick_society(
         if r.convirtio {
             soc.stats.conversiones += 1;
             let nombre = soc.credos.get(va.credo).map(|c| c.nombre.clone()).unwrap_or_else(|| religion.name.clone());
-            dicho(eo, bpos.0, bpos.1, format!("Creo en {nombre}!"), Color::srgb(1.0, 0.9, 0.5));
+            dicho(eo, bpos.0, bpos.1, format!("¡Creo en {nombre}!"), Color::srgb(1.0, 0.9, 0.5));
         }
         // Escribir de vuelta las dos cabezas (+ daño) y avisar a los testigos.
         let mut murio = false;
@@ -1471,6 +2023,7 @@ fn tick_society(
     }
     for e in muertos {
         if let Ok((_, n, ..)) = npcs.get(e) {
+            soc.herencias.push((n.uid, n.pareja, n.vivienda));
             soc.free_ids.push(n.brain);
             eprintln!("ha-society: {} murio en una pelea del pueblo", npc_name(n.uid, n.family));
         }
@@ -1480,7 +2033,7 @@ fn tick_society(
         soc.dirty = true;
     }
 
-    for (x, z, _parent, family, town, pvida) in births {
+    for (x, z, family, town, mvida, pvida, (madre, padre), vivienda) in births {
         let Some(child) = soc.free_ids.pop() else { break };
         let uid = soc.next_uid;
         soc.next_uid = soc.next_uid.wrapping_add(1);
@@ -1495,6 +2048,9 @@ fn tick_society(
             heading: 0.0,
             energy: 0.5,
             age: 0.0,
+            pareja: 0,
+            padre,
+            madre,
             faith: 0.0,
             converted: false,
             home_x: Some(x + ox),
@@ -1505,8 +2061,17 @@ fn tick_society(
             history: Vec::new(),
             health: 1.0,
             role: Role::Wanderer, // S6: el recién nacido elige oficio en el próximo tick
-            vida: Some(Vida::hija_de(&pvida, uid)),
+            vida: Some(Vida::hija_de_pareja(&mvida, &pvida, uid)),
+            // La cría vive en la casa de la familia y trabaja donde le toque en el pueblo.
+            vivienda,
         };
+        soc.stats.nacimientos += 1;
+        eprintln!(
+            "ha-society: nacio {} (hija/o de {} y {})",
+            npc_name(uid, family),
+            npc_name(madre, family),
+            npc_name(padre, family)
+        );
         spawn_npc(&mut commands, &art, &rec, child);
     }
 }
@@ -1558,19 +2123,28 @@ fn tick_colony_economy(time: Res<Time>, mut soc: ResMut<Society>, mut live: Quer
     }
     for body in bodies {
         if Some(body) == soc.active_body {
-            let mut roles: Vec<Role> = live.iter().map(|n| n.role).collect();
+            // Los niños no trabajan: quedan fuera del reparto de oficios (pero comen, y cuentan
+            // para el humor de la colonia).
+            let mut roles: Vec<Role> = live.iter().filter(|n| !es_nino(n.age, n.padre, n.madre)).map(|n| n.role).collect();
             if roles.is_empty() {
                 continue;
             }
             let mut stock = soc.stock(body);
             colony_step(&mut stock, &mut roles);
             soc.stock.insert(body, stock);
-            for (mut n, r) in live.iter_mut().zip(roles) {
-                n.role = r;
+            let humor = colony_health(stock, live.iter().count() as u32);
+            let mut it = roles.into_iter();
+            for mut n in live.iter_mut() {
+                n.role = if es_nino(n.age, n.padre, n.madre) { Role::Wanderer } else { it.next().unwrap_or(n.role) };
+                aplicar_humor(&mut n.vida, humor);
             }
         } else {
-            let mut roles: Vec<Role> =
-                soc.records.iter().filter(|r| r.body == body).map(|r| r.role).collect();
+            let mut roles: Vec<Role> = soc
+                .records
+                .iter()
+                .filter(|r| r.body == body && !es_nino(r.age, r.padre, r.madre))
+                .map(|r| r.role)
+                .collect();
             if roles.is_empty() {
                 continue;
             }
@@ -1579,7 +2153,9 @@ fn tick_colony_economy(time: Res<Time>, mut soc: ResMut<Society>, mut live: Quer
             soc.stock.insert(body, stock);
             let mut it = roles.into_iter();
             for r in soc.records.iter_mut().filter(|r| r.body == body) {
-                if let Some(nr) = it.next() {
+                if es_nino(r.age, r.padre, r.madre) {
+                    r.role = Role::Wanderer;
+                } else if let Some(nr) = it.next() {
                     r.role = nr;
                 }
             }
@@ -1615,11 +2191,11 @@ fn tick_society_remote(
     for r in soc.records.iter_mut() {
         let home = (r.home_x.unwrap_or(r.x), r.home_z.unwrap_or(r.z));
         let town = (r.town_x.unwrap_or(home.0), r.town_z.unwrap_or(home.1));
-        let sitio = sitio_de(home, town, r.uid, r.family);
+        let sitio = sitio_de(home, town, r.uid, r.family, &r.vivienda);
         let comida = soc.stock.get(&r.body).map(|s| s.food > FOOD_MIN_STOCK).unwrap_or(false);
         let v = r.vida.get_or_insert_with(|| Vida::nueva(r.uid));
         sociedad::vivir_credo(v, &soc.credos, dt);
-        let (nx, nz) = avanzar_lejos(v, (r.x, r.z), &sitio, fase, comida, dt);
+        let (nx, nz) = avanzar_lejos(v, (r.x, r.z), &sitio, &r.vivienda, fase, comida, dt);
         r.x = nx;
         r.z = nz;
         r.age += dt;
@@ -1637,6 +2213,7 @@ fn tick_society_remote(
 /// Saca del mundo a un NPC que murió por decisión de la civilización (ejecución, vejez del
 /// linaje, tragedia): mismo libro de cuentas que una muerte a golpes.
 pub(crate) fn despedir_npc(commands: &mut Commands, soc: &mut Society, e: Entity, npc: &Npc) {
+    soc.herencias.push((npc.uid, npc.pareja, npc.vivienda));
     commands.entity(e).despawn_recursive();
     soc.alive = soc.alive.saturating_sub(1);
     soc.free_ids.push(npc.brain);
@@ -1693,6 +2270,7 @@ fn harm_events(
     npc.health = (npc.health - ATTACK_DAMAGE).max(0.0);
     let dead = npc.health <= 0.0;
     let brain_id = npc.brain;
+    let herencia = (npc.uid, npc.pareja, npc.vivienda);
     drop(npc);
     sfx.send(crate::audio::PlaySfxAt(
         crate::audio::Sfx::Dig,
@@ -1726,6 +2304,7 @@ fn harm_events(
         soc.adjust(f, REP_WITNESS);
     }
     civ.matado_por_el_jugador(uid, vx, vz);
+    soc.herencias.push(herencia);
     commands.entity(e).despawn_recursive();
     soc.alive = soc.alive.saturating_sub(1);
     soc.free_ids.push(brain_id);
@@ -1733,6 +2312,40 @@ fn harm_events(
     // Un solo camino de escritura: pedir flush inmediato al próximo tick del guardado
     // periódico, que sí junta `live`.
     soc.dirty = true;
+}
+
+/// **Herencia de la casa.** Cuando muere alguien con casa, la toma su pareja o, si no hay, un
+/// hijo ya adulto — sólo si ese heredero no tiene casa propia: nadie queda en la calle
+/// mientras una vivienda del pueblo está vacía. Los hijos chicos siguen bajo el techo de
+/// su madre (heredan la vivienda al nacer), así que a ellos no hace falta repartirles nada.
+fn repartir_herencias(mut soc: ResMut<Society>, mut npcs: Query<&mut Npc>) {
+    if soc.herencias.is_empty() {
+        return;
+    }
+    for (uid, pareja, viv) in std::mem::take(&mut soc.herencias) {
+        let Some(casa) = viv.casa else { continue };
+        let mut heredero: Option<Mut<Npc>> = None;
+        for n in npcs.iter_mut() {
+            if n.uid == uid || n.vivienda.casa.is_some() {
+                continue;
+            }
+            let es_pareja = pareja != 0 && n.uid == pareja;
+            let es_hijo = (n.madre == uid || n.padre == uid) && !es_nino(n.age, n.padre, n.madre);
+            let mejor = match &heredero {
+                None => es_pareja || es_hijo,
+                Some(h) => es_pareja && h.uid != pareja,
+            };
+            if mejor {
+                heredero = Some(n);
+            }
+        }
+        if let Some(mut h) = heredero {
+            h.vivienda.casa = Some(casa);
+            soc.stats.herencias += 1;
+            soc.dirty = true;
+            eprintln!("ha-society: {} hereda la casa de uid {uid}", npc_name(h.uid, h.family));
+        }
+    }
 }
 
 fn save_society_periodic(
@@ -1916,6 +2529,17 @@ fn update_society_overlay(
             .collect::<Vec<_>>()
             .join("; ")
     };
+    let (mut ninos, mut ancianos, mut con_pareja) = (0u32, 0u32, 0u32);
+    for np in &npcs {
+        match linaje::etapa(np.age, np.padre != 0 || np.madre != 0) {
+            Etapa::Nino => ninos += 1,
+            Etapa::Anciano => ancianos += 1,
+            Etapa::Adulto => {}
+        }
+        if np.pareja != 0 {
+            con_pareja += 1;
+        }
+    }
     let st = &soc.stats;
     // Brújula de asentamientos (throttle 2 s: `settlement_in` no es gratis).
     *acc += time.delta_secs();
@@ -1940,6 +2564,7 @@ fn update_society_overlay(
          ANIMO  {hh:02}:{mm:02}  comida {:.0}% descanso {:.0}% compania {:.0}%  moral media {:+.2}  malhechores {malos}\n\
          HACEN  {acts_txt}\n\
          CREDOS  {credos_txt}\n\
+         LINAJE  ninos {ninos}  ancianos {ancianos}  en pareja {con_pareja}  parejas formadas {}  nacimientos {}  herencias {}\n\
          HISTORIA  hurtos {}  agresiones {}  detenciones {}  ayudas {}  muertes {}  conversiones {}  sectas {}\n\
          PUEBLOS  sembrados aqui {seeded_here}  mas cercano: {nearest_txt}",
         fams.len(),
@@ -1953,6 +2578,9 @@ fn update_society_overlay(
         rest_avg * 100.0,
         belong_avg * 100.0,
         moral_avg,
+        st.parejas,
+        st.nacimientos,
+        st.herencias,
         st.hurtos,
         st.agresiones,
         st.detenciones,
@@ -2026,6 +2654,108 @@ pub(crate) fn push_history(history: &mut Vec<String>, line: &str) {
     if n > 5 {
         history.drain(0..n - 5);
     }
+}
+
+/// **Las parejas del pueblo.** Cada ~2 s los solteros adultos de un mismo pueblo que están
+/// cerca se pueden enamorar (más si ya se quieren: `lazos`); al formarse se quieren más aún. Una
+/// pareja se deshace sola cuando uno de los dos deja de existir (viudez). Sin parientes cercanos
+/// ni niños ni ancianos (ver `ha_shared::linaje::pueden_ser_pareja`).
+fn parejas_del_pueblo(time: Res<Time>, mut soc: ResMut<Society>, mut npcs: Query<&mut Npc>, mut acc: Local<(f32, u64)>) {
+    acc.0 += time.delta_secs();
+    if acc.0 < 2.0 {
+        return;
+    }
+    acc.0 = 0.0;
+    acc.1 = acc.1.wrapping_add(1);
+    let vivos: std::collections::HashSet<u64> = npcs.iter().map(|n| n.uid).collect();
+    for mut n in &mut npcs {
+        if n.pareja != 0
+            && n.pareja != JUGADOR_UID
+            && !vivos.contains(&n.pareja)
+            && !soc.records.iter().any(|r| r.uid == n.pareja)
+        {
+            n.pareja = 0;
+        }
+    }
+    struct Soltero {
+        uid: u64,
+        x: f32,
+        z: f32,
+        town: (f32, f32),
+        age: f32,
+        nacido: bool,
+        par: Parentesco,
+        vida: Vida,
+    }
+    let solteros: Vec<Soltero> = npcs
+        .iter()
+        .filter(|n| n.pareja == 0 && n.health > 0.0)
+        .map(|n| Soltero {
+            uid: n.uid,
+            x: n.x,
+            z: n.z,
+            town: (n.town_x, n.town_z),
+            age: n.age,
+            nacido: n.padre != 0 || n.madre != 0,
+            par: Parentesco { padre: n.padre, madre: n.madre },
+            vida: n.vida,
+        })
+        .collect();
+    let mut formadas: Vec<(u64, u64)> = Vec::new();
+    let ronda = acc.1;
+    for (i, a) in solteros.iter().enumerate() {
+        if formadas.iter().any(|&(x, y)| x == a.uid || y == a.uid) {
+            continue;
+        }
+        for b in &solteros[i + 1..] {
+            if formadas.iter().any(|&(x, y)| x == b.uid || y == b.uid) {
+                continue;
+            }
+            if (a.town.0 - b.town.0).abs() > 2.0 || (a.town.1 - b.town.1).abs() > 2.0 {
+                continue;
+            }
+            if (a.x - b.x).powi(2) + (a.z - b.z).powi(2) > linaje::RADIO_CORTEJO * linaje::RADIO_CORTEJO {
+                continue;
+            }
+            let afin = (a.vida.lazos.get(b.uid) + b.vida.lazos.get(a.uid)) * 0.5;
+            if !linaje::pueden_ser_pareja(a.uid, a.age, a.nacido, a.par, b.uid, b.age, b.nacido, b.par, afin) {
+                continue;
+            }
+            let h = sims::hash(a.uid.wrapping_mul(0x9E37_79B9) ^ b.uid ^ ronda.wrapping_mul(0x85EB_CA6B));
+            let suerte = (h >> 11) as f32 / (1u64 << 53) as f32;
+            if suerte < linaje::chance_de_cortejo(afin) {
+                formadas.push((a.uid, b.uid));
+                break;
+            }
+        }
+    }
+    for (ua, ub) in formadas {
+        for mut n in &mut npcs {
+            let otro = if n.uid == ua {
+                ub
+            } else if n.uid == ub {
+                ua
+            } else {
+                continue;
+            };
+            n.pareja = otro;
+            n.vida.lazos.sumar(otro, 0.5);
+            let nombre = npc_name(otro, n.family);
+            push_history(&mut n.history, &format!("Me junté con {nombre}."));
+        }
+        soc.stats.parejas += 1;
+        let familia = |uid: u64| npcs.iter().find(|n| n.uid == uid).map(|n| n.family).unwrap_or(0);
+        eprintln!("ha-society: {} y {} son pareja", npc_name(ua, familia(ua)), npc_name(ub, familia(ub)));
+    }
+}
+
+/// El jugador como pareja o padre en el linaje: no es un NPC, así que tiene un uid propio que
+/// no choca con ninguno (los NPC se numeran desde abajo).
+pub(crate) const JUGADOR_UID: u64 = u64::MAX;
+
+/// Niño = nacido en el juego (tiene padres) y todavía de poca edad. Los fundadores no lo son.
+pub(crate) fn es_nino(age: f32, padre: u64, madre: u64) -> bool {
+    linaje::etapa(age, padre != 0 || madre != 0) == Etapa::Nino
 }
 
 /// Nombre estable (ASCII) derivado del uid — para el título del menú del NPC.
@@ -2107,5 +2837,229 @@ mod religion_tests {
         assert!(r.founded);
         assert_eq!(r.name, name);
         assert!(!name.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod vivienda_tests {
+    use super::*;
+
+    fn casa() -> Huella {
+        Huella { min: (10, 10), w: 4, h: 3, puerta: (12, 13) }
+    }
+
+    /// Con casa, el sitio de dormir queda ADENTRO del edificio y usa la casa entera.
+    #[test]
+    fn con_casa_el_sitio_esta_adentro() {
+        let viv = Vivienda { casa: Some(casa()), puesto: None, parque: Some((50.0, 50.0)) };
+        let s = sitio_de((0.0, 0.0), (5.0, 5.0), 7, 1, &viv);
+        assert!(s.casa_uso > 0.0);
+        assert!(casa().dentro(s.casa.0, s.casa.1), "el lugar de dormir cae fuera de la casa: {:?}", s.casa);
+        assert_eq!(s.parque, (50.0, 50.0));
+    }
+
+    /// Sin casa (colono, partida vieja) cae a puntos sueltos y `casa_uso` no promete de más.
+    #[test]
+    fn sin_casa_cae_a_puntos_sueltos() {
+        let s = sitio_de((3.0, 4.0), (5.0, 5.0), 7, 1, &Vivienda::default());
+        assert_eq!(s.casa_uso, 0.0);
+    }
+
+    #[test]
+    fn huellas_lista_solo_lo_que_hay() {
+        assert_eq!(Vivienda::default().huellas().1, 0);
+        let v = Vivienda { casa: Some(casa()), puesto: Some(casa()), parque: None };
+        assert_eq!(v.huellas().1, 2);
+        let v = Vivienda { casa: None, puesto: Some(casa()), parque: None };
+        assert_eq!(v.huellas().1, 1);
+    }
+
+    /// Una partida guardada sin `Vivienda` sigue leyéndose (migración por `Default`).
+    #[test]
+    fn vivienda_serde_ida_y_vuelta() {
+        let v = Vivienda { casa: Some(casa()), puesto: None, parque: Some((1.0, 2.0)) };
+        let j = serde_json::to_string(&v).unwrap();
+        assert_eq!(serde_json::from_str::<Vivienda>(&j).unwrap(), v);
+    }
+}
+
+#[cfg(test)]
+mod humor_tests {
+    use super::*;
+
+    #[test]
+    fn hambre_baja_el_animo_y_abundancia_lo_sube() {
+        let mut v = Vida::nueva(3);
+        v.m.set(Motivo::Seguridad, 0.5);
+        aplicar_humor(&mut v, 0.0);
+        assert!(v.m.get(Motivo::Seguridad) < 0.5);
+        let mut w = Vida::nueva(3);
+        w.m.set(Motivo::Seguridad, 0.5);
+        aplicar_humor(&mut w, 1.0);
+        assert!(w.m.get(Motivo::Seguridad) > 0.5);
+        let mut x = Vida::nueva(3);
+        x.m.set(Motivo::Seguridad, 0.5);
+        aplicar_humor(&mut x, 0.6);
+        assert_eq!(x.m.get(Motivo::Seguridad), 0.5);
+    }
+
+    #[test]
+    fn el_stock_viejo_sin_obras_se_lee() {
+        let s: Stock = serde_json::from_str(r#"{"food":1.0,"wood":2.0,"stone":3.0}"#).unwrap();
+        assert_eq!(s.obras, 0);
+    }
+}
+
+#[cfg(test)]
+mod linaje_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn npc(uid: u64, x: f32, age: f32, padre: u64, madre: u64) -> Npc {
+        Npc {
+            brain: 0,
+            x,
+            z: 0.0,
+            heading: 0.0,
+            family: 0,
+            uid,
+            energy: 1.0,
+            age,
+            pareja: 0,
+            padre,
+            madre,
+            faith: 0.0,
+            converted: false,
+            home_x: x,
+            home_z: 0.0,
+            town_x: 0.0,
+            town_z: 0.0,
+            say_cd: 0.0,
+            history: Vec::new(),
+            health: 1.0,
+            calm_cd: 0.0,
+            convert_cd: 0.0,
+            role: Role::Wanderer,
+            vida: Vida::nueva(uid),
+            bump: 0.0,
+            vivienda: Vivienda::default(),
+            ruta: Vec::new(),
+            ruta_meta: (0.0, 0.0),
+            pide_ruta: false,
+            atasco: 0,
+        }
+    }
+
+    fn mundo(npcs: Vec<Npc>) -> App {
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default());
+        app.insert_resource(Society::default());
+        app.add_systems(Update, parejas_del_pueblo);
+        for n in npcs {
+            app.world_mut().spawn(n);
+        }
+        app
+    }
+
+    fn rondas(app: &mut App, n: usize) {
+        for _ in 0..n {
+            app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs(3));
+            app.update();
+        }
+    }
+
+    fn parejas(app: &mut App) -> Vec<(u64, u64)> {
+        let mut q = app.world_mut().query::<&Npc>();
+        q.iter(app.world()).map(|n| (n.uid, n.pareja)).collect()
+    }
+
+    /// Un hombre y una mujer adultos del mismo pueblo, cerca, terminan juntos — y de a dos.
+    #[test]
+    fn dos_adultos_compatibles_se_emparejan() {
+        let (mut h, mut m) = (0u64, 0u64);
+        for u in 1..200 {
+            if linaje::es_mujer(u) && m == 0 {
+                m = u;
+            }
+            if !linaje::es_mujer(u) && h == 0 {
+                h = u;
+            }
+        }
+        let mut app = mundo(vec![npc(h, 0.0, 0.0, 0, 0), npc(m, 3.0, 0.0, 0, 0)]);
+        rondas(&mut app, 60);
+        let p = parejas(&mut app);
+        assert!(p.iter().all(|&(u, par)| par == if u == h { m } else { h }), "no se emparejaron: {p:?}");
+        assert!(app.world().resource::<Society>().stats.parejas >= 1);
+    }
+
+    /// Un niño nunca forma pareja, ni hermanos entre sí.
+    #[test]
+    fn ni_ninos_ni_hermanos() {
+        let (mut h, mut m) = (0u64, 0u64);
+        for u in 1..200 {
+            if linaje::es_mujer(u) && m == 0 {
+                m = u;
+            }
+            if !linaje::es_mujer(u) && h == 0 {
+                h = u;
+            }
+        }
+        let mut app = mundo(vec![npc(h, 0.0, 10.0, 900, 901), npc(m, 3.0, 10.0, 900, 901)]);
+        rondas(&mut app, 80);
+        assert!(parejas(&mut app).iter().all(|&(_, p)| p == 0), "niños emparejados");
+        let adultos = 2.0 * linaje::NINO_S;
+        let mut app = mundo(vec![npc(h, 0.0, adultos, 900, 901), npc(m, 3.0, adultos, 900, 901)]);
+        rondas(&mut app, 80);
+        assert!(parejas(&mut app).iter().all(|&(_, p)| p == 0), "hermanos emparejados");
+    }
+
+    /// Si uno de la pareja ya no existe, el que queda vuelve a estar soltero (viudez).
+    #[test]
+    fn la_viudez_suelta_a_la_pareja() {
+        let mut v = npc(5, 0.0, 0.0, 0, 0);
+        v.pareja = 77;
+        let mut app = mundo(vec![v]);
+        rondas(&mut app, 2);
+        assert_eq!(parejas(&mut app), vec![(5, 0)]);
+    }
+
+    /// Quien se juntó con el jugador no enviuda por no encontrarlo entre los NPC.
+    #[test]
+    fn la_pareja_del_jugador_no_enviuda() {
+        let mut v = npc(6, 0.0, 0.0, 0, 0);
+        v.pareja = JUGADOR_UID;
+        let mut app = mundo(vec![v]);
+        rondas(&mut app, 3);
+        assert_eq!(parejas(&mut app), vec![(6, JUGADOR_UID)]);
+    }
+
+    #[test]
+    fn el_nino_no_trabaja_y_el_fundador_si() {
+        assert!(es_nino(10.0, 1, 2));
+        assert!(!es_nino(10.0, 0, 0));
+        assert!(!es_nino(linaje::NINO_S * 2.0, 1, 2));
+    }
+
+    /// Muere el dueño de una casa: la toma la pareja que no tiene; el que ya tiene casa no.
+    #[test]
+    fn la_pareja_hereda_la_casa_y_quien_ya_tiene_no() {
+        let casa = Huella { min: (0, 0), w: 4, h: 4, puerta: (1, 3) };
+        let mut viuda = npc(8, 0.0, 0.0, 0, 0);
+        viuda.pareja = 7;
+        let mut con_casa = npc(9, 0.0, 0.0, 0, 0);
+        con_casa.pareja = 7;
+        con_casa.vivienda.casa = Some(casa);
+        let mut app = App::new();
+        app.insert_resource(Society::default());
+        app.add_systems(Update, repartir_herencias);
+        app.world_mut().spawn(viuda);
+        app.world_mut().spawn(con_casa);
+        let viv = Vivienda { casa: Some(casa), ..Default::default() };
+        app.world_mut().resource_mut::<Society>().herencias.push((7, 8, viv));
+        app.update();
+        let mut q = app.world_mut().query::<&Npc>();
+        let r: Vec<(u64, bool)> = q.iter(app.world()).map(|n| (n.uid, n.vivienda.casa.is_some())).collect();
+        assert!(r.contains(&(8, true)), "la viuda no heredó: {r:?}");
+        assert_eq!(app.world().resource::<Society>().stats.herencias, 1);
     }
 }

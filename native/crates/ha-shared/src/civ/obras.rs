@@ -47,6 +47,7 @@ impl Mundo {
             Obra::Escuela => 500.0 * (1.0 + nivel as f32),
             Obra::Muralla => 700.0 * (1.0 + nivel as f32),
             Obra::Nave => 6000.0,
+            Obra::Refugio => 900.0 * (1.0 + nivel as f32),
         }
     }
 
@@ -65,6 +66,10 @@ impl Mundo {
         if p.saberes.tiene(ARQUITECTURA) && p.muralla < 3 {
             ops.push((0.2 + if guerra { 2.5 } else { 0.0 } + if amenaza { 1.2 } else { 0.0 } + g.ambicion * 0.5, Obra::Muralla, 0));
         }
+        let bomba_cerca = p.saberes.tiene(NUCLEAR) && (p.arsenal > 0 || p.vecinos.iter().any(|v| self.pueblos.get(v).map(|q| q.arsenal > 0).unwrap_or(false)));
+        if bomba_cerca && p.saberes.tiene(ARQUITECTURA) && p.refugio < 3 {
+            ops.push((0.4 + 1.6 * g.audacia.min(0.5) + if guerra { 1.2 } else { 0.0 } + 0.8 * (1.0 - g.bondad), Obra::Refugio, 0));
+        }
         let destinos = self.destinos_posibles(id);
         if !destinos.is_empty() && p.saberes.tiene(SOPORTE_VITAL) && g.audacia > 0.35 && p.mat > 1500.0 {
             let d = destinos[0];
@@ -82,6 +87,7 @@ impl Mundo {
                     Obra::Escuela => p.escuela,
                     Obra::Muralla => p.muralla,
                     Obra::Nave => 0,
+                    Obra::Refugio => p.refugio,
                 };
                 return Some(Proyecto { obra: o, prog: 0.0, costo: Self::costo_obra(o, nivel), destino: d });
             }
@@ -129,6 +135,7 @@ impl Mundo {
                 Obra::Biblioteca => self.pueblos.get_mut(&id).unwrap().biblioteca += 1,
                 Obra::Escuela => self.pueblos.get_mut(&id).unwrap().escuela += 1,
                 Obra::Muralla => self.pueblos.get_mut(&id).unwrap().muralla += 1,
+                Obra::Refugio => self.pueblos.get_mut(&id).unwrap().refugio += 1,
                 Obra::Nave => {
                     // el cielo cambia mientras se construye: se retoma el rumbo o se cancela
                     let libres = self.destinos_posibles(id);
@@ -220,6 +227,8 @@ impl Mundo {
             + if destino >= 2 && s.tiene(PROPULSION_AVANZADA) { 0.1 } else { 0.0 }
             + if destino >= 7 && s.tiene(PROPULSION_PROFUNDA) { 0.1 } else { 0.0 })
         .clamp(0.3, 0.95);
+        // Una nave calculada con la gravedad mal medida no llega: la verdad manda, no la creencia.
+        let calidad = (calidad * self.factor_ingenieria(origen, &[super::fisica::GRAVEDAD, super::fisica::ORBITAS])).clamp(0.12, 0.95);
         let prov = self.pueblos[&origen].mat.min(600.0) * 0.5 + 100.0;
         self.pueblos.get_mut(&origen).unwrap().mat -= prov.min(self.pueblos[&origen].mat);
         let id = self.sig_expedicion;
@@ -246,6 +255,7 @@ impl Mundo {
                     self.matar(*t, "en el espacio");
                 }
                 self.hecho(Tipo::Tragedia, e.origen, e.destino as u32, format!("La nave de {no} se pierde rumbo a {nd}."));
+                self.aprender_de_falla(e.origen, &[super::fisica::GRAVEDAD, super::fisica::ORBITAS]);
                 continue;
             }
             let existente = self.pueblos.values().find(|p| p.vivo && p.cuerpo == e.destino).map(|p| p.id);
@@ -288,6 +298,7 @@ impl Mundo {
         p.tesoro = 100.0;
         p.saberes = e.tripulacion.iter().filter_map(|t| self.personas.get(t)).fold(origen.saberes, |a, x| a.union(x.saberes));
         p.archivo = origen.archivo;
+        p.creencias = origen.creencias;
         p.biblioteca = 1;
         p.escuela = 1;
         p.culto = origen.culto;

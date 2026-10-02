@@ -70,7 +70,15 @@ const MAX_KNOWN_REGIONS: usize = 3_000;
 const MAX_FORAGE_REGION: usize = 6;
 /// Cuánta biomasa vale un punto de forraje dibujado.
 const FORAGE_UNIT: f32 = 1.5;
-const VEL: f32 = 2.6;
+/// Paso de paseo (m/s). Era 2,6 y corriendo ×1,9 llegaba a 4,9: más que el jugador a pie
+/// (4,0). El reporte fue *"se sienten como por dos de velocidad"* (30 sep 2026).
+const VEL: f32 = 1.7;
+/// Ritmo del metabolismo (hambre, sed, energía). Antes el herbívoro se vaciaba en ~50 s y
+/// pasaba la vida yendo a comer y beber; ahora un ciclo dura ~4 min de juego real.
+const METABOLISMO: f32 = 0.25;
+// Guardas de ritmo: un animal asustado no le gana al jugador caminando (4 m/s), y el
+// metabolismo no vuelve a ser de minutos.
+const _: () = assert!(VEL * 1.9 < 4.0 && METABOLISMO <= 0.3);
 const TURN: f32 = 2.3;
 const EAT_D2: f32 = 0.55;
 const REPRO_ENERGY: f32 = 0.94; // se reproduce si está bien alimentado
@@ -296,21 +304,15 @@ fn genome_path(uid: u64) -> PathBuf {
 }
 
 fn load_vivarium() -> (Vec<ResidentRecord>, u64) {
-    let Ok(raw) = std::fs::read_to_string(vivarium_json()) else {
-        return (Vec::new(), 1);
-    };
-    match serde_json::from_str::<VivariumSave>(&raw) {
-        Ok(s) => (s.residents, s.next_uid.max(1)),
-        Err(_) => (Vec::new(), 1),
+    match crate::persistent_agents::cargar_json::<VivariumSave>(&vivarium_json()) {
+        Some(s) => (s.residents, s.next_uid.max(1)),
+        None => (Vec::new(), 1),
     }
 }
 
 fn save_vivarium(records: &[ResidentRecord], next_uid: u64) {
-    let _ = std::fs::create_dir_all(vivarium_dir());
     let save = VivariumSave { residents: records.to_vec(), next_uid };
-    if let Ok(json) = serde_json::to_string(&save) {
-        let _ = std::fs::write(vivarium_json(), json);
-    }
+    crate::persistent_agents::guardar_json(&vivarium_json(), &save);
 }
 
 /// Definición de una especie (visual + conducta base). El arte es un slot lógico
@@ -1092,12 +1094,14 @@ fn stream_regions(
             if live.contains(&slot) {
                 continue;
             }
-            let Some((x, z)) = free_spot(&tiles, body, rx, rz, 100 + slot) else { continue };
+            let Some((x, z)) = forage_spot(&tiles, body, rx, rz, 100 + slot) else { continue };
             commands.spawn((
                 FoodDot { x, z, region: Some((rx, rz)), slot },
-                Sprite::from_color(Color::srgb(0.85, 0.25, 0.35), Vec2::splat(0.5)),
+                // Un hongo rojo del pack: el forraje se ve como algo que se come, no como un
+                // cuadrado de color.
+                art.sprite_or_color("prop/hongos_rojo", Color::srgb(0.85, 0.25, 0.35), Vec2::splat(0.7)),
                 // Marca pintada en el suelo: banda de piso, nunca tapa a un animal.
-                Transform::from_xyz(x, -z, crate::layers::FLOOR),
+                Transform::from_xyz(x, -z + 0.35, crate::layers::FLOOR),
             ));
         }
     }
@@ -1124,6 +1128,22 @@ fn herd_slot(trophic: Trophic, i: u32) -> u32 {
 /// Primer punto CAMINABLE cerca del ancla `slot` de la región (prueba unas pocas
 /// alternativas deterministas). `None` = la región está tapada ahí; se materializa menos
 /// fauna, que es preferible a incrustar un animal dentro de una roca.
+/// Forraje sólo en terreno virgen: ni calzada, ni vereda, ni lote, ni casa, ni agua.
+fn forage_spot(tiles: &TileWorld, body: CelestialBody, rx: i32, rz: i32, slot: u32) -> Option<(f32, f32)> {
+    for k in 0..6u32 {
+        let (x, z) = ecology::region_point(body, rx, rz, slot.wrapping_add(k * 7919));
+        let (tx, tz) = (x.floor() as i64, z.floor() as i64);
+        if !tiles.solid_at(body, tx, tz)
+            && ha_shared::topdown::topdown_tile(body, 0, tx, tz).buildable_ground()
+            && ha_shared::geography::civil_at(body, tx, tz).is_none()
+            && ha_shared::topdown::building_cell(body, tx, tz).is_none()
+        {
+            return Some((x, z));
+        }
+    }
+    None
+}
+
 fn free_spot(
     tiles: &TileWorld,
     body: CelestialBody,
@@ -1165,10 +1185,7 @@ fn pick_species(defs: &[SpeciesDef], hostile: bool, rx: i32, rz: i32, i: u32) ->
 
 fn load_ecology(eco: &mut EcologyWorld) {
     eco.loaded = true;
-    let Ok(raw) = std::fs::read_to_string(ecology_json()) else {
-        return;
-    };
-    let Ok(save) = serde_json::from_str::<EcologySave>(&raw) else {
+    let Some(save) = crate::persistent_agents::cargar_json::<EcologySave>(&ecology_json()) else {
         return;
     };
     for (b, rx, rz, pop) in save.cells {
@@ -1197,10 +1214,7 @@ fn save_ecology_periodic(
     let save = EcologySave {
         cells: eco.cells.iter().map(|(&(b, x, z), c)| (b, x, z, c.pop)).collect(),
     };
-    let _ = std::fs::create_dir_all(vivarium_dir());
-    if let Ok(json) = serde_json::to_string(&save) {
-        let _ = std::fs::write(ecology_json(), json);
-    }
+    crate::persistent_agents::guardar_json(&ecology_json(), &save);
 }
 
 /// VIVARIO (F1): consume los pedidos de spawn en creativo → coloca un residente por
@@ -1285,7 +1299,7 @@ fn spawn_placed_food(
 }
 
 /// Dirección cardinal (4) del rumbo — mismo esquema que el jugador/colonos.
-fn dir4(heading: f32) -> &'static str {
+pub(crate) fn dir4(heading: f32) -> &'static str {
     let (dx, dz) = (heading.cos(), heading.sin());
     if dz.abs() >= dx.abs() {
         if dz > 0.0 {
@@ -1304,7 +1318,7 @@ fn dir4(heading: f32) -> &'static str {
 /// walk→idle→idle_down), cacheando para no reconstruir cada frame. Réplica del
 /// patrón de `sim::face_player_sprite`, así el pack LimeZu (poses por dirección)
 /// anima la fauna igual que al jugador.
-fn apply_pose(
+pub(crate) fn apply_pose(
     commands: &mut Commands,
     entity: Entity,
     art: &crate::art2d::ArtLibrary,
@@ -1541,11 +1555,11 @@ fn tick_fauna(
         // (deshidratación) → el animal necesita beber.
         // El carnívoro tiene metabolismo LENTO: una presa lo sacia mucho tiempo. Con el
         // mismo ritmo que el herbívoro cazaba cada 20 s y, entre pocos, vaciaban el valle.
-        let metab = if a.hostile { 0.006 } else { 0.02 };
+        let metab = if a.hostile { 0.006 } else { 0.02 } * METABOLISMO;
         n.hunger = (n.hunger + dt * metab).min(1.0);
-        n.thirst = (n.thirst + dt * 0.018).min(1.0);
+        n.thirst = (n.thirst + dt * 0.018 * METABOLISMO).min(1.0);
         // El hambre baja la energía pero NUNCA a cero (piso): sin muerte por inanición.
-        n.energy = (n.energy - dt * 0.02 * (1.0 + n.thirst * 0.5)).clamp(STARVE_FLOOR, 1.0);
+        n.energy = (n.energy - dt * 0.02 * METABOLISMO * (1.0 + n.thirst * 0.5)).clamp(STARVE_FLOOR, 1.0);
         a.eat_t = (a.eat_t - dt).max(0.0);
         a.drink_t = (a.drink_t - dt).max(0.0);
         a.celo = (a.celo - dt).max(0.0);
@@ -1956,7 +1970,7 @@ fn tick_fauna(
     // GRANJA: las mordidas duelen de verdad y los huevos caen al piso.
     if mordidas > 0 {
         if let Ok(mut sim) = jugador_sim.get_single_mut() {
-            sim.hp = (sim.hp - MORDIDA_DANO * mordidas as f32).max(0.0);
+            sim.hp = (sim.hp - MORDIDA_DANO * mordidas as f32 * (1.0 - sim.armadura)).max(0.0);
         }
     }
     for (hx, hz) in huevos {
@@ -2671,12 +2685,12 @@ pub fn dano_de(item: &str) -> f32 {
 pub fn botin(art_key: &str, mut r: impl FnMut() -> f32) -> Vec<(&'static str, u32)> {
     let mut rango = |a: u32, b: u32| a + ((r() * (b - a + 1) as f32) as u32).min(b - a);
     let mut v = match art_key {
-        "npc/fauna_cow" => vec![("beef", rango(1, 3)), ("leather", rango(0, 2))],
-        "npc/fauna_pig" => vec![("pork", rango(1, 3))],
+        "npc/fauna_cow" => vec![("beef", rango(1, 3)), ("leather", rango(1, 2))],
+        "npc/fauna_pig" => vec![("pork", rango(1, 3)), ("leather", rango(0, 1))],
         "npc/fauna_chicken" | "npc/fauna_duck" => vec![("chicken", 1), ("feather", rango(0, 2))],
-        "npc/fauna_sheep" => vec![("mutton", rango(1, 2)), ("wool", 1)],
-        "npc/fauna_goat" => vec![("mutton", rango(1, 2)), ("leather", rango(0, 1))],
-        "npc/fauna_donkey" => vec![("leather", rango(0, 2))],
+        "npc/fauna_sheep" => vec![("mutton", rango(1, 2)), ("wool", 1), ("leather", rango(0, 1))],
+        "npc/fauna_goat" => vec![("mutton", rango(1, 2)), ("leather", rango(1, 2))],
+        "npc/fauna_donkey" => vec![("leather", rango(1, 3))],
         "npc/fauna_rabbit" => vec![("rabbit_meat", 1), ("leather", rango(0, 1))],
         "npc/fauna_dog" => vec![],
         _ => vec![("meat", 1)],
@@ -3303,6 +3317,15 @@ fn etiquetas_de_nombre(
 mod granja_tests {
     use super::*;
 
+    /// El genoma embebido se entrenó con ESTA versión del código de sensores. Si cambia el
+    /// significado de los bits de `sense()` hay que subir `SENSE_VERSION` y reentrenar
+    /// (`./editor_assets gym`); si no, la fauna lee basura y se mueve peor sin romperse.
+    #[test]
+    fn el_genoma_se_entreno_con_los_sensores_de_hoy() {
+        let escrito = include_str!("../../iafz-sys/genomes/FAUNA.adn.sensores").trim();
+        assert_eq!(escrito, ha_shared::fauna_brain::SENSE_VERSION.to_string(), "FAUNA.adn está entrenado con otros sensores");
+    }
+
     /// Cada animal de granja de la Tierra come algo que la huerta produce (o que
     /// ya existe): si no, no hay forma de criarlo.
     #[test]
@@ -3388,7 +3411,12 @@ mod granja_tests {
         };
         let vaca = junta("npc/fauna_cow", &mut r);
         assert!(vaca.contains("beef") && vaca.contains("leather") && vaca.contains("bone"));
-        assert!(junta("npc/fauna_pig", &mut r).contains("pork"));
+        let cerdo = junta("npc/fauna_pig", &mut r);
+        assert!(cerdo.contains("pork") && cerdo.contains("leather"), "el cerdo da carne y cuero");
+        // Las pieles: todo animal de cría las da (el conejo también).
+        for key in ["npc/fauna_sheep", "npc/fauna_goat", "npc/fauna_donkey", "npc/fauna_rabbit"] {
+            assert!(junta(key, &mut r).contains("leather"), "{key} sin piel");
+        }
         let gallina = junta("npc/fauna_chicken", &mut r);
         assert!(gallina.contains("chicken") && gallina.contains("feather"));
         let oveja = junta("npc/fauna_sheep", &mut r);
