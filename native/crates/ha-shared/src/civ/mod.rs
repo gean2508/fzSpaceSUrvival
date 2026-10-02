@@ -23,6 +23,7 @@ pub mod fisica;
 pub mod gente;
 pub mod gobierno;
 pub mod guerra;
+pub mod innovacion;
 pub mod jugador;
 pub mod mundo;
 pub mod nombres;

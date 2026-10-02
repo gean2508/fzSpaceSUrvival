@@ -98,15 +98,24 @@ fn registrar_poses_de_personaje(art: &mut ArtLibrary) {
     let mut total = 0usize;
     for clave in claves {
         let mut poses: HashMap<String, PoseInfo> = HashMap::new();
+        // Los aldeanos tienen la hoja COMPACTA (sólo sus filas, `NPC_ANIMS`); el jugador, la completa.
+        let es_npc = clave.starts_with("npc/char_");
         for anim in CHAR_ANIMS {
+            if es_npc && ha_assets::chargen_index::npc_cell(anim, 0, 0).is_none() {
+                continue;
+            }
             for (dir, nombre) in DIRS {
                 // Una animación de una sola dirección se registra una vez: cuatro
                 // poses idénticas sólo engordan el mapa.
                 if anim.dirs == AnimDirs::Single && dir != 3 {
                     continue;
                 }
-                let celda = char_cell(anim, dir, 0);
-                let (col, row) = (celda % STRIP_COLS, celda / STRIP_COLS);
+                let (col, row) = if es_npc {
+                    ha_assets::chargen_index::npc_cell(anim, dir, 0).unwrap_or((0, 0))
+                } else {
+                    let celda = char_cell(anim, dir, 0);
+                    (celda % STRIP_COLS, celda / STRIP_COLS)
+                };
                 let origen = UVec2::new(col * cw, row * ch);
                 let pose = format!("{}_{}", anim.key, nombre);
                 poses.insert(
@@ -255,7 +264,7 @@ pub struct ArtLibrary {
     /// **Borde de 9 partes declarado** (px de la hoja), para los marcos del kit
     /// de interfaz. Lo publica `scripts/import-ui-kit.py`. Sin entrada acá,
     /// `ui_frame_node` cae a la heurística de "una celda de la grilla".
-    slices: HashMap<String, [f32; 4]>,
+    pub(crate) slices: HashMap<String, [f32; 4]>,
     /// Poses nombradas por slot (aplica a CUALQUIER atlas, no sólo el jugador):
     /// clave del slot → nombre de pose ("idle_down", "walk_left"…) → frame.
     poses: HashMap<String, HashMap<String, PoseInfo>>,
@@ -1740,6 +1749,25 @@ impl ArtLibrary {
 
 #[cfg(test)]
 mod tests {
+    /// Las hojas de aldeano tienen que estar COMPACTAS (`scripts/compactar-npcs.py`): con la
+    /// hoja completa las poses derivadas apuntarían a filas que no son las suyas.
+    #[test]
+    fn las_hojas_de_aldeano_estan_compactas() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/art/npc");
+        let (w, h) = (ha_assets::chargen_index::NPC_COLS * 32, ha_assets::chargen_index::NPC_ANIMS.len() as u32 * 64);
+        let mut n = 0;
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().map(|x| x == "png").unwrap_or(false) && p.file_name().unwrap().to_string_lossy().starts_with("char_") {
+                let b = std::fs::read(&p).unwrap();
+                let (pw, ph) = (u32::from_be_bytes(b[16..20].try_into().unwrap()), u32::from_be_bytes(b[20..24].try_into().unwrap()));
+                assert_eq!((pw, ph), (w, h), "{} no está compacta: correr scripts/compactar-npcs.py", p.display());
+                n += 1;
+            }
+        }
+        assert_eq!(n, 20);
+    }
+
     use super::*;
 
     /// **Un slot de UI curado como POSE tiene que traer su recorte.**

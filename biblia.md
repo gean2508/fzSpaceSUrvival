@@ -8110,7 +8110,12 @@ vos.
   y la fauna de los otros planetas, que sigue siendo quad de color.
 
 ### Perf / render
-- **Componer también el cuerpo de los aldeanos** (hoy sólo el jugador y los
+- ✅ (2 oct 2026) **Hojas de aldeano COMPACTAS**: `scripts/compactar-npcs.py` las recorta a las 7 filas
+  que usan (`chargen_index::NPC_ANIMS`): 1536×448, 2,7 MB de GPU en vez de 9,4 (−71 %; ~54 MB en vez de
+  ~188 MB con las 20). Correrlo tras cada `chargen`; lo guarda `las_hojas_de_aldeano_estan_compactas`.
+  Verificado con captura de escritorio (Xvfb). Lo que sigue pendiente de esto: que cada aldeano sea ÚNICO
+  (hoy se repiten cada 20). Texto viejo:
+  **Componer también el cuerpo de los aldeanos** (hoy sólo el jugador y los
   retratos). Las 20 hojas horneadas de `art/npc/` pesan 6,9 MB de APK y suben
   896×656 px cada una a la GPU (≈2,3 MB de VRAM × 20) para usar TRES cuadros; la
   tira compuesta mide 448×96 (172 kB). Sale ~45 MB de VRAM y 6,9 MB de APK, y de
@@ -8129,7 +8134,7 @@ vos.
 ### Menor
 - Escalas por asset editables desde el editor.
 - Audio: sonidos por bioma, pájaros/viento ambientales, variación día/noche.
-- Panel UI 9-slice: el editor lo arma pero el HUD todavía no lo consume.
+- ~~Panel UI 9-slice~~: ✅ (2 oct 2026) `ui_pack::MarcoDeHud(clave)` cambia el color plano de un panel del HUD por el marco del pack; lo usan el menú de NPC/compañero, MULTIJUGADOR y la barra de metas. Texto sobre pergamino = `Pack::TINTA`/`SUAVE`. Falta migrar el resto de paneles viejos (mochila, cofre, menú de juego).
 - Normal maps reales para los sprites, si el relieve falso no alcanza.
 
 ### Deuda conocida
@@ -8331,12 +8336,10 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
   `SENSE_VERSION` + `FAUNA.adn.sensores` + test en `fauna.rs` cuidan que los sensores coincidan.
 
 **Falta (honesto) — todo lo que sigue necesita ver la pantalla o el hardware, por eso no se hizo a ciegas**
-* Componer el cuerpo de los aldeanos (§13 Perf): el NPC pide poses `sleep_down`, `sit_floor_*`,
-  `punch_*`, `pick_up_*` que hay que comprobar que existan en `player/character` (que es el layout
-  de la hoja compuesta); hay que verlo en pantalla antes de cambiarlo.
-* Panel 9-slice en el HUD, interior de C8, ciudad generada con el kit, tiendas/carteles, gym
-  de fauna con agua+amenaza (reentrenar `FAUNA.adn`), origen flotante: cada uno toca render o
-  entrenamiento largo y se valida con ojo.
+* (hecho) Hojas de aldeano compactas y panel 9-slice en el HUD: ver §13.
+* Interior de C8, ciudad generada con el kit, tiendas/carteles, gym
+  de fauna con agua+amenaza (reentrenar `FAUNA.adn`), cada uno toca render o
+  entrenamiento largo y se valida con ojo (el origen flotante se midió: no hace falta, ver §17).
 * **Nada de esto está probado en el celu**: por orden del usuario (2 oct) se prueba AL FINAL.
 
 ### Arte con IA (idea, 1 oct 2026 — en cola)
@@ -8382,8 +8385,24 @@ resultados: no hay evidencia de conciencia en estos sistemas.
 **Conexión con el dron**: «el residuo nace en cero» (bitácora 7.54) = prior homeostático: la
 vida es una base programada más una corrección aprendida; por eso la fauna arranca en la vara.
 
-**Cola derivada** (sin frenar lo en curso): test de conservación de flujos (1), contador de
-actividad evolutiva con modelo nulo (4), presupuesto cognitivo explícito (6), rastro causal (5).
+**Mediciones hechas (2 oct 2026)**
+* **Origen flotante: no hace falta.** `solar_ephemeris::precision_tests` mide la mayor coordenada
+  (el Sol, 4 000 000 m) → resolución f32 de 0,25 m, que sólo se ve donde un píxel abarca decenas de
+  metros; sobre una superficie el jugador vive en coordenadas locales. Si la escala crece, el test falla.
+* **La civilización NO es de evolución abierta** (`civ::pruebas::actividad_evolutiva_de_la_civilizacion`,
+  6 semillas × 600 años): los 44 saberes se agotan en 6/6 semillas entre el año 300 y el 550 y la novedad
+  del último tercio es 0,27 de la del primero. Falla el requisito 2 de Taylor («diversidad ilimitada»):
+  el catálogo es finito. ✅ **Arreglado (2 oct 2026)**: `civ/innovacion.rs` — una innovación es la
+  combinación (hash) de dos saberes u otras innovaciones del pueblo, se descubre sola cada año
+  (`1 + saberes/10` intentos), vale poco y con rendimiento logarítmico (`bonus`), se difunde por comercio
+  y se pierde si el pueblo muere; tope 4096 por pueblo. Con ella, la ventana de 50 años más pobre de las
+  6 semillas pasa de 1-6 novedades a cientos (el test exige ≥ 100). El guardado crece 8 B por innovación.
+* **Presupuesto cognitivo** (`causal.rs`): `/actividad` muestra cuántos cerebros hay por nivel
+  (instinto / hábito / deliberación). Rastro causal: `/causal`.
+* Modelo nulo de Bedau en tiempo de ejecución: no se implementa (necesita muchas corridas); se hace
+  fuera de línea con el test de arriba, que ya usa 6 semillas (regla 3.20 del dron).
+
+**Cola derivada** (sin frenar lo en curso): ninguna abierta de §17.
 
 **Indicadores de conciencia a vigilar (pregunta del usuario, 2 oct 2026).** ¿Puede la
 conciencia emerger? Depende de la teoría y no hay prueba: funcionalismo/espacio de trabajo global

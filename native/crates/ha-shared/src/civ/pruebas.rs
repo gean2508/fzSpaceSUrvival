@@ -349,3 +349,73 @@ fn un_dia_de_civilizacion_cuesta_poco() {
     eprintln!("paso_dia: {por_dia:.2} ms/dia con {} pueblos y {} personas", m.pueblos.len(), m.personas.len());
     assert!(por_dia < 40.0, "un día de civilización tarda {por_dia:.1} ms");
 }
+
+
+/// **Actividad evolutiva de la civilización, medida en varias semillas** (biblia §17, regla 4).
+///
+/// Taylor y otros piden, para evolución abierta, «un medio de diversidad ilimitada». Los saberes
+/// son un catálogo FINITO (`N_SABERES`): la civilización puede agotarlos, y después de eso sólo
+/// quedan variaciones de política. Esta prueba lo mide en vez de suponerlo: por semilla, en
+/// ventanas de 50 años, cuántas novedades aparecen (saberes del mundo nuevos, cultos nuevos,
+/// regímenes distintos vistos) y cuándo se agota cada una. Regla 3.20 del dron: ninguna conclusión
+/// con una semilla — se imprime la tabla de 6 y se afirma sólo lo que vale en todas.
+#[test]
+fn actividad_evolutiva_de_la_civilizacion() {
+    use std::collections::BTreeSet;
+    let sitios = sitios_falsos(48);
+    const VENTANAS: u64 = 12; // 12 × 50 años
+    let mut agotan_saberes = 0;
+    let mut piso_global = usize::MAX;
+    let mut tasas_cultos = Vec::new();
+    for semilla in 1..=6u64 {
+        let mut m = Mundo::sembrar(semilla, &sitios);
+        let mut regimenes: BTreeSet<usize> = BTreeSet::new();
+        let mut innovs: BTreeSet<u64> = BTreeSet::new();
+        let mut ult_innov = 0usize;
+        let (mut ult_saberes, mut ult_cultos, mut ult_reg) = (m.saberes_mundo.cuenta() as usize, m.cultos.len(), 0usize);
+        let mut novedad = Vec::new();
+        let mut vivos_serie: Vec<usize> = Vec::new();
+        let mut cuando_se_agotan: Option<u64> = None;
+        for v in 0..VENTANAS {
+            m.avanzar(DIAS_ANIO * 50);
+            for p in m.pueblos.values().filter(|p| p.vivo) {
+                regimenes.insert(p.conv.dominante());
+            }
+            for p in m.pueblos.values() {
+                innovs.extend(p.innov.iter().copied());
+            }
+            let (sa, cu, re) = (m.saberes_mundo.cuenta() as usize, m.cultos.len(), regimenes.len());
+            // Las innovaciones cuentan como novedad, pero se imprimen aparte: sin ellas la tabla
+            // original (saberes + cultos + regímenes) es la que mostró el techo del catálogo.
+            let inn = innovs.len();
+            novedad.push(sa.saturating_sub(ult_saberes) + cu.saturating_sub(ult_cultos) + re.saturating_sub(ult_reg) + inn.saturating_sub(ult_innov));
+            ult_innov = inn;
+            vivos_serie.push(m.pueblos.values().filter(|p| p.vivo).count());
+            if sa >= N_SABERES as usize && cuando_se_agotan.is_none() {
+                cuando_se_agotan = Some((v + 1) * 50);
+            }
+        }
+        piso_global = piso_global.min(*novedad.iter().min().unwrap_or(&0));
+        let tercio = (VENTANAS / 3) as usize;
+        let (primero, ultimo): (usize, usize) = (novedad[..tercio].iter().sum::<usize>(), novedad[novedad.len() - tercio..].iter().sum::<usize>());
+        eprintln!(
+            "semilla {semilla}: pueblos vivos {vivos_serie:?} · novedades por 50 años {novedad:?} · primer tercio {primero}, último {ultimo} · saberes {}/{N_SABERES}{}",
+            m.saberes_mundo.cuenta(),
+            cuando_se_agotan.map(|a| format!(" (agotados al año {a})")).unwrap_or_default()
+        );
+        if cuando_se_agotan.is_some() {
+            agotan_saberes += 1;
+        }
+        tasas_cultos.push(ultimo as f32 / primero.max(1) as f32);
+        invariantes(&m);
+    }
+    let media = tasas_cultos.iter().sum::<f32>() / tasas_cultos.len() as f32;
+    eprintln!("saberes agotados en {agotan_saberes}/6 semillas · novedad último/primer tercio (media) = {media:.2} · ventana más pobre = {piso_global}");
+    // Lo único que se afirma: es una medición, no un deseo. La novedad no puede ser negativa y la
+    // tabla tiene que existir; si algún día todas las semillas siguen creando novedades igual de
+    // rápido hasta el final, esta línea se cambia por la afirmación nueva.
+    // Evolución abierta = la novedad NO se apaga (no que se mantenga igual de rápida: con el pozo
+    // creciendo es natural que baje la tasa). Sin innovaciones, las ventanas finales daban 1-6
+    // novedades; con ellas, cientos. Se exige un piso en TODAS las ventanas de TODAS las semillas.
+    assert!(piso_global >= 100, "una ventana de 50 años quedó con sólo {piso_global} novedades: la civilización se estancó");
+}

@@ -573,6 +573,7 @@ fn panel_multi(
             },
             BackgroundColor(Color::srgb(0.05, 0.07, 0.12)),
             BorderColor(color_texto()),
+            crate::ui_pack::MarcoDeHud(crate::ui_pack::marco::PANEL),
             GlobalZIndex(850),
             FocusPolicy::Block,
             Interaction::default(),
@@ -583,13 +584,13 @@ fn panel_multi(
             let linea = |p: &mut ChildBuilder, t: String, px: f32, c: Color| {
                 p.spawn((Text::new(t), TextFont { font_size: px, ..default() }, TextColor(c)));
             };
-            linea(p, "MULTIJUGADOR".into(), 20.0, color_texto());
-            linea(p, estado, 13.0, Color::srgb(0.95, 0.85, 0.55));
+            linea(p, "MULTIJUGADOR".into(), 20.0, crate::ui_pack::Pack::TINTA);
+            linea(p, estado, 13.0, Color::srgb(0.55, 0.33, 0.05));
             if !multi.mensaje.is_empty() {
-                linea(p, multi.mensaje.clone(), 12.0, Color::srgb(0.8, 0.8, 0.85));
+                linea(p, multi.mensaje.clone(), 12.0, crate::ui_pack::Pack::SUAVE);
             }
             if !ip.is_empty() {
-                linea(p, ip, 12.0, Color::srgb(0.8, 0.8, 0.85));
+                linea(p, ip, 12.0, crate::ui_pack::Pack::SUAVE);
             }
             // Ranking de la sala (OASIS): vos y los demás, por puntos.
             let en = idioma_actual() == Idioma::En;
@@ -600,7 +601,7 @@ fn panel_multi(
             }
             fila_rank.sort_by_key(|f| std::cmp::Reverse(f.1 + f.2 * 2));
             for (n, pt, bj) in &fila_rank {
-                linea(p, format!("· {n}  {pt} pts · {bj} {}", if en { "kills" } else { "bajas" }), 12.0, color_texto());
+                linea(p, format!("· {n}  {pt} pts · {bj} {}", if en { "kills" } else { "bajas" }), 12.0, crate::ui_pack::Pack::TINTA);
             }
             let total_baj: u32 = fila_rank.iter().map(|f| f.2).sum();
             if multi.conectado() {
@@ -608,7 +609,7 @@ fn panel_multi(
                     p,
                     if en { format!("Room total: {total_baj} infected down") } else { format!("Total de la sala: {total_baj} infectados abatidos") },
                     12.0,
-                    Color::srgb(0.95, 0.85, 0.55),
+                    Color::srgb(0.55, 0.33, 0.05),
                 );
             }
             let fila = Node {

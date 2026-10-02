@@ -112,6 +112,23 @@ const fn a(
     CharAnim { key, label, row, frames, dirs, fps, looping }
 }
 
+/// **Las filas que usan los aldeanos** (`society::tick_society`: respirar, caminar, dormir, rezar
+/// sentado, pelear, juntar). Las hojas de `art/npc/char_XX.png` se COMPACTAN a sólo estas filas, en
+/// este orden (`scripts/compactar-npcs.py`): 1536×448 en vez de 1792×1312, o sea 2,7 MB de GPU por
+/// hoja en lugar de 9,4 — con 20 hojas son ~54 MB en vez de ~188 MB (el Redmi muere por OOM, §12).
+/// El jugador y el creador de personajes siguen con la hoja completa.
+pub const NPC_ANIMS: &[&str] = &["still", "idle", "walk", "sleep", "sit_floor", "pick_up", "punch"];
+
+/// Columnas de la hoja compacta: la fila más ancha (`pick_up`: 12 cuadros × 4 direcciones).
+pub const NPC_COLS: u32 = 48;
+
+/// `(col, fila)` de una celda en la hoja COMPACTA del aldeano, o `None` si esa animación no está.
+pub fn npc_cell(anim: &CharAnim, dir: u32, frame: u32) -> Option<(u32, u32)> {
+    let fila = NPC_ANIMS.iter().position(|k| *k == anim.key)? as u32;
+    let col = char_cell(anim, dir, frame) % STRIP_COLS;
+    Some((col, fila))
+}
+
 /// Busca una animación por su ID lógico.
 pub fn char_anim(key: &str) -> Option<&'static CharAnim> {
     CHAR_ANIMS.iter().find(|a| a.key == key)
@@ -374,4 +391,20 @@ mod tests {
         assert_eq!(back.hair, idx.hair);
         assert_eq!(back.npc_looks, idx.npc_looks);
     }
+
+    #[test]
+    fn la_hoja_compacta_del_aldeano_alcanza_para_todas_sus_animaciones() {
+        for k in NPC_ANIMS {
+            let a = char_anim(k).expect(k);
+            for dir in 0..4 {
+                for f in 0..a.frames {
+                    let (col, fila) = npc_cell(a, dir, f).unwrap();
+                    assert!(col < NPC_COLS, "{k} se sale de la hoja compacta");
+                    assert!((fila as usize) < NPC_ANIMS.len());
+                }
+            }
+        }
+        assert!(npc_cell(char_anim("hurt").unwrap(), 0, 0).is_none());
+    }
 }
+

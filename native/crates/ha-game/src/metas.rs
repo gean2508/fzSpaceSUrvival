@@ -306,10 +306,11 @@ fn spawn_ui(commands: &mut Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(6.0),
+                // Debajo de los botones MENU / CAM (arriba al centro), que antes quedaban tapados.
+                top: Val::Px(44.0),
                 left: Val::Percent(50.0),
-                margin: UiRect::left(Val::Px(-170.0)),
-                width: Val::Px(340.0),
+                margin: UiRect::left(Val::Px(-150.0)),
+                width: Val::Px(300.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(2.0),
                 padding: UiRect::all(Val::Px(6.0)),
@@ -319,13 +320,14 @@ fn spawn_ui(commands: &mut Commands) {
             },
             BackgroundColor(Color::srgba(0.05, 0.07, 0.12, 0.72)),
             BorderColor(acento),
+            crate::ui_pack::MarcoDeHud(crate::ui_pack::marco::SLOT_CHICO),
             // Sin `Button`/`Interaction`: es de sólo lectura y no le roba toques al mundo.
             GlobalZIndex(40),
             MetasUi,
             Name::new("Metas"),
         ))
         .with_children(|p| {
-            p.spawn((Text::new(""), TextFont { font_size: 14.0, ..default() }, TextColor(acento), MetasTitulo));
+            p.spawn((Text::new(""), TextFont { font_size: 14.0, ..default() }, TextColor(crate::ui_pack::Pack::TINTA), MetasTitulo));
             p.spawn(Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(4.0),
@@ -339,11 +341,13 @@ fn spawn_ui(commands: &mut Commands) {
                     MetasBarra,
                 ));
             });
-            p.spawn((Text::new(""), TextFont { font_size: 11.0, ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.85)), MetasPista));
+            p.spawn((Text::new(""), TextFont { font_size: 11.0, ..default() }, TextColor(crate::ui_pack::Pack::SUAVE), MetasPista));
+            // El aviso de «meta cumplida» cuelga POR DEBAJO del panel sin ocuparle lugar.
             p.spawn((
                 Text::new(""),
                 TextFont { font_size: 15.0, ..default() },
                 TextColor(Color::srgb(1.0, 0.85, 0.4)),
+                Node { position_type: PositionType::Absolute, top: Val::Percent(100.0), ..default() },
                 Visibility::Hidden,
                 MetasAviso,
             ));

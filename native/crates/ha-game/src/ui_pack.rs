@@ -518,6 +518,7 @@ impl Plugin for UiPackPlugin {
             .init_resource::<HaloTex>()
             .add_systems(Startup, preparar_halo)
             .add_systems(Update, (preparar_hoja, rehacer_pantalla_si_cambia_k))
+            .add_systems(Update, enmarcar_paneles)
             .add_systems(PostUpdate, escala_de_los_marcos.before(bevy::ui::UiSystem::Layout));
     }
 }
@@ -525,6 +526,37 @@ impl Plugin for UiPackPlugin {
 /// Esquina de un marco del kit que todavía no se ajustó (la pone
 /// `ArtLibrary::ui_frame_node` para los marcos con borde declarado).
 pub const ESQUINA_SIN_AJUSTAR: f32 = 6.0;
+
+/// **Un panel del HUD con el marco del pack** (en vez de un color plano): se le pone a la
+/// entidad que hoy lleva `BackgroundColor` + `BorderColor`, con la clave del marco
+/// (`marco::PANEL`, `marco::SLOT_CHICO`…). `enmarcar_paneles` la cambia por el 9-slice del kit y
+/// subraya el relleno interior para que el contenido no caiga sobre la moldura. Si el pack no
+/// tiene la clave, el panel queda como estaba (color plano): nunca se queda sin fondo.
+#[derive(Component, Clone, Copy)]
+pub struct MarcoDeHud(pub &'static str);
+
+fn enmarcar_paneles(
+    mut commands: Commands,
+    art: Res<ArtLibrary>,
+    touch: Res<TouchLayout>,
+    mut nuevos: Query<(Entity, &MarcoDeHud, &mut Node), Added<MarcoDeHud>>,
+) {
+    for (e, m, mut node) in &mut nuevos {
+        let Some(img) = art.ui_frame_node(m.0) else { continue };
+        // La moldura se dibuja a `3·k` puntos por píxel del kit (ver `escala_de_los_marcos`): el
+        // contenido tiene que empezar después. Se toma el borde declarado del marco.
+        let borde = art.slices.get(m.0).map(|b| b[0]).unwrap_or(8.0);
+        let moldura = (borde * 3.0 * k(&touch)).ceil() + 3.0;
+        let (pl, pt) = (node.padding.left, node.padding.top);
+        let mas = |v: Val| match v {
+            Val::Px(x) => Val::Px(x.max(moldura)),
+            _ => Val::Px(moldura),
+        };
+        node.padding = UiRect { left: mas(pl), right: mas(pl), top: mas(pt), bottom: mas(pt) };
+        node.border = UiRect::ZERO;
+        commands.entity(e).remove::<BackgroundColor>().remove::<BorderColor>().insert(img);
+    }
+}
 
 /// Un marco del kit ya llevado a la escala de la pantalla.
 #[derive(Component)]

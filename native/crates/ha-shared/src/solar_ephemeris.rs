@@ -227,3 +227,30 @@ mod tests {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 }
+
+#[cfg(test)]
+mod precision_tests {
+    use super::*;
+
+    /// **Origen flotante: se mide, no se supone.** Los transforms son `f32`: su resolución en
+    /// metros es el `ulp` de la coordenada. Este test calcula el peor caso (el cuerpo más lejos del
+    /// origen) y falla si la escala del sistema crece hasta que un píxel de 3 cm del suelo pueda
+    /// bailar. Mientras pase, no hace falta rebasear el mundo (biblia §13, «Origen flotante»).
+    #[test]
+    fn la_escala_del_sistema_no_rompe_la_precision_f32() {
+        let mut peor = (0.0f32, "");
+        for b in CelestialBody::all() {
+            let c = body_def(*b).center;
+            let m = c[0].abs().max(c[2].abs());
+            if m > peor.0 {
+                peor = (m, body_def(*b).label);
+            }
+        }
+        let ulp = f32::from_bits(peor.0.to_bits() + 1) - peor.0;
+        eprintln!("mayor coordenada: {:.0} m ({}) → resolución f32 {:.3} m", peor.0, peor.1, ulp);
+        // En el espacio entre cuerpos la cámara está muy alejada (un píxel abarca decenas de
+        // metros), y sobre una superficie el jugador vive en coordenadas LOCALES del cuerpo.
+        // Con ulp ≤ 8 m ningún cuerpo se ve moverse a saltos desde donde se lo mira.
+        assert!(ulp <= 8.0, "la coordenada {:.0} m ({}) ya baila {ulp} m: hay que rebasear el origen", peor.0, peor.1);
+    }
+}

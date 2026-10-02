@@ -248,7 +248,7 @@ fn pintar_habilidades(
             TextColor(Color::srgb(0.8, 0.9, 0.85)),
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(74.0),
+                top: Val::Px(112.0),
                 left: Val::Percent(50.0),
                 margin: UiRect::left(Val::Px(-170.0)),
                 width: Val::Px(340.0),

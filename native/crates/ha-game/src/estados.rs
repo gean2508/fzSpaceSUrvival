@@ -155,7 +155,7 @@ fn pintar(
             TextColor(Color::srgb(1.0, 0.4, 0.4)),
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(92.0),
+                top: Val::Px(130.0),
                 left: Val::Percent(50.0),
                 margin: UiRect::left(Val::Px(-170.0)),
                 width: Val::Px(340.0),

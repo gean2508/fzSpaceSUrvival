@@ -432,7 +432,7 @@ fn sync_menu(
                 right: Val::Px(12.0),
                 // Debajo de la energía Y del reloj del día (`hud::spawn_day_clock`,
                 // misma esquina): si sube más, los tapa.
-                top: Val::Px(150.0),
+                top: Val::Px(112.0),
                 width: Val::Px(300.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(8.0),
@@ -442,6 +442,7 @@ fn sync_menu(
             },
             BackgroundColor(PANEL_BG),
             BorderColor(NEON_CYAN),
+            crate::ui_pack::MarcoDeHud(crate::ui_pack::marco::PANEL),
             GlobalZIndex(800),
             FocusPolicy::Block,
             Interaction::default(),
@@ -473,24 +474,24 @@ fn sync_menu(
                     col.spawn((
                         Text::new(name.clone()),
                         TextFont { font_size: 20.0, ..default() },
-                        TextColor(NEON_CYAN),
+                        TextColor(crate::ui_pack::Pack::TINTA),
                     ));
                     col.spawn((
                         Text::new(format!("[{role}]  {job}")),
                         TextFont { font_size: 13.0, ..default() },
-                        TextColor(Color::srgb(0.7, 0.75, 0.85)),
+                        TextColor(crate::ui_pack::Pack::SUAVE),
                     ));
                     col.spawn((
                         Text::new(estado.clone()),
                         TextFont { font_size: 12.0, ..default() },
-                        TextColor(Color::srgb(0.95, 0.85, 0.55)),
+                        TextColor(Color::srgb(0.55, 0.33, 0.05)),
                     ));
                 });
             });
             root.spawn((
                 Text::new("últimos mensajes:"),
                 TextFont { font_size: 12.0, ..default() },
-                TextColor(Color::srgb(0.6, 0.65, 0.75)),
+                TextColor(crate::ui_pack::Pack::ETIQUETA),
             ));
             // Historial (viejo → nuevo). Vacío = todavía no dijo nada cerca tuyo.
             root.spawn((
@@ -507,14 +508,14 @@ fn sync_menu(
                     list.spawn((
                         Text::new("(silencio... toca HABLAR)"),
                         TextFont { font_size: 13.0, ..default() },
-                        TextColor(Color::srgb(0.5, 0.55, 0.65)),
+                        TextColor(crate::ui_pack::Pack::SUAVE),
                     ));
                 } else {
                     for line in &history {
                         list.spawn((
                             Text::new(format!("- {line}")),
                             TextFont { font_size: 14.0, ..default() },
-                            TextColor(Color::srgb(0.9, 0.94, 1.0)),
+                            TextColor(crate::ui_pack::Pack::TINTA),
                         ));
                     }
                 }
@@ -928,6 +929,7 @@ fn sync_menu_companero(
             },
             BackgroundColor(PANEL_BG),
             BorderColor(NEON_CYAN),
+            crate::ui_pack::MarcoDeHud(crate::ui_pack::marco::PANEL),
             GlobalZIndex(800),
             FocusPolicy::Block,
             Interaction::default(),
@@ -935,11 +937,11 @@ fn sync_menu_companero(
             Name::new("CompaneroMenu"),
         ))
         .with_children(|root| {
-            root.spawn((Text::new("Compañero"), TextFont { font_size: 20.0, ..default() }, TextColor(NEON_CYAN)));
+            root.spawn((Text::new("Compañero"), TextFont { font_size: 20.0, ..default() }, TextColor(crate::ui_pack::Pack::TINTA)));
             root.spawn((
                 Text::new(format!("{estado}  |  orden: {orden}")),
                 TextFont { font_size: 13.0, ..default() },
-                TextColor(Color::srgb(0.95, 0.85, 0.55)),
+                TextColor(Color::srgb(0.55, 0.33, 0.05)),
             ));
             root.spawn(Node {
                 flex_direction: FlexDirection::Row,

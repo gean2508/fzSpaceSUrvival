@@ -496,6 +496,7 @@ impl Mundo {
         self.colonias_anual();
         self.hallazgos_anual();
         self.cultos_anual();
+        self.innovacion_anual();
     }
 
     /// Avanza `dias` días.

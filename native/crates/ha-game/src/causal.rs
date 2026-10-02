@@ -9,6 +9,7 @@
 //!   estanca, el mundo se quedó sin cosas nuevas. `/actividad` lo muestra. Es una medida cruda:
 //!   no compara contra un modelo nulo (eso pide muchas semillas, ver checklist de biblia §2).
 
+use bevy::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
 
@@ -55,9 +56,55 @@ pub fn ultimos(n: usize) -> Vec<String> {
 pub fn resumen() -> String {
     con(|l| {
         let por: Vec<String> = l.por_tipo.iter().map(|(t, n)| format!("{t} {n}")).collect();
-        format!("{} eventos · {} tipos · {}", l.siguiente, l.por_tipo.len(), por.join(", "))
+        let (i, h, d) = cerebros();
+        format!(
+            "{} eventos · {} tipos · {} · cerebros: {i} instinto, {h} hábito, {d} deliberación",
+            l.siguiente,
+            l.por_tipo.len(),
+            por.join(", ")
+        )
     })
     .unwrap_or_default()
+}
+
+/// **Presupuesto cognitivo** (§17 regla 6): cuántos cerebros hay en cada nivel. Instinto = red
+/// IAFZ (fauna), hábito = Sims (aldeanos, compañero), deliberación = los «héroes» (hoy sólo el
+/// jugador, y en multijugador los otros jugadores). Lo escribe `contar_cerebros` cada 5 s.
+static CEREBROS: Mutex<(u32, u32, u32)> = Mutex::new((0, 0, 0));
+
+pub fn cerebros() -> (u32, u32, u32) {
+    CEREBROS.lock().map(|g| *g).unwrap_or_default()
+}
+
+pub struct CausalPlugin;
+
+impl Plugin for CausalPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, contar_cerebros.run_if(in_state(crate::game_phase::GamePhase::Playing)))
+            .add_systems(OnExit(crate::game_phase::GamePhase::Playing), |mut t: Local<f32>| {
+                *t = 0.0;
+                vaciar();
+            });
+    }
+}
+
+fn contar_cerebros(
+    time: Res<Time>,
+    mut acc: Local<f32>,
+    animales: Query<(), With<crate::fauna::Animal>>,
+    aldeanos: Query<(), With<crate::society::Npc>>,
+    compa: Query<(), With<crate::companion::Companion>>,
+    remotos: Query<(), With<crate::multijugador::JugadorRemoto>>,
+) {
+    *acc += time.delta_secs();
+    if *acc < 5.0 {
+        return;
+    }
+    *acc = 0.0;
+    let v = (animales.iter().count() as u32, (aldeanos.iter().count() + compa.iter().count()) as u32, 1 + remotos.iter().count() as u32);
+    if let Ok(mut g) = CEREBROS.lock() {
+        *g = v;
+    }
 }
 
 /// Para las pruebas y para empezar una partida de cero.
@@ -80,6 +127,7 @@ mod tests {
         assert_eq!(u, vec!["#2 alijo: abierto".to_string(), "#3 baja: otro".to_string()]);
         let r = resumen();
         assert!(r.starts_with("3 eventos · 2 tipos"), "{r}");
+        assert!(r.contains("cerebros:"), "{r}");
         assert!(r.contains("baja 2") && r.contains("alijo 1"));
         for i in 0..CAPACIDAD * 2 {
             registrar("ruido", format!("{i}"));
