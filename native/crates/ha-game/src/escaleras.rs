@@ -214,6 +214,18 @@ impl Plugin for EscalerasPlugin {
 
 // ── Andar el tramo ───────────────────────────────────────────────────────────
 
+/// A qué nivel pasa el jugador según dónde va del tramo `t_z` (`s`, 0 = pie, 1 = cima).
+/// Puro, para poder probarlo: subir sólo si hay suelo arriba; bajar siempre.
+pub(crate) fn nivel_nuevo(actual: i32, t_z: i32, s: f32, hay_suelo_arriba: bool) -> Option<i32> {
+    if actual == t_z && s >= escaleras::CIMA && hay_suelo_arriba {
+        Some(t_z + 1)
+    } else if actual == t_z + 1 && s <= escaleras::PIE {
+        Some(t_z)
+    } else {
+        None
+    }
+}
+
 /// **El sistema entero de subir y bajar**, y es una función de dónde estás
 /// parado: sin eventos, sin pestillo y sin estado que se pueda desincronizar.
 ///
@@ -273,13 +285,14 @@ pub(crate) fn caminar_tramo(
     // es el mismo en que está más oscura, y es el mismo en que `tiles.z` cambia.
     fade.tramo = crate::world2d::FUNDIDO_TRAMO * escaleras::meseta_del_tramo(s);
     // El compromiso. Es lo único que toca `tiles.z` en todo el módulo.
-    let nuevo = if tiles.z == t.z && s >= escaleras::CIMA {
-        Some(t.z + 1)
-    } else if tiles.z == t.z + 1 && s <= escaleras::PIE {
-        Some(t.z)
-    } else {
-        None
+    // **Subir exige suelo arriba.** Una escalera sin rellano (datos viejos, o una obra a medias)
+    // te subía a un nivel donde la celda es aire; `fall_through_void` te devolvía abajo y el
+    // tramo te volvía a subir: un entra-y-sale a metralla, cuadro tras cuadro.
+    let hay_suelo_arriba = {
+        let arriba = tiles.tile_at_level(body, t.z + 1, tx, tz);
+        arriba != Tile::Air && !arriba.solid()
     };
+    let nuevo = nivel_nuevo(tiles.z, t.z, s, hay_suelo_arriba);
     if let Some(z) = nuevo {
         tiles.z = z;
         tiles.version = tiles.version.wrapping_add(1);
@@ -495,6 +508,15 @@ fn guardar(time: Res<Time>, mut escaleras: ResMut<Escaleras>) {
 
 #[cfg(test)]
 mod tests {
+    /// Una escalera sin rellano no sube (el entra-y-sale a metralla del 2 oct 2026), y siempre baja.
+    #[test]
+    fn sin_suelo_arriba_no_se_sube_pero_siempre_se_baja() {
+        use super::*;
+        assert_eq!(nivel_nuevo(0, 0, 1.0, true), Some(1));
+        assert_eq!(nivel_nuevo(0, 0, 1.0, false), None, "sin rellano no se sube");
+        assert_eq!(nivel_nuevo(1, 0, 0.0, false), Some(0), "bajar no pide nada");
+        assert_eq!(nivel_nuevo(0, 0, 0.5, true), None, "a mitad de tramo no pasa nada");
+    }
     use super::*;
 
     fn mundo() -> (Escaleras, TileWorld, CelestialBody) {

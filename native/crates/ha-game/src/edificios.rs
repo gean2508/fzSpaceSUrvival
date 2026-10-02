@@ -276,6 +276,33 @@ pub fn aplicar(
     }
 }
 
+/// **El piso de adentro** (C8.1): todas las celdas del edificio que está en `(cx, cz)` pasan a
+/// `WoodFloor`. Es idempotente y sólo toca celdas que no sean sólidas (`place_tile` lo exige), así
+/// que un ambiente nuevo no pisa una pared ni el agua honda. Las paredes de adentro (tabiques) ya las
+/// dibuja `walls` desde `Edificio::tabiques`; lo que faltaba era el suelo.
+pub fn estampar_piso(
+    tiles: &mut crate::world2d::TileWorld,
+    eds: &Edificios,
+    body: u8,
+    z: i32,
+    cx: i64,
+    cz: i64,
+) -> usize {
+    let Some(i) = eds.cerca_de(body, z, cx, cz) else { return 0 };
+    let Some(cuerpo) = crate::world2d::body_from_u8(body) else { return 0 };
+    let mut puestas = 0;
+    for (x, zz) in eds.list[i].ed.celdas() {
+        if tiles.tile_at(cuerpo, x, zz) == ha_shared::topdown::Tile::WoodFloor {
+            continue;
+        }
+        if tiles.place_tile(cuerpo, x, zz, ha_shared::topdown::Tile::WoodFloor) {
+            puestas += 1;
+        }
+    }
+    eprintln!("ha-edificios: piso estampado en {puestas} celdas del edificio {i}");
+    puestas
+}
+
 /// Dónde pegar el ambiente nuevo: del lado del edificio hacia el que apuntaste.
 ///
 /// Se mira la celda apuntada contra la caja del edificio y se elige el lado. Así

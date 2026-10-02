@@ -8058,6 +8058,17 @@ lo que falta para que el sistema aguante el roleplay que viene detrás.
 | C7 | **Perf en el Redmi con una base grande**: 500+ piezas colocadas. El índice de C1 saca el costo por consulta; falta medir el streaming de sprites de pared/techo y el rebuild de chunks al editar. | ☐ bloqueado en hardware |
 | C8 | **El edificio de ciudad se coloca ENTERO** (§5): kit modular importado sin cortar, `ha-shared/edificio.rs` (planta, tramos, tabiques automáticos, lista única de aberturas), ficha EDIFICIO de la mochila y dibujo de la cáscara. Driver `HA_CASATEST`. | ✅ 8 ago 2026 |
 
+✅ **C8.1 el adentro (2 oct 2026):** fundar o ampliar un ambiente estampa su piso de madera
+(`edificios::estampar_piso`, llamado desde `build.rs`; `HA_SIN_PISO=1` lo apaga para comparar). El
+driver `HA_CASATEST` ahora exige que ninguna celda transitable del edificio quede sin piso. Las paredes de
+adentro ya las dibujaba `walls` desde los tabiques.
+
+🐛 **Entra-y-sale de nivel («metralleta», 2 oct 2026):** una escalera sin rellano arriba subía al jugador a
+un nivel donde la celda era aire, `fall_through_void` lo devolvía y el tramo lo subía otra vez, cuadro tras
+cuadro. `escaleras::nivel_nuevo` ahora sólo sube si hay suelo arriba (con test). Cazado con `HA_NIVELLOG=1`
+(log de cada cambio de `tiles.z` con la celda y lo que hay arriba y abajo). El archivo de pruebas
+`native/escaleras.json` tenía dos escaleras sueltas justo donde corre `HA_CASATEST`: vaciado.
+
 **Lo que le falta a C8**, en orden, y ninguna es urgente:
 
 1. **El adentro.** La cáscara es la elevación de la calle; cruzar la puerta te
@@ -8337,7 +8348,7 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
 
 **Falta (honesto) — todo lo que sigue necesita ver la pantalla o el hardware, por eso no se hizo a ciegas**
 * (hecho) Hojas de aldeano compactas y panel 9-slice en el HUD: ver §13.
-* Interior de C8, ciudad generada con el kit, tiendas/carteles, gym
+* Ciudad generada con el kit, tiendas/carteles, gym
   de fauna con agua+amenaza (reentrenar `FAUNA.adn`), cada uno toca render o
   entrenamiento largo y se valida con ojo (el origen flotante se midió: no hace falta, ver §17).
 * **Nada de esto está probado en el celu**: por orden del usuario (2 oct) se prueba AL FINAL.

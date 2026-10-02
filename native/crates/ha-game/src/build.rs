@@ -1021,6 +1021,11 @@ fn apply_build_hold(
         )
         .is_some()
         {
+            // **El adentro** (C8.1): fundar o ampliar un ambiente estampa su piso. La cáscara es
+            // la elevación de la calle; sin esto, cruzar la puerta te dejaba sobre el pasto.
+            if matches!(accion, crate::edificios::Accion::Ambiente | crate::edificios::Accion::Ampliar) && crate::flags::var("HA_SIN_PISO").is_err() {
+                crate::edificios::estampar_piso(&mut world.tiles, &world.edificios, body, z, tx as i64, tz as i64);
+            }
             sfx.send(crate::audio::PlaySfxAt(
                 crate::audio::Sfx::Place,
                 render_xy(punto.x, punto.y),

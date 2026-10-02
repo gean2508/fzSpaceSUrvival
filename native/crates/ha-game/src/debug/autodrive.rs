@@ -245,7 +245,7 @@ impl Plugin for AutoDrivePlugin {
         // (con HA_FORCE_TOUCH=1, como el resto de los drivers de obra).
         if crate::flags::var("HA_CASATEST").is_ok() {
             app.init_resource::<CasaTestState>();
-            app.add_systems(Update, casa_test_drive.before(aplicar_actuacion_del_driver));
+            app.add_systems(Update, (casa_test_drive.before(aplicar_actuacion_del_driver), nivel_log));
             return;
         }
         // **Entrar en una cueva ANDANDO.** Busca una boca de verdad en el mundo
@@ -5293,9 +5293,41 @@ fn ct_bandas(world: &mut World) -> (usize, f32, f32) {
         detalle.push(format!("m{}b{}={:.2}", b.modulo, b.piso, sp.color.alpha()));
     }
     detalle.sort();
-    eprintln!("ha-verify: CASA bandas [{}]", detalle.join(" "));
+    let tz = world.resource::<crate::world2d::TileWorld>().z;
+    eprintln!("ha-verify: CASA bandas [{}] tiles.z={tz}", detalle.join(" "));
     (n, zmin, if alfa.is_finite() { alfa } else { 1.0 })
 }
+
+/// Cada cambio de `tiles.z` con su motivo visible: dónde está el jugador y qué hay debajo y arriba.
+/// `HA_NIVELLOG=1`. Existe porque en `HA_CASATEST` el nivel entraba y salía (0→1→0) al cruzar la puerta.
+fn nivel_log(world: &mut World) {
+    if crate::flags::var("HA_NIVELLOG").is_err() {
+        return;
+    }
+    let z = world.resource::<crate::world2d::TileWorld>().z;
+    let ultimo = world.get_resource::<NivelUltimo>().map(|n| n.0);
+    if ultimo == Some(z) {
+        return;
+    }
+    let (px, pz) = {
+        let mut q = world.query_filtered::<&SimState, With<Player>>();
+        q.get_single(world).map(|s| (s.body.x, s.body.z)).unwrap_or((0.0, 0.0))
+    };
+    let t = world.resource::<crate::world2d::TileWorld>();
+    let (tx, tzc) = (px.floor() as i64, pz.floor() as i64);
+    let cuerpo = ha_shared::CelestialBody::Earth;
+    eprintln!(
+        "ha-nivel: {:?} → {z} en celda ({tx},{tzc}) · en z={z}: {:?} · en z+1: {:?} · en z-1: {:?}",
+        ultimo,
+        t.tile_at_level(cuerpo, z, tx, tzc),
+        t.tile_at_level(cuerpo, z + 1, tx, tzc),
+        t.tile_at_level(cuerpo, z - 1, tx, tzc)
+    );
+    world.insert_resource(NivelUltimo(z));
+}
+
+#[derive(Resource)]
+struct NivelUltimo(i32);
 
 fn casa_test_drive(world: &mut World) {
     let now = world.resource::<Time>().elapsed_secs();
@@ -5451,6 +5483,27 @@ fn casa_test_drive(world: &mut World) {
             let Some(ed) = ct_ed(world) else { return };
             let z1 = ed.celdas().iter().map(|c| c.1).max().unwrap_or(az);
             bt_teleport(world, ax as f32 + 0.5, z1 as f32 - 0.5);
+            // **El adentro** (C8.1): las celdas del edificio tienen que ser piso de madera.
+            {
+                let cuerpo = ha_shared::CelestialBody::Earth;
+                let t = world.resource::<crate::world2d::TileWorld>();
+                let total = ed.celdas().len();
+                // Una celda SÓLIDA (roca, acantilado) no admite piso: `place_tile` la rechaza a
+                // propósito, y el terreno de cada semilla trae las suyas. Esas no cuentan.
+                let celdas_ed = ed.celdas();
+                let sin_piso: Vec<_> = celdas_ed
+                    .iter()
+                    .filter(|c| {
+                        let tl = t.tile_at(cuerpo, c.0, c.1);
+                        tl != ha_shared::topdown::Tile::WoodFloor && !tl.solid()
+                    })
+                    .collect();
+                eprintln!("ha-verify: CASA piso_adentro: {} de {total} celdas sin piso que podrían tenerlo", sin_piso.len());
+                if !sin_piso.is_empty() {
+                    report_bug("casa", "el_adentro_tiene_piso", &format!("{} de {total} celdas transitables siguen sin piso", sin_piso.len()));
+                    world.resource_mut::<CasaTestState>().fallo = true;
+                }
+            }
             world.resource_mut::<CasaTestState>().next_t = now + 1.8;
         }
         _ => {
