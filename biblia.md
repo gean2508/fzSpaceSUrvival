@@ -431,7 +431,8 @@ calculan una vez por celda. Lo vigila `generating_a_chunk_is_cheap` (< 8 µs/cel
 
 **Se borró el sistema de cuevas viejo.** No hay galerías procedurales repartidas
 por todo el espesor del mundo ni pozos con escalera puestos por el generador. De
-`−2` hacia abajo el subsuelo es **piedra maciza** hasta `MIN_Z_LEVEL` (−16), y ahí
+`−2` hacia abajo el subsuelo es **lecho de roca** (`LECHO_DE_ROCA = −2` desde el 2 oct 2026: hay UNA
+capa de subsuelo, la de las cuevas, con biomas — ver §18; antes eran 16 niveles hasta −16), y ahí
 el único hueco que existe es el que abriste con el pico (`TileWorld::dig_down`).
 Lo vigila `bajo_las_cuevas_el_subsuelo_es_macizo`.
 
@@ -8513,6 +8514,48 @@ El usuario lo pidió así: «de nada sirve una simulación en números si al ent
   y llueve. Resultado: 4/4 infectados caídos, 0 muertes, goteras anotadas.
 * **Decisión**: «ciudad generada con el kit modular» queda DESCARTADA — el usuario dijo que las ciudades
   están bien con los assets que tienen; lo que pidió fueron más opciones de casas (los 8 planos) y eso está.
+
+### El subsuelo: UNA capa con biomas, y arte que no parece de Paint (2 oct 2026, 3.ª tanda)
+Reclamo del usuario: *«cuando cavo parece que acabo de romper el juego… las texturas se ven como si faltara
+un cuadrado»* + *«lo que dibujaste parece hecho en Paint, no llega a los talones del pack»*. Decisión suya:
+**una sola capa** («hay que priorizar el rendimiento») con biomas subterráneos (la opción B).
+* **Diagnóstico**: el macizo no tenía losa en la hoja del suelo (`tiles/subsuelo` apuntaba a un dibujo mío en
+  `art/gen/mundo.png`, que la malla del chunk no puede leer) y caía a un color plano casi negro; la galería era
+  un piso recortado en la nada, sin pared ni borde; el piso traía una variante ocre (`floor/cueva#s7`, una
+  alfombra de Interiors) que salpicaba manchas amarillas.
+* **Una capa** (`ha_shared::topdown::LECHO_DE_ROCA = -2`, `MIN_Z_LEVEL = -8`): el subsuelo es el nivel de las
+  cuevas (`cuevas::NIVEL = -1`) y debajo es lecho de roca. Antes eran 16 niveles de macizo que nadie visitaba.
+  Las partidas con galerías más hondas pierden esos niveles. Los pisos de arriba (`z > 0`) no cambian.
+* **Biomas** (`ha_shared::subsuelo`, función pura): grilla de regiones de 72 celdas con un punto sorteado en
+  cada una (Voronoi). Cinco: **piedra** (38 %), **arcilla** (20), **hierro** (18), **musgo** (14), **cristal**
+  (10). Cada uno cambia (a) la ROCA (`tiles/subsuelo_<bioma>`), (b) el AIRE de la cueva (`Bioma::velo`, el color
+  del velo de `sky2d`, con transición suave al cruzar), (c) el tinte del piso de la galería, (d) las vetas
+  (`deposit_roll`: el hierro es de hierro, el cristal da gemas rojas y azules) y (e) lo que SUELTA la roca al
+  picar (`materias::extra_al_picar` sobre `Tile::Subsoil`: arcilla / mena de hierro / caliza y carbón / sal).
+  La chapa de abajo a la izquierda dice el bioma («Cavernas de cristal»).
+* **Cómo se ve** (`world2d::build_chunk_mesh`, sin un draw call más): el macizo es la **roca empedrada del
+  pack** (`tiles/roca`) llevada a una rampa de la paleta por bioma (`scripts/dibujar-subsuelo.py`, que corre
+  `atlas-suelo.py` al final); una celda de roca con la galería al sur se parte en **tapa + cara oscura + filo
+  claro** (`es_cara_de_pared_del_subsuelo`), y una **sombra de rincón** (`oclusion_del_subsuelo`) hunde la
+  galería hacia sus paredes. `atlas-suelo.py` descarta ahora las variantes de `floor/cueva` que no se parecen
+  en croma a la primera.
+* **Arte dibujado, otra vez** (skill `pixel-art`): la causa del aspecto «Paint» era que cada pieza era una
+  elipse rellena con tres tonos. `scripts/lib/volumen.py` hace una silueta irregular, una **cúpula
+  iluminada desde arriba-izquierda**, textura de la roca del pack como relieve y un filtro de moda para que
+  los tonos sean manchas y no ruido; `scripts/lib/iconos.py` agrega el contorno de Interiors. Rehechos con eso:
+  vetas y gemas del mundo (`art/gen/minerales.png`: `decor/ore_*`, `decor/gem_*`), y los íconos de mochila de
+  gemas, lingotes, piedra, tierra, arena y las 15 materias (`art/gen/materias.png`).
+  ⚠ **Orden de scripts**: `dibujar-mundo.py` y `dibujar-items.py` todavía definen las versiones viejas de esas
+  claves; correr SIEMPRE después `dibujar-minerales.py` y `dibujar-materias.py`.
+* Los animales de granja (`art/gen/fauna/*.png`) NO son dibujos míos: son las hojas animadas del pack.
+* **Descartado a conciencia**: aldeanos únicos por composición de capas. Cada hoja compuesta pesa ~2,7 MB de GPU
+  y con 60 vecinos vivos pasa de 150 MB: el Redmi ya anda justo de RAM. Lo que hay (20 hojas del pack +
+  `society::tinte_individual`) alcanza para que dos vecinos al lado no sean idénticos.
+* Driver `HA_SUBTEST=1` (Xvfb): baja a la capa de las cuevas en un punto de cada bioma, abre una sala con
+  pilares y captura `sub-<n>-<bioma>.png`.
+* **Falta**: vida propia del subsuelo (hoy está vacío a propósito: sin fauna ni vecinos), pilares/columnas
+  generados, agua y lava subterráneas, y rehacer el resto de lo dibujado (`items.png`, `granja.png`, `ui.png`)
+  con la misma librería.
 
 ### Falta (honesto)
 * Los NPC no se «siguen» ni te siguen por amistad (la regla «nada de séquito» manda); sí se conversa y se aprende.

@@ -104,26 +104,28 @@ def ladrillo(src: Image.Image) -> Image.Image:
 
 def main():
     seco = "--dry-run" in sys.argv
-    f = {k: celda(p, c) for k, (p, c) in FUENTES.items()}
-    veta = [(11, 14), (12, 14), (17, 17), (18, 17), (14, 20), (20, 13), (9, 19)]
+    from lib.iconos import bulto, cubos, esquirla, gota, ladrillo, lingote, polvo, ramitas
+
+    # Dibujados con `lib/volumen.py` (cúpula iluminada + relieve de la roca REAL del pack) y el contorno de
+    # Modern Interiors: ya no son siluetas reteñidas de un ícono, sino cada uno con su forma.
     lista = [
         # ── crudos ──────────────────────────────────────────────────────────
-        ("clay", "Arcilla", retenir(f["dirt"], (176, 108, 74))),
-        ("coal", "Carbón", motas(retenir(f["stone"], (54, 52, 66)), (150, 150, 170), [(13, 15), (18, 18)])),
-        ("copper_ore", "Mena de cobre", motas(f["stone"], (205, 112, 60), veta)),
-        ("tin_ore", "Mena de estaño", motas(f["stone"], (222, 228, 238), veta)),
-        ("iron_ore", "Mena de hierro", motas(retenir(f["stone"], (118, 96, 92)), (160, 84, 58), veta)),
-        ("limestone", "Caliza", retenir(f["stone"], (224, 214, 188))),
-        ("resin", "Resina", retenir(f["gem"], (216, 150, 54))),
-        ("salt", "Sal", retenir(f["sand"], (236, 236, 244))),
+        ("clay", "Arcilla", bulto((176, 108, 74), 1, 9.5, 7.5, False, None, 0, 1.7, 0.0).im),
+        ("coal", "Carbón", bulto((54, 52, 66), 2, 8.5, 7, True, (150, 150, 170), 3).im),
+        ("copper_ore", "Mena de cobre", bulto((120, 120, 134), 3, 9, 7.5, True, (205, 112, 60), 6).im),
+        ("tin_ore", "Mena de estaño", bulto((120, 120, 134), 4, 9, 7.5, True, (222, 228, 238), 6).im),
+        ("iron_ore", "Mena de hierro", bulto((110, 96, 96), 5, 9, 7.5, True, (160, 84, 58), 6).im),
+        ("limestone", "Caliza", bulto((224, 214, 188), 11, 10, 6.8, True, None, 0, 1.3, 0.45).im),
+        ("resin", "Resina", gota((216, 150, 54)).im),
+        ("salt", "Sal", cubos((236, 236, 244)).im),
         # ── derivados, uno por clase ─────────────────────────────────────────
-        ("mat_metal", "Metal", retenir(f["iron"], (156, 168, 184))),
-        ("mat_aleacion", "Aleación", retenir(f["gold"], (192, 124, 62))),
-        ("mat_ceramica", "Cerámica", ladrillo(f["stone"])),
-        ("mat_vidrio", "Vidrio", retenir(f["potion"], (186, 226, 236))),
-        ("mat_aglutinante", "Aglutinante", retenir(f["sand"], (228, 220, 200))),
-        ("mat_compuesto", "Compuesto", retenir(f["dirt"], (190, 154, 104))),
-        ("mat_combustible", "Carbón vegetal", motas(retenir(f["stone"], (40, 38, 50)), (120, 120, 140), [(13, 15)])),
+        ("mat_metal", "Metal", lingote((156, 168, 184)).im),
+        ("mat_aleacion", "Aleación", lingote((192, 124, 62)).im),
+        ("mat_ceramica", "Cerámica", ladrillo((176, 86, 66)).im),
+        ("mat_vidrio", "Vidrio", esquirla((186, 226, 236)).im),
+        ("mat_aglutinante", "Aglutinante", polvo((228, 220, 200)).im),
+        ("mat_compuesto", "Compuesto", polvo((190, 154, 104), 4).im),
+        ("mat_combustible", "Carbón vegetal", ramitas((40, 38, 50)).im),
     ]
     pag = Pagina()
     sprites, objetos = {}, {}

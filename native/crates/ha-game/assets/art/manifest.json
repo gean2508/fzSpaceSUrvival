@@ -112809,12 +112809,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 7,
-    "h": 1,
+    "col": 2,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/gem_red": {
@@ -112822,12 +112822,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 6,
-    "h": 1,
+    "col": 3,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/ladder": {
@@ -112869,12 +112869,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 5,
-    "h": 1,
+    "col": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/ore_iron": {
@@ -112882,12 +112882,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 4,
-    "h": 1,
+    "col": 0,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/rock": {
@@ -212395,12 +212395,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 28,
-    "h": 1,
+    "col": 12,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/beef": {
@@ -212525,12 +212525,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/bucket": {
@@ -212580,9 +212580,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 0,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/coal": {
@@ -212593,9 +212593,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 1,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/copper_ore": {
@@ -212606,9 +212606,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/dirt": {
@@ -212616,12 +212616,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
     "col": 9,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/egg": {
@@ -212655,12 +212655,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 20,
-    "h": 1,
+    "col": 4,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/gem_red": {
@@ -212668,12 +212668,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 19,
-    "h": 1,
+    "col": 5,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/gold_ingot": {
@@ -212681,12 +212681,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 18,
-    "h": 1,
+    "col": 7,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/gorra_azul": {
@@ -212733,12 +212733,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 1,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/hand": {
@@ -212759,12 +212759,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
-    "col": 17,
-    "h": 1,
+    "col": 6,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/iron_ore": {
@@ -212775,9 +212775,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 4,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/jetpack": {
@@ -212844,12 +212844,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 12,
-    "h": 1,
+    "col": 9,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/leather_boots": {
@@ -212899,9 +212899,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 5,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_aglutinante": {
@@ -212912,9 +212912,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 12,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_aleacion": {
@@ -212925,9 +212925,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 9,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_ceramica": {
@@ -212938,9 +212938,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 10,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_combustible": {
@@ -212951,9 +212951,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 14,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_compuesto": {
@@ -212964,9 +212964,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 13,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_metal": {
@@ -212977,9 +212977,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 8,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_vidrio": {
@@ -212990,9 +212990,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 11,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/meat": {
@@ -213000,12 +213000,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 3,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/milk_bucket": {
@@ -213052,12 +213052,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 0,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_engine": {
@@ -213130,12 +213130,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 31,
-    "h": 1,
+    "col": 15,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/pie": {
@@ -213143,12 +213143,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 4,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/pork": {
@@ -213169,12 +213169,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 26,
-    "h": 1,
+    "col": 10,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/potion_green": {
@@ -213182,12 +213182,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 27,
-    "h": 1,
+    "col": 11,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/probe": {
@@ -213250,9 +213250,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 6,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/ropa_01": {
@@ -213692,9 +213692,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 7,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/sand": {
@@ -213702,12 +213702,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
     "col": 10,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/shield_wood": {
@@ -213715,12 +213715,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 22,
-    "h": 1,
+    "col": 19,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/snow": {
@@ -213728,12 +213728,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 11,
-    "h": 1,
+    "col": 8,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/soup": {
@@ -213741,12 +213741,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 5,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/sticks": {
@@ -213754,12 +213754,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 7,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/stone": {
@@ -213767,12 +213767,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/minerales.png",
    "rect": {
     "col": 8,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/stone_axe": {
@@ -213780,12 +213780,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 30,
-    "h": 1,
+    "col": 14,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/stone_pickaxe": {
@@ -213793,12 +213793,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 1,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 17,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/tin_ore": {
@@ -213809,9 +213809,9 @@
    "png": "art/gen/materias.png",
    "rect": {
     "col": 3,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/torch": {
@@ -213819,12 +213819,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 21,
-    "h": 1,
+    "col": 18,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/water_bucket": {
@@ -213871,12 +213871,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
     "col": 6,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/wood_axe": {
@@ -213884,12 +213884,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 29,
-    "h": 1,
+    "col": 13,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/wood_pickaxe": {
@@ -213897,12 +213897,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/comida.png",
    "rect": {
-    "col": 0,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 16,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/wool": {
