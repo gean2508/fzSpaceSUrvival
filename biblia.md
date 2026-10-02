@@ -8545,8 +8545,17 @@ un cuadrado»* + *«lo que dibujaste parece hecho en Paint, no llega a los talon
   los tonos sean manchas y no ruido; `scripts/lib/iconos.py` agrega el contorno de Interiors. Rehechos con eso:
   vetas y gemas del mundo (`art/gen/minerales.png`: `decor/ore_*`, `decor/gem_*`), y los íconos de mochila de
   gemas, lingotes, piedra, tierra, arena y las 15 materias (`art/gen/materias.png`).
-  ⚠ **Orden de scripts**: `dibujar-mundo.py` y `dibujar-items.py` todavía definen las versiones viejas de esas
-  claves; correr SIEMPRE después `dibujar-minerales.py` y `dibujar-materias.py`.
+  **Después se rehizo TODO lo dibujado** (pedido del usuario: «mejora todo el arte como el último»):
+  comida, madera, frascos, herramientas, antorcha y escudo (`dibujar-comida.py` → `art/gen/comida.png`), la granja
+  entera (`dibujar-granja.py` ahora usa `lib/granja_v2.py`: tierra arada con surcos, trigo, zanahoria, calabaza, semillas,
+  pollo, conejo, pluma, lana, hueso, huevo, etiqueta, cubos y el corazón de celo), objetos del mundo
+  (`dibujar-mundo-v2.py` → `art/gen/mundo2.png`: tronco, cactus, rocas lunar/marciana, juncos, caña, pozo, cofre,
+  estantes, taxi) y la interfaz y las máquinas (`dibujar-ui-v2.py` → `art/gen/ui2.png`: pestañas de la mochila,
+  mira, globo del menú, extractores, taladro, hábitat y plataforma).
+  ⚠ **Orden de scripts**: `dibujar-mundo.py`, `dibujar-items.py` y `dibujar-ui.py` todavía definen las versiones
+  viejas de esas claves; correr SIEMPRE después `dibujar-minerales.py`, `dibujar-materias.py`, `dibujar-comida.py`,
+  `dibujar-granja.py`, `dibujar-mundo-v2.py` y `dibujar-ui-v2.py`. Sin rehacer (obsoletos o de relleno): las piezas de
+  nave, `items/hand|jetpack|probe`, cielos y estrellas, canchas, césped cortado, `room_large` y las guirnaldas.
 * Los animales de granja (`art/gen/fauna/*.png`) NO son dibujos míos: son las hojas animadas del pack.
 * **Descartado a conciencia**: aldeanos únicos por composición de capas. Cada hoja compuesta pesa ~2,7 MB de GPU
   y con 60 vecinos vivos pasa de 150 MB: el Redmi ya anda justo de RAM. Lo que hay (20 hojas del pack +
@@ -8554,8 +8563,7 @@ un cuadrado»* + *«lo que dibujaste parece hecho en Paint, no llega a los talon
 * Driver `HA_SUBTEST=1` (Xvfb): baja a la capa de las cuevas en un punto de cada bioma, abre una sala con
   pilares y captura `sub-<n>-<bioma>.png`.
 * **Falta**: vida propia del subsuelo (hoy está vacío a propósito: sin fauna ni vecinos), pilares/columnas
-  generados, agua y lava subterráneas, y rehacer el resto de lo dibujado (`items.png`, `granja.png`, `ui.png`)
-  con la misma librería.
+  generados, y agua y lava subterráneas.
 
 ### Falta (honesto)
 * Los NPC no se «siguen» ni te siguen por amistad (la regla «nada de séquito» manda); sí se conversa y se aprende.

@@ -25620,7 +25620,7 @@
    "label": "Plataforma de lanzamiento"
   },
   "machines/regolith_drill": {
-   "label": "Perforadora de regolito"
+   "label": "Taladro de regolito"
   },
   "machines/stone_extractor": {
    "label": "Extractor de piedra"
@@ -29282,7 +29282,7 @@
    "label": "Tocón"
   },
   "nature/tronco": {
-   "label": "Tronco caído"
+   "label": "Tronco"
   },
   "nature/villa_patio_flores_1": {
    "label": "Villa patio flores 1",
@@ -32687,13 +32687,13 @@
    "label": "Menú: Tierra"
   },
   "ui/tab_construir": {
-   "label": "Pestaña de construir"
+   "label": "Pestaña: construir"
   },
   "ui/tab_craft": {
-   "label": "Pestaña de fabricar"
+   "label": "Pestaña: fabricar"
   },
   "ui/tab_inventario": {
-   "label": "Pestaña de mochila"
+   "label": "Pestaña: mochila"
   },
   "vehicle/ambulancia_abajo": {
    "label": "Ambulancia (abajo)",
@@ -37811,12 +37811,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 15,
-    "h": 1,
+    "col": 4,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "agua/mata_flotante": {
@@ -112656,9 +112656,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 5,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "cultivo/sembrado": {
@@ -112669,9 +112669,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "cultivo/tierra_arada": {
@@ -112682,9 +112682,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 0,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "cultivo/tierra_regada": {
@@ -112695,9 +112695,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 1,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "cultivo/trigo_1": {
@@ -112734,9 +112734,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 3,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "cultivo/zanahoria_1": {
@@ -112744,6 +112744,7 @@
     32,
     32
    ],
+   "layer": "Floor",
    "png": "art/pack/terrains_and_fences_0.png",
    "rect": {
     "col": 22,
@@ -112757,6 +112758,7 @@
     32,
     32
    ],
+   "layer": "Floor",
    "png": "art/pack/terrains_and_fences_0.png",
    "rect": {
     "col": 24,
@@ -112773,9 +112775,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 4,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/cockpit_seat": {
@@ -112898,12 +112900,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
     "col": 3,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/rock_moon": {
@@ -112911,12 +112913,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "decor/tree": {
@@ -129134,12 +129136,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 16,
-    "h": 1,
+    "col": 5,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "fishing/spot": {
@@ -148041,12 +148043,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 22,
-    "h": 1,
+    "col": 8,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "furniture/cama": {
@@ -169233,12 +169235,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 22,
-    "h": 1,
+    "col": 9,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "furniture/estudio_de_tv_1": {
@@ -212424,9 +212426,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 16,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/botas_1": {
@@ -212541,9 +212543,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 19,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/carrot": {
@@ -212554,9 +212556,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 9,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/chicken": {
@@ -212567,9 +212569,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 12,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/clay": {
@@ -212632,9 +212634,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 17,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/feather": {
@@ -212645,9 +212647,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 14,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/gem_blue": {
@@ -212834,9 +212836,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 22,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/leather": {
@@ -213016,9 +213018,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 21,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mutton": {
@@ -213042,9 +213044,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 18,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/orange": {
@@ -213211,9 +213213,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 10,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/pumpkin_seeds": {
@@ -213224,9 +213226,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 7,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/rabbit_meat": {
@@ -213237,9 +213239,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 13,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/resin": {
@@ -213835,9 +213837,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 20,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/wheat": {
@@ -213848,9 +213850,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 8,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/wheat_seeds": {
@@ -213861,9 +213863,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 6,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/wood": {
@@ -213913,9 +213915,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 15,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/wool_coat": {
@@ -215069,12 +215071,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 14,
-    "h": 1,
+    "col": 8,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "machines/launch_pad": {
@@ -215082,12 +215084,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 12,
-    "h": 1,
+    "col": 9,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "machines/regolith_drill": {
@@ -215095,12 +215097,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 13,
-    "h": 1,
+    "col": 7,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "machines/stone_extractor": {
@@ -215108,12 +215110,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 11,
-    "h": 1,
+    "col": 6,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "machines/wood_extractor": {
@@ -215121,12 +215123,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 10,
-    "h": 1,
+    "col": 5,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "nature/altavoz_arena_chico": {
@@ -224223,12 +224225,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
     "col": 1,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "nature/calle_arbol_1": {
@@ -234238,12 +234240,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
     "col": 0,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "nature/villa_patio_flores_1": {
@@ -253550,12 +253552,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 20,
-    "h": 1,
+    "col": 6,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/pozos_1": {
@@ -260098,12 +260100,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 21,
-    "h": 1,
+    "col": 7,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "quay/muro": {
@@ -274342,9 +274344,9 @@
    "png": "art/gen/granja.png",
    "rect": {
     "col": 11,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/crosshair": {
@@ -274352,12 +274354,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 7,
-    "h": 1,
+    "col": 3,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/energy_empty": {
@@ -275276,12 +275278,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/ui2.png",
    "rect": {
-    "col": 9,
-    "h": 1,
+    "col": 4,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/minimapa_marco": {
@@ -275585,12 +275587,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/ui2.png",
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/tab_craft": {
@@ -275598,12 +275600,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/ui2.png",
    "rect": {
     "col": 1,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/tab_inventario": {
@@ -275611,12 +275613,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/ui2.png",
    "rect": {
     "col": 0,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/thirst_empty": {
@@ -280146,12 +280148,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/mundo2.png",
    "rect": {
-    "col": 23,
-    "h": 1,
+    "col": 10,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "vehicle/telefono_publico_1": {

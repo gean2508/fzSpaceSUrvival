@@ -262,31 +262,35 @@ def cubo(contenido=None):
     return f, False
 
 
+# Desde el 2 oct 2026 las recetas viven en `lib/granja_v2.py` (volumen con luz arriba-izquierda); las
+# funciones de arriba quedan como referencia del estilo anterior.
+from lib import granja_v2 as g2  # noqa: E402
+
 PIEZAS = {
     # clave: (receta, apoyado, nombre)
-    "cultivo/tierra_arada": (*tierra_arada(TIERRA), "Tierra arada"),
-    "cultivo/tierra_regada": (*tierra_arada(TIERRA_MOJADA), "Tierra arada (húmeda)"),
-    "cultivo/sembrado": (sembrado, False, "Semillas sembradas"),
-    "cultivo/trigo_3": (trigo_maduro, True, "Trigo maduro"),
-    "cultivo/zanahoria_3": (zanahoria_madura, True, "Zanahorias listas"),
-    "cultivo/calabaza_3": (calabaza_madura, True, "Calabaza madura"),
-    "items/wheat_seeds": (*icono_semillas(SEMILLA), "Semillas de trigo"),
-    "items/pumpkin_seeds": (*icono_semillas(SEMILLA_CALABAZA), "Semillas de calabaza"),
-    "items/wheat": (icono_trigo, False, "Trigo"),
-    "items/carrot": (icono_zanahoria, False, "Zanahoria"),
-    "items/pumpkin": (icono_calabaza, False, "Calabaza"),
-    "ui/corazon_celo": (corazon, False, "Corazón (animal en celo)"),
-    "items/chicken": (icono_pollo, False, "Pollo crudo"),
-    "items/rabbit_meat": (icono_conejo, False, "Carne de conejo"),
-    "items/feather": (icono_pluma, False, "Pluma"),
-    "items/wool": (icono_lana, False, "Lana"),
-    "items/bone": (icono_hueso, False, "Hueso"),
-    "items/egg": (icono_huevo, False, "Huevo"),
-    "items/name_tag": (icono_etiqueta, False, "Etiqueta"),
-    "items/bucket": (*cubo(), "Cubo"),
-    "items/water_bucket": (*cubo((72, 130, 200)), "Cubo con agua"),
-    "items/milk_bucket": (*cubo((238, 236, 228)), "Cubo con leche"),
-    "items/lava_bucket": (*cubo((226, 110, 40)), "Cubo con lava"),
+    "cultivo/tierra_arada": (*g2.tierra_arada(TIERRA), "Tierra arada"),
+    "cultivo/tierra_regada": (*g2.tierra_arada((112, 78, 54), True), "Tierra arada (húmeda)"),
+    "cultivo/sembrado": (g2.sembrado, False, "Semillas sembradas"),
+    "cultivo/trigo_3": (g2.trigo_maduro, True, "Trigo maduro"),
+    "cultivo/zanahoria_3": (g2.zanahoria_madura, True, "Zanahorias listas"),
+    "cultivo/calabaza_3": (g2.calabaza_madura, True, "Calabaza madura"),
+    "items/wheat_seeds": (*g2.icono_semillas(SEMILLA), "Semillas de trigo"),
+    "items/pumpkin_seeds": (*g2.icono_semillas(SEMILLA_CALABAZA), "Semillas de calabaza"),
+    "items/wheat": (g2.icono_trigo, False, "Trigo"),
+    "items/carrot": (g2.icono_zanahoria, False, "Zanahoria"),
+    "items/pumpkin": (g2.icono_calabaza, False, "Calabaza"),
+    "ui/corazon_celo": (g2.corazon, False, "Corazón (animal en celo)"),
+    "items/chicken": (g2.icono_pollo, False, "Pollo crudo"),
+    "items/rabbit_meat": (g2.icono_conejo, False, "Carne de conejo"),
+    "items/feather": (g2.icono_pluma, False, "Pluma"),
+    "items/wool": (g2.icono_lana, False, "Lana"),
+    "items/bone": (g2.icono_hueso, False, "Hueso"),
+    "items/egg": (g2.icono_huevo, False, "Huevo"),
+    "items/name_tag": (g2.icono_etiqueta, False, "Etiqueta"),
+    "items/bucket": (*g2.cubo(), "Cubo"),
+    "items/water_bucket": (*g2.cubo((72, 130, 200)), "Cubo con agua"),
+    "items/milk_bucket": (*g2.cubo((238, 236, 228)), "Cubo con leche"),
+    "items/lava_bucket": (*g2.cubo((226, 110, 40)), "Cubo con lava"),
 }
 
 
