@@ -69,6 +69,9 @@ pub enum Accion {
     Abrir(WallKind),
     /// Cambia el tema (ladrillo → azul → hormigón).
     Tema,
+    /// **Un PLANO entero** (`ha_shared::planos`): cuartos, pisos, puertas, ventanas, piso y muebles
+    /// de una vez, pagando los materiales. El índice es el del catálogo.
+    Plano(usize),
 }
 
 /// La paleta, tal cual se dibuja en la ficha EDIFICIO.
@@ -82,6 +85,14 @@ pub const ACCIONES: &[(Accion, &str, &str)] = &[
     (Accion::Abrir(WallKind::Window), "Ventana", "Abre una ventana"),
     (Accion::Abrir(WallKind::Wall), "Tapiar", "Vuelve a cerrar la abertura apuntada"),
     (Accion::Tema, "Cambiar tema", "Va rotando: ladrillo, azul, hormigón"),
+    (Accion::Plano(0), "Plano: Cabaña", "Un cuarto con puerta y ventanas · 40 madera, 10 piedra"),
+    (Accion::Plano(1), "Plano: Casa", "Living y dormitorio, dos plantas · 60 madera, 30 piedra"),
+    (Accion::Plano(2), "Plano: Casa ancha", "Living y cocina lado a lado · 90 madera, 40 piedra"),
+    (Accion::Plano(3), "Plano: Residencia", "Cuatro ambientes, tres plantas · 160 madera, 90 piedra"),
+    (Accion::Plano(4), "Plano: Tienda", "Local con depósito y vidriera · 70 madera, 40 piedra"),
+    (Accion::Plano(5), "Plano: Torre", "Una torre de cuatro plantas · 80 madera, 60 piedra"),
+    (Accion::Plano(6), "Plano: Galpón", "Taller con depósito, dos portones · 90 madera, 50 piedra"),
+    (Accion::Plano(7), "Plano: Departamentos", "Tres unidades, cuatro plantas · 200 madera, 160 piedra"),
 ];
 
 pub fn accion(sub: usize) -> Option<Accion> {
@@ -105,6 +116,12 @@ pub fn icono(sub: usize) -> &'static str {
         Some(Accion::Abrir(WallKind::Window)) => "edificio/piso_doble",
         Some(Accion::Abrir(WallKind::Wall)) => "edificio/piso_rejilla",
         Some(Accion::Tema) => "edificio/azotea",
+        Some(Accion::Plano(i)) => match ha_shared::planos::PLANOS.get(i).map(|p| p.uso) {
+            Some(ha_shared::planos::Uso::Comercio) => "edificio/pb_vidrio",
+            Some(ha_shared::planos::Uso::Taller) => "edificio/pb_arco",
+            Some(ha_shared::planos::Uso::Torre) => "edificio/piso_ventanal",
+            _ => "edificio/local",
+        },
         None => "edificio/azotea",
     }
 }
@@ -196,7 +213,7 @@ impl Plugin for EdificiosPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Edificios>()
             .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), cargar_al_arrancar)
-            .add_systems(Update, (dibujar_cascara, guardado_debounced));
+            .add_systems(Update, (dibujar_cascara, sincronizar_tabiques, guardado_debounced));
     }
 }
 
@@ -267,6 +284,8 @@ pub fn aplicar(
                 WallKind::Wall => "Tapiado",
             })
         }
+        // Los planos se atienden en `build.rs` (cobran materiales y necesitan el mundo entero).
+        Accion::Plano(_) => None,
         Accion::Tema => {
             let i = eds.cerca_de(body, z, cx, cz)?;
             eds.list[i].tema = (eds.list[i].tema + 1) % TEMAS.len();
@@ -274,6 +293,102 @@ pub fn aplicar(
             Some("Tema cambiado")
         }
     }
+}
+
+/// Cuántas unidades de la clase de material `clase` (`ceramica`, `metal`…) hay en la mochila.
+pub fn unidades_de_clase(inv: &crate::inventory_persist::PlayerInventory, clase: &str) -> u32 {
+    inv.items
+        .iter()
+        .filter(|(i, _)| crate::materias::derivado_de_item(i).map(|(c, _)| c == clase).unwrap_or(false))
+        .map(|(_, q)| *q)
+        .sum()
+}
+
+/// Gasta `n` unidades de esa clase (de las pilas que haya).
+pub fn gastar_clase(inv: &mut crate::inventory_persist::PlayerInventory, clase: &str, mut n: u32) {
+    let pilas: Vec<(String, u32)> = inv
+        .items
+        .iter()
+        .filter(|(i, _)| crate::materias::derivado_de_item(i).map(|(c, _)| c == clase).unwrap_or(false))
+        .map(|(i, q)| (i.clone(), *q))
+        .collect();
+    for (item, q) in pilas {
+        if n == 0 {
+            break;
+        }
+        let t = q.min(n);
+        inv.remove(&item, t);
+        n -= t;
+    }
+}
+
+/// **Qué acabado de fachada se puede pagar** con lo que hay en la mochila: ladrillo si hay cerámica
+/// suficiente (la cerámica se DESCUBRE, `experimentos.rs`), azul si hay metal, y si no, hormigón (que
+/// sale de la piedra). Devuelve el índice en [`TEMAS`] y, si hace falta, `(clase, unidades)`.
+pub fn acabado_para(inv: &crate::inventory_persist::PlayerInventory, area: i64, pisos: i64) -> (usize, Option<(&'static str, u32)>) {
+    for (slug, clase, por) in ha_shared::planos::ACABADOS {
+        let Some(clase) = clase else { continue };
+        let n = ha_shared::planos::costo_acabado(area, pisos, por);
+        if unidades_de_clase(inv, clase) >= n {
+            let idx = TEMAS.iter().position(|(s, _)| *s == slug).unwrap_or(0);
+            return (idx, Some((clase, n)));
+        }
+    }
+    (TEMAS.iter().position(|(s, _)| *s == "hormigon").unwrap_or(0), None)
+}
+
+/// **Levanta un plano entero** con la celda `(ax, az)` en el medio de su frente. `Err` si no se puede
+/// (terreno ocupado, agua, otro edificio encima). No cobra: de eso se encarga quien lo llama.
+#[allow(clippy::too_many_arguments)]
+pub fn fundar_plano(
+    tiles: &mut crate::world2d::TileWorld,
+    structures: &mut crate::structures::BuiltStructures,
+    eds: &mut Edificios,
+    body: u8,
+    z: i32,
+    ax: i64,
+    az: i64,
+    plano: &ha_shared::planos::Plano,
+    tema: usize,
+    semilla: u32,
+    // Los constructores de los pueblos sólo levantan sobre terreno natural (no sobre calles ni veredas).
+    solo_natural: bool,
+) -> Result<usize, &'static str> {
+    let Some(ed) = plano.edificio(ax, az) else { return Err("El plano no entra") };
+    let Some(cuerpo) = crate::world2d::body_from_u8(body) else { return Err("Cuerpo desconocido") };
+    for (x, zz) in ed.celdas() {
+        let t = tiles.tile_at(cuerpo, x, zz);
+        if t.solid() || t == ha_shared::topdown::Tile::Water || t == ha_shared::topdown::Tile::WaterDeep {
+            return Err("El terreno no sirve: hay obstáculos o agua");
+        }
+        if solo_natural && !matches!(t, ha_shared::topdown::Tile::Grass | ha_shared::topdown::Tile::Dirt | ha_shared::topdown::Tile::Sand) {
+            return Err("No se construye sobre la calle");
+        }
+        if eds.en(body, z, x, zz).is_some() || structures.blocks(cuerpo, z, x, zz) {
+            return Err("Ya hay algo construido ahí");
+        }
+    }
+    eds.list.push(EdificioVivo { body, z, tema, ed });
+    let i = eds.list.len() - 1;
+    eds.toco();
+    estampar_piso(tiles, eds, body, z, ax, az);
+    let mut puestos = 0;
+    for m in plano.muebles(ax, az, semilla) {
+        structures.add(crate::structures::PlacedStructure {
+            body,
+            z,
+            cx: m.x0,
+            cz: m.z0,
+            w: m.cw,
+            h: m.prof,
+            art: m.key.to_string(),
+            // El pie del mueble frena; el respaldo, que se dibuja sobre la pared, no.
+            solid: (0..m.cw as u32).map(|c| (c, (m.prof - 1) as u32)).collect(),
+            rot: 0,
+        });
+        puestos += 1;
+    }
+    Ok(puestos)
 }
 
 /// **El piso de adentro** (C8.1): todas las celdas del edificio que está en `(cx, cz)` pasan a
@@ -367,6 +482,61 @@ pub(crate) const PISOS: &[&str] = &[
 ];
 pub(crate) const AZOTEAS: &[&str] = &["edificio/azotea", "edificio/azotea_clara"];
 
+/// El colisionador del contorno de UN edificio (ver [`dibujar_cascara`]).
+#[derive(Component)]
+pub struct CascaraSolida;
+
+/// **Las paredes de adentro** (los tabiques) se vuelven paredes de verdad: piezas de borde del
+/// kit de madera (pared, vano, puerta, ventana) que se dibujan con su cara de interior, frenan y
+/// se pueden abrir. Es idempotente (`BuiltWalls::add` reemplaza el borde) y corre sólo cuando
+/// cambia algún edificio (`rev`).
+fn sincronizar_tabiques(eds: Res<Edificios>, mut walls: ResMut<crate::walls::BuiltWalls>, mut ultimo: Local<u64>) {
+    if *ultimo == eds.rev && eds.rev != 0 {
+        return;
+    }
+    *ultimo = eds.rev;
+    let idx = |id: &str| ha_shared::build_grid::EDGE_PIECES.iter().position(|p| p.id == id);
+    let (Some(pared), Some(vano), Some(puerta), Some(ventana)) =
+        (idx("edge_wall_wood"), idx("edge_doorway_wood"), idx("edge_door_wood"), idx("edge_window"))
+    else {
+        return;
+    };
+    for ev in &eds.list {
+        for b in ev.ed.tabiques() {
+            let kind = ev.ed.aberturas().get(&b).copied().unwrap_or(WallKind::Wall);
+            let piece = match kind {
+                WallKind::Wall => pared,
+                WallKind::Doorway => vano,
+                WallKind::Door => puerta,
+                WallKind::Window => ventana,
+            };
+            let w = crate::walls::PlacedWall { body: ev.body, z: ev.z, tx: b.tx, tz: b.tz, axis: b.axis(), piece };
+            if walls.at(crate::world2d::body_from_u8(ev.body).unwrap_or(ha_shared::CelestialBody::Earth), ev.z, b.tx, b.tz, b.axis()) != Some(&w) {
+                walls.add(w);
+            }
+        }
+    }
+}
+
+/// Rectángulos `[x0, z0, x1, z1]` (metros) del contorno que FRENA: pared y ventana sí; puerta y vano,
+/// por donde se entra, no.
+pub fn rects_del_contorno(ed: &Edificio) -> Vec<[f32; 4]> {
+    const GROSOR: f32 = 0.18;
+    let mut v = Vec::new();
+    for (b, _) in ed.contorno() {
+        let kind = ed.aberturas().get(&b).copied().unwrap_or(WallKind::Wall);
+        if kind.is_entrance() {
+            continue;
+        }
+        let (x, z) = (b.tx as f32 * TILE_M, b.tz as f32 * TILE_M);
+        v.push(match b.axis() {
+            WallAxis::H => [x, z - GROSOR, x + TILE_M, z + GROSOR],
+            WallAxis::V => [x - GROSOR, z, x + GROSOR, z + TILE_M],
+        });
+    }
+    v
+}
+
 /// Cuánto lejos del jugador se dibuja la cáscara, en tiles.
 const RADIO: i64 = 48;
 
@@ -381,6 +551,7 @@ fn dibujar_cascara(
     eds: Res<Edificios>,
     player: Query<&Transform, With<Player>>,
     vivos: Query<Entity, With<BandaSprite>>,
+    solidos: Query<Entity, With<CascaraSolida>>,
     mut last_rev: Local<u64>,
     mut last_z: Local<i32>,
 ) {
@@ -399,6 +570,17 @@ fn dibujar_cascara(
     *last_z = tiles.z;
     for e in &vivos {
         commands.entity(e).despawn_recursive();
+    }
+    for e in &solidos {
+        commands.entity(e).despawn_recursive();
+    }
+    // **El contorno frena** (antes la cáscara era sólo dibujo y se atravesaba): un colisionador por
+    // edificio, con los huecos de puertas y vanos abiertos.
+    {
+        let body = active_surface_body(&ctx, &planet) as u8;
+        for ev in eds.list.iter().filter(|e| e.body == body && e.z == tiles.z) {
+            commands.spawn((CascaraSolida, crate::building::SolidoDeFachada(rects_del_contorno(&ev.ed))));
+        }
     }
     let Ok(player_tf) = player.get_single() else {
         return;
@@ -542,6 +724,27 @@ mod tests {
         let mut eds = Edificios::default();
         aplicar(&mut eds, 0, 0, 10, 10, 10.5, 10.5, Accion::Ambiente);
         eds
+    }
+
+    #[test]
+    fn el_contorno_frena_salvo_donde_hay_puerta() {
+        let p = ha_shared::planos::plano("casa_doble").unwrap();
+        let e = p.edificio(100, 100).unwrap();
+        let n_contorno = e.contorno().len();
+        let rects = rects_del_contorno(&e);
+        // Dos puertas de calle: dos huecos. El vano interior no es contorno.
+        assert_eq!(rects.len(), n_contorno - 2, "{} bordes de contorno, {} rects", n_contorno, rects.len());
+        // Un rect del frente cae sobre la línea z = 101 (el borde sur de la fila de adelante).
+        assert!(rects.iter().any(|r| r[1] < 101.0 && r[3] > 101.0));
+    }
+
+    #[test]
+    fn los_planos_de_la_paleta_son_los_del_catalogo() {
+        for (i, p) in ha_shared::planos::PLANOS.iter().enumerate() {
+            let fila = ACCIONES.iter().find(|(a, _, _)| *a == Accion::Plano(i)).expect("falta la tarjeta");
+            assert_eq!(fila.1, format!("Plano: {}", p.nombre), "{}", p.id);
+            assert!(fila.2.contains(&p.madera.to_string()) && fila.2.contains(&p.piedra.to_string()), "el costo de {} no coincide", p.id);
+        }
     }
 
     #[test]

@@ -33585,6 +33585,51 @@
   },
   "items/botas_7": {
    "label": "Calzado 7 (naranja)"
+  },
+  "items/clay": {
+   "label": "Arcilla"
+  },
+  "items/coal": {
+   "label": "Carbón"
+  },
+  "items/copper_ore": {
+   "label": "Mena de cobre"
+  },
+  "items/tin_ore": {
+   "label": "Mena de estaño"
+  },
+  "items/iron_ore": {
+   "label": "Mena de hierro"
+  },
+  "items/limestone": {
+   "label": "Caliza"
+  },
+  "items/resin": {
+   "label": "Resina"
+  },
+  "items/salt": {
+   "label": "Sal"
+  },
+  "items/mat_metal": {
+   "label": "Metal"
+  },
+  "items/mat_aleacion": {
+   "label": "Aleación"
+  },
+  "items/mat_ceramica": {
+   "label": "Cerámica"
+  },
+  "items/mat_vidrio": {
+   "label": "Vidrio"
+  },
+  "items/mat_aglutinante": {
+   "label": "Aglutinante"
+  },
+  "items/mat_compuesto": {
+   "label": "Compuesto"
+  },
+  "items/mat_combustible": {
+   "label": "Carbón vegetal"
   }
  },
  "origen": {
@@ -283750,6 +283795,201 @@
    "rect": {
     "col": 6,
     "row": 3,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/clay": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 0,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/coal": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 1,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/copper_ore": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/tin_ore": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 3,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/iron_ore": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 4,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/limestone": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 5,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/resin": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 6,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/salt": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 7,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_metal": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 8,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_aleacion": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 9,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_ceramica": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 10,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_vidrio": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 11,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_aglutinante": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 12,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_compuesto": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 13,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/mat_combustible": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/materias.png",
+   "rect": {
+    "col": 14,
+    "row": 0,
     "w": 1,
     "h": 1
    }

@@ -168,16 +168,26 @@ pub struct Pueblo {
     pub golpeado: u64,
     #[serde(default)]
     pub golpeado_por: u32,
-    /// **Innovaciones**: combinaciones de saberes (y de otras innovaciones) que este pueblo
-    /// descubrió. Ver `innovacion.rs`. Ordenadas y sin repetir.
+    /// El cuaderno de experimentos del pueblo (ver `descubrimiento.rs`).
     #[serde(default)]
-    pub innov: Vec<u64>,
+    pub cuaderno: super::descubrimiento::Cuaderno,
+    /// Lo que la técnica descubierta suma a la capacidad: comida, mat, mil, inv, salud, orden, com, defensa.
+    #[serde(default)]
+    pub bonus_materia: [f32; 8],
 }
 
 impl Pueblo {
     pub fn capacidad(&self) -> Capacidad {
         let mut c = Capacidad::de(self.saberes);
-        super::innovacion::bonus(self.innov.len(), &mut c);
+        let b = self.bonus_materia;
+        c.comida += b[0];
+        c.mat += b[1];
+        c.mil += b[2];
+        c.inv += b[3];
+        c.salud += b[4];
+        c.orden += b[5];
+        c.com += b[6];
+        c.defensa += b[7];
         c
     }
 
@@ -227,7 +237,8 @@ impl Pueblo {
             refugio: 0,
             golpeado: 0,
             golpeado_por: 0,
-            innov: Vec::new(),
+            cuaderno: Default::default(),
+            bonus_materia: [0.0; 8],
         }
     }
 

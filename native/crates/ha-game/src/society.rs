@@ -409,8 +409,8 @@ pub(crate) struct Npc {
     home_z: f32,
     /// Centro del PUEBLO al que pertenece (la plaza). Es el asentamiento de `geography`
     /// donde nació; ya no hay "un centro por cuerpo", puede haber varios pueblos.
-    town_x: f32,
-    town_z: f32,
+    pub(crate) town_x: f32,
+    pub(crate) town_z: f32,
     say_cd: f32,      // cooldown de charla ambiental
     /// Últimas frases dichas (máx 5) — para el menú del NPC (tocar → ver historial).
     pub(crate) history: Vec<String>,
@@ -613,7 +613,7 @@ pub(crate) struct Society {
     /// S4/B3: reputación por cuerpo — sobrevive a familias extintas.
     body_rep: HashMap<u8, f32>,
     /// S6: recursos de la colonia por cuerpo — lo que producen/consumen los roles.
-    stock: HashMap<u8, Stock>,
+    pub(crate) stock: HashMap<u8, Stock>,
     /// Sectas de la sociedad: nacen de un carismático, reclutan y se odian entre sí.
     pub(crate) credos: Credos,
     /// Contadores de la vida social, para QA (no persisten).

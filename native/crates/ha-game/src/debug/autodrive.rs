@@ -243,6 +243,14 @@ impl Plugin for AutoDrivePlugin {
         // solo dibujo), se amplía, se le apilan plantas y se le abre la puerta.
         // Deja `casa-calle.png` y `casa-adentro.png`. HA_CASATEST=1
         // (con HA_FORCE_TOUCH=1, como el resto de los drivers de obra).
+        // **Todos los planos, uno al lado del otro.** Levanta cada plano del catálogo (sin cobrar) en
+        // un lote libre cerca del jugador y deja una captura por plano desde la calle y una desde
+        // adentro: `plano-<id>-calle.png` / `plano-<id>-adentro.png`. HA_PLANOSTEST=1 HA_FORCE_TOUCH=1.
+        if crate::flags::var("HA_PLANOSTEST").is_ok() {
+            app.init_resource::<PlanosTestState>();
+            app.add_systems(Update, planos_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         if crate::flags::var("HA_CASATEST").is_ok() {
             app.init_resource::<CasaTestState>();
             app.add_systems(Update, (casa_test_drive.before(aplicar_actuacion_del_driver), nivel_log));
@@ -5328,6 +5336,103 @@ fn nivel_log(world: &mut World) {
 
 #[derive(Resource)]
 struct NivelUltimo(i32);
+
+#[derive(Resource, Default)]
+struct PlanosTestState {
+    idx: usize,
+    fase: u32,
+    next_t: f32,
+    sitio: (i64, i64),
+    origen: Option<(f32, f32)>,
+}
+
+/// Busca un lote libre para el plano `p` en una espiral alrededor de `(cx, cz)`.
+fn planos_sitio(world: &mut World, p: &ha_shared::planos::Plano, cx: i64, cz: i64, semilla: u32) -> Option<(i64, i64)> {
+    for i in 0..400i64 {
+        let ang = i as f32 * 2.399_963_2;
+        let r = 14.0 + (i as f32).sqrt() * 5.0;
+        let (ax, az) = (cx + (ang.cos() * r) as i64, cz + (ang.sin() * r) as i64);
+        let ok = world.resource_scope::<crate::world2d::TileWorld, _>(|w, mut tiles| {
+            w.resource_scope::<crate::structures::BuiltStructures, _>(|w, mut st| {
+                let mut eds = w.resource_mut::<crate::edificios::Edificios>();
+                crate::edificios::fundar_plano(&mut tiles, &mut st, &mut eds, 0, 0, ax, az, p, 2, semilla, true).is_ok()
+            })
+        });
+        if ok {
+            return Some((ax, az));
+        }
+    }
+    None
+}
+
+fn planos_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 || !player_ready(world) {
+        return;
+    }
+    if now < world.resource::<PlanosTestState>().next_t {
+        return;
+    }
+    let (idx, fase) = {
+        let st = world.resource::<PlanosTestState>();
+        (st.idx, st.fase)
+    };
+    if idx >= ha_shared::planos::PLANOS.len() {
+        eprintln!("ha-verify: PLANOSTEST DONE");
+        std::process::exit(0);
+    }
+    let p = &ha_shared::planos::PLANOS[idx];
+    if world.resource::<PlanosTestState>().origen.is_none() {
+        let mut q = world.query_filtered::<&SimState, With<Player>>();
+        let (x, z) = q.get_single(world).map(|s| (s.body.x, s.body.z)).unwrap_or((0.0, 0.0));
+        world.resource_mut::<PlanosTestState>().origen = Some((x, z));
+    }
+    let (ox, oz) = world.resource::<PlanosTestState>().origen.unwrap();
+    match fase {
+        0 => {
+            // Fundar: cada plano en su propio lote, apartados entre sí.
+            let (cx, cz) = (ox as i64 + idx as i64 * 34, oz as i64);
+            match planos_sitio(world, p, cx, cz, 7) {
+                Some(s) => {
+                    eprintln!("ha-verify: PLANO {} fundado en {:?}", p.id, s);
+                    let mut st = world.resource_mut::<PlanosTestState>();
+                    st.sitio = s;
+                    st.fase = 1;
+                    st.next_t = now + 0.5;
+                }
+                None => {
+                    eprintln!("ha-verify: PLANO {} no encontró lote", p.id);
+                    let mut st = world.resource_mut::<PlanosTestState>();
+                    st.idx += 1;
+                    st.next_t = now + 0.2;
+                }
+            }
+        }
+        1 => {
+            // A la calle: unos pasos al sur del frente.
+            let (ax, az) = world.resource::<PlanosTestState>().sitio;
+            bt_teleport(world, ax as f32 + 0.5, az as f32 + 4.5);
+            let mut st = world.resource_mut::<PlanosTestState>();
+            st.fase = 2;
+            st.next_t = now + 2.5;
+        }
+        2 => {
+            shot(world, &format!("{}/plano-{}-calle.png", flytest_dir(), p.id));
+            let (ax, az) = world.resource::<PlanosTestState>().sitio;
+            bt_teleport(world, ax as f32 + 0.5, az as f32 - 1.5);
+            let mut st = world.resource_mut::<PlanosTestState>();
+            st.fase = 3;
+            st.next_t = now + 2.5;
+        }
+        _ => {
+            shot(world, &format!("{}/plano-{}-adentro.png", flytest_dir(), p.id));
+            let mut st = world.resource_mut::<PlanosTestState>();
+            st.idx += 1;
+            st.fase = 0;
+            st.next_t = now + 1.0;
+        }
+    }
+}
 
 fn casa_test_drive(world: &mut World) {
     let now = world.resource::<Time>().elapsed_secs();

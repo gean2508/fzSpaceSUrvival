@@ -376,6 +376,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             });
             menu_row(root, |bar| {
                 menu_button(bar, "MULTIJUGADOR", crate::multijugador::BotonMultijugador);
+                menu_button(bar, "EXPERIMENTAR", crate::experimentos::BotonExperimentar);
             });
 
             // ── Barra de EDICIÓN de UI (oculta salvo en modo EDITAR UI). Estos

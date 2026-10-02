@@ -101,6 +101,31 @@ impl Civ {
         self.mundo.as_ref()
     }
 
+    /// **El acabado de las casas de un pueblo, según lo que descubrió** (índice en `edificios::TEMAS`):
+    /// ladrillo si el pueblo civil más cercano sabe hacer cerámica, azul si trabaja metales, hormigón
+    /// si no. Lo descubierto se ve en la calle.
+    pub(crate) fn tema_cerca(&self, x: f32, z: f32) -> usize {
+        use ha_shared::civ::materia::Clase;
+        let idx = |slug: &str| crate::edificios::TEMAS.iter().position(|(s, _)| *s == slug).unwrap_or(0);
+        let Some(m) = self.mundo.as_ref() else { return idx("hormigon") };
+        let Some(p) = m
+            .pueblos
+            .values()
+            .filter(|p| p.vivo && p.cuerpo == 0)
+            .min_by(|a, b| ((a.x - x).powi(2) + (a.z - z).powi(2)).total_cmp(&((b.x - x).powi(2) + (b.z - z).powi(2))))
+        else {
+            return idx("hormigon");
+        };
+        let clases: Vec<Clase> = p.cuaderno.producibles().iter().filter_map(|id| m.materia.get(*id).map(|x| x.clase)).collect();
+        if clases.contains(&Clase::Ceramica) {
+            idx("ladrillo")
+        } else if clases.iter().any(|c| matches!(c, Clase::Metal | Clase::Aleacion)) {
+            idx("azul")
+        } else {
+            idx("hormigon")
+        }
+    }
+
     /// El Registro es un objeto del pueblo: tocarlo abre la consola sin pasar por el menú.
     pub(crate) fn abrir_desde_registro(&mut self) {
         self.panel = true;
@@ -766,6 +791,32 @@ fn rango(r: u8) -> &'static str {
     }
 }
 
+/// **Lo que el pueblo descubrió experimentando** (`ha_shared::civ::descubrimiento`): cuántas recetas
+/// firmes tiene en el cuaderno, qué materiales sabe producir y cuánto le sirven.
+fn texto_tecnica(m: &Mundo, p: &ha_shared::civ::pueblo::Pueblo) -> String {
+    use ha_shared::civ::materia::{utilidad, USOS};
+    let firmes = p.cuaderno.firmes().count();
+    let mut mats: Vec<(f32, String)> = p
+        .cuaderno
+        .producibles()
+        .iter()
+        .filter_map(|id| m.materia.get(*id))
+        .map(|x| (USOS.iter().map(|u| utilidad(x, *u)).fold(0.0f32, f32::max), x.nombre.clone()))
+        .collect();
+    mats.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let top: Vec<String> = mats.iter().take(3).map(|(u, n)| format!("{n} ({:.0}%)", u * 100.0)).collect();
+    let mitos = p.cuaderno.entradas.values().filter(|e| e.ritual && e.resultado.is_some()).count();
+    let mut t = format!("Experimentos: {firmes} recetas firmes");
+    if !top.is_empty() {
+        t += &format!("; lo mejor que sabe hacer: {}", top.join(", "));
+    }
+    if mitos > 0 {
+        t += &format!("; cree en {mitos} ritual{} que todavía no probó sin él", if mitos == 1 { "" } else { "es" });
+    }
+    t += ".\n";
+    t
+}
+
 fn texto_pueblo(m: &Mundo) -> String {
     let Some(id) = m.jugador.pueblo else {
         return "Todavía no vivís en ningún pueblo.\nAcercate a uno: la gente te va a ir conociendo.".into();
@@ -799,6 +850,7 @@ fn texto_pueblo(m: &Mundo) -> String {
         "Culto: {}. Saberes: {} de {}. Estado: {}.\n",
         culto, p.saberes.cuenta(), N_SABERES, guerra
     );
+    t += &texto_tecnica(m, p);
     t += &format!(
         "Leyes: impuesto {:.0}%, robo = {}, homicidio = {}, cultos libres {:.0}%, servicio {:.0}%.\n",
         p.leyes.impuesto * 100.0, pena(p.leyes.pena_robo), pena(p.leyes.pena_homicidio), p.leyes.libertad_culto * 100.0, p.leyes.servicio * 100.0

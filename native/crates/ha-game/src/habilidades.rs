@@ -57,8 +57,8 @@ impl Oficio {
 /// A qué oficio entrena cada ítem que entra a la mochila.
 fn oficio_de(item: &str) -> Option<Oficio> {
     Some(match item {
-        "wood" | "sticks" => Oficio::Tala,
-        "stone" | "gem_blue" | "gem_red" | "iron_ingot" | "gold_ingot" => Oficio::Mineria,
+        "wood" | "sticks" | "resin" => Oficio::Tala,
+        "stone" | "clay" | "coal" | "copper_ore" | "tin_ore" | "iron_ore" | "limestone" | "salt" | "gem_blue" | "gem_red" | "iron_ingot" | "gold_ingot" => Oficio::Mineria,
         "leather" | "meat" | "beef" | "pork" | "chicken" | "mutton" | "rabbit_meat" | "feather" | "bone" | "wool" => {
             Oficio::Caza
         }

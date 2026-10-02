@@ -1009,6 +1009,47 @@ fn apply_build_hold(
         };
         let body = active_surface_body(&ctx, &planet) as u8;
         let z = world.tiles.z;
+        // **Un plano entero**: cobra los materiales y lo levanta de una vez.
+        if let crate::edificios::Accion::Plano(i) = accion {
+            let Some(p) = ha_shared::planos::PLANOS.get(i) else { return };
+            let (tema, acab) = crate::edificios::acabado_para(&inv, p.area(), p.pisos);
+            let alcanza = editor.creative
+                || (inv.qty("wood") >= p.madera
+                    && inv.qty("stone") >= p.piedra
+                    && acab.map(|(c, n)| crate::edificios::unidades_de_clase(&inv, c) >= n).unwrap_or(true));
+            if !alcanza {
+                crate::causal::registrar("obra", format!("faltan materiales para {}", p.nombre));
+                return;
+            }
+            match crate::edificios::fundar_plano(
+                &mut world.tiles,
+                &mut world.structures,
+                &mut world.edificios,
+                body,
+                z,
+                tx as i64,
+                tz as i64,
+                p,
+                tema,
+                ha_shared::partida::semilla(),
+                false,
+            ) {
+                Ok(muebles) => {
+                    if !editor.creative {
+                        inv.remove("wood", p.madera);
+                        inv.remove("stone", p.piedra);
+                        if let Some((c, n)) = acab {
+                            crate::edificios::gastar_clase(&mut inv, c, n);
+                        }
+                        persist.mark_immediate();
+                    }
+                    crate::causal::registrar("obra", format!("{} levantada ({} muebles)", p.nombre, muebles));
+                    sfx.send(crate::audio::PlaySfxAt(crate::audio::Sfx::Place, render_xy(punto.x, punto.y)));
+                }
+                Err(e) => crate::causal::registrar("obra", format!("{}: {e}", p.nombre)),
+            }
+            return;
+        }
         if crate::edificios::aplicar(
             &mut world.edificios,
             body,

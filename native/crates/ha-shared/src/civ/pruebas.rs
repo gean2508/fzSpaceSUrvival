@@ -351,71 +351,77 @@ fn un_dia_de_civilizacion_cuesta_poco() {
 }
 
 
-/// **Actividad evolutiva de la civilización, medida en varias semillas** (biblia §17, regla 4).
-///
-/// Taylor y otros piden, para evolución abierta, «un medio de diversidad ilimitada». Los saberes
-/// son un catálogo FINITO (`N_SABERES`): la civilización puede agotarlos, y después de eso sólo
-/// quedan variaciones de política. Esta prueba lo mide en vez de suponerlo: por semilla, en
-/// ventanas de 50 años, cuántas novedades aparecen (saberes del mundo nuevos, cultos nuevos,
-/// regímenes distintos vistos) y cuándo se agota cada una. Regla 3.20 del dron: ninguna conclusión
-/// con una semilla — se imprime la tabla de 6 y se afirma sólo lo que vale en todas.
+/// **¿Descubren de verdad?** (biblia §17). Se mide en 6 semillas × 600 años, sin mirar ninguna sola:
+/// qué materiales derivados aparecen, cuándo aparece la primera cerámica, el primer carbón vegetal,
+/// el primer metal, la primera aleación y el vidrio, cuántas recetas firmes hay en el mundo y si lo que
+/// descubre cada mundo es DISTINTO (otro orden, otros materiales, otras técnicas). Es una medición: lo
+/// que se afirma abajo es sólo lo que tiene que valer para que esto sea descubrimiento y no un guion.
 #[test]
-fn actividad_evolutiva_de_la_civilizacion() {
+fn descubrimiento_emergente_en_varias_semillas() {
+    use super::materia::{Clase, USOS, utilidad};
     use std::collections::BTreeSet;
     let sitios = sitios_falsos(48);
     const VENTANAS: u64 = 12; // 12 × 50 años
-    let mut agotan_saberes = 0;
-    let mut piso_global = usize::MAX;
-    let mut tasas_cultos = Vec::new();
+    let clases = [Clase::Ceramica, Clase::Combustible, Clase::Metal, Clase::Aleacion, Clase::Vidrio, Clase::Aglutinante, Clase::Compuesto];
+    let mut huellas: Vec<Vec<Option<u64>>> = Vec::new();
+    let mut piso = usize::MAX;
+    let mut sin_aleacion = 0;
+    let mut con_aleacion = 0;
     for semilla in 1..=6u64 {
         let mut m = Mundo::sembrar(semilla, &sitios);
-        let mut regimenes: BTreeSet<usize> = BTreeSet::new();
-        let mut innovs: BTreeSet<u64> = BTreeSet::new();
-        let mut ult_innov = 0usize;
-        let (mut ult_saberes, mut ult_cultos, mut ult_reg) = (m.saberes_mundo.cuenta() as usize, m.cultos.len(), 0usize);
+        let mut primero: Vec<Option<u64>> = vec![None; clases.len()];
+        let mut recetas_prev = 0usize;
         let mut novedad = Vec::new();
-        let mut vivos_serie: Vec<usize> = Vec::new();
-        let mut cuando_se_agotan: Option<u64> = None;
         for v in 0..VENTANAS {
-            m.avanzar(DIAS_ANIO * 50);
-            for p in m.pueblos.values().filter(|p| p.vivo) {
-                regimenes.insert(p.conv.dominante());
+            // Cada 5 años se mira qué clases de material ya sabe producir ALGUIEN: así se ve el ORDEN
+            // en que cada mundo las descubre (una ventana de 50 años lo aplastaba todo en «año 50»).
+            for sub in 0..10u64 {
+                m.avanzar(DIAS_ANIO * 5);
+                let anio = v * 50 + (sub + 1) * 5;
+                for (i, c) in clases.iter().enumerate() {
+                    if primero[i].is_none()
+                        && m.pueblos.values().any(|p| p.cuaderno.firmes().filter_map(|e| e.resultado).any(|id| m.materia.get(id).map(|x| x.clase == *c).unwrap_or(false)))
+                    {
+                        primero[i] = Some(anio);
+                    }
+                }
             }
+            let mut recetas: BTreeSet<u64> = BTreeSet::new();
+            let mut producibles: BTreeSet<u64> = BTreeSet::new();
             for p in m.pueblos.values() {
-                innovs.extend(p.innov.iter().copied());
+                recetas.extend(p.cuaderno.entradas.iter().filter(|(_, e)| e.firme()).map(|(k, _)| *k));
+                producibles.extend(p.cuaderno.producibles());
             }
-            let (sa, cu, re) = (m.saberes_mundo.cuenta() as usize, m.cultos.len(), regimenes.len());
-            // Las innovaciones cuentan como novedad, pero se imprimen aparte: sin ellas la tabla
-            // original (saberes + cultos + regímenes) es la que mostró el techo del catálogo.
-            let inn = innovs.len();
-            novedad.push(sa.saturating_sub(ult_saberes) + cu.saturating_sub(ult_cultos) + re.saturating_sub(ult_reg) + inn.saturating_sub(ult_innov));
-            ult_innov = inn;
-            vivos_serie.push(m.pueblos.values().filter(|p| p.vivo).count());
-            if sa >= N_SABERES as usize && cuando_se_agotan.is_none() {
-                cuando_se_agotan = Some((v + 1) * 50);
+            novedad.push(recetas.len().saturating_sub(recetas_prev));
+            recetas_prev = recetas.len();
+        }
+        let derivados = m.materia.materiales.len() - 14;
+        // La mejor herramienta y arma que alguien del mundo sabe producir.
+        let mut mejor = [0.0f32; 5];
+        for p in m.pueblos.values() {
+            for id in p.cuaderno.producibles() {
+                if let Some(x) = m.materia.get(id) {
+                    for (i, u) in USOS.iter().enumerate() {
+                        mejor[i] = mejor[i].max(utilidad(x, *u));
+                    }
+                }
             }
         }
-        piso_global = piso_global.min(*novedad.iter().min().unwrap_or(&0));
-        let tercio = (VENTANAS / 3) as usize;
-        let (primero, ultimo): (usize, usize) = (novedad[..tercio].iter().sum::<usize>(), novedad[novedad.len() - tercio..].iter().sum::<usize>());
         eprintln!(
-            "semilla {semilla}: pueblos vivos {vivos_serie:?} · novedades por 50 años {novedad:?} · primer tercio {primero}, último {ultimo} · saberes {}/{N_SABERES}{}",
-            m.saberes_mundo.cuenta(),
-            cuando_se_agotan.map(|a| format!(" (agotados al año {a})")).unwrap_or_default()
+            "semilla {semilla}: derivados {derivados} · recetas firmes por ventana {novedad:?} · primera vez (años) cerámica/carbón/metal/aleación/vidrio/cal/compuesto = {primero:?} · mejor herramienta {:.2}, arma {:.2}, constr {:.2}",
+            mejor[0], mejor[1], mejor[3]
         );
-        if cuando_se_agotan.is_some() {
-            agotan_saberes += 1;
+        piso = piso.min(*novedad.iter().min().unwrap());
+        if primero[3].is_some() {
+            con_aleacion += 1;
+        } else {
+            sin_aleacion += 1;
         }
-        tasas_cultos.push(ultimo as f32 / primero.max(1) as f32);
+        huellas.push(primero);
         invariantes(&m);
     }
-    let media = tasas_cultos.iter().sum::<f32>() / tasas_cultos.len() as f32;
-    eprintln!("saberes agotados en {agotan_saberes}/6 semillas · novedad último/primer tercio (media) = {media:.2} · ventana más pobre = {piso_global}");
-    // Lo único que se afirma: es una medición, no un deseo. La novedad no puede ser negativa y la
-    // tabla tiene que existir; si algún día todas las semillas siguen creando novedades igual de
-    // rápido hasta el final, esta línea se cambia por la afirmación nueva.
-    // Evolución abierta = la novedad NO se apaga (no que se mantenga igual de rápida: con el pozo
-    // creciendo es natural que baje la tasa). Sin innovaciones, las ventanas finales daban 1-6
-    // novedades; con ellas, cientos. Se exige un piso en TODAS las ventanas de TODAS las semillas.
-    assert!(piso_global >= 100, "una ventana de 50 años quedó con sólo {piso_global} novedades: la civilización se estancó");
+    let distintas: BTreeSet<_> = huellas.iter().collect();
+    eprintln!("mundos con aleación {con_aleacion} · sin {sin_aleacion} · huellas distintas {}/6 · ventana más pobre {piso}", distintas.len());
+    assert!(distintas.len() >= 4, "los mundos descubren casi lo mismo y en el mismo orden: es un guion, no descubrimiento");
+    assert!(piso >= 1, "una ventana de 50 años sin ninguna receta firme nueva: se estancó");
 }

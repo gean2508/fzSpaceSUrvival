@@ -45,6 +45,9 @@ pub mod infectados;
 pub mod estados;
 pub mod alijos;
 pub mod causal;
+pub mod materias;
+pub mod experimentos;
+pub mod casas_npc;
 pub mod multijugador;
 mod ambient;
 mod consola;
@@ -384,6 +387,7 @@ fn run_app_inner() {
         .add_plugins(granja::GranjaPlugin)
         .add_plugins(textos_mundo::TextosMundoPlugin)
         .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, frutales::FrutalesPlugin, i18n::IdiomaPlugin, multijugador::MultijugadorPlugin, metas::MetasPlugin, habilidades::HabilidadesPlugin, infectados::InfectadosPlugin, estados::EstadosPlugin, alijos::AlijosPlugin, causal::CausalPlugin, equipo::EquipoPlugin, fps_tope::FpsTopePlugin))
+        .add_plugins((experimentos::ExperimentosPlugin, casas_npc::CasasNpcPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)

@@ -72,6 +72,12 @@ pub struct Mundo {
     pub refugios: Vec<super::catastrofe::Refugio>,
     #[serde(default)]
     pub sig_refugio: u32,
+    /// La materia oculta del mundo y todo lo que se fue derivando (`materia.rs`).
+    #[serde(default)]
+    pub materia: super::materia::Materia,
+    /// Cuántos hechos de descubrimiento se contaron este año (para no llenar la crónica).
+    #[serde(skip)]
+    pub cronica_materia_este_anio: u8,
 }
 
 impl Mundo {
@@ -104,6 +110,8 @@ impl Mundo {
             ultima_bomba: 0,
             refugios: Vec::new(),
             sig_refugio: 1,
+            materia: super::materia::Materia::nueva(semilla),
+            cronica_materia_este_anio: 0,
         }
     }
 
@@ -496,7 +504,7 @@ impl Mundo {
         self.colonias_anual();
         self.hallazgos_anual();
         self.cultos_anual();
-        self.innovacion_anual();
+        self.descubrimiento_anual();
     }
 
     /// Avanza `dias` días.

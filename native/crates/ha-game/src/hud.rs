@@ -4378,6 +4378,10 @@ pub(crate) fn update_interact_hud(
                                     if hash.rem_euclid(3) == 0 {
                                         add_item_to_slots(&mut inv_ui, "apple", 1);
                                     }
+                                    // La RESINA de los árboles (`materias.rs`): materia para experimentar.
+                                    if let Some(extra) = crate::materias::extra_al_talar(ha_shared::partida::semilla(), cx as i32, cz as i32, pid as u32) {
+                                        add_item_to_slots(&mut inv_ui, extra, 1);
+                                    }
                                 }
                                 let body = crate::world2d::active_surface_body(&ctx, &planet);
                                 flora.harvest(body, cx, cz, pid);

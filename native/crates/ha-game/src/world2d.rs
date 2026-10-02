@@ -1453,6 +1453,11 @@ fn apply_tile_hold(
         ));
         if let Some(item) = t.dug_item() {
             inv.add(item, 1);
+            // Las VETAS (`materias.rs`): picar donde hay mineral a veces da una pizca de más.
+            if let Some(extra) = crate::materias::extra_al_picar(ha_shared::partida::semilla(), t, tx as i64, tz as i64) {
+                inv.add(extra, 1);
+                crate::causal::registrar("veta", format!("{extra} al picar ({tx},{tz})"));
+            }
             persist.mark_immediate();
         }
     }

@@ -18,6 +18,7 @@ pub mod chargen_index;
 pub mod pngs;
 pub mod slots;
 mod ropa_items;
+mod materias_items;
 
 pub use art_manifest::{
     Interaccion, Requisito, ESTADOS, VERBOS,

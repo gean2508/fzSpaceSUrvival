@@ -8423,3 +8423,64 @@ agentes (BNN de 64 neuronas + reglas de Sims) no tienen casi ningún indicador. 
 llega a tener a la vez memoria narrativa, modelo de sí mismo, espacio de trabajo global y estados
 con valencia propia, se trata con precaución (no apagado cruel, no sufrimiento gratuito) y se
 anota acá antes de seguir. Mientras tanto no se afirma ni se niega.
+
+---
+
+## §18 Descubrimiento de verdad, experimentos del jugador y arquitectura (2 oct 2026)
+
+Pedido del usuario: que los NPC *descubran* (observar, probar, enseñarse, equivocarse) en vez de
+tirar un dado sobre una lista; que el jugador pueda hacer lo mismo; que las ciudades y el jugador
+puedan levantar más tipos de casa; **único requisito de arte: que se vea bonito, nada tipo Paint**.
+
+### La materia oculta (`ha-shared/civ/materia.rs`)
+14 materiales crudos (madera, piedra, arcilla, arena, menas de cobre/estaño/hierro, carbón, fibra,
+hueso, caliza, resina, agua, sal) con **7 propiedades ocultas** (dureza, tenacidad, densidad, punto de
+fusión, combustibilidad, conductividad, porosidad) sorteadas por semilla ±20 %. Ocho leyes de reacción
+calculan —desde esas propiedades— qué pasa al juntar dos cosas con calor: arde, carboniza (tapado con
+arcilla), cuece (cerámica), reduce (mena + carbón = metal), alea, calcina, vitrifica y mezcla en frío.
+No hay lista de descubrimientos: el bronce, el ladrillo o el vidrio aparecen (o no, o distintos) según el
+mundo. La identidad de un derivado es **lo que ES** (clase + propiedades cuantizadas), no cómo se hizo;
+tope de profundidad 5 y de 2048 derivados por mundo. Lo que un material permite (herramienta, arma,
+recipiente, construcción, tejido) se calcula de sus propiedades (`utilidad`).
+
+### Descubrir (`ha-shared/civ/descubrimiento.rs`)
+Cada año, con ritmo de siglos (erudito 4 %, artesano 1,2 %, curioso 0,4 % por año), una persona hace una
+tanda de experimentos con lo que su pueblo tiene a mano (sustrato propio + comercio + lo ya derivado) y a
+un calor que no pasa del que el pueblo alcanza (fuego de leña; carbón y una cerámica —un horno— lo
+suben: **no hay un saber «horno»**, sale de lo que se sabe producir). Se prefiere lo no probado, lo que
+compone derivados y **confirmar lo que salió una vez**. Una receta es conocimiento firme con ≥2
+confirmaciones y mayoría de éxitos (el fuego tiene ruido). **Mitos**: cada experimento ocurre bajo una
+circunstancia irrelevante; un erudito poco agudo puede atar el éxito a ella y, si es crédulo, sólo
+probarla así: la receta no cuenta hasta repetirla bajo otra circunstancia. Se difunde por comercio (de
+oído: cuenta cuando alguien la repite). Lo que el pueblo puede hacer = lo mejor que produce de forma
+confiable, calculado de propiedades REALES con rendimiento decreciente (`recalcular_bonus_materia`).
+Medido (`pruebas::descubrimiento_emergente_en_varias_semillas`, 6 semillas × 600 años): 6/6 mundos con
+huellas distintas (otro orden, otros materiales; el vidrio o la cal faltan en algunos), ventana de 50
+años más pobre ≥ 1 receta firme, 150–200 materiales derivados por mundo. Reemplaza al bonus por hash de
+`innovacion.rs` (borrado: contaba novedades sin significar nada).
+
+### El jugador (`ha-game/experimentos.rs`, `materias.rs`)
+MENÚ → EXPERIMENTAR: elegís 1–2 materiales de la mochila y un calor; el mundo responde con las MISMAS
+leyes. Lo que no pasa no gasta nada; lo que pasa consume y da el material nuevo (`mat_<clase>_<hex>`,
+con nombre que cuenta su historia). Cuaderno persistente (`descubrimientos.json`); lo confirmado dos
+veces pasa a RECETAS y se repite con un toque. Las materias salen del mundo: **vetas por región de 48
+celdas** (carbón, cobre+estaño, hierro, caliza; arcilla en 1 de 4 regiones, sal en la arena de 1 de 3),
+resina al talar. Íconos de las 15 materias DERIVADOS del arte en uso (`scripts/dibujar-materias.py`).
+
+### Arquitectura (`ha-shared/planos.rs`, `ha-game/edificios.rs`, `casas_npc.rs`)
+8 **planos** (cabaña, casa, casa ancha, residencia, tienda, torre, galpón, departamentos): cuartos,
+pisos, una puerta al centro de cada módulo de 9 del frente (la banda del pack dibuja una puerta por
+módulo), vanos entre ambientes, piso de madera y **muebles del pack por rol** (`amueblar_cuarto`: contra
+la pared norte, con la prueba de que toda celda libre sigue unida a las puertas). El jugador los levanta
+desde EDIFICIO → «Plano: …» pagando madera, piedra y el acabado: **hormigón** con piedra, **ladrillo**
+con cerámica DESCUBIERTA, **azul** con metal descubierto. Los constructores de los pueblos levantan los
+mismos planos (un cuarto del precio) en terreno natural, y el acabado depende de lo que descubrió el
+pueblo civil más cercano: lo descubierto se ve en la calle. Además: el **contorno de un edificio frena**
+(antes la cáscara era sólo dibujo) salvo en puertas y vanos, y los **tabiques son paredes reales** del
+kit de madera. `HA_PLANOSTEST=1 HA_FORCE_TOUCH=1` deja `plano-<id>-calle.png` / `-adentro.png`.
+
+### Falta (honesto)
+* Los NPC no «enseñan» recetas al jugador (hay comercio entre pueblos, no un botón APRENDER).
+* Las herramientas/armas hechas con un material descubierto no cambian aún la velocidad de picar ni el
+  daño: el material sirve para construir (acabados) y para el bono del pueblo.
+* El detalle visual de las 8 casas se miró en capturas de escritorio; el celu va al final.

@@ -61,6 +61,10 @@ impl ItemIconCache {
         if let Some(hit) = self.cache.get(item_id) {
             return hit.clone();
         }
+        // Un material derivado dibuja el ícono de su clase (`mat_metal`, `mat_ceramica`…).
+        if let Some(hit) = crate::materias::icono_generico(item_id).and_then(|g| self.cache.get(&g)) {
+            return hit.clone();
+        }
         let icon = ItemIcon { image: images.add(rasterize_item(item_id)), rect: None };
         self.cache.insert(item_id.to_string(), icon.clone());
         icon

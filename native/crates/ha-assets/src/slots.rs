@@ -10368,7 +10368,7 @@ pub fn game_slots() -> Vec<SlotDef> {
         out.push(s(k, l, "backgrounds"));
     }
     // Ítems (íconos + sprite de máquina).
-    for &(id, label) in ITEM_IDS.iter().chain(crate::ropa_items::ROPA_IDS.iter()) {
+    for &(id, label) in ITEM_IDS.iter().chain(crate::ropa_items::ROPA_IDS.iter()).chain(crate::materias_items::MATERIAS_IDS.iter()) {
         out.push(SlotDef {
             key: leak(format!("items/{id}")),
             label,

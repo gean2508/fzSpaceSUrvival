@@ -502,6 +502,13 @@ fn cosechar_al_completar(
 /// Nombre en castellano de un ítem (el catálogo de slots lo tiene; el de
 /// `ha_shared::items` está en inglés).
 pub fn nombre_item(item: &str) -> String {
+    // Un material derivado (`mat_<clase>_<hex>`) lleva su historia en el nombre.
+    if let Some(n) = crate::materias::nombre_derivado(item) {
+        return n;
+    }
+    if let Some(generico) = crate::materias::icono_generico(item) {
+        return ha_assets::slots::slot_label(&format!("items/{generico}")).unwrap_or("Material").to_string();
+    }
     ha_assets::slots::slot_label(&format!("items/{item}"))
         .map(str::to_string)
         .unwrap_or_else(|| ha_shared::item_display_name(item).to_string())

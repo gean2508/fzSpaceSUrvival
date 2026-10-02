@@ -14,6 +14,7 @@ pub mod inventory;
 pub mod interactions;
 pub mod items;
 pub mod armadura;
+pub mod planos;
 pub mod recipes;
 pub mod launch_pad;
 pub mod parkour;
