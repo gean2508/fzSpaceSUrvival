@@ -191,6 +191,7 @@ fn crear_alijos(
             }
             a.por_sector.insert((sx, sz), Alijo { uid, x: cx, z: cz, abierto: false });
             guardar(&a);
+            crate::causal::registrar("alijo", format!("creado en el sector ({sx},{sz}), ({cx:.0},{cz:.0})"));
             eprintln!("ha-alijos: sector ({sx},{sz}) en ({cx:.0},{cz:.0})");
             return; // un alijo por revisión
         }
@@ -204,6 +205,7 @@ fn marcar_abiertos(mut a: ResMut<Alijos>, panel: Res<ChestPanelState>) {
         if al.uid == uid && !al.abierto {
             al.abierto = true;
             cambio = true;
+            crate::causal::registrar("alijo", format!("abierto en ({:.0},{:.0})", al.x, al.z));
         }
     }
     if cambio {

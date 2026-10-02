@@ -226,6 +226,7 @@ fn revisar_metas(
         let en = idioma_actual() == Idioma::En;
         let nombre = if en { meta.en } else { meta.es };
         let txt = if en { format!("Goal complete: {nombre}!") } else { format!("¡Meta cumplida: {nombre}!") };
+        crate::causal::registrar("meta", nombre.to_string());
         multi.decir(&if en { format!("Goal: {nombre}") } else { format!("Meta: {nombre}") });
         m.aviso = Some((txt, 4.0));
         m.version += 1;

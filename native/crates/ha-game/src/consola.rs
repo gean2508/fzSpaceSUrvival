@@ -99,6 +99,10 @@ pub enum Orden {
     Dar { item: String, cantidad: u32 },
     /// Mover al jugador a esa celda de la superficie.
     Ir { x: f32, z: f32 },
+    /// Los últimos eventos del mundo (`causal.rs`).
+    Causal,
+    /// Conteo de eventos y de tipos distintos (`causal.rs`).
+    Actividad,
     /// Mostrar la ayuda.
     Ayuda,
     /// No era un comando: el texto es el motivo.
@@ -120,6 +124,8 @@ pub fn parsear(linea: &str) -> Orden {
         "ayuda" => Orden::Ayuda,
         "creativo" => Orden::Creativo,
         "depurar" => Orden::Depurar,
+        "causal" => Orden::Causal,
+        "actividad" => Orden::Actividad,
         "dar" => {
             let Some(item) = partes.next() else {
                 return Orden::Error("dar qué. probá /dar madera 10".into());
@@ -398,7 +404,12 @@ fn ejecutar(
     jugador: &mut Query<(&mut crate::sim::SimState, &mut crate::sim::PlayerVisual), With<crate::sim::Player>>,
 ) -> String {
     match orden {
-        Orden::Ayuda => "/creativo · /dar <item> <n> · /ir <x> <z> · /depurar".into(),
+        Orden::Ayuda => "/creativo · /dar <item> <n> · /ir <x> <z> · /depurar · /causal · /actividad".into(),
+        Orden::Causal => {
+            let u = crate::causal::ultimos(4);
+            if u.is_empty() { "todavía no pasó nada anotable".into() } else { u.join(" | ") }
+        }
+        Orden::Actividad => crate::causal::resumen(),
         Orden::Depurar => {
             if crate::debug::alternar_paneles() {
                 "paneles de depuración a la vista".into()

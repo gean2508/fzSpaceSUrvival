@@ -375,6 +375,7 @@ fn romper_paredes(
         if *v <= 0.0 {
             vida.remove(&k);
             walls.remove(body, 0, tx, tz, axis);
+            crate::causal::registrar("pared", format!("cae una pared de madera en ({tx},{tz})"));
         }
     }
 }
@@ -443,6 +444,7 @@ fn golpear(
     if i.vida <= 0.0 {
         let (x, z) = (i.x, i.z);
         bajas.total += 1;
+        crate::causal::registrar("baja", format!("infectado abatido en ({x:.0},{z:.0}), botín {}", i.botin.len()));
         // El cuerpo queda en el suelo con TODO lo que llevaba: se abre como un cofre.
         let body = active_surface_body(&ctx, &planet);
         let uid = chests.crear_cadaver(body, x, z, &i.botin);

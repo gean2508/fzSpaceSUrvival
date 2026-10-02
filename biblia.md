@@ -8320,10 +8320,20 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
   saquear → vender → vestirse.
 * Textos con acentos y signos de apertura corregidos en toda la UI (regla 6).
 
+* **Rastro causal y actividad** (`causal.rs`, §17 reglas 4-5): anillo de 200 eventos (bajas,
+  alijos, metas, ventas, compras, encargos, paredes caídas); consola `/causal` y `/actividad`.
+* **Gym de fauna honesto** (`ha-asset-tools/src/gym.rs`, método del dron): `./editor_assets gym-medir`
+  mide el genoma contra la vara (`steer = 0`) en 24 mundos que no usa para entrenar; `gym` arranca
+  con salidas en cero, valida en 12 mundos y confirma en otros 12. Resultado del 2 oct: el
+  `FAUNA.adn` anterior parecía aportar +20 y daba −108 en la confirmación (sobreajuste a 3
+  mundos); el nuevo está +63 / +3,4 sobre la vara y se instaló como «no estorba y mejora al
+  instalado» (no llega al umbral de «aporta» en la confirmación). Respaldo: `/tmp` (no versionado).
+  `SENSE_VERSION` + `FAUNA.adn.sensores` + test en `fauna.rs` cuidan que los sensores coincidan.
+
 **Falta (honesto) — todo lo que sigue necesita ver la pantalla o el hardware, por eso no se hizo a ciegas**
-* Componer el cuerpo de los aldeanos (§13 Perf): la hoja compuesta (28×3 celdas) no tiene el
-  mismo layout que `npc/char_N`, y el sistema de poses de `NpcPose` lee rects de esa hoja; hay
-  que verlo en pantalla antes de cambiarlo.
+* Componer el cuerpo de los aldeanos (§13 Perf): el NPC pide poses `sleep_down`, `sit_floor_*`,
+  `punch_*`, `pick_up_*` que hay que comprobar que existan en `player/character` (que es el layout
+  de la hoja compuesta); hay que verlo en pantalla antes de cambiarlo.
 * Panel 9-slice en el HUD, interior de C8, ciudad generada con el kit, tiendas/carteles, gym
   de fauna con agua+amenaza (reentrenar `FAUNA.adn`), origen flotante: cada uno toca render o
   entrenamiento largo y se valida con ojo.
@@ -8374,3 +8384,12 @@ vida es una base programada más una corrección aprendida; por eso la fauna arr
 
 **Cola derivada** (sin frenar lo en curso): test de conservación de flujos (1), contador de
 actividad evolutiva con modelo nulo (4), presupuesto cognitivo explícito (6), rastro causal (5).
+
+**Indicadores de conciencia a vigilar (pregunta del usuario, 2 oct 2026).** ¿Puede la
+conciencia emerger? Depende de la teoría y no hay prueba: funcionalismo/espacio de trabajo global
+(sí, si el sistema tiene la organización), IIT (no en hardware digital convencional), biologicismo
+(no sin metabolismo real), ilusionismo (casi cualquier sistema con modelo de sí). Hoy nuestros
+agentes (BNN de 64 neuronas + reglas de Sims) no tienen casi ningún indicador. Si algún agente
+llega a tener a la vez memoria narrativa, modelo de sí mismo, espacio de trabajo global y estados
+con valencia propia, se trata con precaución (no apagado cruel, no sufrimiento gratuito) y se
+anota acá antes de seguir. Mientras tanto no se afirma ni se niega.

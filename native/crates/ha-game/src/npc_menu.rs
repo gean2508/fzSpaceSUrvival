@@ -722,6 +722,7 @@ fn menu_buttons(
                             inv.remove(&id, n);
                         }
                         inv.add("gold_ingot", oro);
+                        crate::causal::registrar("venta", format!("{oro} lingotes por mercadería"));
                         let f = if en { format!("Deal! {oro} gold ingots.") } else { format!("¡Trato hecho! {oro} lingotes de oro.") };
                         say_from(&mut speech, e, x, z, f, color, true);
                     }
@@ -730,6 +731,7 @@ fn menu_buttons(
                     let n = (sims_hash(uid ^ (time.elapsed().as_millis() as u64)) % 100_000) as u32;
                     let prenda = ha_shared::armadura::prenda_al_azar(n);
                     inv.add(prenda, 1);
+                    crate::causal::registrar("compra", format!("prenda {prenda} por {PRECIO_PRENDA} lingotes"));
                     let nombre = crate::granja::nombre_item(prenda);
                     let f = if en { format!("Here: {}.", crate::i18n::tr(&nombre)) } else { format!("Tomá: {nombre}.") };
                     say_from(&mut speech, e, x, z, f, color, true);
@@ -758,6 +760,7 @@ fn menu_buttons(
                         inv.add(pi, pn);
                         soc.adjust(familia, ENCARGO_REP);
                         encargos.pendientes.remove(&uid);
+                        crate::causal::registrar("encargo", format!("entregado a {uid}: {n} de {item}"));
                         encargos.descanso.insert(uid, ahora + ENCARGO_DESCANSO);
                         let f = if en {
                             format!("Perfect, thank you! Take {pn} {}.", crate::i18n::tr(&crate::granja::nombre_item(pi)))
@@ -1017,5 +1020,28 @@ fn menu_companero(
                 menu.companero = false;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod economia_tests {
+    use super::*;
+
+    /// §17 regla 1 (contabilidad conservada): no hay ciclo de dinero gratis. Lo que se COMPRA
+    /// (prendas) no se puede VENDER, y todo lo vendible rinde menos de un lingote por unidad:
+    /// vender y recomprar nunca deja ganancia.
+    #[test]
+    fn vender_y_recomprar_nunca_da_ganancia() {
+        for id in ha_shared::armadura::hallables_ids() {
+            assert!(unidades_por_oro(id).is_none(), "{id} se compra, no puede venderse");
+        }
+        for id in ["apple", "bread", "leather", "wood", "stone", "meat", "iron_ingot", "gem_blue"] {
+            let por = unidades_por_oro(id).expect(id);
+            assert!(por >= 1, "{id} rinde más de un lingote por unidad");
+        }
+        // El oro tampoco se vende por oro.
+        assert!(unidades_por_oro("gold_ingot").is_none());
+        // Una prenda cuesta más que lo que da vender una unidad de lo más barato.
+        assert!(PRECIO_PRENDA >= 2);
     }
 }
