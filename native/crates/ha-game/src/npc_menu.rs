@@ -183,6 +183,8 @@ enum NpcAction {
     Preguntar,
     /// Pedirle que te enseñe una receta de las que sabe (si te aprecia lo bastante).
     Aprender,
+    /// Enseñarle al pueblo una receta que descubriste vos.
+    Ensenar,
     Close,
 }
 
@@ -541,6 +543,7 @@ fn sync_menu(
                 if role != "HOSTIL" {
                     npc_button(row, "PREGUNTAR", NpcAction::Preguntar, Color::srgb(0.75, 0.95, 1.0));
                     npc_button(row, "ENSEÑAME", NpcAction::Aprender, Color::srgb(0.7, 1.0, 0.75));
+                    npc_button(row, "ENSEÑARLE", NpcAction::Ensenar, Color::srgb(0.85, 0.95, 0.6));
                 }
                 if role == "HOSTIL" {
                     npc_button(row, "CALMAR", NpcAction::Calm, Color::srgb(1.0, 0.7, 0.4));
@@ -594,7 +597,7 @@ fn menu_saber(
 ) {
     let Some(uid) = menu.open_uid else { return };
     for (interaction, action) in &interactions {
-        if *interaction != Interaction::Pressed || !matches!(action, NpcAction::Preguntar | NpcAction::Aprender) {
+        if *interaction != Interaction::Pressed || !matches!(action, NpcAction::Preguntar | NpcAction::Aprender | NpcAction::Ensenar) {
             continue;
         }
         let Some((e, mut npc)) = npcs.iter_mut().find(|(_, n)| n.uid == uid) else { continue };
@@ -636,6 +639,17 @@ fn menu_saber(
                     soc.adjust_capped(npc.family, PREGUNTAR_REP, PREGUNTAR_TOPE);
                 }
                 t
+            }
+            NpcAction::Ensenar => {
+                let mut dicho = "Eso ya lo sabemos todos acá, o todavía no tenés nada firme que enseñar.".to_string();
+                for (e, m) in exp.para_ensenar() {
+                    if let Some(pueblo) = civ.ensenar_al_pueblo(uid, npc.x, npc.z, &e, &m) {
+                        soc.adjust_capped(npc.family, 0.12, 1.0);
+                        dicho = format!("¿{}? ¡Qué ingenioso! Se lo cuento a todo {pueblo}.", m.nombre);
+                        break;
+                    }
+                }
+                dicho
             }
             _ => {
                 if rep < APRENDER_MIN_REP {
@@ -704,7 +718,7 @@ fn menu_buttons(
                 menu.refresh = true;
             }
             // Las resuelve `menu_saber` (necesita el mundo civil y el cuaderno).
-            NpcAction::Preguntar | NpcAction::Aprender => {}
+            NpcAction::Preguntar | NpcAction::Aprender | NpcAction::Ensenar => {}
             NpcAction::Talk => {
                 if let Some((e, mut npc)) = npcs.iter_mut().find(|(_, n)| n.uid == uid) {
                     let rep = soc.rep(npc.family);

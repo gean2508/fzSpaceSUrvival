@@ -237,9 +237,38 @@ impl Materia {
         -0.25 + 0.85 * ((h >> 40) as f32 / (1u64 << 24) as f32)
     }
 
+    /// Los crudos de los que sale, sin repetir y en orden de aparición (recorre la cadena de origen).
+    fn raices(&self, partes: &[u64], out: &mut Vec<u64>) {
+        for p in partes {
+            match self.get(*p) {
+                Some(m) if !m.origen.is_empty() => self.raices(&m.origen.clone(), out),
+                Some(_) => {
+                    if !out.contains(p) {
+                        out.push(*p);
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+
+    /// «aleación de cobre y estaño»: nombra por los CRUDOS de los que sale (nunca «adobe de adobe de…»),
+    /// y los que ya son varios pasos de fabricación llevan el número de paso (II, III…).
     fn nombre_derivado(&self, base: &str, partes: &[u64]) -> String {
-        let n: Vec<String> = partes.iter().filter_map(|p| self.get(*p).map(|m| m.nombre.clone())).collect();
-        format!("{base} de {}", n.join(" y "))
+        let mut r = Vec::new();
+        self.raices(partes, &mut r);
+        let n: Vec<String> = r.iter().filter_map(|p| self.get(*p).map(|m| m.nombre.clone())).collect();
+        let prof = partes.iter().filter_map(|p| self.get(*p)).map(|m| m.profundidad).max().unwrap_or(0) + 1;
+        let cuerpo = match n.len() {
+            0 => base.to_string(),
+            1 => format!("{base} de {}", n[0]),
+            2 => format!("{base} de {} y {}", n[0], n[1]),
+            _ => format!("{base} de {}, {} y otros", n[0], n[1]),
+        };
+        match prof {
+            0 | 1 => cuerpo,
+            k => format!("{cuerpo} {}", ["", "", "II", "III", "IV", "V"][(k as usize).min(5)]),
+        }
     }
 
     /// **La identidad de un derivado es lo que ES, no cómo se hizo**: la clase y sus propiedades
@@ -586,5 +615,16 @@ mod tests {
         m2.registrar(&cal);
         let Resultado::Obtiene(mor, "mezcla") = m2.reaccionar(cal.id, Some(ARENA), 0.0, false) else { panic!() };
         assert!(utilidad(&mor, Uso::Construccion) > utilidad(m.get(ARENA).unwrap(), Uso::Construccion));
+    }
+
+    #[test]
+    fn los_nombres_salen_de_los_crudos_y_no_se_anidan() {
+        let mut m = mundo(2);
+        let Resultado::Obtiene(a, _) = m.reaccionar(MADERA, Some(ARCILLA), 0.0, false) else { panic!() };
+        m.registrar(&a);
+        assert!(a.nombre.matches(" de ").count() == 1 && a.nombre.contains("madera") && a.nombre.contains("arcilla"), "{}", a.nombre);
+        let Resultado::Obtiene(b, _) = m.reaccionar(a.id, Some(ARCILLA), 0.0, false) else { return };
+        assert!(!b.nombre.contains("de adobe") && b.nombre.matches(" de ").count() == 1, "{}", b.nombre);
+        assert!(b.nombre.ends_with("II"), "{}", b.nombre);
     }
 }

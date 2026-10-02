@@ -425,3 +425,32 @@ fn descubrimiento_emergente_en_varias_semillas() {
     assert!(distintas.len() >= 4, "los mundos descubren casi lo mismo y en el mismo orden: es un guion, no descubrimiento");
     assert!(piso >= 1, "una ventana de 50 años sin ninguna receta firme nueva: se estancó");
 }
+
+/// Lo que el jugador descubrió y le enseña a un pueblo entra en su cuaderno y sube lo que puede hacer.
+#[test]
+fn el_jugador_le_ensena_una_receta_a_un_pueblo() {
+    use super::materia::*;
+    let s = sitios_falsos(24);
+    let mut m = Mundo::sembrar(21, &s);
+    m.asegurar_materia();
+    let pueblo = *m.pueblos.keys().next().unwrap();
+    let Resultado::Obtiene(mat, ley) = m.materia.reaccionar(MENA_COBRE, Some(CARBON), 1.0, false) else { panic!("cobre + carbón a todo fuego debería dar metal") };
+    let e = super::descubrimiento::Entrada {
+        a: MENA_COBRE,
+        b: CARBON,
+        calor: 20,
+        resultado: Some(mat.id),
+        ley: ley.into(),
+        n: 3,
+        ok: 3,
+        ctx_vistos: 3,
+        ritual: false,
+        ctx_creido: 0,
+        de_oido: false,
+    };
+    let antes = m.pueblos[&pueblo].cuaderno.firmes().count();
+    assert!(m.pueblo_aprende_del_jugador(pueblo, &e, &mat), "el pueblo no la sabía");
+    assert_eq!(m.pueblos[&pueblo].cuaderno.firmes().count(), antes + 1);
+    assert!(m.pueblos[&pueblo].cuaderno.producibles().contains(&mat.id));
+    assert!(!m.pueblo_aprende_del_jugador(pueblo, &e, &mat), "enseñarla dos veces no suma");
+}

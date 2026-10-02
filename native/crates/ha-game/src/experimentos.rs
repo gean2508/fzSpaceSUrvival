@@ -53,6 +53,18 @@ impl Experimentos {
         self.version = self.version.wrapping_add(1);
     }
 
+    /// Las recetas firmes del jugador con su material, para enseñárselas a un pueblo.
+    pub(crate) fn para_ensenar(&mut self) -> Vec<(ha_shared::civ::descubrimiento::Entrada, Material)> {
+        let firmes: Vec<_> = self.cuaderno.firmes().cloned().collect();
+        firmes
+            .into_iter()
+            .filter_map(|e| {
+                let m = self.materia().get(e.resultado?)?.clone();
+                Some((e, m))
+            })
+            .collect()
+    }
+
     /// ¿Ya sabe esta receta (firme)? Evita enseñar lo que ya está en el cuaderno.
     pub(crate) fn sabe(&self, e: &ha_shared::civ::descubrimiento::Entrada) -> bool {
         let k = ha_shared::civ::descubrimiento::clave(e.a, (e.b != ha_shared::civ::descubrimiento::SIN_B).then_some(e.b), e.calor);

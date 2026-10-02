@@ -8488,6 +8488,8 @@ El usuario lo pidió así: «de nada sirve una simulación en números si al ent
   local atiende y **las noticias del barrio**; hablar sube la amistad hasta 0,35) y **ENSEÑAME** (si su
   fama contigo ≥ 0,22 te pasa una receta que no sabés: `Experimentos::aprender`; si era un mito, te lo
   dice y lo probás vos bajo otra circunstancia). Los que no son eruditos sólo saben una parte de lo firme.
+  **ENSEÑARLE** va al revés: tu receta firme entra en el cuaderno de SU pueblo (`Mundo::pueblo_aprende_del_jugador`),
+  sube lo que el pueblo puede hacer, queda en la crónica («Un forastero le enseña a X cómo se hace Y») y su fama contigo sube.
 * **Consecuencias** (`ha-game/barrio.rs`, memoria por pueblo en `barrio.json`):
   * Los **infectados atacan a los vecinos** (persiguen al más cercano, 16 celdas de olfato) y los
     matan (`civ.muerte_de_npc`, herencia, testigos con `Seguridad` a cero).

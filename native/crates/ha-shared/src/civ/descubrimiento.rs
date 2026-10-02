@@ -283,6 +283,34 @@ impl Mundo {
         }
     }
 
+    /// **El jugador le enseña a un pueblo una receta que descubrió.** El pueblo la anota (de oído: ya
+    /// la usa, aunque nadie de ahí la haya probado) y lo que puede hacer se recalcula. `false` si el
+    /// pueblo ya la sabía.
+    pub fn pueblo_aprende_del_jugador(&mut self, pueblo: u32, e: &Entrada, resultado: &Material) -> bool {
+        self.asegurar_materia();
+        let b = (e.b != SIN_B).then_some(e.b);
+        let k = clave(e.a, b, e.calor);
+        let Some(p) = self.pueblos.get(&pueblo) else { return false };
+        if p.cuaderno.entradas.get(&k).map(|x| x.firme()).unwrap_or(false) {
+            return false;
+        }
+        self.materia.registrar(resultado);
+        let nombre_pueblo = self.nombre_pueblo(pueblo);
+        let Some(p) = self.pueblos.get_mut(&pueblo) else { return false };
+        if resultado.id >= N_CRUDOS {
+            p.cuaderno.materiales.insert(resultado.id);
+        }
+        let mut copia = e.clone();
+        copia.n = copia.n.max(2);
+        copia.ok = copia.ok.max(2);
+        copia.ritual = false;
+        copia.de_oido = true;
+        p.cuaderno.entradas.insert(k, copia);
+        self.recalcular_bonus_materia(pueblo);
+        self.hecho(Tipo::Descubrimiento, pueblo, JUGADOR_ID, format!("Un forastero le enseña a {nombre_pueblo} cómo se hace {}.", resultado.nombre));
+        true
+    }
+
     /// **Una vez por año**: experimentan, se difunde por comercio y se recalcula lo que cada pueblo
     /// puede hacer con lo que sabe.
     pub(crate) fn descubrimiento_anual(&mut self) {

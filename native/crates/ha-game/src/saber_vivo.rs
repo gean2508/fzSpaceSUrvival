@@ -57,11 +57,22 @@ pub struct Taller {
     gente: HashMap<u64, Option<Estudioso>>,
 }
 
+impl Taller {
+    /// Cuántos aldeanos están estudiando de verdad (para QA).
+    pub fn estudiosos(&self) -> usize {
+        self.gente.values().filter(|e| e.is_some()).count()
+    }
+}
+
 #[derive(Component)]
 struct Fogata {
     ttl: f32,
     fase: f32,
 }
+
+/// Marca para QA: cuenta las fogatas encendidas.
+#[derive(Component)]
+pub struct FogataMarca;
 
 pub struct SaberVivoPlugin;
 
@@ -198,6 +209,7 @@ fn estudiar(
                 Sprite { image: g.0.clone(), color: Color::srgba(1.0, 0.62, 0.25, 0.55), custom_size: Some(Vec2::splat(3.2)), ..default() },
                 Transform::from_xyz(r.x, r.y - 0.2, crate::layers::OVERHEAD - 0.5),
                 Fogata { ttl: FOGATA_S, fase: (uid % 97) as f32 },
+                FogataMarca,
             ));
         }
         let _ = (&est.nombre, est.oficio);

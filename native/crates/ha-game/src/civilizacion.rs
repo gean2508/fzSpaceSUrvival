@@ -282,6 +282,18 @@ impl Civ {
         })
     }
 
+    /// El jugador le enseña una receta suya al pueblo de este NPC. `Some(texto)` si el pueblo no la sabía.
+    pub(crate) fn ensenar_al_pueblo(&mut self, uid: u64, x: f32, z: f32, e: &ha_shared::civ::descubrimiento::Entrada, m: &ha_shared::civ::materia::Material) -> Option<String> {
+        let p = self.persona_para(uid, x, z)?;
+        let mundo = self.mundo.as_mut()?;
+        let pueblo = mundo.personas.get(&p)?.pueblo;
+        if !mundo.pueblo_aprende_del_jugador(pueblo, e, m) {
+            return None;
+        }
+        self.sucio = true;
+        Some(mundo.pueblos.get(&pueblo)?.nombre.clone())
+    }
+
     /// Un NPC encarnado murió por una causa del mundo (infectados, no el jugador): la civilización lo
     /// registra igual que una baja cualquiera (sucesión, duelo).
     pub(crate) fn muerte_de_npc(&mut self, uid: u64, x: f32, z: f32) {

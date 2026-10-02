@@ -5379,7 +5379,7 @@ fn vida_test_drive(world: &mut World) {
             teleport_surface(world, cx, cz);
         }
     }
-    let espera = [0.0, 25.0, 4.0, 30.0, 50.0][(stage as usize).min(4)];
+    let espera = [0.0, 50.0, 4.0, 30.0, 50.0][(stage as usize).min(4)];
     if stage > 0 && now - entered < espera {
         return;
     }
@@ -5414,7 +5414,16 @@ fn vida_test_drive(world: &mut World) {
             let total = world.resource::<crate::barrio::Memoria>().total();
             world.resource_mut::<VidaTestState>().base = total;
             world.resource_mut::<VidaTestState>().pob0 = n;
-            eprintln!("ha-vida: vecinos a menos de 60: {n}; jugador ({px:.0},{pz:.0})");
+            let est = world.resource::<crate::saber_vivo::Taller>().estudiosos();
+            let fogatas = world.query::<&crate::saber_vivo::FogataMarca>().iter(world).count();
+            let ejemplos: Vec<String> = world
+                .query::<&crate::society::Npc>()
+                .iter(world)
+                .flat_map(|n| n.history.iter().filter(|h| h.starts_with("Pruebo") || h.starts_with("¡Salió") || h.starts_with("Nada...")).cloned().collect::<Vec<_>>())
+                .take(4)
+                .collect();
+            eprintln!("ha-vida: lo que se vio estudiar: {ejemplos:?}");
+            eprintln!("ha-vida: vecinos a menos de 60: {n}; estudiosos {est}, fogatas ahora {fogatas}; jugador ({px:.0},{pz:.0})");
             // Cuatro infectados cayendo sobre el centro, entre la gente.
             world.resource_scope::<crate::art2d::ArtLibrary, _>(|world, art| {
                 let mut cmds = world.commands();
