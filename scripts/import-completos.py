@@ -60,6 +60,8 @@ SLOTS = {
     "building/universidad": [("17_Garden_Singles_32x32", "Palace_Example_1")],
     "building/escuela": [("13_School_Singles_32x32", "School_1")],
     "building/comisaria": [("15_Police_Station_Singles_32x32", f"Police_Station_{i}") for i in (1, 2)],
+    "building/tienda": [(G, "Hardware_Store")],
+    "building/deposito": [("23_MIlitary_Base_Singles_32x32", f"Dormitory_{i}") for i in (1, 2, 4)],
     "building/correo_edificio": [("22_Post_Office_Singles_32x32", f"Building_{i}") for i in (1, 3)],
 }
 

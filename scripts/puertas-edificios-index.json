@@ -602,32 +602,6 @@
    "puerta2_closing",
    "puerta2_en_sprite"
   ],
-  "building/deposito#4": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
-  "building/deposito#6": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
   "building/dormitorio_1": [
    "base",
    "closed",
@@ -1702,14 +1676,6 @@
    "puerta_en_sprite"
   ],
   "building/shopping_y_mercado_shopping": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite"
-  ],
-  "building/tienda": [
    "base",
    "closed",
    "open",

@@ -3805,18 +3805,6 @@
     {
      "id": "3",
      "label": "Deposito 3"
-    },
-    {
-     "id": "4",
-     "label": "Deposito 4"
-    },
-    {
-     "id": "5",
-     "label": "Deposito 5"
-    },
-    {
-     "id": "6",
-     "label": "Deposito 6"
     }
    ]
   },
@@ -70798,9 +70786,9 @@
      ],
      "png": "art/pack/completos_3.png",
      "rect": {
-      "col": 21,
+      "col": 11,
       "h": 13,
-      "row": 0,
+      "row": 30,
       "w": 8
      }
     },
@@ -70879,9 +70867,9 @@
     }
    },
    "rect": {
-    "col": 21,
+    "col": 11,
     "h": 13,
-    "row": 0,
+    "row": 30,
     "w": 8
    }
   },
@@ -70899,9 +70887,9 @@
      ],
      "png": "art/pack/completos_3.png",
      "rect": {
-      "col": 21,
+      "col": 11,
       "h": 13,
-      "row": 0,
+      "row": 30,
       "w": 8
      }
     },
@@ -70980,9 +70968,9 @@
     }
    },
    "rect": {
-    "col": 21,
+    "col": 11,
     "h": 13,
-    "row": 0,
+    "row": 30,
     "w": 8
    }
   },
@@ -71000,9 +70988,9 @@
      ],
      "png": "art/pack/completos_3.png",
      "rect": {
-      "col": 0,
+      "col": 19,
       "h": 13,
-      "row": 18,
+      "row": 30,
       "w": 8
      }
     },
@@ -71081,9 +71069,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 19,
     "h": 13,
-    "row": 18,
+    "row": 30,
     "w": 8
    }
   },
@@ -71339,11 +71327,11 @@
     32,
     32
    ],
-   "png": "art/pack/military_base_2.png",
+   "png": "art/pack/completos_3.png",
    "rect": {
-    "col": 12,
-    "h": 13,
-    "row": 0,
+    "col": 0,
+    "h": 9,
+    "row": 18,
     "w": 11
    }
   },
@@ -71352,11 +71340,11 @@
     32,
     32
    ],
-   "png": "art/pack/military_base_2.png",
+   "png": "art/pack/completos_3.png",
    "rect": {
-    "col": 12,
-    "h": 13,
-    "row": 0,
+    "col": 0,
+    "h": 9,
+    "row": 18,
     "w": 11
    }
   },
@@ -71365,18 +71353,18 @@
     32,
     32
    ],
-   "png": "art/pack/military_base_2.png",
+   "png": "art/pack/completos_3.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/military_base_2.png",
+     "png": "art/pack/completos_3.png",
      "rect": {
-      "col": 4,
+      "col": 11,
       "h": 12,
-      "row": 13,
+      "row": 18,
       "w": 11
      }
     },
@@ -71528,9 +71516,9 @@
     }
    },
    "rect": {
-    "col": 4,
+    "col": 11,
     "h": 12,
-    "row": 13,
+    "row": 18,
     "w": 11
    }
   },
@@ -71539,18 +71527,18 @@
     32,
     32
    ],
-   "png": "art/pack/military_base_2.png",
+   "png": "art/pack/completos_3.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/military_base_2.png",
+     "png": "art/pack/completos_3.png",
      "rect": {
-      "col": 15,
+      "col": 0,
       "h": 12,
-      "row": 13,
+      "row": 30,
       "w": 11
      }
     },
@@ -71702,371 +71690,10 @@
     }
    },
    "rect": {
-    "col": 15,
-    "h": 12,
-    "row": 13,
-    "w": 11
-   }
-  },
-  "building/deposito#4": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/military_base_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/military_base_3.png",
-     "rect": {
-      "col": 0,
-      "h": 9,
-      "row": 23,
-      "w": 11
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 208,
-      "h": 46,
-      "row": 132,
-      "w": 62
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 32,
-      "h": 64,
-      "row": 160,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 9,
-    "row": 23,
-    "w": 11
-   }
-  },
-  "building/deposito#5": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/military_base_4.png",
-   "rect": {
-    "col": 6,
-    "h": 8,
-    "row": 0,
-    "w": 11
-   }
-  },
-  "building/deposito#6": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/military_base_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/military_base_3.png",
-     "rect": {
-      "col": 0,
-      "h": 12,
-      "row": 0,
-      "w": 8
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 44,
-      "row": 1122,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.8,
-      "frames": 6
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 240,
-      "h": 44,
-      "row": 1122,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 240,
-      "h": 44,
-      "row": 1122,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 44,
-      "row": 1122,
-      "w": 40
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 64,
-      "row": 320,
-      "w": 64
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 8.0,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 170,
-      "h": 44,
-      "row": 158,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
     "col": 0,
     "h": 12,
-    "row": 0,
-    "w": 8
+    "row": 30,
+    "w": 11
    }
   },
   "building/dibujo_grafiti_blanco_chico": {
@@ -100721,100 +100348,12 @@
     32,
     32
    ],
-   "png": "art/pack/shopping_center_and_markets_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/shopping_center_and_markets_0.png",
-     "rect": {
-      "col": 0,
-      "h": 12,
-      "row": 0,
-      "w": 18
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 88,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 88,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 88,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 88,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 256,
-      "h": 88,
-      "row": 288,
-      "w": 64
-     }
-    }
-   },
+   "png": "art/pack/completos_3.png",
    "rect": {
-    "col": 0,
-    "h": 12,
+    "col": 21,
+    "h": 9,
     "row": 0,
-    "w": 18
+    "w": 8
    }
   },
   "building/tienda_carpa_1": {
@@ -108234,6 +107773,19 @@
     "w": 14
    }
   },
+  "completo/generic_building_hardware_store": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_3.png",
+   "rect": {
+    "col": 21,
+    "h": 9,
+    "row": 0,
+    "w": 8
+   }
+  },
   "completo/hotel_and_hospital_hospital_1": {
    "grid": [
     32,
@@ -108245,6 +107797,45 @@
     "h": 21,
     "row": 16,
     "w": 27
+   }
+  },
+  "completo/military_base_dormitory_1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_3.png",
+   "rect": {
+    "col": 0,
+    "h": 9,
+    "row": 18,
+    "w": 11
+   }
+  },
+  "completo/military_base_dormitory_2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_3.png",
+   "rect": {
+    "col": 11,
+    "h": 12,
+    "row": 18,
+    "w": 11
+   }
+  },
+  "completo/military_base_dormitory_4": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_3.png",
+   "rect": {
+    "col": 0,
+    "h": 12,
+    "row": 30,
+    "w": 11
    }
   },
   "completo/office_example_1": {
@@ -108306,9 +107897,9 @@
    ],
    "png": "art/pack/completos_3.png",
    "rect": {
-    "col": 21,
+    "col": 11,
     "h": 13,
-    "row": 0,
+    "row": 30,
     "w": 8
    }
   },
@@ -108319,9 +107910,9 @@
    ],
    "png": "art/pack/completos_3.png",
    "rect": {
-    "col": 0,
+    "col": 19,
     "h": 13,
-    "row": 18,
+    "row": 30,
     "w": 8
    }
   },

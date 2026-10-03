@@ -30,6 +30,10 @@
   "completo/school_school_1",
   "completo/police_station_police_station_1",
   "completo/police_station_police_station_2",
+  "completo/generic_building_hardware_store",
+  "completo/military_base_dormitory_1",
+  "completo/military_base_dormitory_2",
+  "completo/military_base_dormitory_4",
   "completo/post_office_building_1",
   "completo/post_office_building_3",
   "building/casa_chica",
@@ -71,6 +75,11 @@
   "building/comisaria",
   "building/comisaria#1",
   "building/comisaria#2",
+  "building/tienda",
+  "building/deposito",
+  "building/deposito#1",
+  "building/deposito#2",
+  "building/deposito#3",
   "building/correo_edificio",
   "building/correo_edificio#1",
   "building/correo_edificio#2"
@@ -85,6 +94,7 @@
   "building/oficina",
   "building/torre",
   "building/comisaria",
+  "building/deposito",
   "building/correo_edificio"
  ],
  "paginas": [

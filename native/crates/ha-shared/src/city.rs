@@ -258,7 +258,7 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     // Ahora los interiores no pueden caer en `building/`
     // (`import-pack-masivo.py::CARPETAS_DE_AFUERA`) y ningún lote puede apuntar a
     // un dibujo de adentro (`art2d::la_ciudad_no_se_construye_con_interiores`).
-    LotProgram { key: "building/tienda", cells: (20, 13), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/tienda", cells: (11, 9), district: District::Commercial, weight: 5 },
     LotProgram { key: "building/mercado_chico_1", cells: (14, 12), district: District::Commercial, weight: 8 },
     LotProgram { key: "building/mercado_mediano_1", cells: (18, 14), district: District::Commercial, weight: 8 },
     LotProgram { key: "building/gasolinera", cells: (15, 14), district: District::Commercial, weight: 7 },
@@ -283,7 +283,7 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     // ── Industria. La central eléctrica con sus molinos es de las referencias:
     // va en el borde, que es donde el pack la dibujó (contra la arboleda).
     LotProgram { key: "building/nave_industrial", cells: (15, 16), district: District::Industrial, weight: 20 },
-    LotProgram { key: "building/deposito", cells: (13, 14), district: District::Industrial, weight: 14 },
+    LotProgram { key: "building/deposito", cells: (13, 11), district: District::Industrial, weight: 14 },
     LotProgram { key: "building/granero", cells: (10, 10), district: District::Industrial, weight: 8 },
     LotProgram { key: "building/hangar", cells: (30, 24), district: District::Industrial, weight: 5 },
     // Las casas rodantes del camping: el pack las trae en tres tamaños y son la
