@@ -68,6 +68,8 @@ pub fn item_display_name(id: &str) -> &'static str {
         "supply" => "Supply Pack",
         "map_small" => "Small Map",
         "map_large" => "Large Map",
+        // Guía hacia un alijo (Rust-only, ver `ha-game/alijos.rs`).
+        "mapa_tesoro" => "Treasure Map",
         // Ropa encontrable (Rust-only, ver `armadura::es_hallable`).
         id if id.starts_with("ropa_") => "Clothes",
         id if id.starts_with("gorra_") || id.starts_with("gorro_") => "Cap",

@@ -33523,6 +33523,9 @@
      "label": "Helicóptero 2"
     }
    ]
+  },
+  "items/mapa_tesoro": {
+   "label": "Mapa del tesoro"
   }
  },
  "origen": {
@@ -208019,9 +208022,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 8,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/gem_red": {
@@ -208032,9 +208035,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 9,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/gold_ingot": {
@@ -208123,9 +208126,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 0,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/iron_ingot": {
@@ -208162,9 +208165,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 1,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/lantern": {
@@ -208325,9 +208328,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 10,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/mat_compuesto": {
@@ -208442,9 +208445,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 3,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_fin": {
@@ -208455,9 +208458,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 4,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_lander": {
@@ -208468,9 +208471,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 5,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_nose": {
@@ -208481,9 +208484,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 6,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_tank": {
@@ -208494,9 +208497,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 7,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/pickaxe": {
@@ -208572,9 +208575,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 2,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/pumpkin": {
@@ -210485,9 +210488,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 11,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "machines/regolith_drill": {
@@ -241811,9 +241814,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 21,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/cancha_tenis": {
@@ -241824,9 +241827,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 22,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/cantero": {
@@ -242780,9 +242783,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 20,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/chatarra_1": {
@@ -264614,9 +264617,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 23,
-    "h": 4,
     "row": 0,
-    "w": 3
+    "w": 3,
+    "h": 4
    }
   },
   "slope/arena": {
@@ -269726,9 +269729,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 12,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/button": {
@@ -270365,9 +270368,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 13,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/icon_cavar": {
@@ -270378,9 +270381,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 14,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/icon_craft": {
@@ -270391,9 +270394,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 15,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/icon_interactuar": {
@@ -270426,9 +270429,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 16,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/joystick_base": {
@@ -270680,9 +270683,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 17,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_button": {
@@ -270715,9 +270718,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 18,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_espacio": {
@@ -270728,9 +270731,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 19,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_luna": {
@@ -270741,9 +270744,9 @@
    "png": "art/gen/restantes.png",
    "rect": {
     "col": 26,
-    "h": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_tierra": {
@@ -279928,6 +279931,19 @@
     "h": 1,
     "row": 18,
     "w": 1
+   }
+  },
+  "items/mapa_tesoro": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/restantes.png",
+   "rect": {
+    "col": 27,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   }
  }

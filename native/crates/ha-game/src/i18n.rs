@@ -313,6 +313,7 @@ const FRASES: &[(&str, &str)] = &[
     // Alijos
     ("ALIJO a", "CACHE"),
     ("Abrí un alijo", "Open a cache"),
+    ("Mapa del tesoro", "Treasure map"),
     ("Cinco alijos", "Five caches"),
     // Gameplay
     ("CADÁVER", "CORPSE"),

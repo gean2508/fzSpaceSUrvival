@@ -7,9 +7,15 @@
 //! infectados que lo custodian de día y de noche. Nada se genera lejos de vos: cupo de un
 //! alijo por revisión (cada 2 s) y sólo en la Tierra.
 //!
-//! Una brújula de texto (`ALIJO a 120 m · NE`) apunta al más cercano que ya conocés y no
-//! abriste. El estado (sectores creados, uids, abiertos) vive en `alijos.json` de la partida,
-//! y el cofre en `chests.json` como cualquier otro.
+//! **La guía sale del mapa** (3 oct 2026). Un alijo se puede encontrar de casualidad, pero la
+//! brújula de texto (`ALIJO a 120 m · NE`) sólo aparece si llevás el **mapa del tesoro** de ese
+//! alijo (`mapa_tesoro`: lo sueltan los infectados, aparece en cómodas y, a veces, un alijo trae
+//! el mapa del siguiente). Cada mapa que entra a la mochila marca un alijo lejano (400-900 m);
+//! si el mapa sale de la mochila (lo guardás, lo tirás) la guía se apaga y vuelve, al mismo
+//! alijo, cuando lo recuperás. Abrir el alijo gasta su mapa.
+//!
+//! El estado (sectores creados, uids, abiertos, mapas leídos) vive en `alijos.json` de la
+//! partida, y el cofre en `chests.json` como cualquier otro.
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -18,6 +24,7 @@ use std::collections::BTreeMap;
 use crate::chests::{ChestPanelState, ChestWorld};
 use crate::game_phase::GamePhase;
 use crate::i18n::{idioma_actual, Idioma};
+use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 use crate::obstaculos::Obstaculos;
 use crate::scene::WorldContextRuntime;
 use crate::sim::Player;
@@ -26,6 +33,14 @@ use crate::world2d::{active_surface_body, ActivePlanet};
 const SECTOR: i64 = 200;
 const CREAR_A: f32 = 140.0;
 const REVISAR_CADA: f32 = 2.0;
+/// El ítem que da la guía.
+pub const MAPA_TESORO: &str = "mapa_tesoro";
+/// Un mapa marca un alijo a esta distancia (en sectores, chebyshev): ni a la vuelta de la
+/// esquina ni del otro lado del mundo.
+const MAPA_MIN: i64 = 2;
+const MAPA_MAX: i64 = 4;
+/// Cuánto queda en pantalla el "¡Mapa del tesoro!" al leer uno nuevo.
+const AVISO_S: f32 = 4.0;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 struct Alijo {
@@ -38,8 +53,21 @@ struct Alijo {
 #[derive(Resource, Default)]
 pub struct Alijos {
     por_sector: BTreeMap<(i64, i64), Alijo>,
+    /// Sectores marcados por mapas, en el orden en que se leyeron, todavía sin abrir. Llevar `n`
+    /// mapas encima guía a los primeros `n`.
+    mapas: Vec<(i64, i64)>,
     cargado: bool,
     acc: f32,
+    /// Segundos que le quedan al aviso de mapa nuevo.
+    aviso: f32,
+}
+
+/// Lo que se escribe en `alijos.json`. Las partidas viejas guardaban sólo la lista de sectores.
+#[derive(Serialize, Deserialize, Default)]
+struct Guardado {
+    sectores: Vec<(i64, i64, Alijo)>,
+    #[serde(default)]
+    mapas: Vec<(i64, i64)>,
 }
 
 impl Alijos {
@@ -76,6 +104,10 @@ pub fn botin_alijo(n: u32) -> Vec<(&'static str, u32)> {
     if azar(100) < 40 {
         v.push((["torch", "lantern", "potion_green", "potion_blue"][azar(4) as usize], 1 + azar(2)));
     }
+    // Un alijo de cada tres guarda el mapa del siguiente: la cadena de llaves del OASIS.
+    if azar(100) < 35 {
+        v.push((MAPA_TESORO, 1));
+    }
     v
 }
 
@@ -85,18 +117,51 @@ fn archivo() -> Option<std::path::PathBuf> {
 
 fn guardar(a: &Alijos) {
     let Some(p) = archivo() else { return };
-    let lista: Vec<(i64, i64, Alijo)> = a.por_sector.iter().map(|((x, z), v)| (*x, *z, v.clone())).collect();
-    if let Ok(t) = serde_json::to_string(&lista) {
+    let g = Guardado {
+        sectores: a.por_sector.iter().map(|((x, z), v)| (*x, *z, v.clone())).collect(),
+        mapas: a.mapas.clone(),
+    };
+    if let Ok(t) = serde_json::to_string(&g) {
         let _ = std::fs::write(p, t);
     }
 }
 
-fn cargar() -> BTreeMap<(i64, i64), Alijo> {
-    archivo()
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| serde_json::from_str::<Vec<(i64, i64, Alijo)>>(&t).ok())
-        .map(|l| l.into_iter().map(|(x, z, a)| ((x, z), a)).collect())
+fn leer_guardado(t: &str) -> Guardado {
+    serde_json::from_str::<Guardado>(t)
+        .or_else(|_| serde_json::from_str::<Vec<(i64, i64, Alijo)>>(t).map(|sectores| Guardado { sectores, mapas: Vec::new() }))
         .unwrap_or_default()
+}
+
+fn cargar() -> Guardado {
+    archivo().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| leer_guardado(&t)).unwrap_or_default()
+}
+
+/// El sector que marca un mapa nuevo leído parado en `(sx0, sz0)`: uno del anillo
+/// `MAPA_MIN..=MAPA_MAX` que no se haya creado ni esté ya marcado. `n` desempata (cuántos
+/// mapas se leyeron), así dos mapas seguidos no marcan el mismo.
+fn sector_para_mapa(semilla: u32, sx0: i64, sz0: i64, n: u32, ocupado: impl Fn((i64, i64)) -> bool) -> Option<(i64, i64)> {
+    let mut libres = Vec::new();
+    for sx in sx0 - MAPA_MAX..=sx0 + MAPA_MAX {
+        for sz in sz0 - MAPA_MAX..=sz0 + MAPA_MAX {
+            let d = (sx - sx0).abs().max((sz - sz0).abs());
+            if d >= MAPA_MIN && !ocupado((sx, sz)) {
+                libres.push((sx, sz));
+            }
+        }
+    }
+    if libres.is_empty() {
+        return None;
+    }
+    let h = ha_shared::worldgen::hash_cell(semilla ^ 0x3A9A, sx0.wrapping_mul(31) + n as i64, sz0);
+    Some(libres[h as usize % libres.len()])
+}
+
+/// Dónde está el alijo de un sector marcado: el cofre si ya se creó, el punto del sector si no.
+fn posicion(a: &Alijos, semilla: u32, s: (i64, i64)) -> (f32, f32) {
+    match a.por_sector.get(&s) {
+        Some(al) => (al.x, al.z),
+        None => punto_del_sector(semilla, s.0, s.1),
+    }
 }
 
 /// Rumbo en 8 vientos (castellano o inglés).
@@ -117,7 +182,7 @@ pub struct AlijosPlugin;
 impl Plugin for AlijosPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Alijos>()
-            .add_systems(Update, (crear_alijos, marcar_abiertos, brujula).chain().run_if(in_state(GamePhase::Playing)))
+            .add_systems(Update, (crear_alijos, leer_mapas, marcar_abiertos, brujula).chain().run_if(in_state(GamePhase::Playing)))
             .add_systems(OnExit(GamePhase::Playing), salir);
     }
 }
@@ -142,7 +207,9 @@ fn crear_alijos(
     player: Query<&Transform, With<Player>>,
 ) {
     if !a.cargado {
-        a.por_sector = cargar();
+        let g = cargar();
+        a.por_sector = g.sectores.into_iter().map(|(x, z, al)| ((x, z), al)).collect();
+        a.mapas = g.mapas;
         a.cargado = true;
     }
     a.acc += time.delta_secs();
@@ -168,8 +235,10 @@ fn crear_alijos(
                 continue;
             }
             // Si cae en pared o agua se corre un poco; si no hay lugar, el sector queda sin alijo.
+            // Al que marca un mapa se lo busca más lejos: el mapa no puede llevar a la nada.
+            let radio: i64 = if a.mapas.contains(&(sx, sz)) { 40 } else { 6 };
             let mut sitio = None;
-            'busca: for r in 0..6i64 {
+            'busca: for r in 0..radio {
                 for (dx, dz) in [(0, 0), (r, 0), (-r, 0), (0, r), (0, -r), (r, r), (-r, -r)] {
                     let (cx, cz) = (x + dx as f32, z + dz as f32);
                     if !obst.caja_frena(body, cx, cz, 0.6) && !obst.solido(body, cx.floor() as i64, cz.floor() as i64) {
@@ -180,6 +249,8 @@ fn crear_alijos(
             }
             let Some((cx, cz)) = sitio else {
                 a.por_sector.insert((sx, sz), Alijo { uid: u32::MAX, x, z, abierto: true });
+                // Si un mapa lo marcaba, el mapa se queda y `leer_mapas` le busca otro alijo.
+                a.mapas.retain(|s| *s != (sx, sz));
                 guardar(&a);
                 continue;
             };
@@ -198,24 +269,68 @@ fn crear_alijos(
     }
 }
 
-fn marcar_abiertos(mut a: ResMut<Alijos>, panel: Res<ChestPanelState>) {
+/// Cada mapa del tesoro que entra a la mochila marca un alijo. Los mapas son ítems comunes (un
+/// contador), así que la cuenta manda: si hay más mapas que alijos marcados, se marca otro.
+fn leer_mapas(
+    mut a: ResMut<Alijos>,
+    time: Res<Time>,
+    inv: Res<PlayerInventory>,
+    ctx: Res<WorldContextRuntime>,
+    player: Query<&Transform, With<Player>>,
+) {
+    if a.aviso > 0.0 {
+        a.aviso = (a.aviso - time.delta_secs()).max(0.0);
+    }
+    if !a.cargado || inv.qty(MAPA_TESORO) as usize <= a.mapas.len() {
+        return;
+    }
+    if !matches!(ctx.active, ha_shared::WorldContext::Overworld) {
+        return;
+    }
+    let Ok(pt) = player.get_single() else { return };
+    let (px, pz) = (pt.translation.x, -pt.translation.y);
+    let (sx0, sz0) = ((px / SECTOR as f32).floor() as i64, (pz / SECTOR as f32).floor() as i64);
+    let n = a.mapas.len() as u32 + a.abiertos();
+    let elegido = sector_para_mapa(ha_shared::partida::semilla(), sx0, sz0, n, |s| {
+        a.por_sector.contains_key(&s) || a.mapas.contains(&s)
+    });
+    let Some(s) = elegido else { return };
+    a.mapas.push(s);
+    a.aviso = AVISO_S;
+    guardar(&a);
+    crate::causal::registrar("alijo", format!("mapa leído: marca el sector ({},{})", s.0, s.1));
+}
+
+fn marcar_abiertos(
+    mut a: ResMut<Alijos>,
+    panel: Res<ChestPanelState>,
+    mut inv: ResMut<PlayerInventory>,
+    mut persist: ResMut<InventoryPersistState>,
+) {
     let Some(uid) = panel.open_uid else { return };
-    let mut cambio = false;
-    for al in a.por_sector.values_mut() {
+    let mut abierto = None;
+    for (s, al) in a.por_sector.iter_mut() {
         if al.uid == uid && !al.abierto {
             al.abierto = true;
-            cambio = true;
+            abierto = Some(*s);
             crate::causal::registrar("alijo", format!("abierto en ({:.0},{:.0})", al.x, al.z));
         }
     }
-    if cambio {
-        guardar(&a);
+    let Some(s) = abierto else { return };
+    // Encontrado: su mapa ya no sirve. Sólo se gasta si lo llevabas (si no, la guía ni se veía).
+    if let Some(i) = a.mapas.iter().position(|m| *m == s) {
+        a.mapas.remove(i);
+        if i < inv.qty(MAPA_TESORO) as usize && inv.remove(MAPA_TESORO, 1) {
+            persist.mark_dirty();
+        }
     }
+    guardar(&a);
 }
 
 fn brujula(
     mut commands: Commands,
     a: Res<Alijos>,
+    inv: Res<PlayerInventory>,
     player: Query<&Transform, With<Player>>,
     mut q: Query<(&mut Text, &mut Visibility), With<BrujulaAlijo>>,
 ) {
@@ -244,19 +359,26 @@ fn brujula(
     let Ok(pt) = player.get_single() else { return };
     let (px, pz) = (pt.translation.x, -pt.translation.y);
     let en = idioma_actual() == Idioma::En;
+    let semilla = ha_shared::partida::semilla();
+    // Sólo guían los alijos cuyo mapa llevás encima: los primeros `n` marcados.
+    let n = inv.qty(MAPA_TESORO) as usize;
     let cercano = a
-        .por_sector
-        .values()
-        .filter(|al| !al.abierto)
-        .map(|al| (al, ((al.x - px).powi(2) + (al.z - pz).powi(2)).sqrt()))
+        .mapas
+        .iter()
+        .take(n)
+        .map(|s| posicion(&a, semilla, *s))
+        .map(|(x, z)| ((x, z), ((x - px).powi(2) + (z - pz).powi(2)).sqrt()))
         .min_by(|x, y| x.1.total_cmp(&y.1));
+    let nuevo = a.aviso > 0.0;
     for (mut t, mut v) in &mut q {
         match cercano {
-            Some((al, d)) => {
-                let s = if en {
-                    format!("CACHE {d:.0} m · {}", viento(al.x - px, al.z - pz, true))
-                } else {
-                    format!("ALIJO a {d:.0} m · {}", viento(al.x - px, al.z - pz, false))
+            Some(((x, z), d)) => {
+                let rumbo = viento(x - px, z - pz, en);
+                let s = match (en, nuevo) {
+                    (true, true) => format!("Treasure map! CACHE {d:.0} m · {rumbo}"),
+                    (true, false) => format!("CACHE {d:.0} m · {rumbo}"),
+                    (false, true) => format!("¡Mapa del tesoro! ALIJO a {d:.0} m · {rumbo}"),
+                    (false, false) => format!("ALIJO a {d:.0} m · {rumbo}"),
                 };
                 if t.0 != s {
                     t.0 = s;
@@ -302,8 +424,42 @@ mod tests {
         assert_eq!(viento(0.0, -10.0, false), "N"); // z negativo = norte
         assert_eq!(viento(0.0, 10.0, false), "S");
         assert_eq!(viento(-10.0, 0.0, true), "W");
-        for t in ["ALIJO a 120 m · NO", "CACHE 90 m · NW"] {
+        for t in ["ALIJO a 120 m · NO", "CACHE 90 m · NW", "¡Mapa del tesoro! ALIJO a 640 m · NE", "Treasure map! CACHE 640 m · NE"] {
             assert!(t.chars().all(crate::fuente::dibujable), "{t}");
         }
+    }
+
+    #[test]
+    fn el_mapa_marca_un_sector_lejano_libre_y_distinto() {
+        let mut marcados: Vec<(i64, i64)> = Vec::new();
+        for n in 0..10 {
+            let s = sector_para_mapa(4242, 3, -2, n, |s| marcados.contains(&s)).unwrap();
+            let d = (s.0 - 3).abs().max((s.1 + 2).abs());
+            assert!((MAPA_MIN..=MAPA_MAX).contains(&d), "{s:?} a {d} sectores");
+            assert!(!marcados.contains(&s));
+            marcados.push(s);
+        }
+        // Con todo el anillo ocupado no inventa nada.
+        assert_eq!(sector_para_mapa(1, 0, 0, 0, |_| true), None);
+    }
+
+    #[test]
+    fn las_partidas_viejas_cargan_sin_mapas_y_las_nuevas_con_mapas() {
+        let viejo = r#"[[1,2,{"uid":7,"x":10.0,"z":20.0,"abierto":false}]]"#;
+        let g = leer_guardado(viejo);
+        assert_eq!(g.sectores.len(), 1);
+        assert!(g.mapas.is_empty());
+        let nuevo = Guardado { sectores: g.sectores, mapas: vec![(5, -3)] };
+        let g2 = leer_guardado(&serde_json::to_string(&nuevo).unwrap());
+        assert_eq!(g2.mapas, vec![(5, -3)]);
+        assert_eq!(g2.sectores[0].2.uid, 7);
+    }
+
+    #[test]
+    fn algunos_alijos_traen_el_mapa_del_siguiente() {
+        let con = (0..200u32)
+            .filter(|n| botin_alijo(n.wrapping_mul(2654435761)).iter().any(|(i, _)| *i == MAPA_TESORO))
+            .count();
+        assert!((30..=110).contains(&con), "{con} de 200");
     }
 }

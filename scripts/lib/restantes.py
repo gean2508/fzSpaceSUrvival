@@ -297,3 +297,46 @@ def cohete():
     l.rect(30, 94, 36, 1, rojo[4])
     silueta(l)
     return l
+
+
+def mapa_tesoro():
+    """**Mapa del tesoro** (3 oct 2026): pergamino gastado con los dos extremos enrollados, una isla en tinta
+    sepia, el camino punteado y la X roja. Es lo que da la guía hasta un alijo (`ha-game/alijos.rs`)."""
+    from lib.iconos import textura_roca
+
+    l = Lienzo()
+    papel = rampa((226, 200, 146), 5)
+    tinta = (112, 74, 50)
+    # La hoja, apenas torcida y con el borde mordido (no es un rectángulo).
+    hoja = mascara([(6, 8), (11, 7), (15, 9), (20, 7), (26, 8), (26, 25), (21, 24), (16, 26), (11, 24), (6, 25)])
+    grano = np.tile(textura_roca(), (2, 2))[:CELDA, :CELDA]
+    esculpir(l, hoja, papel, relieve=0.55, textura=grano, fuerza_textura=0.45, base_oscura=0.12)
+    # Los extremos enrollados: dos cilindros de papel más tostado, el de la derecha en sombra.
+    rollo = rampa((186, 128, 76), 5)
+    _cilindro(l, 3, 6, 8, 27, rollo, rad=2)
+    _cilindro(l, 25, 7, 30, 26, rampa((168, 112, 66), 5), rad=2)
+    l.rect(7, 8, 1, 17, rollo[1])                       # el pliegue donde la hoja entra al rollo
+    # La isla: tierra un tono más oscura con la costa entintada.
+    isla = mascara([(10, 13), (14, 11), (19, 12), (22, 15), (21, 20), (16, 22), (12, 21), (9, 17)])
+    for j in range(CELDA):
+        for i in range(CELDA):
+            if isla[j, i]:
+                borde = not all(isla[b, a] for a, b in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)))
+                l.punto(i, j, tinta if borde else (206, 186, 128))
+    l.rect(12, 14, 2, 2, (118, 132, 74))               # un bosquecito
+    l.punto(12, 14, (150, 164, 96))
+    # El camino punteado hasta la X.
+    for x, y in [(11, 19), (13, 19), (14, 17), (16, 17)]:
+        l.punto(x, y, tinta)
+    rojo = rampa((200, 56, 52), 4)
+    for k in range(5):                                   # la X, de dos píxeles de grueso
+        for g in (0, 1):
+            l.punto(17 + k + g, 13 + k, rojo[2] if g == 0 else rojo[1])
+            l.punto(21 - k + g, 13 + k, rojo[2] if g == 0 else rojo[1])
+    l.punto(17, 13, rojo[3])
+    l.punto(21, 13, rojo[3])
+    # Brillos donde pega la luz (arriba-izquierda de cada rollo).
+    l.punto(4, 8, (255, 255, 255))
+    l.punto(4, 9, rollo[4])
+    l.punto(26, 9, rollo[4])
+    return _fin(l)
