@@ -46,7 +46,7 @@ use crate::universe::{
     body_offset, climb_rate, cruise_speed, flight_view_h, nearest_landable, space_alt,
     UniverseFrame, MAX_ALT,
 };
-use crate::world2d::ActivePlanet;
+use crate::world2d::{ActivePlanet, TileWorld};
 
 /// Fases del vuelo. Se DERIVAN de la altura y de la velocidad vertical — no son
 /// estados que se puedan cruzar entre sí (esa era la fuente de los soft-locks).
@@ -133,6 +133,13 @@ const THRUST_RAMP_S: f32 = 0.35;
 /// suspendido sin ninguna manera de tocar el suelo — el bug reportado.
 const LAND_REACH_M: f32 = 400.0;
 
+/// **Bajo tierra no se vuela.** Con roca arriba no hay cielo al que subir: el
+/// vuelo Ki te sacaba atravesando el techo del subsuelo (pedido del usuario,
+/// 3 oct 2026). Se mira la capa que pisás (`TileWorld::z`): negativa = subsuelo.
+pub fn se_puede_volar_en_capa(z: i32) -> bool {
+    z >= 0
+}
+
 pub struct CreativeFlyPlugin;
 
 impl Plugin for CreativeFlyPlugin {
@@ -161,6 +168,7 @@ fn creative_fly_takeoff(
     trepada: Res<crate::escaleras::Trepada>,
     frame: Res<UniverseFrame>,
     flight: Res<Flight>,
+    tiles: Res<TileWorld>,
     mut fly: ResMut<CreativeFlight>,
 ) {
     if fly.flying() {
@@ -173,7 +181,9 @@ fn creative_fly_takeoff(
     // —donde SIEMPRE hay pared delante— pulsar para salir te despegaba en vuelo Ki
     // y te ibas atravesando el subsuelo. Lo cazó el driver del pozo, que empezó a
     // recorrer 148 celdas de roca en línea recta.
-    if !actions.jump || trepada.hacia.is_some() {
+    // En el subsuelo SALTO es sólo un salto: ni carga el aura (que promete un
+    // despegue) ni despega.
+    if !actions.jump || trepada.hacia.is_some() || !se_puede_volar_en_capa(tiles.z) {
         fly.charge_t = 0.0;
         fly.charging = false;
         return;
@@ -209,12 +219,29 @@ fn creative_fly_step(
     mut trans: ResMut<FlightTransition>,
     mut planet: ResMut<ActivePlanet>,
     mut approach: ResMut<crate::camera::ApproachFraming>,
+    tiles: Res<TileWorld>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     if !fly.flying() {
         approach.lead = Vec2::ZERO;
         approach.dir = Vec2::ZERO;
         fly.view_h = 0.0;
+        return;
+    }
+    // Si por cualquier camino quedaste en vuelo con el subsuelo cargado (cargar
+    // partida, un driver, una escalera), se aterriza ahí mismo: bajo tierra el
+    // vuelo no existe, ni un frame.
+    if !se_puede_volar_en_capa(tiles.z) {
+        fly.phase = Phase::Ground;
+        fly.alt = 0.0;
+        fly.vert = 0.0;
+        fly.vy = 0.0;
+        fly.thrust = 0.0;
+        fly.charging = false;
+        fly.charge_t = 0.0;
+        approach.lead = Vec2::ZERO;
+        trans.clear();
+        eprintln!("ha-ki: bajo tierra no se vuela — aterrizaje en la capa {}", tiles.z);
         return;
     }
     // Un frame largo (carga de assets, cambio de app) NO debe catapultarte: la
@@ -760,5 +787,19 @@ fn tick_ki_trail(
         // de opacidad uniforme cortada de golpe al final).
         sprite.color = Color::srgba(1.0, 0.52 + 0.34 * k, 0.10 + 0.32 * k, 0.42 * k * k);
         sprite.custom_size = Some(Vec2::splat(seg.size * (0.35 + 0.65 * k)));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bajo_tierra_no_se_vuela() {
+        assert!(se_puede_volar_en_capa(0), "en la superficie se vuela");
+        assert!(se_puede_volar_en_capa(1), "desde un piso alto también");
+        for z in [-1, -2, -8] {
+            assert!(!se_puede_volar_en_capa(z), "en el subsuelo (capa {z}) no");
+        }
     }
 }

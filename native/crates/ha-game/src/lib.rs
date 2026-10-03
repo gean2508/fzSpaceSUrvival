@@ -113,6 +113,7 @@ mod ui_editor;
 mod ui_pack;
 mod ui_theme;
 mod vault;
+mod volumen_ui;
 mod ui;
 mod world2d;
 
@@ -389,6 +390,7 @@ fn run_app_inner() {
         // etapas mete siete schedules extra en CADA frame; la ablación y el
         // overlay de colisión sólo sirven con variables de entorno.
         .add_plugins(herramientas_de_la_compu)
+        .add_plugins(volumen_ui::VolumenUiPlugin)
         .add_plugins(chargen::ChargenPlugin)
         .add_plugins(loading::LoadingPlugin)
         .add_plugins(vault::VaultPlugin)

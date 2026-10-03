@@ -26,7 +26,7 @@
 //! los agudos, no el volumen. Sin paredes en medio el sonido es seco y sólo
 //! cae por distancia.
 
-use bevy::audio::{AudioPlayer, AudioSink, AudioSource, PlaybackSettings, SpatialListener, Volume};
+use bevy::audio::{AudioPlayer, AudioSink, AudioSinkPlayback, AudioSource, PlaybackSettings, SpatialListener, Volume};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -41,8 +41,11 @@ use ha_shared::topdown::{Tile, TILE_M};
 /// El spec editable, embebido en el binario (editás → recompilás → suena).
 const AUDIO_JSON: &str = include_str!("../../../assets/audio.json");
 
-/// Volúmenes maestros (0..1). Listo para conectar a un menú de ajustes.
-#[derive(Resource)]
+/// Volúmenes maestros (0..1): `sfx` = todo lo que no es música (golpes,
+/// talar, pasos, lluvia, aura, clics) y `music` = las pistas del director. Los
+/// mueven los sliders de AJUSTES (`volumen_ui`), se aplican en vivo a lo que ya
+/// suena (`aplicar_volumen_en_vivo`) y se guardan en `audio.cfg`.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct AudioSettings {
     pub sfx: f32,
     pub music: f32,
@@ -52,6 +55,38 @@ impl Default for AudioSettings {
     fn default() -> Self {
         Self { sfx: 0.8, music: 0.5 }
     }
+}
+
+impl AudioSettings {
+    /// `sfx,0.800\nmusic,0.500` — renglones sueltos para que un archivo viejo o
+    /// a medias sólo pierda lo que le falta, no todo.
+    pub fn a_texto(&self) -> String {
+        format!("sfx,{:.3}\nmusic,{:.3}\n", self.sfx, self.music)
+    }
+
+    /// Pisa sobre `self` lo que el texto traiga bien escrito.
+    pub fn leer_texto(&mut self, texto: &str) {
+        for linea in texto.lines() {
+            let mut partes = linea.split(',');
+            let (Some(clave), Some(valor)) = (partes.next(), partes.next()) else { continue };
+            let Ok(v) = valor.trim().parse::<f32>() else { continue };
+            if !v.is_finite() {
+                continue;
+            }
+            match clave.trim() {
+                "sfx" => self.sfx = v.clamp(0.0, 1.0),
+                "music" => self.music = v.clamp(0.0, 1.0),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Donde se guarda el volumen elegido (junto a `ui-layout.cfg`).
+fn audio_cfg_path() -> std::path::PathBuf {
+    crate::flags::var("HA_AUDIO_FILE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("audio.cfg"))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -382,7 +417,8 @@ impl Plugin for GameAudioPlugin {
             .add_event::<PlaySfx>()
             .add_event::<PlaySfxAt>()
             .add_systems(Startup, build_audio_banks)
-            .add_systems(Update, (terminar_composicion, musica_menu, fundir_musica))
+            // Guardar no depende de la pausa: si el jugador mueve el slider y enseguida manda el juego al fondo, igual queda escrito.
+            .add_systems(Update, (terminar_composicion, musica_menu, fundir_musica, guardar_volumen))
             .add_systems(
                 Update,
                 (
@@ -396,6 +432,7 @@ impl Plugin for GameAudioPlugin {
                     survival_sounds,
                     flight_sounds,
                     music_director,
+                    aplicar_volumen_en_vivo,
                 )
                     // En background no se sintetiza ni se encola NADA: el mixer
                     // de rodio vive en su propio hilo y seguiría sonando con la
@@ -428,6 +465,10 @@ fn build_audio_banks(
 
     settings.sfx = spec.sfx_volume;
     settings.music = spec.music_volume;
+    // Lo que el jugador eligió en AJUSTES gana sobre el default del spec.
+    if let Ok(texto) = std::fs::read_to_string(audio_cfg_path()) {
+        settings.leer_texto(&texto);
+    }
     director.silence = spec.director.first_delay;
     director.silence_min = spec.director.silence_min;
     director.silence_max = spec.director.silence_max.max(spec.director.silence_min);
@@ -905,6 +946,53 @@ fn flight_sounds(
     }
 }
 
+/// El volumen nuevo vale YA, no para el próximo sonido: la pista que está
+/// sonando y el loop del aura se ajustan al instante. (Los SFX sueltos duran
+/// fracciones de segundo y toman el volumen al nacer; la lluvia lo sigue sola en
+/// `weather`.)
+fn aplicar_volumen_en_vivo(
+    settings: Res<AudioSettings>,
+    musica: Query<&AudioSink, With<MusicTrack>>,
+    aura: Query<&AudioSink, (With<ThrustLoop>, Without<MusicTrack>)>,
+) {
+    if !settings.is_changed() {
+        return;
+    }
+    for sink in &musica {
+        sink.set_volume(settings.music);
+    }
+    for sink in &aura {
+        sink.set_volume(settings.sfx * 0.5);
+    }
+}
+
+/// Escribe `audio.cfg` cuando el volumen dejó de moverse medio segundo: un
+/// arrastre de slider son decenas de cambios y no hace falta una escritura por
+/// frame (el eMMC del Redmi es lento).
+fn guardar_volumen(
+    time: Res<Time<bevy::time::Real>>,
+    settings: Res<AudioSettings>,
+    mut pendiente: Local<Option<f32>>,
+    mut primero: Local<bool>,
+) {
+    if settings.is_changed() {
+        // El primer "cambio" es la carga en el arranque: no hay nada que guardar.
+        if *primero {
+            *pendiente = Some(0.5);
+        }
+        *primero = true;
+    }
+    let Some(t) = pendiente.as_mut() else { return };
+    *t -= time.delta_secs();
+    if *t > 0.0 {
+        return;
+    }
+    *pendiente = None;
+    if let Err(e) = std::fs::write(audio_cfg_path(), settings.a_texto()) {
+        eprintln!("ha-audio: no se pudo guardar el volumen: {e}");
+    }
+}
+
 /// Director de música: pista por contexto, con MINUTOS de silencio entre pistas (filosofía Minecraft — la música como
 /// acontecimiento, no wallpaper) y, como Project Zomboid, una pieza de TENSIÓN que corta cuando se acercan los infectados.
 ///
@@ -1047,5 +1135,27 @@ fn fundir_musica(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, 
         if k <= 0.0 {
             commands.entity(e).despawn_recursive();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_volumen {
+    use super::AudioSettings;
+
+    #[test]
+    fn el_volumen_guardado_vuelve_igual() {
+        let elegido = AudioSettings { sfx: 0.35, music: 0.0 };
+        let mut leido = AudioSettings::default();
+        leido.leer_texto(&elegido.a_texto());
+        assert!((leido.sfx - 0.35).abs() < 1e-3);
+        assert_eq!(leido.music, 0.0, "la música silenciada sigue silenciada al volver");
+    }
+
+    #[test]
+    fn un_archivo_roto_no_rompe_el_volumen() {
+        let mut s = AudioSettings::default();
+        s.leer_texto("basura\nsfx,NaN\nmusic,7\nsfx,");
+        assert_eq!(s.sfx, AudioSettings::default().sfx);
+        assert_eq!(s.music, 1.0, "fuera de rango se recorta");
     }
 }

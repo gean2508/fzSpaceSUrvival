@@ -627,6 +627,12 @@ dejaba de ser un pozo. Y aunque no te sacara de sitio, lo que se decide se pulsa
   el fondo de un pozo —donde siempre hay pared— pulsar para salir te despegaba y te
   ibas atravesando el subsuelo en vuelo. Lo cazó el driver `HA_BUILDTEST`, que
   empezó a recorrer 148 celdas de roca en línea recta.
+- **Bajo tierra no se vuela, nunca** (3 oct 2026, pedido del usuario). Con roca
+  arriba no hay cielo al que subir: en el subsuelo (`TileWorld::z < 0`) SALTO es
+  sólo un salto, ni carga el aura ni despega (`creative_fly::se_puede_volar_en_capa`,
+  test `bajo_tierra_no_se_vuela`). Y si por cualquier camino quedás en vuelo con el
+  subsuelo cargado (cargar partida, un driver), `creative_fly_step` te posa ahí
+  mismo. Desde un piso alto (`z > 0`) sí se despega.
 - Sigue valiendo sólo **bajo tierra** y sólo hacia una celda **pisable**: trepar
   hacia dentro de la roca es el soft-lock al revés.
 
@@ -3994,7 +4000,15 @@ peso en el APK. Data-driven desde `native/assets/audio.json`, embebido con
 - **Música estilo C418**: pentatónica procedural determinista, pistas de
   superficie / espacio / subsuelo, director por contexto con **90–240 s de silencio
   entre pistas**. No meter loops continuos ni assets de audio.
-- Volúmenes SFX/Música en el panel de AJUSTES.
+- **Volumen: dos sliders en AJUSTES** (3 oct 2026, `volumen_ui.rs`), en el panel
+  del menú principal Y en el del menú de juego. **Efectos** = todo lo que no es
+  música (golpes a animales y enemigos, talar, picar, pasos, lluvia, aura, clics);
+  **Música** = las pistas del director. Paso de 5 %, a la izquierda del todo dice
+  «Silencio», y cada uno tiene su botón Silenciar/Activar que devuelve el volumen
+  que había. La verdad es `audio::AudioSettings`: `aplicar_volumen_en_vivo` lo
+  aplica también a lo que YA suena (pista en curso, loop del aura; la lluvia lo
+  sigue sola) y `guardar_volumen` lo escribe en `audio.cfg` medio segundo después
+  del último movimiento (gana sobre el default de `audio.json` al arrancar).
 
 ### Arranque de partida: creador de personaje → pantalla de carga
 
