@@ -554,11 +554,15 @@ pub(crate) fn balas_a_infectados(
 
 /// Un toque sobre un cadáver a mano abre su inventario (el panel del cofre). Los cuerpos se
 /// descomponen a los `VIDA_CADAVER` segundos; si lo estás revisando, esperan.
+///
+/// **Con un arma de fuego en la mano no se abre**: los cuerpos quedan justo donde estás tirando, y un toque que
+/// quería ser un disparo abría el botín en medio de la horda (skill `disparo-y-apuntado` §2). Se saquea enfundando.
 #[allow(clippy::too_many_arguments)]
 fn cadaveres(
     mut commands: Commands,
     time: Res<Time>,
     acc: Res<Acumulado>,
+    equipped: Res<EquippedItem>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut touches: EventReader<TouchInput>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -595,8 +599,8 @@ fn cadaveres(
     else {
         return;
     };
-    // El golpe que lo mató no lo abre.
-    if acc.golpe > 0.0 || panel.is_open() {
+    // El golpe que lo mató no lo abre; con un arma en la mano, el toque es un disparo.
+    if acc.golpe > 0.0 || panel.is_open() || crate::armas::es_arma(&equipped.item_id) {
         return;
     }
     let Some(mundo) = crate::render::scale::window_to_world_2d(camera, cam_tf, win, screen) else { return };

@@ -4,6 +4,9 @@
 //! * **Cómo se juega.** Con un arma en la mano, apoyar el dedo en el mundo apunta y dispara hacia ese punto (el
 //!   mantenido es ráfaga en las automáticas; las semiautomáticas disparan una vez por toque). El botón USAR dice
 //!   RECARGAR; cargador vacío + disparo recarga solo. En escritorio: clic izquierdo y la tecla R.
+//! * **Apuntado asistido** (`apuntado.rs`, skill `disparo-y-apuntado`): el dedo dice a quién, un cono angosto elige el
+//!   infectado y la bala se dobla hasta 9° hacia él; la mira se dibuja encima del blanco (el dedo lo tapa), roja si
+//!   pega de lleno. Nunca ayuda contra aldeanos ni animales.
 //! * **Balas de verdad**: entidades con velocidad, alcance, dispersión y caída del daño; se frenan en paredes y bloques
 //!   (la misma geometría que decide el paso del jugador) y le pegan a **cualquiera** — infectados, animales o
 //!   aldeanos. Cada módulo aplica el daño con SU propia lógica de muerte (`infectados`, `fauna`, `society`): acá sólo
@@ -287,6 +290,13 @@ pub struct EstadoArmas {
     aviso: Option<(String, f32)>,
     /// El último ítem visto en la mano, para cancelar la recarga si lo cambiás.
     en_mano: String,
+    /// Blanco del apuntado asistido (bits de la `Entity`), para la histéresis entre cuadros.
+    blanco: Option<u64>,
+    /// Dónde está ese blanco y si la bala le va a pegar de lleno («mira en rojo»): la mira se dibuja ENCIMA de él,
+    /// que el dedo no tapa.
+    mira_en: Option<(Vec2, bool)>,
+    /// Segundos de gatillo sostenido: la primera bala va derecha y la ráfaga abre (`apuntado::dispersion_efectiva`).
+    rafaga_s: f32,
 }
 
 impl EstadoArmas {
@@ -459,6 +469,9 @@ fn apuntar_y_disparar(
     (mut sfx, mut sfx_ui, mut shake): (EventWriter<PlaySfxAt>, EventWriter<PlaySfx>, EventWriter<CameraShakeEvent>),
     glow: Option<Res<crate::light2d::GlowTexture>>,
     inv: Res<PlayerInventory>,
+    (ctx, planet, tiles, walls): (Res<WorldContextRuntime>, Res<ActivePlanet>, Res<TileWorld>, Res<BuiltWalls>),
+    infectados: Query<(Entity, &crate::infectados::Infectado)>,
+    mut pos_antes: Local<Option<Vec2>>,
 ) {
     let dt = time.delta_secs();
     estado.cd = (estado.cd - dt).max(0.0);
@@ -477,9 +490,16 @@ fn apuntar_y_disparar(
         estado.en_mano = equipped.item_id.clone();
         estado.apretado_antes = true; // el toque que equipó no dispara
     }
-    let Some((def, _camo)) = parsear(&equipped.item_id) else { return };
+    let Some((def, _camo)) = parsear(&equipped.item_id) else {
+        estado.blanco = None;
+        estado.mira_en = None;
+        return;
+    };
     let Ok((ptf, visual)) = player.get_single() else { return };
     let pos = Vec2::new(ptf.translation.x, -ptf.translation.y);
+    // ¿Corre? (la dispersión abre un poco): por lo que se movió desde el cuadro anterior.
+    let corriendo = pos_antes.map_or(false, |a| dt > 0.0 && a.distance(pos) / dt > 2.5);
+    *pos_antes = Some(pos);
 
     // ¿Se puede disparar ahora? (nada de paneles, editor ni vuelo)
     let bloqueado = gameplay_block.blocked || editor.enabled || editor.menu_open || fly.flying();
@@ -502,8 +522,30 @@ fn apuntar_y_disparar(
     }
     let dir = punto.map(|p| (p - pos).normalize_or_zero()).filter(|d| *d != Vec2::ZERO).unwrap_or_else(|| rumbo_del_jugador(visual));
 
+    // **Apuntado asistido** (`apuntado.rs`, skill `disparo-y-apuntado`): el dedo dice a quién, el cono elige el
+    // infectado y la bala se dobla hacia él lo justo. Sólo infectados vivos y a la vista: nunca aldeanos ni animales,
+    // la ayuda no puede convertir un tiro errado en un crimen.
+    let cfg = crate::apuntado::Asistencia::default();
+    let elegido = if punto.is_some() && !bloqueado {
+        let body = active_surface_body(&ctx, &planet);
+        let blancos: Vec<crate::apuntado::Blanco> = infectados
+            .iter()
+            .filter(|(_, i)| i.vida > 0.0)
+            .map(|(e, i)| crate::apuntado::Blanco { id: e.to_bits(), pos: Vec2::new(i.x, i.z), vel: Vec2::ZERO, radio: 0.55 })
+            .filter(|b| b.pos.distance_squared(pos) <= (def.alcance + 1.0) * (def.alcance + 1.0))
+            .filter(|b| a_la_vista(pos, b.pos, body, tiles.z, &tiles, &walls))
+            .collect();
+        crate::apuntado::elegir_blanco(pos, dir, punto, def.alcance, &blancos, estado.blanco, &cfg).map(|i| blancos[i])
+    } else {
+        None
+    };
+    estado.blanco = elegido.map(|b| b.id);
+    estado.mira_en = elegido.map(|b| (b.pos, crate::apuntado::en_rojo(pos, dir, &b, def.vel, &cfg)));
+    let dir = crate::apuntado::rumbo_asistido(pos, dir, elegido.as_ref(), def.vel, &cfg);
+
     let flanco = apretado && !estado.apretado_antes;
     estado.apretado_antes = apretado;
+    estado.rafaga_s = if apretado { estado.rafaga_s + dt } else { 0.0 };
     if bloqueado || !apretado || estado.recarga.is_some() || estado.cd > 0.0 {
         return;
     }
@@ -540,8 +582,10 @@ fn apuntar_y_disparar(
         sembrar ^= sembrar << 5;
         (sembrar % 10_000) as f32 / 10_000.0
     };
+    // La escopeta conserva su abanico; el resto: primera bala derecha, la ráfaga abre, correr abre más.
+    let dispersion = if def.perdigones > 1 { def.dispersion } else { crate::apuntado::dispersion_efectiva(def.dispersion, estado.rafaga_s, corriendo) };
     for _ in 0..def.perdigones {
-        let desvio = (azar() * 2.0 - 1.0) * def.dispersion.to_radians();
+        let desvio = (azar() * 2.0 - 1.0) * dispersion.to_radians();
         let a = base + desvio;
         let v = Vec2::new(a.cos(), a.sin()) * def.vel;
         let rayo = def.calibre == Calibre::Energia;
@@ -733,6 +777,17 @@ fn choque_con_el_mundo(a: Vec2, b: Vec2, body: ha_shared::CelestialBody, z: i32,
     None
 }
 
+/// ¿Hay camino limpio de `a` a `b`? `choque_con_el_mundo` marcha a lo sumo 12 pasos (está hecho para el tramo de un
+/// cuadro); para una línea de vista de 30 m se parte en tramos de 5 m, así ningún muro queda entre dos muestras.
+fn a_la_vista(a: Vec2, b: Vec2, body: ha_shared::CelestialBody, z: i32, tiles: &TileWorld, walls: &BuiltWalls) -> bool {
+    let tramos = ((a.distance(b) / 5.0).ceil() as i32).max(1);
+    (0..tramos).all(|k| {
+        let p = a.lerp(b, k as f32 / tramos as f32);
+        let q = a.lerp(b, (k + 1) as f32 / tramos as f32);
+        choque_con_el_mundo(p, q, body, z, tiles, walls).is_none()
+    })
+}
+
 /// Chispa de sangre/polvo en el punto de impacto (la usan los módulos con blancos).
 pub fn chispa_de_impacto(commands: &mut Commands, en: Vec2, color: Color) {
     for k in 0..4 {
@@ -811,7 +866,12 @@ fn visual_del_arma(
     }
     let pos = Vec2::new(ptf.translation.x, -ptf.translation.y);
     let apuntando = cursor.targeting() && cursor.active;
-    let dir = if apuntando { (cursor.world - pos).normalize_or_zero() } else { Vec2::ZERO };
+    // El arma apunta al blanco del apuntado asistido si lo hay; si no, al dedo; si no, al frente.
+    let dir = match estado.mira_en {
+        Some((p, _)) => (p - pos).normalize_or_zero(),
+        None if apuntando => (cursor.world - pos).normalize_or_zero(),
+        None => Vec2::ZERO,
+    };
     let dir = if dir == Vec2::ZERO { rumbo_del_jugador(pv) } else { dir };
     // Si cambió el arma (o no existe todavía) se vuelve a crear con su sprite.
     if *ultimo != equipped.item_id || visual.is_empty() {
@@ -836,16 +896,23 @@ fn visual_del_arma(
         tf.rotation = Quat::from_rotation_z(-ang);
         s.flip_y = izquierda;
     }
-    // La mira: un aro donde está el dedo.
-    if apuntando {
+    // La mira: ENCIMA del infectado elegido por el apuntado asistido (el dedo lo tapa; la mira no), roja si la bala
+    // le va a pegar de lleno. Sin blanco, un aro blanco donde está el dedo.
+    let (donde, color, lado) = match estado.mira_en {
+        Some((p, true)) => (p, Color::srgba(1.0, 0.25, 0.2, 0.95), 1.05),
+        Some((p, false)) => (p, Color::srgba(1.0, 0.85, 0.75, 0.9), 1.05),
+        None => (cursor.world, Color::srgba(1.0, 1.0, 1.0, 0.85), 0.8),
+    };
+    if apuntando || estado.mira_en.is_some() {
         if mira.is_empty() {
             if let Some((sprite, _)) = art.world_sprite("ui/crosshair", Vec2::splat(0.8)) {
-                commands.spawn((MiraDeArma, sprite, Transform::from_xyz(cursor.world.x, -cursor.world.y, 17.0), Name::new("MiraDeArma")));
+                commands.spawn((MiraDeArma, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
             }
         }
         for (_, mut tf, mut s) in &mut mira {
-            tf.translation = Vec3::new(cursor.world.x, -cursor.world.y, 17.0);
-            s.color = Color::srgba(1.0, 1.0, 1.0, 0.85);
+            tf.translation = Vec3::new(donde.x, -donde.y, 17.0);
+            tf.scale = Vec3::splat(lado / 0.8);
+            s.color = color;
         }
     } else {
         for (e, ..) in &mira {

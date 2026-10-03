@@ -8352,6 +8352,29 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
   entrenamiento largo y se valida con ojo (el origen flotante se midió: no hace falta, ver §17).
 * **Nada de esto está probado en el celu**: por orden del usuario (2 oct) se prueba AL FINAL.
 
+### Disparar como en BO2 Zombies — apuntado asistido (3 oct 2026)
+Pedido: «sentirme como matando zombies en Tranzit: no luchaba apuntando ni había interferencia entre controles».
+Receta completa, números y fuentes: **skill `disparo-y-apuntado`** (obligatoria antes de tocar armas, mira o impactos).
+* **El jugador elige a quién, el juego garantiza que la bala llegue.** `apuntado.rs` (puro, con tests): cono de ±15°
+  medido en metros laterales (tope 1,6 m), el dedo a < 1 m de un infectado lo elige sin discusión, histéresis 1,35
+  para que la ráfaga no salte entre dos pegados, la bala se dobla hasta 9° hacia la intercepción, primera bala al
+  25 % de la dispersión (la escopeta conserva su abanico). Sólo infectados vivos y a la vista: **nunca aldeanos** —
+  la ayuda no puede volver crimen un tiro errado.
+* **La mira va ENCIMA del blanco, no bajo el dedo** (el dedo tapa ~1,5 m a pie): roja si la bala pega de lleno.
+* **Con arma en la mano tocar el mundo sólo dispara**: ya no talla/cosecha (`targeting`), no golpea (`infectados`) y
+  desde el 3 oct tampoco abre el botín de un cadáver; se saquea enfundando.
+* Pendiente de la receta (§4-5 de la skill): flash blanco antes del rojo, «+10» por impacto, hitstop corto sólo en la
+  baja, patada de cámara, casquillos con cupo, botón de fuego estilo *Brawl Stars* (toque = mejor blanco, arrastre =
+  a mano). Protocolo en el celu: ≥ 70 % de acierto con pistola a 8-20 m sin esfuerzo, cero toques que hagan otra cosa.
+
+### Una skill por sistema (3 oct 2026)
+Decisión del usuario: cada sistema del juego que funcione bien queda escrito como **skill** (`.claude/skills/<sistema>/`)
+para poder replicarlo a largo plazo y en otros proyectos: el *porqué*, los números medidos, el código que lo hace y
+cómo se prueba. Hechas: `pixel-art`, `audio-sfx`, `swarm-sim`, `graphify-first`, `disparo-y-apuntado`. Faltan, en
+orden de uso: vuelo Ki + cámara (§4, memoria del flip-flop), infectados/horda, fauna IAFZ, sociedad/NPCs (Sims +
+credos), construcción, granja, luz 2D, controles táctiles (zonas de stick, `TouchBlockRects`), mundo/streaming
+(perf §10), multijugador/relay. Al cerrar un frente, su skill se escribe o se actualiza en el mismo commit.
+
 ### Arte con IA (idea, 1 oct 2026 — en cola)
 Entrenar en la laptop no es viable (Intel HD 520; la 940M está apagada y tiene 2 GB). Camino:
 LoRA de pixel art sobre un modelo base, entrenado en GPU alquilada (~1–3 USD) con recortes del

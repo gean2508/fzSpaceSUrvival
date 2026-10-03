@@ -100,6 +100,9 @@ mod survival_stats;
 mod targeting;
 pub mod map_item;
 pub mod torches;
+/// Apuntado asistido (puro): a quién le tirás y hacia dónde sale la bala. Lo usa `armas`; receta en la skill
+/// `disparo-y-apuntado`.
+pub mod apuntado;
 mod transition;
 mod ui_editor;
 mod ui_pack;
