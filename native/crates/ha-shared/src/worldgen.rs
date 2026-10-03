@@ -391,6 +391,20 @@ fn jardin_del_pueblo(
     None
 }
 
+/// **Decoración de JARDÍN de las parcelas residenciales** (pedido del usuario, 3 oct 2026): la casa ocupa SU
+/// parte y el resto de la parcela se decora —macetas, flores, reposeras, mesas, juguetes— en vez de quedar
+/// pasto pelado. ~5 % de las celdas libres del jardín (cada prop es una entidad: presupuesto del Redmi, §10).
+pub fn jardin_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    let h = hash_cell(0x7a8d_1e00, tx, tz);
+    if h % 1000 >= 50 {
+        return None;
+    }
+    if !crate::city::celda_de_jardin(body, tx, tz) {
+        return None;
+    }
+    pick_weighted(crate::pack_siembra::PATIO, h >> 10)
+}
+
 /// Props cerca de asentamientos (el "patio" del pueblo): ~3% de esas celdas.
 pub fn prop_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
     let site = building_site_in(body, tx.div_euclid(SITE_PERIOD), tz.div_euclid(SITE_PERIOD))?;

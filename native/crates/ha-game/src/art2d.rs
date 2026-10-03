@@ -1839,6 +1839,41 @@ mod tests {
 
     use super::*;
 
+    /// **La sim y el cliente miden la casa con la misma vara** (3 oct 2026). La sim edifica el rectángulo de un
+    /// dibujo del pack (`city::huella_de_dibujo`, tabla `casas_medidas` generada por
+    /// `scripts/import-casas-medidas.py`) y el cliente dibuja la variante de ese tamaño sin estirarla. Tres
+    /// cosas tienen que coincidir: la escala del pack, la tabla y el manifest.
+    #[test]
+    fn las_casas_medidas_coinciden_con_el_manifest() {
+        assert_eq!(ha_shared::city::ESCALA_ARTE_DEL_PACK, ESCALA_ARTE, "la sim y el cliente escalan distinto el pack");
+        let man: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/art/manifest.json")).unwrap()).unwrap();
+        for (programa, medidas) in ha_shared::casas_medidas::CASAS_DEL_PACK {
+            // Con variantes: `programa#id`; sin ellas (villa, dúplex…) el dibujo es la clave base.
+            let ids: Vec<String> = man["objects"][programa]["variants"]
+                .as_array()
+                .map(|vs| vs.iter().filter_map(|v| Some(format!("{programa}#{}", v["id"].as_str()?))).collect())
+                .unwrap_or_default();
+            let claves: Vec<String> = if ids.iter().any(|k| man["sprites"].get(k).is_some()) { ids } else { vec![programa.to_string()] };
+            let mut del_manifest: Vec<(i64, i64)> = claves
+                .iter()
+                .filter_map(|k| {
+                    let r = man["sprites"].get(k)?.get("rect")?;
+                    Some((r["w"].as_i64()?, r["h"].as_i64()?))
+                })
+                .collect();
+            del_manifest.sort();
+            del_manifest.dedup();
+            let mut tabla = medidas.to_vec();
+            tabla.sort();
+            assert_eq!(tabla, del_manifest, "{programa}: casas_medidas.rs no coincide con el manifest — correr scripts/import-casas-medidas.py");
+            // Y cada tamaño de la tabla tiene una huella que la sim puede edificar.
+            for &(w, h) in medidas.iter() {
+                assert!(ha_shared::city::huellas_de_programa(programa).contains(&ha_shared::city::huella_de_dibujo(w, h)));
+            }
+        }
+    }
+
     /// **Un slot de UI curado como POSE tiene que traer su recorte.**
     ///
     /// Sin esto el `ImageNode` sale con `rect: None` y Bevy estira **la hoja

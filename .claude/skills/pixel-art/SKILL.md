@@ -93,9 +93,10 @@ revestimiento, alféizares). Lo que sí llega: **re-componer el pixel del pack a
 
 - `_intocables`: nunca se repiten las columnas casi transparentes (la sombra del costado: la casa «crecía» con
   un hueco) ni las que cruza una diagonal (el faldón a 2:1 son pasos de 2 px; repetir uno dienta la cumbrera).
-- `scripts/import-casas-a-medida.py` lleva cada vivienda a la huella exacta de `city.rs` y la juzga. **Medido el
-  3 oct: las 11 quedan POR DEBAJO** — las huellas son ×1,5 a ×4,1 del dibujo. Una casa entera NO se agranda tanto
-  sin perder oficio: hace falta componerla con varias piezas (biblia §8, «El juez del reemplazo»).
+- ⚠ **Las casas NO se agrandan a la parcela: la parcela se adapta a la casa** (pedido del usuario, 3 oct). La
+  sim edifica el rectángulo que mide el dibujo (`city::huella_de_dibujo`, tabla generada por
+  `scripts/import-casas-medidas.py`) y el resto es jardín con pileta. Un importador que estire casas es el problema
+  mal planteado (biblia §8, «La casa mide lo que mide su dibujo»).
 
 **Derivar antes que dibujar sigue siendo el camino más corto al listón**: el taxi derivado de un auto del pack
 (`scripts/dibujar-taxi.py`) da SUPERA; el dibujado a mano daba POR DEBAJO.
