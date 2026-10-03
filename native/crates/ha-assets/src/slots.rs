@@ -138,6 +138,7 @@ const ITEM_IDS: &[(&str, &str)] = &[
     ("jetpack", "Mochila cohete"),
     ("lantern", "Farol"),
     ("leather", "Cuero"),
+    ("mapa_tesoro", "Mapa del tesoro"),
     ("leather_cap", "Gorro de cuero"),
     ("leather_vest", "Chaleco de cuero"),
     ("wool_coat", "Abrigo de lana"),

@@ -8535,6 +8535,12 @@ Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§20**.
 * **Alijos** (`alijos.rs`): un tesoro escondido por sector de 200 m (determinista por semilla), con
   cofre de botín rico y 2-3 guardias infectados que no se queman de día; brújula `ALIJO a 120 m · NE`
   y metas "Abrí un alijo" / "Cinco alijos". Es la versión caminable de los dungeons del OASIS.
+  **La brújula sólo sale con el mapa** (3 oct 2026, pedido del usuario): el ítem `mapa_tesoro`
+  (infectados 6 %, cómodas, y un alijo de cada tres trae el del siguiente) marca, al entrar a la
+  mochila, un sector a 2-4 sectores (400-900 m). Los mapas son un contador: llevar `n` guía a los
+  primeros `n` marcados (`Alijos::mapas`, guardados en `alijos.json`); si lo soltás la guía se apaga
+  y vuelve al mismo alijo al recuperarlo; abrir el alijo gasta su mapa. Sin mapa, un alijo se
+  encuentra igual de casualidad, pero sin guía. Ícono dibujado en `lib/restantes.py::mapa_tesoro`.
 * **Economía** (`npc_menu.rs`): VENDER cambia comida/material/cuero por lingotes de oro
   (`unidades_por_oro`), COMPRAR gasta 2 lingotes en una prenda al azar. Cierra el bucle
   saquear → vender → vestirse.

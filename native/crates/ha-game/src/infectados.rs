@@ -144,6 +144,10 @@ pub fn botin_de(n: u32) -> Vec<(&'static str, u32)> {
     if azar(100) < 5 {
         v.push((crate::armas::arma_al_azar(azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0), 1));
     }
+    // El mapa de un alijo: sin él no hay guía hasta el tesoro (`alijos.rs`).
+    if azar(100) < 6 {
+        v.push((crate::alijos::MAPA_TESORO, 1));
+    }
     if v.is_empty() {
         v.push(("apple", 1));
     }

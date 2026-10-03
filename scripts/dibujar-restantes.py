@@ -40,6 +40,7 @@ def main():
         ("prop/cancha_tenis", "Cancha de tenis", r.cancha((0.74, 0.95, 0.88), "prop/cancha_tenis")),
         ("ship/rocket", "Cohete", r.cohete()),
         ("ui/menu_luna", "Menú: luna", r.luna_llena()),
+        ("items/mapa_tesoro", "Mapa del tesoro", r.mapa_tesoro()),
     ]
     pag = Pagina()
     sprites, objetos = {}, {}
