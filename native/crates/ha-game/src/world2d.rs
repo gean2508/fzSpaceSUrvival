@@ -3043,6 +3043,9 @@ fn spawn_chunk_small_decor(
                     .or_else(|| ha_shared::worldgen::calzada_decor_at(body, tx, tz))
                     .or_else(|| ha_shared::worldgen::playa_decor_at(body, tx, tz))
                     .or_else(|| ha_shared::worldgen::shore_decor_at(body, tx, tz))
+                    // El JARDÍN de las parcelas va antes que la flora suelta: la casa no ocupa toda la parcela y
+                    // el resto se decora (macetas, flores, reposeras).
+                    .or_else(|| ha_shared::worldgen::jardin_decor_at(body, tx, tz))
                     .or_else(|| nature_decor_at(body, tx, tz))
                     .or_else(|| prop_decor_at(body, tx, tz))
             };

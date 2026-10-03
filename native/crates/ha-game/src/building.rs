@@ -314,6 +314,15 @@ fn roof_layout(art: &ArtLibrary, key: Option<&str>, huella: Vec2, cubrir: bool) 
     };
     let size = size * TILE_M;
     if cubrir {
+        // **La casa que mide su dibujo no se escala**: la sim edificó `huella_de_dibujo(celdas)` y el dibujo va
+        // a su tamaño de pack. (Sólo el redondeo a tiles enteros los separa: ≤ medio tile.)
+        let exacta = key.and_then(|k| art.celdas_de(k, None)).is_some_and(|c| {
+            ha_shared::city::huella_de_dibujo(c.x.round() as i64, c.y.round() as i64)
+                == ((huella.x / TILE_M).round() as i64, (huella.y / TILE_M).round() as i64)
+        });
+        if exacta {
+            return (size, (size.y - huella.y).max(0.0));
+        }
         let k = (huella.x / size.x.max(0.001)).max(huella.y / size.y.max(0.001));
         let size = size * k;
         return (size, (size.y - huella.y).max(0.0));
@@ -379,6 +388,24 @@ fn fondo_libre(body: CelestialBody, r: &RoofRect) -> f32 {
 /// `cubrir`) y después el fondo: nunca se deja de dibujar la casa.
 fn elegir_fachada(art: &ArtLibrary, base: &str, r: &RoofRect, body: CelestialBody, semilla: u64) -> String {
     let variantes = art.variantes_con_arte(base);
+    // **La casa se dibuja SIN ESTIRAR**: la sim edificó el rectángulo que mide un dibujo del pack
+    // (`city::huella_de_dibujo`), y acá se elige una variante que mida exactamente eso. Si hay varias del mismo
+    // tamaño, decide la semilla de la parcela.
+    if es_vivienda(base) {
+        let iguales: Vec<&String> = variantes
+            .iter()
+            .filter(|k| {
+                art.celdas_de(k, None).is_some_and(|c| {
+                    ha_shared::city::huella_de_dibujo(c.x.round() as i64, c.y.round() as i64) == (r.w, r.h)
+                })
+            })
+            .collect();
+        if !iguales.is_empty() {
+            let mut h = semilla.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            h ^= h >> 29;
+            return iguales[(h % iguales.len() as u64) as usize].clone();
+        }
+    }
     if variantes.len() <= 1 {
         return art.variant_key_seeded(base, semilla);
     }

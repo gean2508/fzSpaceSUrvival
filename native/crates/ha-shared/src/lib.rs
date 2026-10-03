@@ -31,6 +31,7 @@ pub mod amueblado;
 /// Tablas de siembra del pack (generadas por `scripts/import-pack-masivo.py`).
 pub mod interior_siembra;
 pub mod pack_siembra;
+pub mod casas_medidas;
 pub mod rng;
 pub mod credos;
 pub mod linaje;

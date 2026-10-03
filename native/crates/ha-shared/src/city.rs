@@ -196,8 +196,8 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     // ~10 fachadas distintas del pack (`scripts/import-edificios.py`) y la
     // parcela elige la suya por su esquina: el barrio dejó de ser una casa
     // fotocopiada 200 veces.
-    LotProgram { key: "building/casa_chica", cells: (17, 14), district: District::Residential, weight: 22 },
-    LotProgram { key: "building/casa_mediana", cells: (26, 18), district: District::Residential, weight: 26 },
+    LotProgram { key: "building/casa_chica", cells: (26, 17), district: District::Residential, weight: 22 },
+    LotProgram { key: "building/casa_mediana", cells: (28, 18), district: District::Residential, weight: 26 },
     LotProgram { key: "building/casa_grande", cells: (31, 22), district: District::Residential, weight: 16 },
     LotProgram { key: "building/casa_country", cells: (42, 24), district: District::Residential, weight: 10 },
     // **La casa EN HILERA**: la que el pack dibujó modular (un tramo de 10 celdas
@@ -1205,6 +1205,14 @@ pub fn es_hilera(key: &str) -> bool {
     key == "building/casa_hilera"
 }
 
+/// Tiles de ancho que hay que dejar al costado de la casa para la pileta (6 de pileta + 2 de aire).
+const LUGAR_DE_PILETA: i64 = 8;
+
+/// ¿Esta parcela lleva pileta? (si tiene lugar: ver `sitio_de_pileta`). Un 55 %: es un barrio, no un balneario.
+fn quiere_pileta(h: u32) -> bool {
+    (h >> 5) % 100 < 55
+}
+
 /// **El JARDÍN de una parcela: el lote menos su retiro**, en coordenadas del lote.
 ///
 /// El lote reservado llega hasta la vereda, y hasta hoy la cerca se plantaba
@@ -1229,23 +1237,27 @@ pub fn es_hilera(key: &str) -> bool {
 /// parcela.
 fn jardin_de_la_parcela(lot: Lot, h: u32) -> Parte {
     let (w, d) = (lot.w, lot.h);
-    // Mínimo en el que todavía entra la casa más chica con su patio.
-    const MIN_W: i64 = 12;
-    const MIN_D: i64 = 10;
+    // Mínimo en el que todavía entra la casa más chica con su patio: la del DIBUJO más chico del programa
+    // (`huellas_de_programa`) más lugar para el camino al frente y un borde al costado. Sin dibujos medidos
+    // (la hilera), el mínimo de siempre.
+    let (min_w, min_d) = huellas_de_programa(lot.program().key)
+        .first()
+        .map(|&(hw, hd)| ((hw + 4 + if quiere_pileta(h) { LUGAR_DE_PILETA } else { 0 }).max(12), (hd + 5).max(10)))
+        .unwrap_or((12, 10));
     let mut oeste = ((h >> 19) % 4) as i64;
     let mut este = ((h >> 21) % 4) as i64;
     let mut norte = ((h >> 23) % 4) as i64;
     // El frente se retira menos: es la cara que mira a la calle y la que da la
     // línea del barrio. Retirarlo mucho deja la casa flotando en el medio.
     let mut sur = ((h >> 25) % 2) as i64;
-    while w - oeste - este < MIN_W && (oeste > 0 || este > 0) {
+    while w - oeste - este < min_w && (oeste > 0 || este > 0) {
         if oeste >= este {
             oeste -= 1;
         } else {
             este -= 1;
         }
     }
-    while d - norte - sur < MIN_D && (norte > 0 || sur > 0) {
+    while d - norte - sur < min_d && (norte > 0 || sur > 0) {
         if norte >= sur {
             norte -= 1;
         } else {
@@ -1281,6 +1293,57 @@ fn indice_de_borde(w: i64, d: i64, lx: i64, lz: i64) -> Option<i64> {
 /// `(x, z, ancho, fondo)`.
 pub type Parte = (i64, i64, i64, i64);
 
+/// Escala con la que el juego dibuja el pack (`ha-game::art2d::ESCALA_ARTE`): un test del cliente exige que
+/// sean el mismo número. Vive acá porque la sim tiene que saber cuánto mide un dibujo sin cargar arte.
+pub const ESCALA_ARTE_DEL_PACK: f32 = 0.95;
+
+/// **Qué rectángulo del suelo ocupa una casa cuyo dibujo mide `w × h` celdas del pack.**
+///
+/// Pedido del usuario (3 oct 2026): *la casa ocupa SU parte de la parcela, el interior ocupa esa misma parte y
+/// el resto es jardín.* Antes la huella era un 55 % × 50 % del jardín sin mirar el dibujo, y la fachada se
+/// estiraba para taparla. Ahora el ancho ES el del dibujo (con la escala del pack) y el fondo es la porción de
+/// suelo de la casa: el dibujo 3/4 es techo + pared de frente, así que sólo ~60 % de su alto es suelo.
+/// Lo usan la sim (`partes_de_la_parcela`) y el cliente (`building::elegir_fachada`): **tienen que dar lo mismo**.
+pub fn huella_de_dibujo(w_celdas: i64, h_celdas: i64) -> (i64, i64) {
+    let w = (w_celdas as f32 * ESCALA_ARTE_DEL_PACK).round() as i64;
+    let d = (h_celdas as f32 * ESCALA_ARTE_DEL_PACK * 0.6).round() as i64;
+    (w.max(6), d.max(5))
+}
+
+/// Las huellas posibles de un programa residencial (una por tamaño de dibujo distinto), de la más chica a la
+/// más grande. Vacío si el programa no tiene casas medidas (la hilera, por ejemplo, se arma de a módulos).
+pub fn huellas_de_programa(key: &str) -> Vec<(i64, i64)> {
+    let mut v: Vec<(i64, i64)> = crate::casas_medidas::CASAS_DEL_PACK
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, ms)| ms.iter().map(|&(w, h)| huella_de_dibujo(w, h)).collect())
+        .unwrap_or_default();
+    v.sort();
+    v.dedup();
+    v
+}
+
+/// **Qué casa del pack se levanta en esta parcela**: `(clave del programa cuyo arte se dibuja, huella)`.
+///
+/// Se sortea entre los dibujos del propio programa que entran en el jardín. Si el terreno recortó el lote y
+/// ninguno entra (12×14 cuando el programa pide 17), se usa la casa más grande de CUALQUIER programa
+/// residencial que sí entre: mejor otra casa entera que la misma estirada o achicada. `None` = ni la más
+/// chica entra (se cae a la huella vieja). El cliente dibuja la variante de `clave` cuya huella coincide.
+pub fn casa_elegida(lot: Lot, h: u32, w: i64, d: i64) -> Option<(&'static str, (i64, i64))> {
+    let entra = |&(hw, hd): &(i64, i64)| hw <= w - 3 && hd <= d - 5;
+    let propia = lot.program().key;
+    let propias: Vec<(i64, i64)> = huellas_de_programa(propia).into_iter().filter(entra).collect();
+    if !propias.is_empty() {
+        return Some((propia, propias[((h >> 15) as usize) % propias.len()]));
+    }
+    // Otro programa: la huella más grande que entre (la más parecida a lo que el programa quería).
+    LOT_PROGRAMS
+        .iter()
+        .filter(|p| p.district == District::Residential && !es_hilera(p.key))
+        .flat_map(|p| huellas_de_programa(p.key).into_iter().filter(entra).map(move |hu| (p.key, hu)))
+        .max_by_key(|&(k, (hw, hd))| (hw * hd, std::cmp::Reverse(k)))
+}
+
 /// **Dónde cae la casa de una parcela residencial, y por dónde entra el auto.**
 ///
 /// Existe porque la cuenta estaba ESCRITA DOS VECES —en `residential_tile`, que
@@ -1309,7 +1372,9 @@ pub fn partes_de_la_parcela(lot: Lot, h: u32) -> (Parte, Option<(i64, i64)>) {
     // si la casa se colocara respecto del lote, con un retiro grande quedaría
     // pisando su propia cerca. Ver `jardin_de_la_parcela`.
     let (jx, jz, w, d) = jardin_de_la_parcela(lot, h);
-    let (mut house_w, house_d) = lot.program().huella_de(w, d);
+    // **La casa mide lo que mide su dibujo** (`casa_elegida`); si ni la más chica entra, la huella vieja.
+    let del_dibujo = casa_elegida(lot, h, w, d).map(|(_, huella)| huella);
+    let (mut house_w, house_d) = del_dibujo.unwrap_or_else(|| lot.program().huella_de(w, d));
     // Una hilera mide un número ENTERO de viviendas: si sobra media, el cliente
     // dibujaría un módulo cortado sobre un interior que no existe.
     if es_hilera(lot.program().key) {
@@ -1328,7 +1393,13 @@ pub fn partes_de_la_parcela(lot: Lot, h: u32) -> (Parte, Option<(i64, i64)>) {
     // El `max` del techo no es paranoia: `clamp(a, b)` con `b < a` es un panic,
     // y desde que la parcela se RETIRA de los desniveles (`lot_at`) el fondo
     // puede bajar hasta `LADO_MINIMO`.
-    let house_x = jx + 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1));
+    // **Con pileta, la casa se arrima a un costado** para que el jardín que sobra quede JUNTO (una pileta no
+    // entra en dos mitades de 4 tiles). Sin pileta o sin lugar, la casa cae donde diga el hash, como siempre.
+    let house_x = if quiere_pileta(h) && w - house_w >= 4 + LUGAR_DE_PILETA {
+        if (h >> 6) & 1 == 0 { jx + 2 } else { jx + w - house_w - 2 }
+    } else {
+        jx + 2 + ((h >> 11) as i64).rem_euclid((w - house_w - 3).max(1))
+    };
     let casa = (house_x, jz + 2, house_w, house_d);
     let _ = d;
     // Cada extra se sortea aparte: así hay casas con entrada de auto y sin
@@ -1525,6 +1596,50 @@ fn portal_del_frente(house_x: i64, house_w: i64) -> (i64, i64) {
     (desde, desde + ancho)
 }
 
+/// **Dónde va la pileta de una parcela**, en coordenadas del lote: `(x, z)` de su esquina, de 6×4 con el borde.
+///
+/// A la derecha de la casa si ahí sobran 9 tiles de jardín, si no a la izquierda, si no no hay pileta. Pegada al
+/// fondo (la pileta es del patio de atrás) y a un tile de la casa. La mitad de las parcelas que tienen lugar la
+/// tienen: el barrio se lee como un barrio, no como casas sueltas.
+fn sitio_de_pileta(casa: Parte, jardin: Parte, h: u32) -> Option<(i64, i64)> {
+    if !quiere_pileta(h) {
+        return None;
+    }
+    let (cx, cz, cw, _) = casa;
+    let (jx, _, jw, jd) = jardin;
+    if jd < 11 {
+        return None;
+    }
+    let derecha = (jx + jw - 1) - (cx + cw);
+    let izquierda = cx - (jx + 1);
+    if derecha >= 9 {
+        Some((cx + cw + 2, cz))
+    } else if izquierda >= 9 {
+        Some((cx - 8, cz))
+    } else {
+        None
+    }
+}
+
+/// **¿Esta celda es JARDÍN de una parcela residencial?** (terreno libre dentro de la cerca: ni casa, ni camino,
+/// ni entrada de auto, ni pileta, ni patio). Es donde se siembra la decoración de jardín
+/// (`worldgen::jardin_decor_at`): el pedido del usuario es que la parcela no sea sólo casa.
+pub fn celda_de_jardin(body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let Some(s) = crate::geography::settlement_covering(body, tx, tz) else { return false };
+    let Some(lot) = lot_at(body, &s, tx, tz) else { return false };
+    if lot.program().district != District::Residential {
+        return false;
+    }
+    let (lx, lz) = (tx - lot.min.0, tz - lot.min.1);
+    let h = hash2(body_terrain_seed(body) ^ 0xfa11_0000, lot.min.0, lot.min.1);
+    let (jx, jz, jw, jd) = jardin_de_la_parcela(lot, h);
+    // Adentro de la cerca, no sobre ella.
+    if lx <= jx || lz <= jz || lx >= jx + jw - 1 || lz >= jz + jd - 1 {
+        return false;
+    }
+    residential_tile(lot, lx, lz, h).is_none()
+}
+
 fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
     // **El jardín, no el lote.** Lo que queda afuera es terreno natural: ahí nace
     // la variedad de tamaño de parcela y ahí está el colchón que impide que la
@@ -1538,7 +1653,6 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
     // sólo aporta su rectángulo.
     let (w, d) = (jw, jd);
     let (casa, cochera) = partes_de_la_parcela(lot, h);
-    let has_pool = w >= 18 && d >= 12 && (h >> 5) % 100 < 34;
     let has_patio = (h >> 8) % 100 < 70;
 
     // 1) CERCA, con portón al frente (borde sur, mirando a la calle).
@@ -1625,8 +1739,15 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
             // La semilla es del LOTE, así que la planta se reparte igual en cada
             // consulta y entre partidas, sin guardar nada.
             let semilla = h ^ 0x7ab1_0000;
-            if let Some(t) = tabique_de_planta(rx, rz, house_w, house_d, semilla) {
-                return Some(t);
+            // **La fila de adentro pegada a la fachada es un RECIBIDOR: sin tabiques.** Con la casa del tamaño
+            // de su dibujo (3 oct 2026) los cuartos son chicos, y un tabique entre la puerta y el resto dejaba
+            // la cama del vecino del otro lado de una pared (`hogares::de_la_calle_a_la_cama…`, 14 de 28).
+            // Esa fila es por donde se entra y donde `Edificio::adentro` pone a la gente: libre, se llega a
+            // todos los cuartos por ella.
+            if rz != house_d - 2 {
+                if let Some(t) = tabique_de_planta(rx, rz, house_w, house_d, semilla) {
+                    return Some(t);
+                }
             }
             return Some(Tile::WoodFloor);
         }
@@ -1696,13 +1817,13 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
         }
     }
 
-    // 5) PILETA con su borde de piedra, en el patio de atrás.
-    if has_pool {
-        let px = jx + jw - 7;
-        let pz = jz + 2;
-        if lx >= px && lx < px + 5 && lz >= pz && lz < pz + 4 {
+    // 5) PILETA con su borde de piedra, al costado de la casa (jardín de atrás). Va donde SOBRA lugar —a la
+    //    derecha o a la izquierda de la casa— y nunca pisando la casa: con la casa del tamaño de su dibujo
+    //    (3 oct 2026) sobra jardín de un lado u otro, y la pileta es parte de ese jardín.
+    if let Some((px, pz)) = sitio_de_pileta(casa, (jx, jz, jw, jd), h) {
+        if lx >= px && lx < px + 6 && lz >= pz && lz < pz + 4 {
             let (rx, rz) = (lx - px, lz - pz);
-            let rim = rx == 0 || rz == 0 || rx == 4 || rz == 3;
+            let rim = rx == 0 || rz == 0 || rx == 5 || rz == 3;
             // `Water` = bajío ⇒ **se nada**. La pileta del patio es una pileta.
             return Some(if rim { Tile::Pavement } else { Tile::Water });
         }
@@ -1895,7 +2016,12 @@ pub fn roofed_rect(
     if p.district == District::Residential {
         let h = hash2(body_terrain_seed(body) ^ 0xfa11_0000, lot.min.0, lot.min.1);
         let ((hx, hz, hw, hd), _) = partes_de_la_parcela(lot, h);
-        return Some((lot.min.0 + hx, lot.min.1 + hz, hw, hd, p.key));
+        // La clave del arte es la de la casa que de verdad se levantó (puede ser de otro programa si el terreno
+        // recortó el lote): ver `casa_elegida`.
+        let (jx, jz, jw, jd) = jardin_de_la_parcela(lot, h);
+        let _ = (jx, jz);
+        let clave = casa_elegida(lot, h, jw, jd).filter(|&(_, hu)| hu == (hw, hd)).map(|(k, _)| k).unwrap_or(p.key);
+        return Some((lot.min.0 + hx, lot.min.1 + hz, hw, hd, clave));
     }
     // **La clave del PROGRAMA viaja con el rect.** Antes se tiraba y quien
     // dibujaba el techo adivinaba el arte por el tamaño (5×4 → casa chica), lo
@@ -2172,11 +2298,13 @@ mod tests {
         // diecisiete celdas. Pedir 51 de frente era pedir un dibujo que no existe.
         // Lo que el test quiere afirmar —que los grandes son grandes de verdad y
         // no se aplanó todo a la caja única por manzana— se afirma igual por área.
+        // (3 oct 2026: ×2 y no ×4. La casa chica pasó a 26×17 para dar jardín y pileta junto a una casa que
+        // mide lo que su dibujo; la universidad sigue siendo más del doble.)
         let uni = LOT_PROGRAMS.iter().find(|p| p.key == "building/universidad").unwrap();
         let casa = LOT_PROGRAMS.iter().find(|p| p.key == "building/casa_chica").unwrap();
         let (a_uni, a_casa) = (uni.cells.0 * uni.cells.1, casa.cells.0 * casa.cells.1);
         assert!(
-            a_uni > a_casa * 4,
+            a_uni > a_casa * 2,
             "la universidad ({}×{}) no es un edificio grande al lado de la casa chica ({}×{})",
             uni.cells.0,
             uni.cells.1,
@@ -2377,6 +2505,95 @@ mod tests {
             selladas.len(),
             &selladas[..selladas.len().min(5)]
         );
+    }
+
+    /// **La casa mide lo que mide su dibujo, y la parcela NO es sólo casa** (pedido del usuario, 3 oct 2026).
+    ///
+    /// Para cada vivienda generada: su huella tiene que ser EXACTAMENTE la de uno de los dibujos del pack de su
+    /// programa (`huella_de_dibujo`), y tiene que sobrar jardín: la casa nunca ocupa más del 60 % del lote
+    /// (en el barrido real el máximo es 51 %: un lote que el terreno recortó).
+    #[test]
+    fn la_casa_mide_su_dibujo_y_la_parcela_tiene_jardin() {
+        let body = CelestialBody::Earth;
+        let s = a_city();
+        let mut vistos = std::collections::HashSet::new();
+        let (mut casas, mut a_medida) = (0, 0);
+        let mut peor_ocupacion = 0.0f32;
+        let mut sin_jardin: Vec<(i64, i64)> = Vec::new();
+        let r = s.radius.min(1_500);
+        for dz in (-r..r).step_by(5) {
+            for dx in (-r..r).step_by(5) {
+                let (tx, tz) = (s.center.0 + dx, s.center.1 + dz);
+                let Some(lot) = lot_at(body, &s, tx, tz) else { continue };
+                let p = lot.program();
+                if p.district != District::Residential || es_hilera(p.key) || !vistos.insert(lot.min) {
+                    continue;
+                }
+                let Some((_, _, hw, hd, clave)) = roofed_rect(body, &s, tx, tz) else { continue };
+                casas += 1;
+                if huellas_de_programa(clave).contains(&(hw, hd)) {
+                    a_medida += 1;
+                }
+                let ocupacion = (hw * hd) as f32 / (lot.w * lot.h) as f32;
+                peor_ocupacion = peor_ocupacion.max(ocupacion);
+                if ocupacion > 0.6 {
+                    sin_jardin.push(lot.min);
+                }
+            }
+        }
+        assert!(casas > 20, "el barrido no encontró casas: {casas}");
+        println!("{a_medida} de {casas} casas miden exactamente su dibujo; ocupación máxima del lote {:.0} %", peor_ocupacion * 100.0);
+        assert!(
+            a_medida * 100 >= casas * 95,
+            "sólo {a_medida} de {casas} casas miden su dibujo: el jardín es chico para el pack"
+        );
+        assert!(sin_jardin.is_empty(), "{} casas ocupan más del 60 % de su lote: {:?}", sin_jardin.len(), &sin_jardin[..sin_jardin.len().min(5)]);
+    }
+
+    /// **La parcela no es sólo casa**: tiene jardín decorado y, en una buena parte, pileta — y la pileta nunca
+    /// pisa la casa (pedido del usuario, 3 oct 2026).
+    #[test]
+    fn la_parcela_tiene_jardin_decorado_y_pileta_sin_pisar_la_casa() {
+        let body = CelestialBody::Earth;
+        let s = a_city();
+        let mut vistos = std::collections::HashSet::new();
+        let (mut casas, mut con_pileta, mut jardin_total, mut decoradas) = (0usize, 0usize, 0usize, 0usize);
+        let r = s.radius.min(1_200);
+        for dz in (-r..r).step_by(5) {
+            for dx in (-r..r).step_by(5) {
+                let (tx, tz) = (s.center.0 + dx, s.center.1 + dz);
+                let Some(lot) = lot_at(body, &s, tx, tz) else { continue };
+                if lot.program().district != District::Residential || es_hilera(lot.program().key) || !vistos.insert(lot.min) {
+                    continue;
+                }
+                casas += 1;
+                let h = hash2(body_terrain_seed(body) ^ 0xfa11_0000, lot.min.0, lot.min.1);
+                let (casa, _) = partes_de_la_parcela(lot, h);
+                let jardin = jardin_de_la_parcela(lot, h);
+                if let Some((px, pz)) = sitio_de_pileta(casa, jardin, h) {
+                    con_pileta += 1;
+                    let (cx, cz, cw, cd) = casa;
+                    let pisa = px < cx + cw && px + 6 > cx && pz < cz + cd && pz + 4 > cz;
+                    assert!(!pisa, "la pileta {:?} pisa la casa {:?} en el lote {:?}", (px, pz), casa, lot.min);
+                    assert!(px > jardin.0 && px + 6 < jardin.0 + jardin.2, "la pileta se sale de la cerca");
+                }
+                for lz in 0..lot.h {
+                    for lx in 0..lot.w {
+                        if celda_de_jardin(body, lot.min.0 + lx, lot.min.1 + lz) {
+                            jardin_total += 1;
+                            if crate::worldgen::jardin_decor_at(body, lot.min.0 + lx, lot.min.1 + lz).is_some() {
+                                decoradas += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(casas > 20, "el barrido no encontró casas: {casas}");
+        println!("{con_pileta} de {casas} parcelas con pileta; {decoradas} de {jardin_total} celdas de jardín decoradas");
+        assert!(con_pileta * 100 >= casas * 20, "muy pocas parcelas con pileta: {con_pileta} de {casas}");
+        assert!(jardin_total > casas * 20, "casi no queda jardín: {jardin_total} celdas para {casas} casas");
+        assert!(decoradas * 100 >= jardin_total * 3, "el jardín no se decora: {decoradas} de {jardin_total}");
     }
 
     /// **Los edificios grandes se plantan ENTEROS**, ocupando varias manzanas, en

@@ -6316,17 +6316,43 @@ assets o los superan»*. Lo que se construyó y lo que se midió:
   los techos a dos aguas intocables; `fachada_a_medida` combina módulos lado a lado y pasa cada candidata por el
   juez. `scripts/import-casas-a-medida.py` intenta llevar cada vivienda a la huella exacta de su programa.
 
-⚠ **Lo que dio la medición de las casas, y por qué NO se publicó nada.** Las huellas residenciales de
-`city.rs` son entre 1,5 y 4,1 veces el dibujo del pack (casa_chica 13x10 celdas → 18x15; villa 9x13 → 37x36,
-con `ESCALA_ARTE` = 0,95). Las 11 variantes quedan POR DEBAJO del juez o sin gemelas suficientes: crecer ×1,5
-convierte el techo en un paño liso o dienta la cumbrera. **Una casa entera del pack no se puede agrandar a esa
-huella sin bajar de calidad**, y achicar el lote está prohibido (ver «El lote CRECE»). Lo que queda es de
-DISEÑO, no de arte: componer la vivienda con varias piezas del pack (como `casa_hilera` con su kit
-`tramo`/`remate`, que sí mide exacto) y que la sim sepa dónde va cada puerta. Hasta entonces sigue el respaldo
-de hoy (×1,4 + azotea de respaldo). El importador queda: se niega solo, y publica en cuanto una variante pase.
+### LA CASA MIDE LO QUE MIDE SU DIBUJO, Y EL RESTO DE LA PARCELA ES JARDÍN (3 oct 2026)
 
-Orden: `import-casas-a-medida.py` va después de `import-completos.py` → `medir-puertas.py` →
-`import-puertas-edificios.py`.
+⚠ **Corrección de un error mío del mismo día.** Medí «la huella de la sim contra el dibujo» y concluí que las
+casas no se podían agrandar a la parcela. El supuesto era el equivocado: **la casa NO tiene que ocupar la parcela.**
+Pedido textual del usuario: *«Las casas no deben ocupar toda la parcela. Que la casa ocupe una parte, que el
+interior ocupe esa misma parte que ocupa por fuera, y el resto se decore con cosas de jardín, con piscinas.
+Está prohibido que en la parcela vaya sólo la casa, y asumir que toda la parcela debe estar ocupada por la
+casa.»* Lo que hay desde hoy:
+
+- **La huella de la casa es el rectángulo de su dibujo** (`city::huella_de_dibujo(w, h)`: ancho = celdas ×
+  `ESCALA_ARTE_DEL_PACK` 0,95; fondo = 60 % del alto del dibujo, porque el 3/4 es techo + pared). Antes era el
+  55 % × 50 % del jardín y la fachada se estiraba (`roof_layout(cubrir)`) o quedaba corta y asomaba el interior.
+- **Los tamaños salen de una tabla GENERADA**, `ha-shared/src/casas_medidas.rs`, que escribe
+  `scripts/import-casas-medidas.py` midiendo el manifest (nunca a mano). Cada parcela sortea entre los dibujos de
+  su programa que entran en el jardín (`city::casa_elegida`); si el terreno recortó el lote y ninguno entra, usa la
+  casa más grande de otro programa que sí entre. El `rect` que devuelve `roofed_rect` lleva la clave de ESA casa.
+- **El cliente dibuja la variante que mide justo eso** (`building::elegir_fachada` filtra por huella) y, si
+  coincide, `roof_layout` la deja a escala 1. Test que cierra el círculo: `las_casas_medidas_coinciden_con_el_manifest`.
+- **El interior ocupa el mismo rectángulo**: `residential_tile` no cambió, sólo recibe la huella nueva. Con cuartos
+  chicos, la fila de adentro pegada a la fachada es un **recibidor sin tabiques** (si no, la cama del vecino
+  quedaba del otro lado de una pared: `hogares::de_la_calle_a_la_cama…` bajó de 80 % a 14 de 28).
+- **El resto es jardín**: el retiro del jardín nunca deja menos que la casa más chica del programa + camino.
+  Un 55 % de las parcelas lleva **pileta** (6×4 con borde, `sitio_de_pileta`): la casa se arrima a un costado
+  para que el jardín sobrante quede junto, y la pileta nunca pisa la casa. Y se siembra **decoración de jardín**
+  (`worldgen::jardin_decor_at`, tabla `PATIO`: macetas, flores, reposeras, mesas, juguetes; ~5 % de las celdas
+  libres, presupuesto del Redmi) en las celdas libres de cada parcela (`city::celda_de_jardin`).
+- `casa_chica` pasó de lote 17×14 a **26×17** y `casa_mediana` de 26×18 a 28×18: con la casa a su tamaño real, un
+  lote de 17 no dejaba jardín. Medido en el barrido de la Tierra: **99,5 % de las casas miden exactamente su
+  dibujo**, la casa ocupa como mucho el 53 % del lote, **32 % de las parcelas tienen pileta** y ~5 % del jardín
+  está decorado. Tests: `la_casa_mide_su_dibujo_y_la_parcela_tiene_jardin`,
+  `la_parcela_tiene_jardin_decorado_y_pileta_sin_pisar_la_casa`.
+- ⛔ Esto aplica a las **viviendas**. Los edificios (universidad, hospital…) siguen sin achicarse (24 ago).
+- `import-casas-a-medida.py` (re-medir pixel del pack a la huella) **queda sin uso para las casas**: era la
+  solución al problema mal planteado. Se conserva porque `lib/edificio.py` sirve para otras piezas.
+
+Orden: `import-casas-medidas.py` va DESPUÉS de `import-completos.py` → `medir-puertas.py` →
+`import-puertas-edificios.py` (cualquier cambio de variantes de casa cambia la tabla: el test del cliente avisa).
 
 ## §9 Build, publicación y comandos
 
