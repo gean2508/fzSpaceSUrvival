@@ -199,18 +199,14 @@ fn place_held_item_in_hand(
     let Ok(visual) = player.get_single() else {
         return;
     };
-    let (dx, dz) = (visual.to_rot.cos(), visual.to_rot.sin());
-    // Mismo criterio de cuadrante que `sim::pose_direction`.
-    let (offset, flip, front) = if dz.abs() >= dx.abs() {
-        if dz > 0.0 {
-            (Vec2::new(0.34, -0.30), false, true) // de frente: mano derecha
-        } else {
-            (Vec2::new(-0.34, -0.30), true, false) // de espaldas: detrás
-        }
-    } else if dx < 0.0 {
-        (Vec2::new(-0.42, -0.26), true, true)
-    } else {
-        (Vec2::new(0.42, -0.26), false, true)
+    // La MISMA dirección que eligió el cuerpo (`sim::face_player_sprite`, con
+    // histéresis): recalcularla acá por cuadrante hacía que, con el stick en la
+    // diagonal, la mano y el cuerpo miraran para lados distintos.
+    let (offset, flip, front) = match visual.dir4 {
+        3 => (Vec2::new(0.34, -0.30), false, true), // de frente: mano derecha
+        1 => (Vec2::new(-0.34, -0.30), true, false), // de espaldas: detrás
+        2 => (Vec2::new(-0.42, -0.26), true, true),
+        _ => (Vec2::new(0.42, -0.26), false, true),
     };
     for (mut tf, mut sprite) in &mut held {
         tf.translation.x = offset.x;

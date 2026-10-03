@@ -72,6 +72,7 @@ impl Plugin for PixelHudPlugin {
             .init_resource::<survival_bars::SurvivalBarsCache>()
             .add_systems(Startup, ensure_game_ui_root)
             .init_resource::<BagShot>()
+            .init_resource::<HudShot>()
             .add_systems(Update, (mover_pulgar_inventario, barras_de_la_mochila).after(bag_panel_system))
             .add_systems(Update, (skin_ui_from_art, casillas_del_kit, marcos_del_kit, pintar_personaje_mochila, pintar_mano_mochila, capturar_mochila).after(spawn_hud_once))
             // Aparte del bloque de abajo: ese ya llegó al tope de 20 sistemas
@@ -129,6 +130,8 @@ impl Plugin for PixelHudPlugin {
                         .after(crate::machines::try_place_on_hold),
                 ),
             );
+        #[cfg(not(target_os = "android"))]
+        app.add_systems(Update, capturar_hud.after(spawn_hud_once));
     }
 }
 
@@ -558,28 +561,51 @@ fn spawn_hud_once(
         // **El bloque de estado, con las medidas de la imagen de referencia.**
         // Un velo oscuro de 520 × 190 en (24, 24), diez corazones del pack y las
         // tres barras con su iconito. Todo en unidades del mockup por `k`.
+        //
+        // **El velo crece con lo que tiene adentro.** Tenía alto FIJO (190 u) y
+        // el contenido ya lo llenaba sin margen: en cuanto aparecía la barra de
+        // Ki (después de volar) o la de oxígeno, las filas se salían por abajo
+        // del velo. Y el cartel de aviso vivía ADENTRO, con un ancho mínimo en
+        // píxeles sin escalar (180) que en el teléfono es más que el velo
+        // entero (~190 px a k≈0,36): se desbordaba también por la derecha.
+        // Ahora el velo es de alto automático con margen parejo, y el cartel va
+        // DEBAJO, en la misma columna, con su propio fondo.
         let k = crate::ui_pack::k(&layout);
+        // Los iconitos de las barras son glifos de 16 px: achicados a 29·k (≈10
+        // px en el teléfono) el muestreo al vecino más cercano se come la mitad
+        // del dibujo y la pata/gota/rayo quedan ilegibles. Nunca por debajo de 14.
+        let icono = (29.0 * k).max(14.0);
+        let alto_barra = (18.0 * k).max(6.0);
+        let pad_x = 22.0 * k;
+        let ancho_velo = 520.0 * k;
         parent
             .spawn((
                 Node {
                     position_type: PositionType::Absolute,
                     left: Val::Px(layout.insets.left as f32 + 24.0 * k),
                     top: Val::Px(layout.insets.top as f32 + 24.0 * k),
-                    width: Val::Px(520.0 * k),
-                    height: Val::Px(190.0 * k),
+                    width: Val::Px(ancho_velo),
                     display: Display::Flex,
                     flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(14.0 * k),
-                    padding: UiRect {
-                        left: Val::Px(22.0 * k),
-                        top: Val::Px(16.0 * k),
-                        ..default()
-                    },
+                    align_items: AlignItems::FlexStart,
+                    row_gap: Val::Px(gap * 2.0),
+                    ..default()
+                },
+                HudArmado,
+                Name::new("HudTopLeftColumn"),
+            ))
+            .with_children(|col| {
+            col.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(12.0 * k),
+                    padding: UiRect::axes(Val::Px(pad_x), Val::Px(16.0 * k)),
                     ..default()
                 },
                 BackgroundColor(Color::srgba(0.055, 0.043, 0.078, 0.376)),
                 BorderRadius::all(Val::Px(18.0 * k)),
-                HudArmado,
                 Name::new("HudTopLeft"),
             ))
             .with_children(|panel| {
@@ -603,13 +629,14 @@ fn spawn_hud_once(
                     });
                 survival_bars::spawn_survival_bars(
                     panel,
-                    466.0 * k,
-                    29.0 * k,
-                    18.0 * k,
+                    ancho_velo - 2.0 * pad_x,
+                    icono,
+                    alto_barra,
                     9.0 * k,
                     &bar_icons,
                 );
-                spawn_status_prompt_block(panel, heart, gap);
+            });
+            spawn_status_prompt_block(col, heart, gap);
             });
 
         // La fila de energía que vivía acá arriba a la derecha —seis muslos de
@@ -2684,6 +2711,81 @@ struct MochilaCtx<'w> {
     art: Res<'w, crate::art2d::ArtLibrary>,
     layout: Res<'w, TouchLayout>,
     tune: Res<'w, HudTune>,
+}
+
+/// **QA de dev**: `HA_HUDSHOT=<prefijo>` camina en las cuatro direcciones (con
+/// el teclado sintético, el mismo camino que WASD), saca una captura en cada
+/// una y anota qué cuadro de la hoja quedó puesto; después fuerza la barra de
+/// Ki a la vista (el caso que desbordaba el panel de vida) y captura de nuevo.
+/// Con `HA_FORCE_TOUCH=1 HA_RES=873x393` es el HUD del Redmi en el escritorio.
+#[derive(Resource, Default)]
+pub struct HudShot {
+    cuadros: u32,
+}
+
+#[cfg(not(target_os = "android"))]
+fn capturar_hud(
+    mut shot: ResMut<HudShot>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut flight: ResMut<crate::flight::Flight>,
+    jugador: Query<(&crate::sim::PlayerVisual, &Sprite, &crate::sim::CurrentPose), With<Player>>,
+    mut commands: Commands,
+    mut exit: EventWriter<AppExit>,
+    fase: Res<State<crate::game_phase::GamePhase>>,
+) {
+    use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+    let Ok(prefijo) = crate::flags::var("HA_HUDSHOT") else { return };
+    if !matches!(*fase.get(), crate::game_phase::GamePhase::Playing) {
+        return;
+    }
+    shot.cuadros += 1;
+    let n = shot.cuadros;
+    const PASOS: [(KeyCode, &str); 4] = [
+        (KeyCode::KeyD, "derecha"),
+        (KeyCode::KeyS, "abajo"),
+        (KeyCode::KeyA, "izquierda"),
+        (KeyCode::KeyW, "arriba"),
+    ];
+    let mut capturar = |nombre: &str| {
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(format!("{prefijo}-{nombre}.png")));
+    };
+    // 0..90 el mundo termina de llegar; después, 40 cuadros por dirección.
+    if n == 90 {
+        capturar("quieto");
+    }
+    if (100..260).contains(&n) {
+        let i = ((n - 100) / 40) as usize;
+        let t = (n - 100) % 40;
+        let (tecla, nombre) = PASOS[i];
+        match t {
+            0 => keys.press(tecla),
+            30 => {
+                capturar(nombre);
+                if let Ok((v, sprite, pose)) = jugador.get_single() {
+                    eprintln!(
+                        "ha-hudshot: {nombre} dir4={} pose={} espejo={}",
+                        v.dir4,
+                        pose.nombre(),
+                        sprite.flip_x
+                    );
+                }
+            }
+            39 => keys.release(tecla),
+            _ => {}
+        }
+    }
+    if n >= 270 {
+        flight.ki = crate::flight::KI_MAX * 0.4;
+    }
+    match n {
+        300 => capturar("ki"),
+        330 => {
+            exit.send(AppExit::Success);
+        }
+        _ => {}
+    }
 }
 
 /// **QA de dev**: `HA_BAGSHOT=<prefijo>` deja dos capturas del juego —el HUD

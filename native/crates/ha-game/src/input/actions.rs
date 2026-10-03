@@ -265,6 +265,8 @@ fn spawn_button(
     commands.entity(parent).with_children(|p| {
         p.spawn((
             ActionButton(kind),
+            // La letra se achica sola hasta entrar en el disco (`fuente.rs`).
+            crate::fuente::BotonConTexto,
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(cx - width * 0.5),
@@ -316,7 +318,7 @@ pub fn layout_action_buttons(
     mut root: Query<&mut Node, With<ActionUiRoot>>,
     mut buttons: Query<(&ActionButton, &mut Node, &Children), Without<ActionUiRoot>>,
     mut labels: Query<
-        &mut TextFont,
+        (&mut TextFont, Option<&crate::fuente::TamanoPedido>),
         (
             Or<(With<ActionButtonLabel>, With<JumpButtonLabel>)>,
             Without<ActionUiRoot>,
@@ -399,10 +401,15 @@ pub fn layout_action_buttons(
         };
         // El tamaño de fuente cuesta todavía más que un `Node`: cambiarlo obliga
         // a RE-MEDIR el texto antes de relayoutear. Sólo cuando cambió de verdad.
+        //
+        // Esto es lo que se PIDE; `fuente::encoger_texto_de_botones` lo achica
+        // si la palabra no entra en el disco. Por eso se compara contra el
+        // pedido y no contra el tamaño dibujado: si no, cada cuadro se pisarían.
         let font_size = (height * 0.38).clamp(11.0, 18.0);
         for child in children.iter() {
-            if let Ok(mut font) = labels.get_mut(*child) {
-                if font.font_size != font_size {
+            if let Ok((mut font, ajuste)) = labels.get_mut(*child) {
+                let pedido = ajuste.map_or(font.font_size, |a| a.pedido);
+                if pedido != font_size {
                     font.font_size = font_size;
                 }
             }

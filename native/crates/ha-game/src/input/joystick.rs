@@ -384,22 +384,27 @@ fn spawn_stick(
     base_img: Option<ImageNode>,
     knob_img: Option<ImageNode>,
 ) {
+    // **Con arte del pack, SÓLO el arte.** El disco de color, el borde y el
+    // fondo blanco del pomo se pintaban igual DEBAJO de la imagen, que no llena
+    // su nodo (el zócalo del pack ocupa ~80 % del cuadro): se veían tres círculos
+    // desparejos —uno liso, uno pixelado y un aro blanco alrededor del pomo—.
+    // El color queda sólo como reserva cuando el slot no tiene arte.
+    let con_arte = base_img.is_some();
     let mut base = commands.spawn((
         Node {
             position_type: PositionType::Absolute,
             display: Display::Flex,
-            border: UiRect::all(Val::Px(3.2)),
+            border: UiRect::all(Val::Px(if con_arte { 0.0 } else { 3.2 })),
             ..default()
         },
-        BorderColor(ui_theme::joystick_border(false)),
-        BackgroundColor(ui_theme::joystick_base()),
+        BorderColor(if con_arte { Color::NONE } else { ui_theme::joystick_border(false) }),
+        BackgroundColor(if con_arte { Color::NONE } else { ui_theme::joystick_base() }),
         BorderRadius::MAX,
         JoystickBase,
         crate::game_ui::GameplayUi,
     ));
-    // Reskin UI: si el pack trae `ui/joystick_base`, se muestra en vez del color.
     if let Some(img) = base_img {
-        base.insert(img);
+        base.insert((img.with_color(tinte_base(false)), JoystickConArte));
     }
     base.with_children(|p| {
         let mut knob = p.spawn((
@@ -407,14 +412,28 @@ fn spawn_stick(
                 position_type: PositionType::Absolute,
                 ..default()
             },
-            BackgroundColor(ui_theme::joystick_knob()),
             BorderRadius::MAX,
             JoystickKnob,
         ));
-        if let Some(img) = knob_img {
-            knob.insert(img);
+        match knob_img {
+            Some(img) => {
+                knob.insert((img, BackgroundColor(Color::NONE)));
+            }
+            None => {
+                knob.insert(BackgroundColor(ui_theme::joystick_knob()));
+            }
         }
     });
+}
+
+/// El zócalo se dibuja con el arte del pack (no con el color de reserva).
+#[derive(Component)]
+struct JoystickConArte;
+
+/// Con arte, "lo estás tocando" se lee porque el zócalo se enciende: medio
+/// transparente en reposo (no tapa el mundo), opaco con el pulgar encima.
+fn tinte_base(activo: bool) -> Color {
+    Color::srgba(1.0, 1.0, 1.0, if activo { 0.95 } else { 0.62 })
 }
 
 fn spawn_joystick_ui(mut commands: Commands, art: Res<crate::art2d::ArtLibrary>) {
@@ -430,7 +449,10 @@ fn update_joystick_ui(
     layout: Res<TouchLayout>,
     config: Res<UiLayoutConfig>,
     state: Res<StickState>,
-    mut bases: Query<(&mut Node, &mut BorderColor), (With<JoystickBase>, Without<JoystickKnob>)>,
+    mut bases: Query<
+        (&mut Node, &mut BorderColor, Option<&mut ImageNode>, Has<JoystickConArte>),
+        (With<JoystickBase>, Without<JoystickKnob>),
+    >,
     mut knobs: Query<&mut Node, (With<JoystickKnob>, Without<JoystickBase>)>,
 ) {
     if !crate::platform::uses_touch_gameplay_ui() {
@@ -445,16 +467,23 @@ fn update_joystick_ui(
     // MISMOS píxeles casi todos los frames, y con el `DerefMut` normal cada
     // llamada marcaría `Node`/`BorderColor` como cambiado y Bevy relayoutearía el
     // árbol de UI completo por frame. Ver `set_px`.
-    for (mut node, mut border) in &mut bases {
+    for (mut node, mut border, img, con_arte) in &mut bases {
         if paint_base(
             &state.move_stick,
             r,
             win_h,
+            con_arte,
             node.bypass_change_detection(),
             border.bypass_change_detection(),
         ) {
             node.set_changed();
             border.set_changed();
+        }
+        if let Some(mut img) = img {
+            let want = tinte_base(state.move_stick.active);
+            if img.color != want {
+                img.color = want;
+            }
         }
     }
     for mut node in &mut knobs {
@@ -487,6 +516,7 @@ fn paint_base(
     side: &JoystickSide,
     r: f32,
     win_h: f32,
+    con_arte: bool,
     node: &mut Node,
     border: &mut BorderColor,
 ) -> bool {
@@ -500,7 +530,7 @@ fn paint_base(
     dirty |= set_px(&mut node.bottom, bottom);
     dirty |= set_px(&mut node.width, r * 2.0);
     dirty |= set_px(&mut node.height, r * 2.0);
-    let want = ui_theme::joystick_border(side.active);
+    let want = if con_arte { Color::NONE } else { ui_theme::joystick_border(side.active) };
     if border.0 != want {
         border.0 = want;
         dirty = true;

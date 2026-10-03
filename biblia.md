@@ -4090,6 +4090,50 @@ sin consumir sostiene el punto unos frames.
 y el alcance se mide **a su pie**, no a su centro — tocar la copa de un árbol agarra
 el árbol.
 
+### El personaje mira hacia donde empujás el stick (3 oct 2026)
+
+Reporte: *"la dirección del jugador que sea coherente a la dirección que se mueve
+el joystick"*. La sim estaba bien (`topdown` deja `body.rot = atan2(mz, mx)` del
+movimiento) y la pose también (`walk_left` etc., que `art2d::registrar_poses_de_personaje`
+deriva del índice del generador en el orden `R, U, L, D`). Lo roto era
+**`sim::apply_visual`, que espejaba el `Transform` entero (`scale.x = -1`) en toda
+la mitad izquierda del círculo**, encima de una pose que ya era la izquierda: yendo
+a la izquierda (o en diagonal izquierda) el personaje miraba a la derecha, y el
+objeto de la mano caía del lado errado.
+
+Ahora no hay espejo de `Transform`; `dir4_de_rumbo` elige la dirección con
+**histéresis** de ~10° más allá de la diagonal (sin ella, un pulgar apoyado justo
+a 45° hacía parpadear la pose) y la guarda en `PlayerVisual::dir4`, que también
+lee `held_item.rs` (mano y cuerpo nunca discrepan). La rama de reserva sin poses
+quedó corregida al orden `R, U, L, D` y anima `idle`/`walk`. Tests:
+`sim::tests_orientacion`. Driver: `HA_HUDSHOT=<prefijo>` (camina en las cuatro
+direcciones, anota el cuadro puesto y captura).
+
+### Joystick, panel de vida y letras de los botones (3 oct 2026)
+
+- **Joystick con arte = sólo el arte.** Debajo del zócalo y el pomo del pack se
+  seguían pintando el disco de color, el borde y el fondo blanco del pomo; como
+  el zócalo ocupa ~80 % de su cuadro, se veían tres círculos desparejos. El color
+  queda de reserva sin arte; con arte, "lo estás tocando" es el zócalo que pasa
+  de medio transparente a opaco.
+- **El velo de la vida crece con su contenido.** Tenía alto fijo (190 u) y el
+  contenido ya lo llenaba: al aparecer la barra de Ki u oxígeno las filas se
+  salían por abajo. El cartel de aviso vivía adentro con un ancho mínimo en píxeles
+  sin escalar (180), más ancho que el velo entero en el teléfono (~190 px a
+  k≈0,36). Ahora `HudTopLeftColumn` = velo de alto automático + cartel debajo.
+  Los glifos de las barras (16 px) nunca bajan de 14 px: a 29·k el muestreo al
+  vecino se comía el dibujo.
+- **La letra de un botón no se sale del botón** (`fuente::encoger_texto_de_botones`).
+  Todo texto hijo directo de un `Button` o de un `BotonConTexto` (los discos de
+  SALTAR/USAR) se achica, midiendo con la fuente embebida, hasta que entra en el
+  interior —en los redondos, en la cuerda del disco—. Sólo achica lo que pidió
+  quien lo armó (`TamanoPedido`), sólo con ancho propio (los de ancho automático
+  crecen con su texto y se los saltea: si no, botón y letra se achicarían en
+  espiral) y sólo cuando cambió algo. El viejo `clamp(11, 18)` por alto metía
+  "SALTAR" a 11 px en un disco de ~46.
+- **Para ver el HUD del Redmi en el escritorio:** `HA_FORCE_TOUCH=1
+  HA_RES=873x393` (2400×1080 a densidad 2,75, sin `UiScale`).
+
 ### Todo el mundo se deja tocar (15 ago 2026)
 
 Hasta acá el dedo sólo encontraba **árboles, rocas, vetas, cofres, NPCs y lo que
