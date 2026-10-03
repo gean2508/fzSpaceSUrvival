@@ -34,6 +34,8 @@ const TOPE_DIAS_AUSENTE: u64 = 160;
 const DIAS_POR_FOTOGRAMA_AL_PONERSE_AL_DIA: u64 = 3;
 const GUARDAR_CADA: f32 = 90.0;
 const RADIO_PUEBLO: f32 = 140.0;
+/// Años de descubrimiento que ya tiene un mundo al empezar (ver `Mundo::precalentar_descubrimientos`).
+const PRECALENTAR_ANIOS: u32 = 160;
 
 const CIAN: Color = Color::srgb(0.55, 0.95, 1.0);
 const FONDO: Color = Color::srgb(0.03, 0.045, 0.08);
@@ -141,12 +143,19 @@ impl Civ {
             Some(a) if a.mundo.semilla == semilla => {
                 let mut m = a.mundo;
                 m.reindexar();
+                // Un mundo guardado antes del descubrimiento (o jugado poco) tiene los cuadernos vacíos: se le da el
+                // mismo punto de partida que a uno nuevo.
+                if m.pueblos.values().map(|p| p.cuaderno.firmes().count()).sum::<usize>() < 6 {
+                    let n = m.precalentar_descubrimientos(PRECALENTAR_ANIOS);
+                    eprintln!("ha-civ: descubrimientos precalentados ({PRECALENTAR_ANIOS} años, {n} recetas firmes)");
+                }
                 let ausente = ahora().saturating_sub(a.unix) as f32 / SEGUNDOS_POR_DIA;
                 self.pendientes = (ausente as u64).min(TOPE_DIAS_AUSENTE);
                 self.mundo = Some(m);
             }
             _ => {
-                let m = Mundo::sembrar(semilla, &sitios_tierra());
+                let mut m = Mundo::sembrar(semilla, &sitios_tierra());
+                m.precalentar_descubrimientos(PRECALENTAR_ANIOS);
                 eprintln!("ha-civ: mundo sembrado ({} pueblos, {} personas)", m.pueblos.len(), m.personas.len());
                 self.mundo = Some(m);
                 self.sucio = true;
@@ -214,6 +223,13 @@ impl Civ {
         let pu = m.pueblos.get(&per.pueblo)?;
         let cargo = if pu.gobernante == Some(p) { format!("gobierna {}", pu.nombre) } else { format!("{} de {}", per.oficio.etiqueta(), pu.nombre) };
         Some(format!("{}, {}", per.nombre, cargo))
+    }
+
+    /// El oficio del NPC `uid` SI ya encarna a una persona (no asigna nada).
+    pub(crate) fn oficio_de_npc(&self, uid: u64) -> Option<ha_shared::civ::persona::Oficio> {
+        let m = self.mundo.as_ref()?;
+        let p = m.persona_de_npc((uid as u32).max(1))?;
+        Some(m.personas.get(&p)?.oficio)
     }
 
     /// Como `persona_para`, pero para los que se ven estudiando: si el NPC todavía no encarna a

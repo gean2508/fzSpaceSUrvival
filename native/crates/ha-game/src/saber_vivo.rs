@@ -163,10 +163,16 @@ fn estudiar(
         let entrada = t.gente.entry(uid);
         let est = match entrada {
             std::collections::hash_map::Entry::Vacant(v) => {
-                // Sólo uno de cada cinco aldeanos se anota para estudiar; los demás no gastan nada.
-                if uid % 5 != 0 || mirados >= MIRAR {
+                // Estudia quien YA es erudito/artesano (su persona está encarnada) y, de los que todavía no encarnan a
+                // nadie, uno de cada cinco (a ése se le busca un erudito libre). Los demás no gastan nada.
+                let oficio = civ.oficio_de_npc(uid);
+                let candidato = matches!(oficio, Some(Oficio::Erudito | Oficio::Artesano)) || (oficio.is_none() && uid % 5 == 0);
+                if !candidato {
                     v.insert(None);
                     continue;
+                }
+                if mirados >= MIRAR {
+                    continue; // en otra pasada: no se descarta
                 }
                 mirados += 1;
                 let s = civ.saber_de_npc(uid, n.x, n.z, true).filter(|s| matches!(s.oficio, Oficio::Erudito | Oficio::Artesano) && !s.recetas.is_empty());

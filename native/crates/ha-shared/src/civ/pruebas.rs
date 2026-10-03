@@ -454,3 +454,22 @@ fn el_jugador_le_ensena_una_receta_a_un_pueblo() {
     assert!(m.pueblos[&pueblo].cuaderno.producibles().contains(&mat.id));
     assert!(!m.pueblo_aprende_del_jugador(pueblo, &e, &mat), "enseñarla dos veces no suma");
 }
+
+/// Un mundo recién sembrado y precalentado ya tiene qué estudiar: los cuadernos no están vacíos, y cada semilla da
+/// recetas distintas. Sin la crónica llena de «descubrimientos» del día cero.
+#[test]
+fn el_mundo_nuevo_trae_cuadernos_con_algo_que_estudiar() {
+    let s = sitios_falsos(24);
+    let mut huellas = std::collections::BTreeSet::new();
+    for semilla in [31u64, 32, 33] {
+        let mut m = Mundo::sembrar(semilla, &s);
+        let cronica = m.cronica.hechos.len();
+        let n = m.precalentar_descubrimientos(160);
+        assert!(n >= 8, "semilla {semilla}: sólo {n} recetas firmes en todo el mundo");
+        let con_recetas = m.pueblos.values().filter(|p| p.cuaderno.firmes().count() > 0).count();
+        assert!(con_recetas * 2 >= m.pueblos.len(), "semilla {semilla}: {con_recetas}/{} pueblos con recetas", m.pueblos.len());
+        assert_eq!(m.cronica.hechos.len(), cronica, "la crónica quedó con hechos del día cero");
+        huellas.insert(m.pueblos.values().map(|p| p.cuaderno.firmes().count()).collect::<Vec<_>>());
+    }
+    assert!(huellas.len() >= 2, "todas las semillas dieron lo mismo");
+}

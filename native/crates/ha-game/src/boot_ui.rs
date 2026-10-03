@@ -686,7 +686,8 @@ fn tick_splash(
         next.set(GamePhase::Loading);
         return;
     }
-    timer.0 += time.delta_secs();
+    // Un cuadro lento (la carga inicial en el celu tarda segundos) no se come la splash: se cuenta a lo sumo 50 ms por cuadro.
+    timer.0 += time.delta_secs().min(0.05);
     if timer.0 >= SPLASH_SECS {
         next.set(GamePhase::MainMenu);
     }

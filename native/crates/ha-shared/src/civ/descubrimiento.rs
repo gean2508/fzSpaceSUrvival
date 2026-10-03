@@ -283,6 +283,26 @@ impl Mundo {
         }
     }
 
+    /// **Un mundo nuevo no empieza en el año cero del conocimiento**: el descubrimiento va a ritmo de siglos, y sin esto un
+    /// jugador veía cuadernos VACÍOS durante horas (los eruditos no tenían nada que probar). Corre `anios` años de
+    /// descubrimiento y nada más —sin guerras, elecciones ni nacimientos— y borra de la crónica lo que escribió, para
+    /// que no aparezcan «descubrimientos» fechados el día cero. Deja a cada pueblo con unas cuantas recetas firmes, distintas
+    /// por pueblo y por semilla. Devuelve cuántas recetas firmes hay en total.
+    pub fn precalentar_descubrimientos(&mut self, anios: u32) -> usize {
+        let antes = self.cronica.hechos.len();
+        let sig = self.cronica.siguiente;
+        let totales = self.cronica.totales.clone();
+        for _ in 0..anios {
+            self.descubrimiento_anual();
+        }
+        while self.cronica.hechos.len() > antes {
+            self.cronica.hechos.pop_back();
+        }
+        self.cronica.siguiente = sig;
+        self.cronica.totales = totales;
+        self.pueblos.values().map(|p| p.cuaderno.firmes().count()).sum()
+    }
+
     /// **El jugador le enseña a un pueblo una receta que descubrió.** El pueblo la anota (de oído: ya
     /// la usa, aunque nadie de ahí la haya probado) y lo que puede hacer se recalcula. `false` si el
     /// pueblo ya la sabía.
