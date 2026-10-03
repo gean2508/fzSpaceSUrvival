@@ -86,6 +86,18 @@ const NPC_REPRO_COST: f32 = 0.5;
 const AGGRO_THRESHOLD: f32 = -0.55; // rep por debajo → la familia te ENFRENTA (no huye)
 // --- F7 RELIGIÓN + propósito (role-play) ---
 const NUM_SKINS: u64 = 20; // hojas horneadas por el Character Generator (npc/char_1..20)
+/// Las seis hojas de NIÑOS (`npc/char_21..26`, `scripts/hornear-ninos.py`): cuerpo, ropa y peinado de niño del pack.
+const NUM_SKINS_NINO: u64 = 6;
+
+/// **La hoja de este aldeano según su edad.** Los niños nacidos en el juego usan las capas infantiles del pack (no un
+/// adulto achicado); al crecer cambian a la hoja adulta de siempre (`uid % 20`), así que el retrato sigue al cuerpo.
+pub(crate) fn skin_de(uid: u64, edad: f32, padre: u64, madre: u64) -> String {
+    if matches!(linaje::etapa(edad, padre != 0 || madre != 0), linaje::Etapa::Nino) {
+        format!("npc/char_{}", 21 + uid % NUM_SKINS_NINO)
+    } else {
+        format!("npc/char_{}", (uid % NUM_SKINS) + 1)
+    }
+}
 /// Tamaño en mundo del aldeano: el MISMO que el jugador (`scene.rs`), porque
 /// ahora comparten hoja y frame (16×32 = 1:2). Un humano de ~1,9 m.
 const NPC_SIZE: Vec2 = Vec2::new(0.95, 1.9);
@@ -928,7 +940,7 @@ fn spawn_npc(
     // `ha-asset-tools::chargen`, hoja 16×32 igual a la del jugador). Mismo tamaño
     // humano que el jugador (0.95×1.9): el frame es 1:2, forzarlo a cuadrado
     // achataba al aldeano.
-    let skin = format!("npc/char_{}", (rec.uid % NUM_SKINS) + 1);
+    let skin = skin_de(rec.uid, rec.age, rec.padre, rec.madre);
     let sprite = art.sprite_or_color(&skin, Color::srgb(0.85, 0.82, 0.75), NPC_SIZE);
     let r = render_xy(rec.x, rec.z);
     let mut ent = commands
@@ -1883,7 +1895,12 @@ fn tick_society(
         let r = render_xy(n.x, n.z);
         // La edad se ve: el niño es más bajo (escala desde el centro → se baja para que los pies
         // queden donde estaban) y el anciano se nota en el color más abajo.
-        let k = linaje::escala_por_edad(n.age, n.padre != 0 || n.madre != 0);
+        // La hoja infantil ya dibuja a un niño (≈70 % de un adulto): sólo se achica el bebé recién nacido.
+        let k = if matches!(linaje::etapa(n.age, n.padre != 0 || n.madre != 0), linaje::Etapa::Nino) {
+            0.7 + 0.3 * (linaje::escala_por_edad(n.age, true) - 0.6) / 0.4
+        } else {
+            1.0
+        };
         if (tf.scale.x - k).abs() > 0.005 {
             tf.scale = Vec3::new(k, k, 1.0);
         }
@@ -1900,7 +1917,7 @@ fn tick_society(
             _ => format!("idle_{dir}"),
         };
         if pose.pedida != pedida {
-            let clave = format!("npc/char_{}", (n.uid % NUM_SKINS) + 1);
+            let clave = skin_de(n.uid, n.age, n.padre, n.madre);
             crate::fauna::apply_pose(&mut commands, e, &art, &clave, &pedida, &mut sprite, &mut pose.aplicada);
             pose.pedida = pedida;
         }

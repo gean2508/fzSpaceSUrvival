@@ -230809,6 +230809,84 @@
     "w": 1
    }
   },
+  "npc/char_21": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/npc/char_21.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "npc/char_22": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/npc/char_22.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "npc/char_23": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/npc/char_23.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "npc/char_24": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/npc/char_24.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "npc/char_25": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/npc/char_25.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "npc/char_26": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/npc/char_26.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
   "npc/char_3": {
    "grid": [
     32,

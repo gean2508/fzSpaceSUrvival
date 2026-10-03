@@ -8638,3 +8638,13 @@ resuelve lo modular.
 * **Mirarlo**: `HA_BARRIOTEST=1` (viviendas) y `HA_BARRIO_CIVICO=1 HA_BARRIOTEST=1` (campus, oficinas, comisaría).
   Con Xvfb va **sin** `WGPU_BACKEND` (con `gl` aborta en EGL).
 * Memoria: 32 edificios son ~36 MB de textura. Se recortaron las variantes (6 de 8 casas chicas, 3 villas, 2 comisarías…).
+
+### Skins de niños — `hornear-ninos.py` (3 oct 2026)
+
+Los hijos de la sociedad eran adultos achicados. El pack trae las capas infantiles (`Bodies_kids`, `Eyes_kids`,
+`Outfits_kids`, `Hairstyles_kids`, hojas de 24×4 celdas de 32×64, **otro layout** que las de adultos). El script las apila
+en el orden del generador (ojos y ropa miden 768×192: van corridos una fila), las pasa a la hoja COMPACTA del aldeano y
+deja seis: `art/npc/char_21..26.png`. Les faltan `sit_floor`/`pick_up`/`punch`: se arman con cuadros de `idle`.
+`society::skin_de(uid, edad, padre, madre)` elige la hoja por etapa (niño → 21..26, el resto `uid % 20`); al crecer cambia
+a la adulta en el próximo cambio de pose. El bebé recién nacido se achica (70 %→100 % de una hoja que ya es ~70 % de un
+adulto). **Pendiente conocido**: el retrato del diálogo sigue siendo el del generador de adultos.

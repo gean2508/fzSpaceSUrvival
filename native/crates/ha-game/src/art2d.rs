@@ -1765,7 +1765,8 @@ mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 20);
+        // 20 aldeanos adultos (`char_1..20`) + 6 skins de niño (`char_21..26`, `scripts/hornear-ninos.py`).
+        assert_eq!(n, 26);
     }
 
     use super::*;
