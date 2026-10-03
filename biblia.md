@@ -8282,6 +8282,7 @@ escasez, heridas, amenazas nocturnas, fortificar la base, habilidades por uso, s
 Investigación de diseño (sandbox/survival): el bucle que engancha es *recolectar → fabricar →
 herramienta mejor → recolectar más profundo*, con metas visibles que enseñan el circuito,
 peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los busque.
+Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§19**.
 
 **Hecho**
 * `metas.rs`: cadena de 13 metas (madera → pico → piedra → antorcha → cuero → ropa → hierro →
@@ -8659,3 +8660,216 @@ El usuario reportó que el juego iba tan lagueado que Android mató procesos (Ta
    estudio y la huella no coincide, cae al camino viejo (componer en un hilo, caché en disco).
 2. **Texturas de fachadas**: 49 MB → ~26 MB de contenido (23 edificios, 1-3 variantes por lote, páginas de 2048).
 Pendiente de medir en el celu: RAM y fps con ambos cambios.
+
+---
+
+## §19 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)
+
+Pedido del usuario: *«buscar en internet los juegos desde el 2000 hasta la actualidad y armar una
+lluvia de ideas de lo que los hizo divertidos, un boom, aceptados por la gente; llevarlo a mi juego
+para que sea divertido, tenga sentido, haya cosas que hacer y la gente prefiera estar en mi juego
+que en la vida real — el OASIS de Ready Player One, a ese nivel»*. Complementa los pilares de §16
+(OASIS + Project Zomboid). Nada de esto está hecho: es la **cantera** de donde salen las próximas
+features. Antes de tomar cualquiera, pasá el checklist de §2 y la regla 2 (60 fps del Redmi).
+
+**Juegos revisados**: Minecraft, Roblox, Fortnite, WoW, Second Life, Habbo/Club Penguin, VRChat,
+EVE Online, GTA V RP (NoPixel), Stardew Valley, Animal Crossing NH, RimWorld, Dwarf Fortress,
+Zelda BotW/TotK, Elden Ring, Death Stranding, Among Us, Lethal Company, Palworld, Valheim,
+Terraria, Rust/DayZ, Hades, Vampire Survivors, Balatro, Wordle, Pokémon GO. Más la psicología que
+los explica: **teoría de la autodeterminación** (autonomía, competencia, vínculo — las tres
+predicen disfrute y ganas de volver, Ryan/Rigby/Przybylski) y el **modelo de Quantic Foundry**
+(12 motivaciones en 6 grupos: acción, social, maestría, logro, inmersión, creatividad; >1,75 M
+encuestados).
+
+### A. Los 16 motores que se repiten
+
+Cada uno: **qué juegos**, **por qué funciona**, **qué tiene Ki hoy** → **qué falta**.
+
+1. **Tres escalas de recompensa a la vez** — Hades, Vampire Survivors, Minecraft. Segundos (el
+   golpe), minutos (la sala, el botín), horas (desbloqueos, historia). Es lo que produce «una más».
+   Ki: golpe/talar · metas y alijos · civilización y la Luna. **Falta el jugo del segundo**: el
+   golpe no «cruje» (Balatro vive de sonidos crocantes y números que saltan).
+2. **Un lienzo, no un camino** — Minecraft, Roblox, Terraria. Gráficos simples que dejan imaginar,
+   herramientas en vez de historia. Ki: construir, planos, cavar. Falta: que lo construido **se
+   comparta** (ver 15).
+3. **Diseño multiplicativo (química)** — Zelda BotW: objetos que se afectan entre sí (fuego, agua,
+   viento, metal, temperatura); el jugador inventa soluciones que nadie previó. Ki ya tiene una
+   química más profunda que casi cualquier juego (`civ/materia.rs`: 7 propiedades ocultas, 8 leyes)
+   **pero vive en un menú**. Falta que toque el mundo.
+4. **Historias que nadie escribió** — RimWorld, Dwarf Fortress, EVE, NoPixel. El juego no narra:
+   da sistemas comprensibles que chocan y el jugador cuenta lo que pasó. Clave de RimWorld: la sim
+   no es demasiado compleja *para que se entienda la causa*. Ki tiene civ, Sims, barrio y rastro
+   causal (`/causal`). **Falta un narrador que lo muestre**: hoy la historia pasa en números.
+5. **Identidad y autoexpresión** — Habbo, VRChat, Animal Crossing, skins de Fortnite. La gente se
+   queda donde *es alguien*. Ki: creador, 43 prendas, casa. Falta la firma del juego: **el aura de
+   Ki** como seña personal.
+6. **Vínculo y pertenencia** — WoW (gremios), Valheim (roles naturales: constructor, explorador,
+   luchador), Stardew (corazones con cada vecino). El 20 % de los jugadores de MMO dice que el mundo
+   virtual es *su residencia principal*: lo que los ata son personas. Ki: amistad, familia, sectas,
+   multijugador con presencia y chat. Falta grupo de jugadores con casa común y vecinos que te
+   recuerden por nombre.
+7. **Consecuencia permanente** — EVE: «lo que pasa queda en la historia para siempre», guerras de
+   miles de jugadores. Ki: guardado por partida, crónica de la civ. **Falta el mundo compartido
+   persistente** (§15: hoy hay presencia y chat, no mundo común). Es la base del OASIS.
+8. **Rituales y estaciones** — Animal Crossing (reloj real), Stardew (festivales), Wordle (un
+   desafío por día, igual para todos, se comparte sin arruinarlo). Hábito sin culpa.
+9. **Eventos en vivo, una sola vez** — Fortnite (concierto de Travis Scott: 12 M a la vez),
+   Destiny. «Yo estuve ahí». Ki: hordas cada 3.ª noche (§16). Falta lo único e irrepetible.
+10. **Momentos para mostrar** — Among Us, Lethal Company, NoPixel: el caos social y gracioso se
+    vuelve clip y el clip trae jugadores. Barato de entrar, mejor con amigos.
+11. **Coleccionar y completar** — Pokémon GO, Palworld (criaturas que trabajan en tu base), museo
+    de Animal Crossing. Ki: fauna con IA evolutiva, doma (§6). Falta el catálogo y el trabajo.
+12. **Maestría con techo alto** — Elden Ring, Souls, Hades. Difícil pero justo; el progreso es
+    *tuyo*. Ki: vuelo y combate básico. Falta lo que DBZ promete: técnicas, entrenar, rivales.
+13. **Ayuda entre desconocidos (asincrónica)** — Death Stranding (puentes y carteles de otros en tu
+    mundo), Elden Ring (mensajes, manchas de sangre, fantasmas). Compañía sin tener que coordinar.
+14. **Economía de jugadores** — EVE (casi todo lo fabrican los jugadores), Albion. El comercio da
+    oficio y sentido a especializarse. Ki: vender/comprar a NPC (§16), recetas descubiertas (§18).
+15. **Creación de los jugadores** — Roblox, mods de Minecraft, Mario Maker: el contenido infinito lo
+    hace la comunidad. Ki: HA Studio existe, pero es del desarrollador.
+16. **Refugio y contraste** — lo cozy (Stardew, Animal Crossing) pega más fuerte después del miedo
+    (Zomboid, Valheim): volver a casa tras la horda es alivio. Ki tiene los dos lados; falta que la
+    casa *se sienta* hogar.
+
+### B. Lluvia de ideas para Ki (agrupadas por motor)
+
+**El segundo (1)**
+* Golpe con jugo: parada de 2-3 frames al pegar, astillas/chispas del material, número de daño que
+  salta, sonido en capas por material (skill `audio-sfx`). Barato y se nota en todo.
+* La carga de Ki se *siente*: zumbido que sube, piedritas que levitan, cámara que tiembla apenas.
+
+**La química al mundo (3)** — reusar `materia.rs`, cero reglas nuevas
+* El fuego se propaga por lo combustible (pasto seco, paredes de madera, muebles); el agua y la
+  lluvia lo apagan. Defender con piedra ya importa (§16): que el fuego también lo enseñe.
+* Ráfaga de Ki contra roca = la parte según dureza; contra metal conductor bajo la lluvia, arco.
+* Alijos con más de una solución: quemar la puerta, cavar por debajo, volar por arriba, romper con Ki.
+
+**El narrador (4)** — la sim ya existe, falta *contarla*
+* **El diario del pueblo**: una hoja por día con 3-5 titulares sacados del rastro causal («Murió
+  la herrera Ana; su hijo heredó la fragua», «El forastero nos enseñó a hacer vidrio»).
+* **Narrador tipo RimWorld** que dosifica: después de una racha tranquila, un evento; después de una
+  tragedia, respiro. Sólo elige *cuándo*, nunca inventa causas (verdad en un lugar, §2).
+* Vecinos que te recuerdan: «vos sos el que nos salvó en la horda del día 8». Lápidas con epitafio.
+* **Leyendas**: lo que un jugador hizo de grande queda como estatua o canción que los NPC cantan.
+
+**Identidad (5)**
+* **Aura de Ki personal**: color, forma (llama, rayos, chispas), estela de vuelo. La firma del juego
+  y lo primero que ven los demás.
+* Títulos ganados (de las llaves y metas de §16) visibles sobre el nombre.
+* Modo foto con poses y marco que guarda el PNG para compartir.
+
+**Vínculo (6)**
+* **Clan**: grupo de jugadores con casa común, bandera y cofre compartido; roles que salen solos.
+* Corazones con vecinos: regalos que les gustan (de su credo y oficio), eventos a cierto nivel,
+  pareja e hijos con NPC (los hijos ya existen, §6).
+* Maestro de Ki NPC que te entrena si le ganás la confianza (y te reta si no).
+
+**Persistencia (7)**
+* **Mundo compartido en el servidor** (Colyseus ya es autoritativo, §2 regla 4): un planeta común
+  donde lo construido queda. El resto de los planetas siguen privados. Es *el* salto al OASIS.
+* Monumentos: lo que construye un clan aparece en el mapa de todos.
+
+**Rituales (8)** — sin castigo por faltar
+* **Alijo del día**: misma semilla para todos, se comparte el tiempo y las bajas sin revelar dónde.
+* Festivales de los pueblos por estación: cosecha, solsticio, día de la fundación de su credo.
+* Visitante errante raro (mercader de otro planeta) que aparece algunos días.
+
+**Eventos únicos (9)**
+* **Torneo de las Artes Marciales** cada N días en la ciudad grande: inscripción, rivales NPC con
+  técnica propia, público que alienta; en multijugador, jugadores contra jugadores.
+* Cae un meteoro: cráter con materia que no existía en ese mundo (nuevas reacciones de §18).
+* Eclipse: noche larga con horda grande y algo raro para el que la sobreviva.
+
+**Momentos (10)**
+* **El mordido encubierto** (Among Us + Zomboid): en una expedición de grupo, a uno lo muerden y
+  se transforma a la noche si no lo descubren/curan. Sólo en multijugador, opcional.
+* **Expedición con cuota** (Lethal Company): bajar al subsuelo en grupo a juntar lo que pide el
+  pueblo antes de un plazo; botín y peligro crecen con la distancia a la boca.
+
+**Colección (11)**
+* **Bestiario** que se llena al observar/domar: cada especie con su conducta *aprendida* (la IA
+  evolutiva de §6 hace que dos mundos tengan fauna distinta: el bestiario es único).
+* Fauna domada que trabaja (acarrea, cuida la huerta, avisa de infectados) y pelea con vos.
+* Museo del pueblo que se llena con lo que donás (gemas, materias, fósiles del subsuelo).
+
+**Maestría (12)**
+* **Técnicas de Ki** que se aprenden entrenando, no comprando: ráfaga cargada, esquiva corta,
+  teletransporte de unos metros, escudo. Combinables con la química (ráfaga + fuego).
+* **Jefes de mundo**: el alfa de una especie que evolucionó demasiado, el titán de infectados de la
+  horda grande. Con patrón legible y aprendible.
+* Entrenar con gravedad alta en otro planeta (la cámara de gravedad de DBZ) para subir más rápido.
+
+**Ayuda asincrónica (13)**
+* Carteles que deja un jugador y aparecen en el mundo de otros («ojo: horda al norte», «agua acá»),
+  con votos de «útil».
+* La mancha donde murió alguien: tocarla muestra sus últimos 5 segundos (en fantasma).
+* El puente o camino que construye uno aparece, gastado, en el mundo de otros.
+
+**Economía (14)**
+* Mercado entre jugadores; **una receta descubierta es un bien** (venderla o enseñarla).
+* Escasez por planeta/región que hace valer el viaje con Ki (lo que abunda allá falta acá).
+
+**Creación (15)**
+* Planos de casa exportables como texto corto para compartir y construir el de otro.
+* A largo plazo: un planeta propio donde el jugador arma su minijuego con las piezas del juego.
+
+**Refugio (16)**
+* La casa como hogar: mascota que espera en la puerta, ruido de lluvia en el techo, fuego que
+  calienta (ya hay frío, §16), música tranquila adentro, cama que guarda la partida.
+
+**Primera sesión** (lo que hacen bien Roblox, Among Us y Pokémon GO: entrar es gratis y rápido)
+* El primer vuelo de Ki en los primeros 5 minutos: es la promesa del juego y lo que nadie más tiene.
+
+### C. El OASIS, y la línea que no se cruza
+
+El OASIS gana porque es **el lugar donde sos alguien, con gente que te importa, y donde lo que
+hacés queda**. Eso es lo que hay que construir: autonomía, maestría y vínculo de verdad (los tres
+predictores de la teoría de la autodeterminación). Y vale recordar el final de la película:
+Halliday dice que la realidad es lo único real, y Wade cierra el OASIS dos días por semana.
+
+La investigación sobre «patrones oscuros» es clara: retención por ansiedad (rachas que castigan,
+FOMO pagado, cajas de botín, esperas que se cobran) funciona un tiempo y quema a la gente, sobre
+todo a la más vulnerable. **Regla de Ki**: la gente vuelve porque quiere, no porque teme perder algo.
+* Nada de cajas de botín ni nada que se pague por azar.
+* Los rituales premian venir, nunca castigan faltar (no se pierde la racha, no se pudre la casa).
+* Lo único irrepetible (eventos de 9) deja recuerdo y título, no ventaja de poder.
+* El juego avisa la hora real con cariño en sesiones largas (una línea, sin bloquear: regla 9).
+
+### D. Prioridad (impacto ÷ costo, respetando el Redmi)
+
+1. **Jugo del golpe y de la carga de Ki** — barato, mejora cada segundo de juego.
+2. **El diario del pueblo + vecinos que recuerdan** — la sim ya existe; sólo hay que contarla.
+3. **Técnicas de Ki + aura personal** — la identidad del juego; nadie más la tiene.
+4. **Torneo de las Artes Marciales** — evento recurrente con rivales, público y premio.
+5. **Fuego que se propaga** (química al mundo, reusa `materia.rs`).
+6. **Fauna domada que trabaja + bestiario**.
+7. **Festivales + alijo del día**.
+8. **Carteles y fantasmas asincrónicos** (necesita el servidor, no el mundo compartido).
+9. **Jefes de mundo + expedición con cuota**.
+10. **Mundo compartido persistente + clanes** — el más caro y el que más acerca al OASIS; arrancar
+    el diseño de red apenas 1-3 estén.
+
+Cada una, cuando se tome: costo medido, cupo por frame, verdad en un solo lugar, consola de texto,
+prueba multi-semilla (§2) y arte del pack o dibujado con la skill `pixel-art` antes de que cueste.
+
+**Fuentes**: [Minecraft/Roblox/Fortnite](https://thenextweb.com/news/minecraft-roblox-popularity-surge-fortnite) ·
+[comparación de los tres](https://blog.usro.net/2025/05/roblox-vs-fortnite-vs-minecraft-full-comparison/) ·
+[juegos cozy](https://soulbound.game/blog/20-games-like-stardew-valley-for-cozy-farming-adventures/) ·
+[Among Us](https://sowhatgaming.substack.com/p/can-among-us-be-more-than-a-party) ·
+[Lethal Company](https://gamedevreports.substack.com/p/editorial-lethal-company-the-indie) ·
+[virales](https://www.denofgeek.com/tv/15-games-that-took-over-the-internet-overnight/) ·
+[psicología de mundos virtuales (Stanford)](https://cs.stanford.edu/people/eroberts/cs181/projects/virtual-worlds/psychology.html) ·
+[RimWorld y Dwarf Fortress](https://gamedeveloper.com/design/how-i-rimworld-i-fleshes-out-the-i-dwarf-fortress-i-formula) ·
+[EVE Online](https://mezha.ua/en/articles/istoriya-ta-osoblivosti-gri-eve-online-312793/) ·
+[NoPixel](https://shockbyte.com/blog/what-is-nopixel-v) ·
+[multijugador ambiental](https://www.theringer.com/2024/06/21/video-games/ambient-multiplayer-video-games-elden-ring-dragons-dogma-journey) ·
+[autodeterminación (Rochester)](https://www.rochester.edu/warner/lida/wp-content/uploads/2022/11/02bfe513dd59366750000000.pdf) ·
+[Quantic Foundry](https://quanticfoundry.com/) ·
+[Zelda BotW](https://en.wikipedia.org/wiki/The_Legend_of_Zelda:_Breath_of_the_Wild) ·
+[química de BotW](https://gamesbeat.com/the-legend-of-zelda-breath-of-the-wild-makes-chemistry-just-as-important-as-physics/) ·
+[espacios sociales](https://mastersofmedia.hum.uva.nl/2019/10/the-game-of-life-a-case-study-of-video-games-as-social-platforms) ·
+[concierto de Fortnite](https://videogameschronicle.com/news/fortnites-latest-live-event-attracted-a-record-12-million-players) ·
+[Valheim](https://gameinformer.com/2021/02/15/what-is-valheim-and-why-is-everyone-playing-it) ·
+[Vampire Survivors](https://jmduke.com/posts/vampire-survivors.html) ·
+[Wordle](https://www.newswise.com/articles/the-word-on-wordle) ·
+[patrones oscuros](https://deceptive.design/articles/level-up-or-game-over-exploring-how-dark-patterns-shape-mobile-games).
