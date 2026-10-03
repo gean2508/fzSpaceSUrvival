@@ -33639,6 +33639,15 @@
   },
   "items/ammo_energia": {
    "label": "Celdas de energía"
+  },
+  "player/en_mano": {
+   "label": "Lo que el jugador come o bebe"
+  },
+  "player/ondas": {
+   "label": "Ondas del jugador al nadar"
+  },
+  "player/libro": {
+   "label": "Libro en la mano del jugador"
   }
  },
  "origen": {
@@ -278912,6 +278921,103 @@
     "row": 0,
     "w": 2,
     "h": 2
+   }
+  },
+  "player/en_mano": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/gen/jugador/en_mano.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   },
+   "poses": {
+    "comer": {
+     "anim": {
+      "fps": 8.0,
+      "frames": 12
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "beber": {
+     "anim": {
+      "fps": 8.0,
+      "frames": 12
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 1,
+      "w": 1
+     }
+    }
+   }
+  },
+  "player/ondas": {
+   "grid": [
+    48,
+    16
+   ],
+   "png": "art/gen/jugador/ondas.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   },
+   "poses": {
+    "nadar": {
+     "anim": {
+      "fps": 6.0,
+      "frames": 4
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 0,
+      "w": 1
+     }
+    }
+   }
+  },
+  "player/libro": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/pack/jugador_libro.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   },
+   "poses": {
+    "leer": {
+     "anim": {
+      "fps": 6.0,
+      "frames": 12
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 0,
+      "w": 1
+     }
+    }
    }
   }
  }
