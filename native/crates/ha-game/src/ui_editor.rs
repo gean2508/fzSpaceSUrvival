@@ -177,11 +177,6 @@ enum CalAdjust {
     CurveUp,
     RenderDown,
     RenderUp,
-    // FASE 4 (audio): volumen SFX/Música en vivo.
-    SfxDown,
-    SfxUp,
-    MusicDown,
-    MusicUp,
 }
 
 #[derive(Component)]
@@ -219,8 +214,10 @@ pub enum UiEditorCommand {
 
 const EDITOR_PANEL_W: f32 = 116.0;
 const EDITOR_PANEL_H: f32 = 436.0;
-const SETTINGS_PANEL_W: f32 = 168.0;
-const SETTINGS_PANEL_H: f32 = 168.0;
+const SETTINGS_PANEL_W: f32 = 220.0;
+const SETTINGS_PANEL_H: f32 = 252.0;
+/// Ancho útil adentro del panel (menos el relleno de 8 px por lado y el borde).
+const SETTINGS_INNER_W: f32 = SETTINGS_PANEL_W - 20.0;
 
 fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
     let mut panel_entity = Entity::PLACEHOLDER;
@@ -254,7 +251,7 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                     ))
                     .with_children(|header| {
                         header.spawn((
-                            Text::new("CALIBRATION"),
+                            Text::new("AJUSTES"),
                             TextFont {
                                 font_size: 11.0,
                                 ..default()
@@ -263,12 +260,25 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                         ));
                         spawn_editor_button(header, "X", UiEditorCommand::CloseSettings);
                     });
-                spawn_cal_row(panel, "Camera", CalAdjust::CamSensDown, CalAdjust::CamSensUp);
-                spawn_cal_row(panel, "Move", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp);
-                spawn_cal_row(panel, "Curve", CalAdjust::CurveDown, CalAdjust::CurveUp);
-                spawn_cal_row(panel, "Render", CalAdjust::RenderDown, CalAdjust::RenderUp);
-                spawn_cal_row(panel, "SFX", CalAdjust::SfxDown, CalAdjust::SfxUp);
-                spawn_cal_row(panel, "Music", CalAdjust::MusicDown, CalAdjust::MusicUp);
+                // Volumen arriba: es lo que más se busca en AJUSTES.
+                crate::volumen_ui::spawn_slider_volumen(
+                    panel,
+                    crate::volumen_ui::CanalVolumen::Efectos,
+                    SETTINGS_INNER_W,
+                    10.0,
+                    ui_theme::accent_ink(),
+                );
+                crate::volumen_ui::spawn_slider_volumen(
+                    panel,
+                    crate::volumen_ui::CanalVolumen::Musica,
+                    SETTINGS_INNER_W,
+                    10.0,
+                    ui_theme::accent_ink(),
+                );
+                spawn_cal_row(panel, "Cámara", CalAdjust::CamSensDown, CalAdjust::CamSensUp);
+                spawn_cal_row(panel, "Mover", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp);
+                spawn_cal_row(panel, "Curva", CalAdjust::CurveDown, CalAdjust::CurveUp);
+                spawn_cal_row(panel, "Detalle", CalAdjust::RenderDown, CalAdjust::RenderUp);
             })
             .id();
     });
@@ -413,34 +423,23 @@ fn spawn_cal_button(parent: &mut ChildBuilder, label: &str, adjust: CalAdjust) {
 
 fn calibration_button_system(
     mut config: ResMut<UiLayoutConfig>,
-    mut audio: ResMut<crate::audio::AudioSettings>,
     mut buttons: Query<(&Interaction, &CalAdjust, &mut BackgroundColor), Changed<Interaction>>,
 ) {
     for (interaction, adjust, mut bg) in &mut buttons {
         if *interaction == Interaction::Pressed {
+            let cal = &mut config.calibration;
             match adjust {
-                // Volumen (en vivo, 0..1). No toca la calibración/layout.
-                CalAdjust::SfxDown => audio.sfx = (audio.sfx - 0.1).clamp(0.0, 1.0),
-                CalAdjust::SfxUp => audio.sfx = (audio.sfx + 0.1).clamp(0.0, 1.0),
-                CalAdjust::MusicDown => audio.music = (audio.music - 0.1).clamp(0.0, 1.0),
-                CalAdjust::MusicUp => audio.music = (audio.music + 0.1).clamp(0.0, 1.0),
-                other => {
-                    let cal = &mut config.calibration;
-                    match other {
-                        CalAdjust::CamSensDown => cal.camera_sensitivity -= 0.1,
-                        CalAdjust::CamSensUp => cal.camera_sensitivity += 0.1,
-                        CalAdjust::MoveSensDown => cal.movement_sensitivity -= 0.1,
-                        CalAdjust::MoveSensUp => cal.movement_sensitivity += 0.1,
-                        CalAdjust::CurveDown => cal.stick_curve_exponent -= 0.1,
-                        CalAdjust::CurveUp => cal.stick_curve_exponent += 0.1,
-                        CalAdjust::RenderDown => cal.render_scale -= 0.05,
-                        CalAdjust::RenderUp => cal.render_scale += 0.05,
-                        _ => {}
-                    }
-                    config.calibration = cal.clamp();
-                    save_ui_layout(&config);
-                }
+                CalAdjust::CamSensDown => cal.camera_sensitivity -= 0.1,
+                CalAdjust::CamSensUp => cal.camera_sensitivity += 0.1,
+                CalAdjust::MoveSensDown => cal.movement_sensitivity -= 0.1,
+                CalAdjust::MoveSensUp => cal.movement_sensitivity += 0.1,
+                CalAdjust::CurveDown => cal.stick_curve_exponent -= 0.1,
+                CalAdjust::CurveUp => cal.stick_curve_exponent += 0.1,
+                CalAdjust::RenderDown => cal.render_scale -= 0.05,
+                CalAdjust::RenderUp => cal.render_scale += 0.05,
             }
+            config.calibration = cal.clamp();
+            save_ui_layout(&config);
         }
         *bg = BackgroundColor(ui_theme::button_bg(
             UiButtonTone::Primary,
@@ -449,7 +448,7 @@ fn calibration_button_system(
     }
 }
 
-fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration, audio: &crate::audio::AudioSettings) -> String {
+fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration) -> String {
     match adjust {
         CalAdjust::CamSensUp | CalAdjust::CamSensDown => {
             format!("{:.2}", cal.camera_sensitivity)
@@ -463,22 +462,19 @@ fn cal_label_for(adjust: CalAdjust, cal: &InputCalibration, audio: &crate::audio
         CalAdjust::RenderUp | CalAdjust::RenderDown => {
             format!("{:.0}%", cal.render_scale * 100.0)
         }
-        CalAdjust::SfxUp | CalAdjust::SfxDown => format!("{:.0}%", audio.sfx * 100.0),
-        CalAdjust::MusicUp | CalAdjust::MusicDown => format!("{:.0}%", audio.music * 100.0),
     }
 }
 
 fn update_settings_labels(
     state: Res<UiEditorState>,
     config: Res<UiLayoutConfig>,
-    audio: Res<crate::audio::AudioSettings>,
     mut labels: Query<(&CalLabel, &mut Text)>,
 ) {
     if !state.menu_open {
         return;
     }
     for (label, mut text) in &mut labels {
-        let line = cal_label_for(label.0, &config.calibration, &audio);
+        let line = cal_label_for(label.0, &config.calibration);
         if text.0 != line {
             text.0 = line;
         }

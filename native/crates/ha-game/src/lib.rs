@@ -69,6 +69,7 @@ mod transition;
 mod ui_editor;
 mod ui_theme;
 mod vault;
+mod volumen_ui;
 mod ui;
 mod world2d;
 
@@ -297,7 +298,7 @@ fn run_app_inner() {
             UiEditorPlugin,
             AutoDrivePlugin,
         ))
-        .add_plugins(AblatePlugin)
+        .add_plugins((AblatePlugin, volumen_ui::VolumenUiPlugin))
         .add_plugins(debug::StageProbePlugin)
         .add_plugins(chargen::ChargenPlugin)
         .add_plugins(loading::LoadingPlugin)

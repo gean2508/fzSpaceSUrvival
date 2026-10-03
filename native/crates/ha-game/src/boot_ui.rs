@@ -373,6 +373,12 @@ fn spawn_main_menu(mut commands: Commands, bg: Res<MenuBg>, touch: Res<TouchLayo
                     TextFont { font_size: (20.0 * s).clamp(14.0, 22.0), ..default() },
                     TextColor(NEON_CYAN),
                 ));
+                // Volumen: Efectos (golpes, talar, pasos, lluvia…) y Música,
+                // cada uno con su slider y su botón de silenciar.
+                let ancho = (240.0 * s).clamp(150.0, 260.0);
+                let fuente = (14.0 * s).clamp(11.0, 16.0);
+                crate::volumen_ui::spawn_slider_volumen(panel, crate::volumen_ui::CanalVolumen::Efectos, ancho, fuente, NEON_CYAN);
+                crate::volumen_ui::spawn_slider_volumen(panel, crate::volumen_ui::CanalVolumen::Musica, ancho, fuente, NEON_CYAN);
                 settings_button(panel, "PANTALLA COMPLETA", SettingsAction::ToggleFullscreen, s);
                 settings_button(panel, "VOLVER", SettingsAction::Close, s);
                 // HISTORIAL DE CIERRES. El renglón del menú se borra apenas se
