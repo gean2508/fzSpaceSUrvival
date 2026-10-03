@@ -8616,3 +8616,25 @@ Project Zomboid y hacé eso»*.
 * El picado con herramientas de material descubierto no cambia (necesita tocar `ha-shared` + TS).
 * Remiendo: sólo se modela como número de calidad; no hay obra visible de «subirse al techo».
 * El detalle visual de las casas y el cartel se miró en capturas de escritorio; el celu va al final.
+
+### Los edificios ENTEROS, uno por archivo — `import-completos.py` (3 oct 2026)
+
+El importador masivo corta las HOJAS por islas de píxel y bautiza con un nombre automático; cuando dos objetos
+terminaban con el mismo nombre, uno pasaba a ser «variante» del otro. Resultado visible: una casa entera con el módulo
+que venía pegado a su lado, **la universidad dibujada con el hospital** (`building/universidad` y `building/hospital`
+apuntaban al mismo recorte) y oficina = torre = dúplex. El pack trae cada pieza suelta en `*_Singles_32x32`: un archivo
+es un objeto entero y su nombre dice qué es. `scripts/import-completos.py` lee ESAS carpetas, copia 32 edificios a
+`art/pack/completos_N.png` (agrupados por slot, para que precargar la clave base traiga toda la familia), publica
+`completo/<tema>_<nombre>` y apunta los 13 slots de lote (`casa_chica…correo_edificio`) con sus variantes `#n`.
+Se descartan a propósito las piezas `Modular`, `Banister`, `Canopy`, `Side_View`, `Roof`: el sistema de construcción ya
+resuelve lo modular.
+
+* **Universidad = `Palace_Example_1`** (25×34, el palacio de Garden), **escuela = `School_1`**, hospital = `Hospital_1`.
+* **Orden de la cadena**: `…import-edificios → import-completos → medir-puertas → import-puertas-edificios` (las puertas
+  animadas se vuelven a medir sobre los dibujos nuevos; `medir-puertas` tarda ~12 min).
+* **Campus** (`city::es_campus`): universidad, escuela y hospital rodean el edificio de césped (no de baldosa), con
+  sendero hasta la puerta; el patio interior también es césped. Pesos: universidad 28, escuela 22. La huella de la
+  universidad es 32×32 (el sprite se ajusta al ancho de la huella con tope `AGRANDE_MAX`).
+* **Mirarlo**: `HA_BARRIOTEST=1` (viviendas) y `HA_BARRIO_CIVICO=1 HA_BARRIOTEST=1` (campus, oficinas, comisaría).
+  Con Xvfb va **sin** `WGPU_BACKEND` (con `gl` aborta en EGL).
+* Memoria: 32 edificios son ~36 MB de textura. Se recortaron las variantes (6 de 8 casas chicas, 3 villas, 2 comisarías…).

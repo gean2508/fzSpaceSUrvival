@@ -321,11 +321,11 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "building/limonada_puesto_1", cells: (6, 6), district: District::Park, weight: 8 },
     // ── Cívico: LOS GRANDES. Ocupan varias manzanas a propósito.
     LotProgram { key: "building/hospital", cells: (28, 22), district: District::Civic, weight: 14 },
-    LotProgram { key: "building/universidad", cells: (44, 32), district: District::Civic, weight: 10 },
-    LotProgram { key: "building/escuela", cells: (38, 28), district: District::Civic, weight: 16 },
+    LotProgram { key: "building/universidad", cells: (32, 32), district: District::Civic, weight: 28 },
+    LotProgram { key: "building/escuela", cells: (28, 16), district: District::Civic, weight: 22 },
     LotProgram { key: "building/comisaria", cells: (24, 20), district: District::Civic, weight: 14 },
     LotProgram { key: "building/bomberos", cells: (12, 10), district: District::Civic, weight: 12 },
-    LotProgram { key: "building/correo_edificio", cells: (20, 16), district: District::Civic, weight: 10 },
+    LotProgram { key: "building/correo_edificio", cells: (11, 9), district: District::Civic, weight: 10 },
     LotProgram { key: "building/estacion_tren", cells: (11, 7), district: District::Civic, weight: 6 },
 ];
 
@@ -1756,6 +1756,11 @@ fn edificado_de_lote(p: &LotProgram, lot: Lot) -> (i64, i64, i64, i64) {
 /// Edificio "macizo" (comercio, centro, industria, cívico): un rectángulo con
 /// paredes, ventanas y su vereda. Los grandes llevan patio interior para que no
 /// sean un bloque sólido de 56×40.
+/// Los edificios cívicos grandes se levantan en un **campus**: el predio es césped, no explanada de baldosa.
+pub fn es_campus(clave: &str) -> bool {
+    matches!(clave, "building/universidad" | "building/escuela" | "building/hospital")
+}
+
 fn plain_building_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
     let (w, d) = (lot.w, lot.h);
     // Estacionamiento: sólo losa y líneas, sin edificio.
@@ -1768,8 +1773,16 @@ fn plain_building_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, h: u32) -> Op
         return Some(Tile::Pavement);
     }
     let (bx, bz, bw, bd) = edificado_de_lote(p, lot);
-    // Lo que sobra del lote es explanada: vereda alrededor del edificio.
+    // Lo que sobra del lote es explanada: vereda alrededor del edificio. **Menos en los campus** (universidad,
+    // escuela, hospital): ahí lo que sobra es césped —el patio grande que los rodea— con un sendero de baldosa
+    // hasta la puerta y una franja de vereda pegada al frente.
     if lx < bx || lz < bz || lx >= bx + bw || lz >= bz + bd {
+        if es_campus(p.key) {
+            let puerta = bx + bw / 2;
+            let sendero = lz >= bz + bd && (lx == puerta || lx == puerta - 1);
+            let franja = lz == bz + bd;
+            return Some(if sendero || franja { Tile::Pavement } else { Tile::Grass });
+        }
         return Some(Tile::Pavement);
     }
     let (rx, rz) = (lx - bx, lz - bz);
@@ -1789,7 +1802,7 @@ fn plain_building_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, h: u32) -> Op
             if ring && !paso {
                 return Some(Tile::StoneBrick);
             }
-            return Some(Tile::Pavement);
+            return Some(if es_campus(p.key) { Tile::Grass } else { Tile::Pavement });
         }
     }
 

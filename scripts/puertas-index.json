@@ -1,8 +1,8 @@
 {
  "resumen": {
-  "sin_puerta_detectada": 2019,
-  "con_puerta": 283,
-  "con_hueco": 78
+  "sin_puerta_detectada": 2009,
+  "con_puerta": 236,
+  "con_hueco": 71
  },
  "puertas": {
   "23_MIlitary_Base_Dormitory_Door_1_2_32x32": {
@@ -631,58 +631,13 @@
      "aire": 1.5
     },
     {
-     "edificio": "building/casa_chica#4",
+     "edificio": "building/casa_chica#3",
      "como": "dibujada",
      "xy": [
       64,
       384
      ],
-     "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_chica#5",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_country#3",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_country#4",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_country#13",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_country#14",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_de_campo",
@@ -748,51 +703,6 @@
      "aire": 0.98
     },
     {
-     "edificio": "building/casa_grande",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_grande#1",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_grande#2",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_grande#13",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_grande#14",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
-    },
-    {
      "edificio": "building/casa_hilera",
      "como": "dibujada",
      "xy": [
@@ -818,42 +728,6 @@
       384
      ],
      "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_mediana#5",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_mediana#6",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.886
-    },
-    {
-     "edificio": "building/casa_mediana#11",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_mediana#12",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
     },
     {
      "edificio": "building/casas_casa_cartel_get_out_embrujada",
@@ -889,22 +763,13 @@
      "aire": 1.0
     },
     {
-     "edificio": "building/casa_chica#6",
+     "edificio": "building/casa_chica#5",
      "como": "dibujada",
      "xy": [
       224,
       384
      ],
-     "igual": 0.9
-    },
-    {
-     "edificio": "building/casa_country#15",
-     "como": "dibujada",
-     "xy": [
-      224,
-      384
-     ],
-     "igual": 0.9
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_en_terrazas_4",
@@ -925,25 +790,7 @@
      "igual": 0.9
     },
     {
-     "edificio": "building/casa_grande#15",
-     "como": "dibujada",
-     "xy": [
-      224,
-      384
-     ],
-     "igual": 0.9
-    },
-    {
      "edificio": "building/casa_hilera#2",
-     "como": "dibujada",
-     "xy": [
-      224,
-      384
-     ],
-     "igual": 0.9
-    },
-    {
-     "edificio": "building/casa_mediana#7",
      "como": "dibujada",
      "xy": [
       224,
@@ -985,58 +832,13 @@
      "aire": 1.5
     },
     {
-     "edificio": "building/casa_chica#7",
+     "edificio": "building/casa_chica#6",
      "como": "dibujada",
      "xy": [
       222,
       384
      ],
-     "igual": 0.846
-    },
-    {
-     "edificio": "building/casa_chica#8",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.895
-    },
-    {
-     "edificio": "building/casa_country#3",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_country#4",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_country#16",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.846
-    },
-    {
-     "edificio": "building/casa_country#17",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.895
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_de_campo",
@@ -1093,51 +895,6 @@
      "igual": 0.895
     },
     {
-     "edificio": "building/casa_grande",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_grande#1",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_grande#2",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_grande#16",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.846
-    },
-    {
-     "edificio": "building/casa_grande#17",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.895
-    },
-    {
      "edificio": "building/casa_hilera#4",
      "como": "dibujada",
      "xy": [
@@ -1154,42 +911,6 @@
       384
      ],
      "igual": 0.895
-    },
-    {
-     "edificio": "building/casa_mediana#8",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.846
-    },
-    {
-     "edificio": "building/casa_mediana#9",
-     "como": "dibujada",
-     "xy": [
-      222,
-      384
-     ],
-     "igual": 0.895
-    },
-    {
-     "edificio": "building/casa_mediana#11",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
-    },
-    {
-     "edificio": "building/casa_mediana#12",
-     "como": "hueco",
-     "xy": [
-      44,
-      420
-     ],
-     "aire": 0.87
     },
     {
      "edificio": "building/casas_casa_cartel_get_out_embrujada",
@@ -1225,33 +946,6 @@
      "aire": 1.0
     },
     {
-     "edificio": "building/casa_chica#9",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
-    },
-    {
-     "edificio": "building/casa_country#7",
-     "como": "dibujada",
-     "xy": [
-      96,
-      384
-     ],
-     "igual": 0.873
-    },
-    {
-     "edificio": "building/casa_country#18",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
-    },
-    {
      "edificio": "building/casa_en_terrazas_3",
      "como": "hueco",
      "xy": [
@@ -1268,24 +962,6 @@
       464
      ],
      "aire": 0.65
-    },
-    {
-     "edificio": "building/casa_grande#5",
-     "como": "dibujada",
-     "xy": [
-      96,
-      384
-     ],
-     "igual": 0.873
-    },
-    {
-     "edificio": "building/casa_grande#18",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
     },
     {
      "edificio": "building/casa_hilera#3",
@@ -1306,22 +982,13 @@
      "igual": 0.873
     },
     {
-     "edificio": "building/casa_mediana#3",
+     "edificio": "building/casa_mediana#2",
      "como": "dibujada",
      "xy": [
       96,
       384
      ],
-     "igual": 0.873
-    },
-    {
-     "edificio": "building/casa_mediana#10",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
+     "igual": 0.993
     },
     {
      "edificio": "building/casas_casa_cartel_get_out_embrujada",
@@ -1363,7 +1030,7 @@
       544,
       288
      ],
-     "igual": 0.904
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_country#1",
@@ -1372,7 +1039,7 @@
       544,
       288
      ],
-     "igual": 0.904
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_country#2",
@@ -1381,25 +1048,7 @@
       544,
       288
      ],
-     "igual": 0.907
-    },
-    {
-     "edificio": "building/casa_grande#9",
-     "como": "dibujada",
-     "xy": [
-      544,
-      288
-     ],
-     "igual": 0.904
-    },
-    {
-     "edificio": "building/casa_grande#10",
-     "como": "dibujada",
-     "xy": [
-      544,
-      288
-     ],
-     "igual": 0.907
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_sin_adornos",
@@ -1453,15 +1102,6 @@
      "aire": 1.0
     },
     {
-     "edificio": "building/casa_country#6",
-     "como": "dibujada",
-     "xy": [
-      256,
-      320
-     ],
-     "igual": 1.0
-    },
-    {
      "edificio": "building/casa_de_una_planta",
      "como": "dibujada",
      "xy": [
@@ -1471,7 +1111,7 @@
      "igual": 1.0
     },
     {
-     "edificio": "building/casa_grande#4",
+     "edificio": "building/casa_mediana",
      "como": "dibujada",
      "xy": [
       256,
@@ -1480,7 +1120,7 @@
      "igual": 1.0
     },
     {
-     "edificio": "building/casa_mediana#4",
+     "edificio": "building/casa_mediana#1",
      "como": "dibujada",
      "xy": [
       256,
@@ -1513,85 +1153,31 @@
    ],
    "edificios": [
     {
+     "edificio": "building/casa_chica",
+     "como": "dibujada",
+     "xy": [
+      224,
+      192
+     ],
+     "igual": 1.0
+    },
+    {
+     "edificio": "building/casa_chica#1",
+     "como": "dibujada",
+     "xy": [
+      224,
+      192
+     ],
+     "igual": 1.0
+    },
+    {
      "edificio": "building/casa_chica#2",
      "como": "dibujada",
      "xy": [
       224,
       192
      ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_chica#3",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_country#11",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_country#12",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_grande#7",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_grande#8",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_mediana",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_mediana#1",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
-    },
-    {
-     "edificio": "building/casa_mediana#2",
-     "como": "dibujada",
-     "xy": [
-      224,
-      192
-     ],
-     "igual": 0.979
+     "igual": 1.0
     },
     {
      "edificio": "building/casa_postapocaliptica_1",
@@ -1627,24 +1213,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/casa_chica#9",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
-    },
-    {
-     "edificio": "building/casa_country#18",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
-    },
-    {
      "edificio": "building/casa_en_terrazas_3",
      "como": "hueco",
      "xy": [
@@ -1663,25 +1231,7 @@
      "aire": 0.65
     },
     {
-     "edificio": "building/casa_grande#18",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
-    },
-    {
      "edificio": "building/casa_hilera#3",
-     "como": "hueco",
-     "xy": [
-      40,
-      466
-     ],
-     "aire": 1.68
-    },
-    {
-     "edificio": "building/casa_mediana#10",
      "como": "hueco",
      "xy": [
       40,
@@ -1765,24 +1315,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/duplex#3",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.999
-    },
-    {
-     "edificio": "building/duplex#4",
-     "como": "dibujada",
-     "xy": [
-      64,
-      416
-     ],
-     "igual": 0.999
-    },
-    {
      "edificio": "building/edificios_condominio",
      "como": "dibujada",
      "xy": [
@@ -1801,16 +1333,7 @@
      "igual": 0.999
     },
     {
-     "edificio": "building/oficina#3",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.999
-    },
-    {
-     "edificio": "building/oficina#4",
+     "edificio": "building/torre",
      "como": "dibujada",
      "xy": [
       64,
@@ -1819,20 +1342,20 @@
      "igual": 0.999
     },
     {
-     "edificio": "building/torre#3",
-     "como": "dibujada",
-     "xy": [
-      64,
-      384
-     ],
-     "igual": 0.999
-    },
-    {
-     "edificio": "building/torre#4",
+     "edificio": "building/torre#1",
      "como": "dibujada",
      "xy": [
       64,
       416
+     ],
+     "igual": 0.999
+    },
+    {
+     "edificio": "building/torre#2",
+     "como": "dibujada",
+     "xy": [
+      64,
+      384
      ],
      "igual": 0.999
     }
@@ -1852,24 +1375,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/duplex#3",
-     "como": "dibujada",
-     "xy": [
-      256,
-      384
-     ],
-     "igual": 0.908
-    },
-    {
-     "edificio": "building/duplex#4",
-     "como": "dibujada",
-     "xy": [
-      256,
-      416
-     ],
-     "igual": 0.935
-    },
-    {
      "edificio": "building/edificios_condominio",
      "como": "dibujada",
      "xy": [
@@ -1888,40 +1393,31 @@
      "igual": 0.935
     },
     {
-     "edificio": "building/oficina#3",
-     "como": "dibujada",
-     "xy": [
-      256,
-      384
-     ],
-     "igual": 0.908
-    },
-    {
-     "edificio": "building/oficina#4",
+     "edificio": "building/torre",
      "como": "dibujada",
      "xy": [
       256,
       416
      ],
-     "igual": 0.935
+     "igual": 1.0
     },
     {
-     "edificio": "building/torre#3",
-     "como": "dibujada",
-     "xy": [
-      256,
-      384
-     ],
-     "igual": 0.908
-    },
-    {
-     "edificio": "building/torre#4",
+     "edificio": "building/torre#1",
      "como": "dibujada",
      "xy": [
       256,
       416
      ],
-     "igual": 0.935
+     "igual": 1.0
+    },
+    {
+     "edificio": "building/torre#2",
+     "como": "dibujada",
+     "xy": [
+      256,
+      384
+     ],
+     "igual": 0.985
     }
    ]
   },
@@ -3308,7 +2804,17 @@
     96,
     64
    ],
-   "edificios": []
+   "edificios": [
+    {
+     "edificio": "building/universidad",
+     "como": "dibujada",
+     "xy": [
+      352,
+      800
+     ],
+     "igual": 0.986
+    }
+   ]
   },
   "Garden_Villa_Door_2_32x32": {
    "cuadro_celdas": [
@@ -3336,7 +2842,17 @@
     96,
     64
    ],
-   "edificios": []
+   "edificios": [
+    {
+     "edificio": "building/universidad",
+     "como": "dibujada",
+     "xy": [
+      352,
+      800
+     ],
+     "igual": 0.971
+    }
+   ]
   },
   "Garden_Villa_Door_4_32x32": {
    "cuadro_celdas": [
@@ -3364,7 +2880,17 @@
     96,
     128
    ],
-   "edificios": []
+   "edificios": [
+    {
+     "edificio": "building/universidad",
+     "como": "dibujada",
+     "xy": [
+      352,
+      608
+     ],
+     "igual": 0.805
+    }
+   ]
   },
   "Garden_Villa_Door_Balcony_2_32x32": {
    "cuadro_celdas": [
@@ -3454,24 +2980,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/duplex#6",
-     "como": "dibujada",
-     "xy": [
-      32,
-      218
-     ],
-     "igual": 0.874
-    },
-    {
-     "edificio": "building/duplex#7",
-     "como": "dibujada",
-     "xy": [
-      32,
-      218
-     ],
-     "igual": 0.874
-    },
-    {
      "edificio": "building/edificios_ferreteria_tienda",
      "como": "dibujada",
      "xy": [
@@ -3533,24 +3041,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/casa_country#8",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_country#9",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
      "edificio": "building/casa_embrujada",
      "como": "dibujada",
      "xy": [
@@ -3561,24 +3051,6 @@
     },
     {
      "edificio": "building/casa_embrujada_sin_farol",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_grande#11",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_grande#12",
      "como": "dibujada",
      "xy": [
       224,
@@ -3602,24 +3074,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/casa_country#8",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_country#9",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
      "edificio": "building/casa_embrujada",
      "como": "dibujada",
      "xy": [
@@ -3630,24 +3084,6 @@
     },
     {
      "edificio": "building/casa_embrujada_sin_farol",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_grande#11",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_grande#12",
      "como": "dibujada",
      "xy": [
       224,
@@ -3713,24 +3149,6 @@
    ],
    "edificios": [
     {
-     "edificio": "building/casa_country#8",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_country#9",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
      "edificio": "building/casa_embrujada",
      "como": "dibujada",
      "xy": [
@@ -3741,24 +3159,6 @@
     },
     {
      "edificio": "building/casa_embrujada_sin_farol",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_grande#11",
-     "como": "dibujada",
-     "xy": [
-      224,
-      544
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/casa_grande#12",
      "como": "dibujada",
      "xy": [
       224,
@@ -3788,34 +3188,7 @@
       576,
       480
      ],
-     "igual": 0.914
-    },
-    {
-     "edificio": "building/hospital#1",
-     "como": "dibujada",
-     "xy": [
-      576,
-      480
-     ],
-     "igual": 0.914
-    },
-    {
-     "edificio": "building/hotel",
-     "como": "dibujada",
-     "xy": [
-      576,
-      480
-     ],
-     "igual": 0.914
-    },
-    {
-     "edificio": "building/hotel#1",
-     "como": "dibujada",
-     "xy": [
-      576,
-      480
-     ],
-     "igual": 0.914
+     "igual": 1.0
     },
     {
      "edificio": "building/hotel_y_hospital_1",
@@ -3857,34 +3230,7 @@
       704,
       480
      ],
-     "igual": 0.912
-    },
-    {
-     "edificio": "building/hospital#1",
-     "como": "dibujada",
-     "xy": [
-      704,
-      480
-     ],
-     "igual": 0.912
-    },
-    {
-     "edificio": "building/hotel",
-     "como": "dibujada",
-     "xy": [
-      704,
-      480
-     ],
-     "igual": 0.912
-    },
-    {
-     "edificio": "building/hotel#1",
-     "como": "dibujada",
-     "xy": [
-      704,
-      480
-     ],
-     "igual": 0.912
+     "igual": 1.0
     },
     {
      "edificio": "building/hotel_y_hospital_1",
@@ -4044,7 +3390,7 @@
       64,
       448
      ],
-     "igual": 0.919
+     "igual": 0.996
     },
     {
      "edificio": "building/duplex#1",
@@ -4053,7 +3399,7 @@
       64,
       448
      ],
-     "igual": 0.919
+     "igual": 0.996
     },
     {
      "edificio": "building/duplex#2",
@@ -4062,7 +3408,7 @@
       352,
       448
      ],
-     "igual": 0.919
+     "igual": 0.996
     },
     {
      "edificio": "building/edificios_condominio_10_3",
@@ -4084,60 +3430,6 @@
     },
     {
      "edificio": "building/edificios_condominio_39",
-     "como": "dibujada",
-     "xy": [
-      352,
-      448
-     ],
-     "igual": 0.919
-    },
-    {
-     "edificio": "building/oficina",
-     "como": "dibujada",
-     "xy": [
-      64,
-      448
-     ],
-     "igual": 0.919
-    },
-    {
-     "edificio": "building/oficina#1",
-     "como": "dibujada",
-     "xy": [
-      64,
-      448
-     ],
-     "igual": 0.919
-    },
-    {
-     "edificio": "building/oficina#2",
-     "como": "dibujada",
-     "xy": [
-      352,
-      448
-     ],
-     "igual": 0.919
-    },
-    {
-     "edificio": "building/torre",
-     "como": "dibujada",
-     "xy": [
-      64,
-      448
-     ],
-     "igual": 0.919
-    },
-    {
-     "edificio": "building/torre#1",
-     "como": "dibujada",
-     "xy": [
-      64,
-      448
-     ],
-     "igual": 0.919
-    },
-    {
-     "edificio": "building/torre#2",
      "como": "dibujada",
      "xy": [
       352,
@@ -4231,60 +3523,6 @@
       416
      ],
      "igual": 1.0
-    },
-    {
-     "edificio": "building/oficina",
-     "como": "dibujada",
-     "xy": [
-      384,
-      480
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/oficina#1",
-     "como": "dibujada",
-     "xy": [
-      384,
-      480
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/oficina#2",
-     "como": "dibujada",
-     "xy": [
-      64,
-      480
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/torre",
-     "como": "dibujada",
-     "xy": [
-      384,
-      480
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/torre#1",
-     "como": "dibujada",
-     "xy": [
-      384,
-      480
-     ],
-     "igual": 1.0
-    },
-    {
-     "edificio": "building/torre#2",
-     "como": "dibujada",
-     "xy": [
-      64,
-      480
-     ],
-     "igual": 1.0
     }
    ]
   },
@@ -4362,16 +3600,7 @@
    ],
    "edificios": [
     {
-     "edificio": "building/hospital#2",
-     "como": "dibujada",
-     "xy": [
-      224,
-      608
-     ],
-     "igual": 0.916
-    },
-    {
-     "edificio": "building/hotel#2",
+     "edificio": "building/hotel",
      "como": "dibujada",
      "xy": [
       224,
@@ -4394,15 +3623,6 @@
      "xy": [
       224,
       160
-     ],
-     "igual": 0.916
-    },
-    {
-     "edificio": "building/universidad",
-     "como": "dibujada",
-     "xy": [
-      224,
-      608
      ],
      "igual": 0.916
     }
@@ -4695,6 +3915,15 @@
      "igual": 0.826
     },
     {
+     "edificio": "building/oficina#2",
+     "como": "dibujada",
+     "xy": [
+      160,
+      512
+     ],
+     "igual": 1.0
+    },
+    {
      "edificio": "building/oficina_edificio_modular_medio_2",
      "como": "dibujada",
      "xy": [
@@ -4754,7 +3983,26 @@
     64,
     64
    ],
-   "edificios": []
+   "edificios": [
+    {
+     "edificio": "building/oficina",
+     "como": "dibujada",
+     "xy": [
+      288,
+      448
+     ],
+     "igual": 0.757
+    },
+    {
+     "edificio": "building/oficina#1",
+     "como": "dibujada",
+     "xy": [
+      288,
+      448
+     ],
+     "igual": 0.757
+    }
+   ]
   },
   "Office_Door_Lime_Corp_1_32x32": {
    "cuadro_celdas": [
@@ -4768,7 +4016,26 @@
     96,
     60
    ],
-   "edificios": []
+   "edificios": [
+    {
+     "edificio": "building/oficina",
+     "como": "dibujada",
+     "xy": [
+      160,
+      544
+     ],
+     "igual": 1.0
+    },
+    {
+     "edificio": "building/oficina#1",
+     "como": "dibujada",
+     "xy": [
+      160,
+      544
+     ],
+     "igual": 1.0
+    }
+   ]
   },
   "Office_Door_Roof_1_32x32": {
    "cuadro_celdas": [
@@ -4791,6 +4058,24 @@
       64
      ],
      "igual": 0.862
+    },
+    {
+     "edificio": "building/oficina",
+     "como": "dibujada",
+     "xy": [
+      272,
+      108
+     ],
+     "igual": 1.0
+    },
+    {
+     "edificio": "building/oficina#1",
+     "como": "dibujada",
+     "xy": [
+      272,
+      108
+     ],
+     "igual": 1.0
     }
    ]
   },
@@ -4948,15 +4233,6 @@
      "igual": 1.0
     },
     {
-     "edificio": "building/comisaria#3",
-     "como": "dibujada",
-     "xy": [
-      82,
-      416
-     ],
-     "igual": 1.0
-    },
-    {
      "edificio": "building/comisaria_1",
      "como": "dibujada",
      "xy": [
@@ -5035,15 +4311,6 @@
      "igual": 1.0
     },
     {
-     "edificio": "building/comisaria#3",
-     "como": "dibujada",
-     "xy": [
-      102,
-      302
-     ],
-     "igual": 1.0
-    },
-    {
      "edificio": "building/comisaria_1",
      "como": "dibujada",
      "xy": [
@@ -5101,7 +4368,7 @@
       342,
       472
      ],
-     "igual": 0.859
+     "igual": 1.0
     },
     {
      "edificio": "building/comisaria#1",
@@ -5110,7 +4377,7 @@
       342,
       472
      ],
-     "igual": 0.859
+     "igual": 1.0
     },
     {
      "edificio": "building/comisaria#2",
@@ -5119,16 +4386,7 @@
       342,
       472
      ],
-     "igual": 0.859
-    },
-    {
-     "edificio": "building/comisaria#3",
-     "como": "dibujada",
-     "xy": [
-      342,
-      472
-     ],
-     "igual": 0.859
+     "igual": 1.0
     },
     {
      "edificio": "building/comisaria_1",
@@ -5202,7 +4460,7 @@
       58,
       352
      ],
-     "igual": 0.885
+     "igual": 1.0
     },
     {
      "edificio": "building/correo_edificio#1",
@@ -5211,7 +4469,7 @@
       58,
       352
      ],
-     "igual": 0.885
+     "igual": 1.0
     },
     {
      "edificio": "building/correo_edificio#2",
@@ -5220,25 +4478,7 @@
       58,
       352
      ],
-     "igual": 0.885
-    },
-    {
-     "edificio": "building/correo_edificio#3",
-     "como": "dibujada",
-     "xy": [
-      58,
-      352
-     ],
-     "igual": 0.885
-    },
-    {
-     "edificio": "building/correo_edificio#4",
-     "como": "dibujada",
-     "xy": [
-      58,
-      352
-     ],
-     "igual": 0.885
+     "igual": 1.0
     }
    ]
   },
@@ -8342,13 +7582,31 @@
    ]
   },
   "building/casa_chica": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
+   "estado": "con_puerta",
+   "incluidas": [
+    [
+     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
+     [
+      224,
+      192
+     ],
+     1.0
+    ]
+   ],
    "huecos": []
   },
   "building/casa_chica#1": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
+   "estado": "con_puerta",
+   "incluidas": [
+    [
+     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
+     [
+      224,
+      192
+     ],
+     1.0
+    ]
+   ],
    "huecos": []
   },
   "building/casa_chica#2": {
@@ -8360,7 +7618,7 @@
       224,
       192
      ],
-     0.979
+     1.0
     ]
    ],
    "huecos": []
@@ -8369,45 +7627,31 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
+     "Additional_Houses_Door_2_32x32",
      [
-      224,
-      192
+      64,
+      384
      ],
-     0.979
+     1.0
     ]
    ],
    "huecos": []
   },
   "building/casa_chica#4": {
-   "estado": "con_puerta",
-   "incluidas": [
+   "estado": "con_hueco",
+   "incluidas": [],
+   "huecos": [
     [
-     "Additional_Houses_Door_2_32x32",
+     "(hueco a revisar: ninguna puerta del tema entra)",
      [
-      64,
-      384
+      40,
+      466
      ],
-     0.886
+     0.0
     ]
-   ],
-   "huecos": []
+   ]
   },
   "building/casa_chica#5": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_chica#6": {
    "estado": "con_puerta",
    "incluidas": [
     [
@@ -8416,12 +7660,12 @@
       224,
       384
      ],
-     0.9
+     1.0
     ]
    ],
    "huecos": []
   },
-  "building/casa_chica#7": {
+  "building/casa_chica#6": {
    "estado": "con_puerta",
    "incluidas": [
     [
@@ -8430,46 +7674,10 @@
       222,
       384
      ],
-     0.846
+     1.0
     ]
    ],
    "huecos": []
-  },
-  "building/casa_chica#8": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.895
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_chica#9": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_Japanese_Suburban_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
-    ],
-    [
-     "Additional_Houses_Door_Victorian_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
-    ]
-   ]
   },
   "building/casa_contenedor": {
    "estado": "sin_puerta_detectada",
@@ -8485,7 +7693,7 @@
       544,
       288
      ],
-     0.904
+     1.0
     ]
    ],
    "huecos": []
@@ -8499,7 +7707,7 @@
       544,
       288
      ],
-     0.904
+     1.0
     ]
    ],
    "huecos": []
@@ -8513,272 +7721,15 @@
       544,
       288
      ],
-     0.907
+     1.0
     ]
    ],
    "huecos": []
   },
   "building/casa_country#3": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ]
-   ]
-  },
-  "building/casa_country#4": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ]
-   ]
-  },
-  "building/casa_country#5": {
    "estado": "sin_puerta_detectada",
    "incluidas": [],
    "huecos": []
-  },
-  "building/casa_country#6": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_One_Story_House_32x32",
-     [
-      256,
-      320
-     ],
-     1.0
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#7": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Japanese_Suburban_House_32x32",
-     [
-      96,
-      384
-     ],
-     0.873
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#8": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Haunted_House_Door_Complete_2_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Complete_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Unlock_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#9": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Haunted_House_Door_Complete_2_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Complete_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Unlock_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#10": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_country#11": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
-     [
-      224,
-      192
-     ],
-     0.979
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#12": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
-     [
-      224,
-      192
-     ],
-     0.979
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#13": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#14": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#15": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_3_32x32",
-     [
-      224,
-      384
-     ],
-     0.9
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#16": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.846
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#17": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.895
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_country#18": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_Japanese_Suburban_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
-    ],
-    [
-     "Additional_Houses_Door_Victorian_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
-    ]
-   ]
   },
   "building/casa_cubierta_silla_blanca": {
    "estado": "sin_puerta_detectada",
@@ -9135,20 +8086,12 @@
    "incluidas": [],
    "huecos": [
     [
-     "Additional_Houses_Door_2_32x32",
+     "(hueco a revisar: ninguna puerta del tema entra)",
      [
       44,
       420
      ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
+     0.0
     ]
    ]
   },
@@ -9157,44 +8100,19 @@
    "incluidas": [],
    "huecos": [
     [
-     "Additional_Houses_Door_2_32x32",
+     "(hueco a revisar: ninguna puerta del tema entra)",
      [
       44,
       420
      ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
+     0.0
     ]
    ]
   },
   "building/casa_grande#2": {
-   "estado": "con_hueco",
+   "estado": "sin_puerta_detectada",
    "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ]
-   ]
+   "huecos": []
   },
   "building/casa_grande#3": {
    "estado": "sin_puerta_detectada",
@@ -9202,257 +8120,6 @@
    "huecos": []
   },
   "building/casa_grande#4": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_One_Story_House_32x32",
-     [
-      256,
-      320
-     ],
-     1.0
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#5": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Japanese_Suburban_House_32x32",
-     [
-      96,
-      384
-     ],
-     0.873
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#6": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_grande#7": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
-     [
-      224,
-      192
-     ],
-     0.979
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#8": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
-     [
-      224,
-      192
-     ],
-     0.979
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#9": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Modern_House_32x32",
-     [
-      544,
-      288
-     ],
-     0.904
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#10": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Modern_House_32x32",
-     [
-      544,
-      288
-     ],
-     0.907
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#11": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Haunted_House_Door_Complete_2_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Complete_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Unlock_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#12": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Haunted_House_Door_Complete_2_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Complete_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ],
-    [
-     "Haunted_House_Door_Unlock_32x32",
-     [
-      224,
-      544
-     ],
-     1.0
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#13": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#14": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#15": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_3_32x32",
-     [
-      224,
-      384
-     ],
-     0.9
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#16": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.846
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#17": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.895
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_grande#18": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_Japanese_Suburban_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
-    ],
-    [
-     "Additional_Houses_Door_Victorian_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
-    ]
-   ]
-  },
-  "building/casa_grande#19": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_grande#20": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_grande#21": {
    "estado": "sin_puerta_detectada",
    "incluidas": [],
    "huecos": []
@@ -9606,59 +8273,17 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
+     "Additional_Houses_Door_One_Story_House_32x32",
      [
-      224,
-      192
+      256,
+      320
      ],
-     0.979
+     1.0
     ]
    ],
    "huecos": []
   },
   "building/casa_mediana#1": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
-     [
-      224,
-      192
-     ],
-     0.979
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#2": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Post_Apocalyptic_House_32x32",
-     [
-      224,
-      192
-     ],
-     0.979
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#3": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_Japanese_Suburban_House_32x32",
-     [
-      96,
-      384
-     ],
-     0.873
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#4": {
    "estado": "con_puerta",
    "incluidas": [
     [
@@ -9672,166 +8297,33 @@
    ],
    "huecos": []
   },
-  "building/casa_mediana#5": {
+  "building/casa_mediana#2": {
    "estado": "con_puerta",
    "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#6": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      64,
-      384
-     ],
-     0.886
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#7": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_3_32x32",
-     [
-      224,
-      384
-     ],
-     0.9
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#8": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.846
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#9": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      222,
-      384
-     ],
-     0.895
-    ]
-   ],
-   "huecos": []
-  },
-  "building/casa_mediana#10": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
     [
      "Additional_Houses_Door_Japanese_Suburban_House_32x32",
      [
-      40,
-      466
+      96,
+      384
      ],
-     1.68
-    ],
-    [
-     "Additional_Houses_Door_Victorian_House_32x32",
-     [
-      40,
-      466
-     ],
-     1.68
+     0.993
     ]
-   ]
+   ],
+   "huecos": []
   },
-  "building/casa_mediana#11": {
+  "building/casa_mediana#3": {
    "estado": "con_hueco",
    "incluidas": [],
    "huecos": [
     [
-     "Additional_Houses_Door_2_32x32",
+     "(hueco a revisar: ninguna puerta del tema entra)",
      [
       44,
       420
      ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
+     0.0
     ]
    ]
-  },
-  "building/casa_mediana#12": {
-   "estado": "con_hueco",
-   "incluidas": [],
-   "huecos": [
-    [
-     "Additional_Houses_Door_2_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ],
-    [
-     "Additional_Houses_Door_4_32x32",
-     [
-      44,
-      420
-     ],
-     0.87
-    ]
-   ]
-  },
-  "building/casa_mediana#13": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_mediana#14": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_mediana#15": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_mediana#16": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/casa_mediana#17": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
   },
   "building/casa_mesa_bebidas_chiquita_1": {
    "estado": "sin_puerta_detectada",
@@ -10667,7 +9159,7 @@
       342,
       472
      ],
-     0.859
+     1.0
     ]
    ],
    "huecos": []
@@ -10697,7 +9189,7 @@
       342,
       472
      ],
-     0.859
+     1.0
     ]
    ],
    "huecos": []
@@ -10727,37 +9219,7 @@
       342,
       472
      ],
-     0.859
-    ]
-   ],
-   "huecos": []
-  },
-  "building/comisaria#3": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Police_Station_Door_1_32x32",
-     [
-      82,
-      416
-     ],
      1.0
-    ],
-    [
-     "Police_Station_Door_2_32x32",
-     [
-      102,
-      302
-     ],
-     1.0
-    ],
-    [
-     "Police_Station_Door_3_32x32",
-     [
-      342,
-      472
-     ],
-     0.859
     ]
    ],
    "huecos": []
@@ -11592,7 +10054,7 @@
       58,
       352
      ],
-     0.885
+     1.0
     ]
    ],
    "huecos": []
@@ -11606,7 +10068,7 @@
       58,
       352
      ],
-     0.885
+     1.0
     ]
    ],
    "huecos": []
@@ -11620,35 +10082,7 @@
       58,
       352
      ],
-     0.885
-    ]
-   ],
-   "huecos": []
-  },
-  "building/correo_edificio#3": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Post_Office_Door_1_32x32",
-     [
-      58,
-      352
-     ],
-     0.885
-    ]
-   ],
-   "huecos": []
-  },
-  "building/correo_edificio#4": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Post_Office_Door_1_32x32",
-     [
-      58,
-      352
-     ],
-     0.885
+     1.0
     ]
    ],
    "huecos": []
@@ -12062,7 +10496,7 @@
       64,
       448
      ],
-     0.919
+     0.996
     ]
    ],
    "huecos": []
@@ -12084,7 +10518,7 @@
       64,
       448
      ],
-     0.919
+     0.996
     ]
    ],
    "huecos": []
@@ -12106,84 +10540,7 @@
       352,
       448
      ],
-     0.919
-    ]
-   ],
-   "huecos": []
-  },
-  "building/duplex#3": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Condo_6_Door_32x32",
-     [
-      64,
-      384
-     ],
-     0.999
-    ],
-    [
-     "Condo_6_Garage_Door_32x32",
-     [
-      256,
-      384
-     ],
-     0.908
-    ]
-   ],
-   "huecos": []
-  },
-  "building/duplex#4": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Condo_6_Door_32x32",
-     [
-      64,
-      416
-     ],
-     0.999
-    ],
-    [
-     "Condo_6_Garage_Door_32x32",
-     [
-      256,
-      416
-     ],
-     0.935
-    ]
-   ],
-   "huecos": []
-  },
-  "building/duplex#5": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
-   "huecos": []
-  },
-  "building/duplex#6": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Hardware_Store_Door_32x32",
-     [
-      32,
-      218
-     ],
-     0.874
-    ]
-   ],
-   "huecos": []
-  },
-  "building/duplex#7": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Hardware_Store_Door_32x32",
-     [
-      32,
-      218
-     ],
-     0.874
+     0.996
     ]
    ],
    "huecos": []
@@ -13968,7 +12325,7 @@
       576,
       480
      ],
-     0.914
+     1.0
     ],
     [
      "Hospital_Emergency_Shutter_right_32x32",
@@ -13976,92 +12333,12 @@
       704,
       480
      ],
-     0.912
-    ]
-   ],
-   "huecos": []
-  },
-  "building/hospital#1": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Hospital_Emergency_Shutter_left_32x32",
-     [
-      576,
-      480
-     ],
-     0.914
-    ],
-    [
-     "Hospital_Emergency_Shutter_right_32x32",
-     [
-      704,
-      480
-     ],
-     0.912
-    ]
-   ],
-   "huecos": []
-  },
-  "building/hospital#2": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Metropolis_Building_2_Door_1_32x32",
-     [
-      224,
-      608
-     ],
-     0.916
+     1.0
     ]
    ],
    "huecos": []
   },
   "building/hotel": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Hospital_Emergency_Shutter_left_32x32",
-     [
-      576,
-      480
-     ],
-     0.914
-    ],
-    [
-     "Hospital_Emergency_Shutter_right_32x32",
-     [
-      704,
-      480
-     ],
-     0.912
-    ]
-   ],
-   "huecos": []
-  },
-  "building/hotel#1": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Hospital_Emergency_Shutter_left_32x32",
-     [
-      576,
-      480
-     ],
-     0.914
-    ],
-    [
-     "Hospital_Emergency_Shutter_right_32x32",
-     [
-      704,
-      480
-     ],
-     0.912
-    ]
-   ],
-   "huecos": []
-  },
-  "building/hotel#2": {
    "estado": "con_puerta",
    "incluidas": [
     [
@@ -15764,20 +14041,28 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_1_Door_2_32x32",
+     "Office_Door_Lime_Corp_1_32x32",
      [
-      384,
-      480
+      160,
+      544
      ],
      1.0
     ],
     [
-     "Metropolis_Building_1_Door_1_32x32",
+     "Office_Door_Roof_1_32x32",
      [
-      64,
+      272,
+      108
+     ],
+     1.0
+    ],
+    [
+     "Office_Door_Balcony_Lime_Corp_32x32",
+     [
+      288,
       448
      ],
-     0.919
+     0.757
     ]
    ],
    "huecos": []
@@ -15786,20 +14071,28 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_1_Door_2_32x32",
+     "Office_Door_Lime_Corp_1_32x32",
      [
-      384,
-      480
+      160,
+      544
      ],
      1.0
     ],
     [
-     "Metropolis_Building_1_Door_1_32x32",
+     "Office_Door_Roof_1_32x32",
      [
-      64,
+      272,
+      108
+     ],
+     1.0
+    ],
+    [
+     "Office_Door_Balcony_Lime_Corp_32x32",
+     [
+      288,
       448
      ],
-     0.919
+     0.757
     ]
    ],
    "huecos": []
@@ -15808,71 +14101,14 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_1_Door_2_32x32",
+     "Office_Door_1_32x32",
      [
-      64,
-      480
+      160,
+      512
      ],
      1.0
-    ],
-    [
-     "Metropolis_Building_1_Door_1_32x32",
-     [
-      352,
-      448
-     ],
-     0.919
     ]
    ],
-   "huecos": []
-  },
-  "building/oficina#3": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Condo_6_Door_32x32",
-     [
-      64,
-      384
-     ],
-     0.999
-    ],
-    [
-     "Condo_6_Garage_Door_32x32",
-     [
-      256,
-      384
-     ],
-     0.908
-    ]
-   ],
-   "huecos": []
-  },
-  "building/oficina#4": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Condo_6_Door_32x32",
-     [
-      64,
-      416
-     ],
-     0.999
-    ],
-    [
-     "Condo_6_Garage_Door_32x32",
-     [
-      256,
-      416
-     ],
-     0.935
-    ]
-   ],
-   "huecos": []
-  },
-  "building/oficina#5": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
    "huecos": []
   },
   "building/oficina_balcon_edificio": {
@@ -20337,20 +18573,20 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_1_Door_2_32x32",
+     "Condo_6_Garage_Door_32x32",
      [
-      384,
-      480
+      256,
+      416
      ],
      1.0
     ],
     [
-     "Metropolis_Building_1_Door_1_32x32",
+     "Condo_6_Door_32x32",
      [
       64,
-      448
+      416
      ],
-     0.919
+     0.999
     ]
    ],
    "huecos": []
@@ -20359,20 +18595,20 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_1_Door_2_32x32",
+     "Condo_6_Garage_Door_32x32",
      [
-      384,
-      480
+      256,
+      416
      ],
      1.0
     ],
     [
-     "Metropolis_Building_1_Door_1_32x32",
+     "Condo_6_Door_32x32",
      [
       64,
-      448
+      416
      ],
-     0.919
+     0.999
     ]
    ],
    "huecos": []
@@ -20381,28 +18617,6 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_1_Door_2_32x32",
-     [
-      64,
-      480
-     ],
-     1.0
-    ],
-    [
-     "Metropolis_Building_1_Door_1_32x32",
-     [
-      352,
-      448
-     ],
-     0.919
-    ]
-   ],
-   "huecos": []
-  },
-  "building/torre#3": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
      "Condo_6_Door_32x32",
      [
       64,
@@ -20416,36 +18630,9 @@
       256,
       384
      ],
-     0.908
+     0.985
     ]
    ],
-   "huecos": []
-  },
-  "building/torre#4": {
-   "estado": "con_puerta",
-   "incluidas": [
-    [
-     "Condo_6_Door_32x32",
-     [
-      64,
-      416
-     ],
-     0.999
-    ],
-    [
-     "Condo_6_Garage_Door_32x32",
-     [
-      256,
-      416
-     ],
-     0.935
-    ]
-   ],
-   "huecos": []
-  },
-  "building/torre#5": {
-   "estado": "sin_puerta_detectada",
-   "incluidas": [],
    "huecos": []
   },
   "building/torre_de_vigilancia": {
@@ -20938,12 +19125,28 @@
    "estado": "con_puerta",
    "incluidas": [
     [
-     "Metropolis_Building_2_Door_1_32x32",
+     "Garden_Villa_Door_1_32x32",
      [
-      224,
+      352,
+      800
+     ],
+     0.986
+    ],
+    [
+     "Garden_Villa_Door_3_32x32",
+     [
+      352,
+      800
+     ],
+     0.971
+    ],
+    [
+     "Garden_Villa_Door_Balcony_1_32x32",
+     [
+      352,
       608
      ],
-     0.916
+     0.805
     ]
    ],
    "huecos": []
@@ -20994,6 +19197,21 @@
    "huecos": []
   },
   "building/villa": {
+   "estado": "sin_puerta_detectada",
+   "incluidas": [],
+   "huecos": []
+  },
+  "building/villa#1": {
+   "estado": "sin_puerta_detectada",
+   "incluidas": [],
+   "huecos": []
+  },
+  "building/villa#2": {
+   "estado": "sin_puerta_detectada",
+   "incluidas": [],
+   "huecos": []
+  },
+  "building/villa#3": {
    "estado": "sin_puerta_detectada",
    "incluidas": [],
    "huecos": []

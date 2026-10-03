@@ -2136,9 +2136,16 @@ fn barrio_test_drive(world: &mut World) {
                         continue;
                     };
                     // Todo lo que en `city::LOT_PROGRAMS` es vivienda.
-                    let es_casa = rect.4.starts_with("building/casa_")
-                        || rect.4 == "building/villa"
-                        || rect.4 == "building/duplex";
+                    // `HA_BARRIO_CIVICO=1` retrata los GRANDES (campus, comisaría, oficinas) en vez de las viviendas.
+                    let es_casa = if std::env::var("HA_BARRIO_CIVICO").is_ok() {
+                        matches!(
+                            rect.4,
+                            "building/universidad" | "building/escuela" | "building/hospital" | "building/comisaria"
+                                | "building/correo_edificio" | "building/oficina" | "building/torre"
+                        )
+                    } else {
+                        rect.4.starts_with("building/casa_") || rect.4 == "building/villa" || rect.4 == "building/duplex"
+                    };
                     if !es_casa || casas.iter().any(|c| c.4 == rect.4) {
                         continue;
                     }
@@ -2147,7 +2154,7 @@ fn barrio_test_drive(world: &mut World) {
                         rect.4, rect.0, rect.1, rect.2, rect.3
                     );
                     casas.push((rect.0, rect.1, rect.2, rect.3, rect.4.to_string()));
-                    if casas.len() >= 6 {
+                    if casas.len() >= 7 {
                         break 'busca;
                     }
                 }
