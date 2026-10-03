@@ -8659,3 +8659,39 @@ El usuario reportó que el juego iba tan lagueado que Android mató procesos (Ta
    estudio y la huella no coincide, cae al camino viejo (componer en un hilo, caché en disco).
 2. **Texturas de fachadas**: 49 MB → ~26 MB de contenido (23 edificios, 1-3 variantes por lote, páginas de 2048).
 Pendiente de medir en el celu: RAM y fps con ambos cambios.
+
+### §19 Armas de fuego (3 oct 2026)
+
+**Qué hay.** 9 armas × 7 aspectos = 63 ítems `gun_<arma>[__<camo>]` y 5 calibres de munición (`ammo_45`, `ammo_9mm`, `ammo_762`, `ammo_cartucho`,
+`ammo_energia`). Armas: pistola M1911, Thompson M1A1, PPSh-41, MP40, Suomi KP/-31, PPS-43 (las del cartel de subfusiles de la
+referencia), fusil de asalto AK, escopeta y pistola de rayos. Camuflajes (referencias Black Ops 2/7): **115** (verde ácido con
+grietas), **singularidad** (azul cósmico), **grafiti**, **bacon**, **ciclón** (turquesa con franjas naranjas) y **materia oscura**
+(negro con circuitos dorados).
+**Arte**: `scripts/dibujar-armas.py` (+ `lib/armas.py` y `lib/armas_diseno.py`): cada arma es una lista de piezas (polígonos) con
+material M/B/F/L, sombreadas como cúpula iluminada desde arriba-izquierda, luz de borde en el metal y contorno; el camuflaje es un
+patrón procedural (Voronoi, ruido deformado, franjas, circuitos) modulado por esa luz. Salen en `art/gen/armas.png` (64×64 por ícono;
+el mismo sprite es el ícono de mochila y el arma en la mano).
+**Mecánica** (`ha-game/src/armas.rs`): con un arma en la mano, apoyar el dedo en el mundo apunta y dispara hacia ese punto (mantener =
+ráfaga en las automáticas; las semiautomáticas, un disparo por toque). El botón USAR dice **RECARGAR** (tecla R en escritorio); con el
+cargador vacío el disparo recarga solo si hay munición. Las balas son entidades (`Bala`) con velocidad, alcance, dispersión, caída del
+daño (hasta 55 %) y `atraviesa`; se frenan en paredes y bloques con la misma geometría del paso del jugador (`choque_con_el_mundo`) y le
+pegan a **cualquiera**: cada módulo con blancos aplica el daño con su propia muerte (`infectados::balas_a_infectados`,
+`fauna::balas_a_fauna`, `society::balas_a_aldeanos`; fases `ArmasSet::{Mover, Impactos}`). Un balazo a un aldeano cuesta lo mismo que un
+golpe (reputación de su familia y de los testigos).
+**Ruido**: cada disparo sube el olfato de los infectados ×2,6 durante 5 s (`RuidoDeArma`).
+**Botín**: los infectados sueltan munición (38 %) y, rara vez, un arma (5 %); los alijos, munición (70 %) y arma (15 %). Cada partida nueva
+arranca con una pistola y 24 balas .45 (`regalo_inicial`; las demás armas hay que encontrarlas — en creativo vienen todas).
+**Interfaz**: contador «arma · cargador/reserva» sobre la hotbar (`HudArmas`), aro de mira bajo el dedo, fogonazo, estela de la bala
+(amarilla; verde para el rayo), chispas de impacto. Con un arma equipada `targeting` no resuelve objetivos (no se tala ni se abre nada
+a toques) y los golpes cuerpo a cuerpo se anulan: es modo combate. Para hablar con un aldeano o abrir cosas, cambiá de ítem.
+**Sonido**: 12 efectos nuevos (disparo por clase, recargar en tres tiempos, gatillo en seco, impactos) en `ha-audio/defaults.rs`.
+**Balance** (escala de golpe cuerpo a cuerpo; un infectado tiene 12): pistola 6 (2 tiros), AK 6,2 (atraviesa 2), subfusiles 3-4,
+escopeta 8×2,3, pistola de rayos 13 (mata de uno, atraviesa 3, 20 celdas).
+**Probar**: `HA_ARMASTEST=<gun_id> [HA_ARMASTEST_OESTE=1]` (equipa, planta 5 infectados y dispara; deja `armas-0/1/2`).
+
+### Todo pre-hecho: nada se sintetiza en el celu (3 oct 2026)
+
+Pedido: *«el juego no tiene que hacer nada en tiempo real… que se limite a lo estrictamente necesario»*. **Música y SFX viajan YA
+renderizados en el APK** (`assets/audio/musica/*.wav`, `assets/audio/sfx/<clave>_<0|1|2>.wav` con los tres niveles de sordina, índices con
+huella `musica.json` y `sfx.json`). Regenerar todo: `bash scripts/regenerar-audio.sh` (exporta `audio.json`, renderiza, audita con
+`sfx-lab.py`). Si un diseño se edita en el estudio y su huella ya no coincide, ese efecto/pista cae al camino viejo (sintetizar).

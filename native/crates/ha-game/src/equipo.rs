@@ -24,6 +24,10 @@ pub fn es_usable(item: &str) -> bool {
 /// Lo que dice el botón USAR para este objeto: la acción que hace al mantenerlo (`None` = no se
 /// usa solo). Una prenda se viste; lo que sacia sed y no hambre se bebe; lo demás se come.
 pub fn etiqueta_de_uso(item: &str) -> Option<&'static str> {
+    // Un arma de fuego se «usa» recargándola (`armas.rs` escucha el mismo botón).
+    if crate::armas::es_arma(item) {
+        return Some("RECARGAR");
+    }
     if prenda(item).is_some() {
         return Some("VESTIR");
     }

@@ -2,7 +2,7 @@
 //!   cargo run -p ha-audio --bin render_all -- <carpeta_salida> [audio.json]
 //! Sin `audio.json` usa el diseño por defecto (`AudioSpec::default_spec`).
 
-use ha_audio::{hash_pista, render_sfx, render_track, wav_bytes, AudioSpec};
+use ha_audio::{hash_pista, hash_sfx, lowpass, render_sfx, render_track, wav_bytes, AudioSpec, MUFFLE_CUTOFF_HZ, MUFFLE_PASSES};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -19,6 +19,23 @@ fn main() {
     }
     let thrust = render_sfx(&spec.thrust);
     std::fs::write(format!("{out}/sfx__thrust.wav"), wav_bytes(spec.thrust.rate, &thrust)).unwrap();
+    // `SFX_DIR=<carpeta>`: deja cada efecto (con sus tres niveles de sordina) donde lo carga el juego, más el índice con la
+    // huella de cada diseño. El juego NO sintetiza nada al arrancar: carga estos archivos.
+    if let Ok(dir) = std::env::var("SFX_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut indice: std::collections::BTreeMap<String, String> = Default::default();
+        let mut todos: Vec<(String, &ha_audio::SfxSpec)> = spec.sfx.iter().map(|(k, v)| (k.clone(), v)).collect();
+        todos.push(("_thrust".to_string(), &spec.thrust));
+        for (k, s) in todos {
+            let seco = render_sfx(s);
+            for lvl in 0..3 {
+                let buf = if lvl == 0 { seco.clone() } else { lowpass(&seco, s.rate, MUFFLE_CUTOFF_HZ[lvl], MUFFLE_PASSES[lvl]) };
+                std::fs::write(format!("{dir}/{k}_{lvl}.wav"), wav_bytes(s.rate, &buf)).unwrap();
+            }
+            indice.insert(k, format!("{:08x}", hash_sfx(s)));
+        }
+        std::fs::write(format!("{dir}/../sfx.json"), serde_json::to_string_pretty(&indice).unwrap()).unwrap();
+    }
     let t_sfx = t0.elapsed();
     let mut indice: Vec<(String, u32)> = Vec::new();
     for t in &spec.tracks {

@@ -110,6 +110,19 @@ pub enum Sfx {
     Groan,
     /// Mordida.
     Bite,
+    // — 3 oct 2026: armas —
+    ShotPistol,
+    ShotSmg,
+    ShotRifle,
+    ShotShotgun,
+    ShotRay,
+    ReloadOut,
+    ReloadIn,
+    ReloadBolt,
+    DryFire,
+    BulletHit,
+    BulletWall,
+    RayHit,
 }
 
 impl Sfx {
@@ -156,10 +169,22 @@ impl Sfx {
             Sfx::Splash => "splash",
             Sfx::Groan => "groan",
             Sfx::Bite => "bite",
+            Sfx::ShotPistol => "shot_pistol",
+            Sfx::ShotSmg => "shot_smg",
+            Sfx::ShotRifle => "shot_rifle",
+            Sfx::ShotShotgun => "shot_shotgun",
+            Sfx::ShotRay => "shot_ray",
+            Sfx::ReloadOut => "reload_out",
+            Sfx::ReloadIn => "reload_in",
+            Sfx::ReloadBolt => "reload_bolt",
+            Sfx::DryFire => "dry_fire",
+            Sfx::BulletHit => "bullet_hit",
+            Sfx::BulletWall => "bullet_wall",
+            Sfx::RayHit => "ray_hit",
         }
     }
 
-    const ALL: [Sfx; 40] = [
+    const ALL: [Sfx; 52] = [
         Sfx::Click, Sfx::Dig, Sfx::Chop, Sfx::Place, Sfx::Stamp,
         Sfx::StepSoft1, Sfx::StepSoft2, Sfx::StepHard1, Sfx::StepHard2,
         Sfx::BagOpen, Sfx::BagClose, Sfx::Craft, Sfx::Eat, Sfx::Drink,
@@ -169,6 +194,9 @@ impl Sfx {
         Sfx::StepSand1, Sfx::StepSand2, Sfx::StepWood1, Sfx::StepWood2, Sfx::StepSnow,
         Sfx::Drip, Sfx::CrystalChime, Sfx::Crumble, Sfx::OrePing, Sfx::Discover, Sfx::Fizzle,
         Sfx::Goal, Sfx::Deny, Sfx::Splash, Sfx::Groan, Sfx::Bite,
+        Sfx::ShotPistol, Sfx::ShotSmg, Sfx::ShotRifle, Sfx::ShotShotgun, Sfx::ShotRay,
+        Sfx::ReloadOut, Sfx::ReloadIn, Sfx::ReloadBolt, Sfx::DryFire,
+        Sfx::BulletHit, Sfx::BulletWall, Sfx::RayHit,
     ];
 }
 
@@ -205,8 +233,7 @@ const OCCLUSION_PER_BLOCKER: f32 = 0.34;
 const MUFFLE_LEVELS: usize = 3;
 /// Corte del filtro paso-bajos de cada nivel (Hz) y cuántas veces se aplica:
 /// un polo suena a manta, tres a "pared de ladrillo".
-const MUFFLE_CUTOFF_HZ: [f32; MUFFLE_LEVELS] = [0.0, 1600.0, 520.0];
-const MUFFLE_PASSES: [u32; MUFFLE_LEVELS] = [0, 2, 3];
+use ha_audio::{MUFFLE_CUTOFF_HZ, MUFFLE_PASSES};
 
 #[derive(Resource, Default)]
 pub struct SfxBank {
@@ -227,6 +254,7 @@ use ha_audio::{hash_pista, MUSICA_VERSION};
 /// Qué pistas trae YA compuestas el APK (`assets/audio/musica/<nombre>.wav`) y con qué huella. Componer en el celu
 /// costaba decenas de segundos de CPU por pieza —un hilo entero compitiendo con el render en un Helio G88— y ése era
 /// uno de los motivos del lag; ahora sólo se compone lo que el índice no cubre (una partitura editada en el estudio).
+const SFX_PRERENDERIZADOS: &str = include_str!("../assets/audio/sfx.json");
 const MUSICA_PRERENDERIZADA: &str = include_str!("../assets/audio/musica.json");
 
 fn prerenderizada(t: &ha_audio::TrackSpec) -> bool {
@@ -404,11 +432,22 @@ fn build_audio_banks(
     director.silence_min = spec.director.silence_min;
     director.silence_max = spec.director.silence_max.max(spec.director.silence_min);
 
+    // **Nada de sintetizar al arrancar**: los efectos viajan ya renderizados en el APK (`assets/audio/sfx/`), con sus tres
+    // niveles de sordina. Sólo si un diseño se editó en el estudio (su huella ya no coincide) se sintetiza como antes.
+    let indice: HashMap<String, String> = serde_json::from_str(SFX_PRERENDERIZADOS).unwrap_or_default();
+    let mut cargados = 0usize;
     for kind in Sfx::ALL {
         // Si el spec editado perdió un SFX, cae al diseño default (nunca mudo).
         let Some(s) = spec.sfx.get(kind.key()).or_else(|| fallback.sfx.get(kind.key())) else {
             continue;
         };
+        if indice.get(kind.key()).map_or(false, |h| *h == format!("{:08x}", ha_audio::hash_sfx(s))) {
+            let k = kind.key();
+            let variants = std::array::from_fn(|lvl| server.load(format!("audio/sfx/{k}_{lvl}.wav")));
+            bank.sounds.insert(kind, variants);
+            cargados += 1;
+            continue;
+        }
         let dry = render_sfx(s);
         // Una copia por nivel de sordina: filtrar en vivo por sample costaría
         // CPU en el hilo de audio; acá se paga una vez al arrancar y son
@@ -424,8 +463,12 @@ fn build_audio_banks(
         });
         bank.sounds.insert(kind, variants);
     }
-    let thrust_wav = wav_bytes(spec.thrust.rate, &render_sfx(&spec.thrust));
-    bank.thrust = Some(audio_assets.add(AudioSource { bytes: thrust_wav.into() }));
+    if indice.get("_thrust").map_or(false, |h| *h == format!("{:08x}", ha_audio::hash_sfx(&spec.thrust))) {
+        bank.thrust = Some(server.load("audio/sfx/_thrust_0.wav"));
+    } else {
+        let thrust_wav = wav_bytes(spec.thrust.rate, &render_sfx(&spec.thrust));
+        bank.thrust = Some(audio_assets.add(AudioSource { bytes: thrust_wav.into() }));
+    }
 
     for track in &spec.tracks {
         music.specs.entry(track.mood.clone()).or_default().push(track.clone());
@@ -436,8 +479,9 @@ fn build_audio_banks(
         music.pedir(&t);
     }
     eprintln!(
-        "ha-audio: {} SFX sintetizados + {} partituras de música (se componen al hacer falta, con caché en disco)",
+        "ha-audio: {} SFX ({} ya renderizados en el APK) + {} partituras de música (pre-renderizadas; sólo se compone si se editó una)",
         bank.sounds.len(),
+        cargados,
         spec.tracks.len()
     );
 }
@@ -471,25 +515,7 @@ fn play_sfx_events(
 // Sonido posicional: distancia + paneo + oclusión por obstáculos
 // ---------------------------------------------------------------------------
 
-/// Paso-bajos de un polo aplicado `passes` veces sobre el PCM ya renderizado.
-/// Es la "pared" en forma de filtro: se lleva los agudos y deja el cuerpo.
-fn lowpass(buf: &[f32], rate: u32, cutoff_hz: f32, passes: u32) -> Vec<f32> {
-    let mut out = buf.to_vec();
-    if cutoff_hz <= 0.0 || rate == 0 {
-        return out;
-    }
-    let dt = 1.0 / rate as f32;
-    let rc = 1.0 / (std::f32::consts::TAU * cutoff_hz);
-    let alpha = dt / (rc + dt);
-    for _ in 0..passes {
-        let mut y = 0.0f32;
-        for s in out.iter_mut() {
-            y += alpha * (*s - y);
-            *s = y;
-        }
-    }
-    out
-}
+use ha_audio::lowpass;
 
 /// Las orejas viven en su propia entidad (rotación identidad) siguiendo al
 /// jugador: si colgaran del jugador o de la cámara, cualquier giro de esos
