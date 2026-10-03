@@ -25326,7 +25326,7 @@
    "label": "Mena de hierro"
   },
   "items/jetpack": {
-   "label": "Mochila propulsora"
+   "label": "Mochila de vuelo"
   },
   "items/lava_bucket": {
    "label": "Cubo con lava"
@@ -25356,7 +25356,7 @@
    "label": "Cerámica"
   },
   "items/mat_combustible": {
-   "label": "Carbón vegetal"
+   "label": "Combustible"
   },
   "items/mat_compuesto": {
    "label": "Compuesto"
@@ -25383,19 +25383,19 @@
    "label": "Naranja"
   },
   "items/part_engine": {
-   "label": "Motor de cohete"
+   "label": "Pieza: motor"
   },
   "items/part_fin": {
-   "label": "Aleta de cohete"
+   "label": "Pieza: aleta"
   },
   "items/part_lander": {
-   "label": "Tren de aterrizaje"
+   "label": "Pieza: módulo"
   },
   "items/part_nose": {
-   "label": "Punta de cohete"
+   "label": "Pieza: cono"
   },
   "items/part_tank": {
-   "label": "Tanque de cohete"
+   "label": "Pieza: tanque"
   },
   "items/pickaxe": {
    "label": "Pico"
@@ -29851,10 +29851,10 @@
    ]
   },
   "prop/cancha_basket": {
-   "label": "Cancha de básquet (piso)"
+   "label": "Cancha de básquet"
   },
   "prop/cancha_tenis": {
-   "label": "Cancha de tenis (piso)"
+   "label": "Cancha de tenis"
   },
   "prop/cantero": {
    "label": "Cantero"
@@ -32561,7 +32561,7 @@
    ]
   },
   "ui/build_chip": {
-   "label": "Ficha de construcción"
+   "label": "Chip de construir"
   },
   "ui/corazon_celo": {
    "label": "Corazón (animal en celo)"
@@ -32633,16 +32633,16 @@
    "label": "Icono · tilde"
   },
   "ui/icon_atacar": {
-   "label": "Icono de atacar"
+   "label": "Acción: atacar"
   },
   "ui/icon_cavar": {
-   "label": "Icono de cavar"
+   "label": "Acción: cavar"
   },
   "ui/icon_craft": {
-   "label": "Icono de fabricar"
+   "label": "Acción: fabricar"
   },
   "ui/icon_usar": {
-   "label": "Icono de usar"
+   "label": "Acción: usar"
   },
   "ui/lantern_button": {
    "label": "Botón de linterna"
@@ -32672,16 +32672,16 @@
    "label": "Casilla chica"
   },
   "ui/menu_ajustes": {
-   "label": "Menú: Ajustes"
+   "label": "Menú: ajustes"
   },
   "ui/menu_creativo": {
-   "label": "Menú: Creativo"
+   "label": "Menú: creativo"
   },
   "ui/menu_espacio": {
-   "label": "Menú: Espacio"
+   "label": "Menú: espacio"
   },
   "ui/menu_luna": {
-   "label": "Menú: Luna"
+   "label": "Menú: luna"
   },
   "ui/menu_tierra": {
    "label": "Menú: Tierra"
@@ -212675,9 +212675,9 @@
     32,
     32
    ],
-   "png": "art/gen/minerales.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 4,
+    "col": 8,
     "row": 0,
     "w": 1,
     "h": 1
@@ -212688,9 +212688,9 @@
     32,
     32
    ],
-   "png": "art/gen/minerales.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 5,
+    "col": 9,
     "row": 0,
     "w": 1,
     "h": 1
@@ -212766,12 +212766,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 23,
-    "h": 1,
+    "col": 0,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/iron_ingot": {
@@ -212805,12 +212805,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 24,
-    "h": 1,
+    "col": 1,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/lantern": {
@@ -212968,9 +212968,9 @@
     32,
     32
    ],
-   "png": "art/gen/materias.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 14,
+    "col": 10,
     "row": 0,
     "w": 1,
     "h": 1
@@ -213085,12 +213085,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 4,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 3,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_fin": {
@@ -213098,12 +213098,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 5,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 4,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_lander": {
@@ -213111,12 +213111,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 6,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 5,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_nose": {
@@ -213124,12 +213124,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 2,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 6,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/part_tank": {
@@ -213137,12 +213137,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 3,
-    "h": 1,
-    "row": 1,
-    "w": 1
+    "col": 7,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   },
   "items/pickaxe": {
@@ -213215,12 +213215,12 @@
     32,
     32
    ],
-   "png": "art/gen/items.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 25,
-    "h": 1,
+    "col": 2,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "items/pumpkin": {
@@ -215102,7 +215102,7 @@
     32,
     32
    ],
-   "png": "art/gen/ui2.png",
+   "png": "art/gen/restantes.png",
    "rect": {
     "col": 11,
     "row": 0,
@@ -246350,13 +246350,12 @@
     32,
     32
    ],
-   "layer": "Floor",
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 17,
-    "h": 1,
+    "col": 21,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/cancha_tenis": {
@@ -246364,13 +246363,12 @@
     32,
     32
    ],
-   "layer": "Floor",
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 18,
-    "h": 1,
+    "col": 22,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/cantero": {
@@ -247321,13 +247319,12 @@
     32,
     32
    ],
-   "layer": "Floor",
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 19,
-    "h": 1,
+    "col": 20,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "prop/chatarra_1": {
@@ -269156,12 +269153,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 28,
-    "h": 4,
+    "col": 23,
     "row": 0,
-    "w": 3
+    "w": 3,
+    "h": 4
    }
   },
   "slope/arena": {
@@ -274268,12 +274265,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 8,
-    "h": 1,
+    "col": 12,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/button": {
@@ -274907,12 +274904,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 3,
-    "h": 1,
+    "col": 13,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/icon_cavar": {
@@ -274920,12 +274917,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 5,
-    "h": 1,
+    "col": 14,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/icon_craft": {
@@ -274933,12 +274930,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 6,
-    "h": 1,
+    "col": 15,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/icon_interactuar": {
@@ -274968,12 +274965,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 4,
-    "h": 1,
+    "col": 16,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/joystick_base": {
@@ -275222,12 +275219,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 13,
-    "h": 1,
+    "col": 17,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_button": {
@@ -275257,12 +275254,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 12,
-    "h": 1,
+    "col": 18,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_espacio": {
@@ -275270,12 +275267,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 11,
-    "h": 1,
+    "col": 19,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_luna": {
@@ -275283,12 +275280,12 @@
     32,
     32
    ],
-   "png": "art/gen/ui.png",
+   "png": "art/gen/restantes.png",
    "rect": {
-    "col": 10,
-    "h": 1,
+    "col": 26,
     "row": 0,
-    "w": 1
+    "w": 1,
+    "h": 1
    }
   },
   "ui/menu_tierra": {

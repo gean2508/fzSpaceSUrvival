@@ -407,7 +407,7 @@ def espada(hoja=(190, 196, 206), madera=(150, 104, 62)):
     l = Lienzo()
     c = rampa(hoja, 5)
     m = rampa(madera, 5)
-    l.poligono([(24, 3), (28, 4), (29, 8), (13, 22), (10, 19)], c[3])           # hoja
+    l.poligono([(24, 3), (28, 4), (28, 7), (13, 21), (11, 19)], c[3])           # hoja
     l.poligono([(24, 3), (28, 4), (29, 8), (27, 7), (22, 6)], c[4])             # filo de luz
     l.poligono([(29, 8), (13, 22), (11, 20), (26, 8)], c[1])                    # canal en sombra
     l.punto(25, 4, (255, 255, 255))
