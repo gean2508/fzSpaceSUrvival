@@ -58,6 +58,7 @@ pub mod barrio;
 pub mod multijugador;
 mod ambient;
 mod consola;
+mod qwerty;
 mod marca;
 mod light2d;
 mod game_menu;

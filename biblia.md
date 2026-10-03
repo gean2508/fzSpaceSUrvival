@@ -4027,6 +4027,16 @@ y depende de que el IME entregue teclas, que en `android-activity` no es seguro.
 `el_teclado_cubre_lo_que_el_nombre_acepta` clava que las teclas dibujadas y lo que
 `name_input` acepta no se separen.
 
+**Los cuatro teclados en pantalla son QWERTY** (3 oct 2026, `qwerty.rs`): el del
+nombre, el del nombre del mundo (`menu_listas`), el bautizo de animales y la
+consola. Iban en orden alfabético y buscar cada letra en un orden que nadie usa
+era lento. Las letras salen de `qwerty::LETRAS` (con la Ñ donde va en el teclado
+español) y los números van arriba; cada panel suma sus extras (tildes, `/`, `-`).
+Los que escriben nombres en castellano no duplican las filas en mayúscula y
+minúscula: la primera letra de cada palabra sale en mayúscula sola, como en el
+teclado del celular, y **MAYÚS** invierte la letra que viene. Las teclas muestran
+la letra en el caso que van a escribir.
+
 **Y el nombre SOBREVIVE al menú**: `society::npc_line` lo recibe y el saludo neutro
 te nombra ("Buen dia, <vos>."). Antes `SelectedCharacter.name` se guardaba en el
 savegame y no lo leía nadie más.

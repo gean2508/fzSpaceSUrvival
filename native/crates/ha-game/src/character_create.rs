@@ -1565,9 +1565,10 @@ fn quip_from(pool: &[&str], seed: u64) -> String {
 // `android-activity` no es seguro. Dibujarlo nosotros es predecible y entra en
 // la misma pantalla apaisada.
 
-/// Las filas del teclado. ASCII y en mayusculas: es lo unico que la fuente
-/// dibuja y lo unico que `name_input` acepta.
-const KEY_ROWS: [&str; 4] = ["ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789 -_"];
+/// Las filas del teclado, en QWERTY (`qwerty.rs`) con los números arriba.
+/// ASCII y en mayúsculas porque es lo único que `name_input` acepta: por eso va
+/// sin Ñ. El espacio es la tecla ancha de abajo.
+const KEY_ROWS: [&str; 4] = ["1234567890", "QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM_"];
 
 #[derive(Resource, Default)]
 struct KeyboardOpen(bool);
@@ -1669,6 +1670,8 @@ fn sync_keyboard(
                 let y = pyu + 180.0 + KEY_ROWS.len() as f32 * (alto_t + sep);
                 up::boton(l, &art, pxu + 66.0, y, 320.0, alto_t, Some("BORRAR"), None, false,
                           32.0, CcAction::KeyBack, k);
+                up::boton(l, &art, pxu + (pw - 520.0) / 2.0, y, 520.0, alto_t, Some("ESPACIO"),
+                          None, false, 32.0, CcAction::Key(' '), k);
                 up::boton(l, &art, pxu + pw - 66.0 - 320.0, y, 320.0, alto_t, Some("LISTO"),
                           None, true, 32.0, CcAction::KeyDone, k);
                 let _ = Ancla::Izq;
@@ -1754,7 +1757,9 @@ mod quip_tests {
     /// fisico permite y el del telefono no.
     #[test]
     fn el_teclado_cubre_lo_que_el_nombre_acepta() {
-        let keys: String = KEY_ROWS.concat();
+        // El espacio va en la tecla ancha de abajo, fuera de las filas.
+        let keys = format!("{} ", KEY_ROWS.concat());
+        assert!(KEY_ROWS[1].starts_with("QWERTY"));
         for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_".chars() {
             assert!(keys.contains(c), "al teclado en pantalla le falta '{c}'");
         }

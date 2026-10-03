@@ -32,13 +32,14 @@ pub const TOQUES_PARA_DESTRABAR: u32 = 7;
 /// Cuántas respuestas se recuerdan.
 const LINEAS_SALIDA: usize = 5;
 
-/// Las teclas, en filas. Va la barra (para el `/`), los dígitos y el punto y el
-/// menos, que hacen falta para las coordenadas de `/ir`.
+/// Las teclas, en filas QWERTY (`qwerty.rs`) con los números arriba. Va la
+/// barra (para el `/`), y el punto y el menos, que hacen falta para las
+/// coordenadas de `/ir`. Sin Ñ: ninguna orden la usa.
 const FILAS: [&str; 4] = [
-    "/ABCDEFGHIJ",
-    "KLMNOPQRST",
-    "UVWXYZ_ ",
-    "0123456789-.",
+    "1234567890-.",
+    "/QWERTYUIOP",
+    "ASDFGHJKL_",
+    "ZXCVBNM ",
 ];
 
 /// **El estado de la consola.** Vive en un recurso y no en la pantalla porque
