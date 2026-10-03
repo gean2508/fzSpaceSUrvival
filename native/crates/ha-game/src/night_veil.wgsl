@@ -92,7 +92,7 @@
 // el rechazo pasó de ~11 a ~6, y por eso 40 luces cuestan hoy lo que costaban 24.
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
-const MAX_VEIL_LIGHTS: u32 = 40u;
+const MAX_VEIL_LIGHTS: u32 = 64u;
 
 /// Nivel al que la noche cerrada multiplica el albedo del mundo (1 = mediodía).
 /// Es EL número de la noche: `contraste = pozo / esto`. A 0.02 no ves nada, a
@@ -210,13 +210,48 @@ struct NightVeilMaterial {
     _p1: u32,
     _p2: u32,
     // xy = world pos (m), z = **1/alcance²** (no el alcance), w = fuerza 0..1
-    lights: array<vec4<f32>, 40>,
+    lights: array<vec4<f32>, 64>,
     // rgb = color de esa luz (lineal), w = **1/(radio·BULB_R)** para el bulbo
-    tints: array<vec4<f32>, 40>,
+    tints: array<vec4<f32>, 64>,
+    // rgb = el mismo color ya saturado (`tints^1,6`, precalculado en la CPU)
+    cols: array<vec4<f32>, 64>,
+    // Grilla de baldosas: xy = esquina (m), zw = 1/lado (m⁻¹); zw = 0 → sin grilla
+    grid: vec4<f32>,
+    // Máscara de luces por baldosa, cuatro baldosas por vec4: luces 0..31 y 32..39
+    tiles_lo: array<vec4<u32>, 50>,
+    tiles_hi: array<vec4<u32>, 50>,
 }
 
 @group(2) @binding(0)
 var<uniform> material: NightVeilMaterial;
+
+/// Gemelas de `TILES_X`/`TILES_Y` en `light2d.rs`.
+const TILES_X: u32 = 20u;
+const TILES_Y: u32 = 10u;
+
+/// **Qué luces tocan este píxel** (3 oct 2026): la máscara de su baldosa, que la
+/// CPU arma en `light2d::light_tiles`. Antes cada píxel recorría las `n` luces y
+/// descartaba casi todas; ahora recorre sólo los bits prendidos, y una luz que no
+/// está en la máscara es una que el bucle viejo igual saltaba con `continue`.
+/// Fuera de la grilla (la cámara se movió entre dos ticks) va la máscara completa:
+/// más lento, nunca distinto.
+fn mascara(p: vec2<f32>, n: u32) -> vec2<u32> {
+    let todas = vec2<u32>(
+        select((1u << n) - 1u, 0xffffffffu, n >= 32u),
+        select(0u, select((1u << (n - 32u)) - 1u, 0xffffffffu, n >= 64u), n > 32u),
+    );
+    if material.grid.z <= 0.0 {
+        return todas;
+    }
+    let g = (p - material.grid.xy) * material.grid.zw;
+    if g.x < 0.0 || g.y < 0.0 || g.x >= f32(TILES_X) || g.y >= f32(TILES_Y) {
+        return todas;
+    }
+    let k = min(u32(g.y), TILES_Y - 1u) * TILES_X + min(u32(g.x), TILES_X - 1u);
+    let v = k / 4u;
+    let c = k % 4u;
+    return vec2<u32>(material.tiles_lo[v][c], material.tiles_hi[v][c]) & todas;
+}
 
 /// Ruido hash barato por píxel (Dave Hoskins). Solo se usa para el dither.
 fn hash12(p: vec2<f32>) -> f32 {
@@ -249,7 +284,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     var tint = vec3<f32>(0.0);
     var tint_w = 0.0;
 
-    for (var i = 0u; i < n; i = i + 1u) {
+    let m = mascara(p, n);
+    for (var w = 0u; w < 2u; w = w + 1u) {
+      var bits = select(m.y, m.x, w == 0u);
+      while bits != 0u {
+        // Menor a mayor, el orden del bucle viejo: el producto `cover` redondea igual.
+        let i = w * 32u + firstTrailingBit(bits);
+        bits = bits & (bits - 1u);
         let l = material.lights[i];
         // **Sin raíz y sin división.** `l.z` viene como 1/alcance², así que
         // rechazar una luz que no llega a este píxel cuesta una resta, un `dot`,
@@ -266,6 +307,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         cover *= 1.0 - s;
         tint += material.tints[i].rgb * s;
         tint_w += s;
+      }
     }
     let lit = 1.0 - cover;
 
@@ -321,7 +363,12 @@ fn fragment_add(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // Ambiente: el único término plano, y bajísimo. Es "ver la silueta".
     var acc = material.color.rgb * (AMBIENT_GAIN * night);
 
-    for (var i = 0u; i < n; i = i + 1u) {
+    let m = mascara(p, n);
+    for (var w = 0u; w < 2u; w = w + 1u) {
+      var bits = select(m.y, m.x, w == 0u);
+      while bits != 0u {
+        let i = w * 32u + firstTrailingBit(bits);
+        bits = bits & (bits - 1u);
         let l = material.lights[i];
         let t = material.tints[i];
         // Mismo rechazo barato que la pasada de sombra: `l.z` = 1/alcance².
@@ -346,7 +393,8 @@ fn fragment_add(mesh: VertexOutput) -> @location(0) vec4<f32> {
         // suma el color SATURADO (potencia 1,6: el canal dominante queda, los
         // otros bajan); un farol blanco (canales iguales) no cambia. El núcleo sí
         // puede quemar a blanco, como una llama de verdad.
-        let col = pow(max(t.rgb, vec3<f32>(0.0)), vec3<f32>(1.6));
+        // (`pow(t.rgb, 1.6)`, precalculado por luz en la CPU: `cols`.)
+        let col = material.cols[i].rgb;
         var bulbo = 0.0;
         var halo = 0.0;
         if t.w > 0.001 {
@@ -364,6 +412,7 @@ fn fragment_add(mesh: VertexOutput) -> @location(0) vec4<f32> {
             halo = uh * uh * HALO_GAIN;
         }
         acc += col * (diffuse * ADD_GAIN + halo * k) + t.rgb * (bulbo * k);
+      }
     }
 
     let dither = (hash12(mesh.position.xy + vec2<f32>(37.0, 11.0)) - 0.5) * (1.4 / 255.0);
