@@ -263,14 +263,9 @@ fn pintar_habilidades(
         return;
     }
     let en = idioma_actual() == Idioma::En;
-    let mut linea: Vec<String> = OFICIOS
-        .iter()
-        .filter(|o| h.xp[o.idx()] > 0)
-        .map(|o| format!("{} {}", o.nombre(en), h.nivel(*o)))
-        .collect();
-    if let Some((a, _)) = &h.aviso {
-        linea.insert(0, a.clone());
-    }
+    // Sólo se habla cuando se sube de nivel: la línea fija «Huerta 1 · Tala 2» estaba siempre en pantalla, sin que
+    // nadie la hubiera pedido, y se leía como un cartel perdido.
+    let linea: Vec<String> = h.aviso.iter().map(|(a, _)| a.clone()).collect();
     let t = linea.join("  ·  ");
     for mut x in &mut textos {
         if x.0 != t {

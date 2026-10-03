@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.iconos import (antorcha, bola_de_nieve, carne, cuero, escudo, frasco, hacha, naranja, palos, pan, pico, sopa, tarta, tronco, uvas)  # noqa: E402
+from lib.iconos import (antorcha, bola_de_nieve, carne, cuero, escudo, frasco, martillo, espada, cofre, hacha, naranja, palos, pan, pico, sopa, tarta, tronco, uvas)  # noqa: E402
 from lib.pixel import CELDA, Pagina, publicar  # noqa: E402
 
 HOJA_REL = "art/gen/comida.png"
@@ -42,6 +42,10 @@ def main():
         ("stone_pickaxe", "Pico de piedra", pico((130, 130, 144))),
         ("torch", "Antorcha", antorcha()),
         ("shield_wood", "Escudo de madera", escudo()),
+        ("hammer", "Martillo", martillo()),
+        ("sword_iron", "Espada de hierro", espada((176, 182, 190))),
+        ("sword_steel", "Espada de acero", espada((205, 214, 232))),
+        ("chest", "Cofre", cofre()),
     ]
     pag = Pagina()
     sprites, objetos = {}, {}

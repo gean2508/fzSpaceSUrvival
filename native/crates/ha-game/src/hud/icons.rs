@@ -23,6 +23,8 @@ pub struct HudIconAtlas {
 #[derive(Component)]
 pub struct StatHeartIcon {
     pub idx: i32,
+    /// Ancho del corazón entero, en px (el medio corazón usa la mitad).
+    pub ancho: f32,
 }
 
 // `StatEnergyIcon` y su fila de muslos (`drumstick_*`) se borraron el 15 ago
@@ -82,7 +84,7 @@ pub fn spawn_stat_heart(
             ..default()
         },
         img,
-        StatHeartIcon { idx },
+        StatHeartIcon { idx, ancho: w },
         Name::new("StatHeart"),
     ));
 }

@@ -139,3 +139,23 @@ def plataforma():
     for x in range(5, 28, 6):
         l.poligono([(x, 28), (x + 3, 28), (x + 6, 19), (x + 3, 19)], (226, 190, 60))   # franjas
     return _v(l)
+
+
+def sol():
+    """El sol del reloj: disco con volumen y rayos cortos."""
+    l = Lienzo()
+    r = rampa((246, 200, 70), 5)
+    for dx, dy in [(16, 3), (16, 29), (3, 16), (29, 16), (7, 7), (25, 7), (7, 25), (25, 25)]:
+        l.rect(dx - 1, dy - 1, 2, 2, r[3])
+    esculpir(l, _disco(16, 16, 8.5, 8.5), r, relieve=1.5)
+    return _icono(l)
+
+
+def luna():
+    """La luna del reloj: creciente con cráteres."""
+    l = Lienzo()
+    r = rampa((214, 220, 236), 5)
+    m = _disco(16, 16, 10, 10) & ~_disco(21, 13, 8.5, 8.5)
+    esculpir(l, m, r, relieve=1.3)
+    l.punto(10, 17, r[1]); l.punto(11, 17, r[1]); l.punto(12, 22, r[1])
+    return _icono(l)

@@ -60,6 +60,8 @@ pub struct Heridas {
     /// Segundos de sangrado que quedan (0 = sana).
     pub sangrado: f32,
     desde: f32,
+    /// Segundos que queda el aviso «la herida cerró».
+    cerro: f32,
     azar: u64,
 }
 
@@ -112,13 +114,18 @@ fn tick_heridas(
     if h.sangrado > 0.0 {
         h.sangrado = (h.sangrado - dt).max(0.0);
         h.desde += dt;
+        if h.sangrado <= 0.0 {
+            h.cerro = 4.0; // la herida cerró sola: se avisa un momento
+        }
         s.hp = (s.hp - PERDIDA_POR_SEG * dt).max(1.0_f32.min(s.hp));
         if h.desde >= TIEMPO_VENDAJE && inv.qty("wool") > 0 {
             inv.remove("wool", 1);
             persist.mark_dirty();
             h.sangrado = 0.0;
+            h.cerro = 4.0;
         }
     }
+    h.cerro = (h.cerro - dt).max(0.0);
     // FATIGA: sube despierto; quedarte quieto unos segundos te hace descansar. Cansado, tenés
     // más hambre; agotado, perdés vida despacio (piso 25), como el frío.
     let (px, pz) = (pt.translation.x, -pt.translation.y);
@@ -181,6 +188,9 @@ fn pintar(
                 (true, true) => format!("BLEEDING · bandaging with wool ({:.0}s)", h.sangrado),
                 (true, false) => format!("BLEEDING {:.0}s · find wool", h.sangrado),
             });
+        }
+        if h.cerro > 0.0 && h.sangrado <= 0.0 {
+            partes.push(if en { "The wound closed".into() } else { "La herida cerró".into() });
         }
         if h.frio {
             partes.push(if en { "COLD · coat or torch".into() } else { "FRÍO · abrigo o antorcha".into() });

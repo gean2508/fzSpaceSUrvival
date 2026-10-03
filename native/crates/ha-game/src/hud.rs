@@ -78,7 +78,7 @@ impl Plugin for PixelHudPlugin {
             // por tupla que acepta `add_systems`.
             .add_systems(
                 Update,
-                (update_day_clock, update_sky_dial, fill_ui_icon_slots, hide_touch_controls_with_panel)
+                (update_day_clock, update_sky_dial, vestir_astros, fill_ui_icon_slots, hide_touch_controls_with_panel)
                     .after(spawn_hud_once),
             )
             .add_systems(Update, (
@@ -934,6 +934,22 @@ fn spawn_sky_dial(parent: &mut ChildBuilder, heart: f32) {
         });
 }
 
+/// El sol y la luna del reloj dejan de ser círculos de color plano: se visten con el arte dibujado en cuanto la
+/// biblioteca lo tiene (`ui/reloj_sol`, `ui/reloj_luna`). Sin arte, queda el círculo.
+fn vestir_astros(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    sol: Query<Entity, (With<SkyDialSun>, Without<ImageNode>)>,
+    luna: Query<Entity, (With<SkyDialMoon>, Without<ImageNode>)>,
+) {
+    let astros: Vec<(Entity, &str)> = sol.iter().map(|e| (e, "ui/reloj_sol")).chain(luna.iter().map(|e| (e, "ui/reloj_luna"))).collect();
+    for (e, clave) in astros {
+        if let Some(img) = art.ui_icon(clave) {
+            commands.entity(e).try_insert((img, BackgroundColor(Color::NONE), BorderRadius::ZERO));
+        }
+    }
+}
+
 /// Sólo para elegir qué marcador insertar en el bucle de arriba.
 enum SkyDialKind {
     Sun,
@@ -1500,7 +1516,7 @@ fn update_hud_state(
     art: Res<crate::art2d::ArtLibrary>,
     mut stamina: ResMut<StaminaMeter>,
     mut cache: ResMut<HudDisplayCache>,
-    mut hearts: Query<(&StatHeartIcon, &mut ImageNode)>,
+    mut hearts: Query<(&StatHeartIcon, &mut ImageNode, &mut Node)>,
     span: Res<CpuSpanStats>,
 ) {
     let _guard = span_guard(&span, CpuSpanSlot::Hud);
@@ -1524,9 +1540,12 @@ fn update_hud_state(
 
     if !cache.initialized || cache.heart_units != heart_units {
         cache.heart_units = heart_units;
-        for (icon, mut image) in &mut hearts {
+        for (icon, mut image, mut node) in &mut hearts {
             let units = (heart_units - icon.idx * 2).clamp(0, 2);
             *image = crate::hud::icons::heart_node_for_units(units, &atlas, &art);
+            // El medio corazón es el recorte de UNA celda (la mitad izquierda del lleno): estirado al ancho del
+            // corazón entero salía deformado. Se dibuja a medio ancho, pegado a la izquierda.
+            node.width = Val::Px(if units == 1 { icon.ancho * 0.5 } else { icon.ancho });
         }
     }
     // La energía ya no se dibuja acá: es una barra en `survival_bars.rs`. Lo que

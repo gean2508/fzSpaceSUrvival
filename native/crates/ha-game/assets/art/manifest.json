@@ -33731,6 +33731,24 @@
      "label": "Helicóptero 2"
     }
    ]
+  },
+  "items/hammer": {
+   "label": "Martillo"
+  },
+  "items/sword_iron": {
+   "label": "Espada de hierro"
+  },
+  "items/sword_steel": {
+   "label": "Espada de acero"
+  },
+  "items/chest": {
+   "label": "Cofre"
+  },
+  "ui/reloj_sol": {
+   "label": "Reloj: sol"
+  },
+  "ui/reloj_luna": {
+   "label": "Reloj: luna"
   }
  },
  "origen": {
@@ -215073,7 +215091,7 @@
    ],
    "png": "art/gen/ui2.png",
    "rect": {
-    "col": 8,
+    "col": 10,
     "row": 0,
     "w": 1,
     "h": 1
@@ -215086,7 +215104,7 @@
    ],
    "png": "art/gen/ui2.png",
    "rect": {
-    "col": 9,
+    "col": 11,
     "row": 0,
     "w": 1,
     "h": 1
@@ -215099,7 +215117,7 @@
    ],
    "png": "art/gen/ui2.png",
    "rect": {
-    "col": 7,
+    "col": 9,
     "row": 0,
     "w": 1,
     "h": 1
@@ -215112,7 +215130,7 @@
    ],
    "png": "art/gen/ui2.png",
    "rect": {
-    "col": 6,
+    "col": 8,
     "row": 0,
     "w": 1,
     "h": 1
@@ -215125,7 +215143,7 @@
    ],
    "png": "art/gen/ui2.png",
    "rect": {
-    "col": 5,
+    "col": 7,
     "row": 0,
     "w": 1,
     "h": 1
@@ -275280,7 +275298,7 @@
    ],
    "png": "art/gen/ui2.png",
    "rect": {
-    "col": 4,
+    "col": 6,
     "row": 0,
     "w": 1,
     "h": 1
@@ -284429,6 +284447,84 @@
     "h": 1,
     "row": 18,
     "w": 1
+   }
+  },
+  "items/hammer": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/comida.png",
+   "rect": {
+    "col": 20,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/sword_iron": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/comida.png",
+   "rect": {
+    "col": 21,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/sword_steel": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/comida.png",
+   "rect": {
+    "col": 22,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "items/chest": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/comida.png",
+   "rect": {
+    "col": 23,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "ui/reloj_sol": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/ui2.png",
+   "rect": {
+    "col": 4,
+    "row": 0,
+    "w": 1,
+    "h": 1
+   }
+  },
+  "ui/reloj_luna": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/ui2.png",
+   "rect": {
+    "col": 5,
+    "row": 0,
+    "w": 1,
+    "h": 1
    }
   }
  }

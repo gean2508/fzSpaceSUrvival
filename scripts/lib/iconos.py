@@ -386,3 +386,57 @@ def escudo():
     silueta(l)
     l.verificar(apoyado=False)
     return l
+
+
+def martillo(cabeza=(122, 112, 150), madera=(150, 104, 62)):
+    """Martillo de construir: cabeza maciza de dos caras (la de luz arriba) en el mango inclinado."""
+    l = Lienzo()
+    _mango(l, madera)
+    c = rampa(cabeza, 5)
+    l.poligono([(9, 5), (24, 3), (28, 9), (25, 15), (11, 13), (7, 9)], c[3])
+    l.poligono([(9, 5), (24, 3), (28, 9), (23, 8), (11, 8)], c[4])        # cara de luz
+    l.poligono([(25, 15), (28, 9), (23, 8), (22, 13)], c[1])               # lado en sombra
+    l.rect(12, 9, 9, 1, c[2])
+    l.punto(12, 5, (255, 255, 255))
+    silueta(l)
+    l.verificar(apoyado=False)
+    return l
+
+
+def espada(hoja=(190, 196, 206), madera=(150, 104, 62)):
+    l = Lienzo()
+    c = rampa(hoja, 5)
+    m = rampa(madera, 5)
+    l.poligono([(24, 3), (28, 4), (29, 8), (13, 22), (10, 19)], c[3])           # hoja
+    l.poligono([(24, 3), (28, 4), (29, 8), (27, 7), (22, 6)], c[4])             # filo de luz
+    l.poligono([(29, 8), (13, 22), (11, 20), (26, 8)], c[1])                    # canal en sombra
+    l.punto(25, 4, (255, 255, 255))
+    l.banda(8, 15, 17, 24, 2.6, m[1])                                           # guarda
+    l.banda(5, 27, 21, 11, 2.4, m[2])                                            # empuñadura
+    l.banda(4, 26, 20, 10, 1.0, m[4])
+    l.rect(4, 26, 3, 3, c[3])                                                    # pomo
+    silueta(l)
+    l.verificar(apoyado=False)
+    return l
+
+
+def cofre():
+    l = Lienzo()
+    m = rampa((150, 104, 62), 5)
+    h = rampa((176, 182, 190), 4)
+    l.rect(4, 15, 24, 16, m[2])                       # cuerpo
+    l.rect(4, 15, 24, 3, m[4])                        # luz arriba
+    l.rect(4, 28, 24, 3, m[0])                        # sombra abajo
+    for x in (9, 15, 21):
+        l.rect(x, 18, 1, 10, m[1])                     # tablas
+    l.poligono([(4, 15), (7, 7), (25, 7), (28, 15)], m[3])                       # tapa
+    l.poligono([(7, 7), (25, 7), (26, 9), (6, 9)], m[4])
+    l.rect(4, 15, 24, 1, m[0])
+    l.rect(13, 15, 6, 8, h[2])                        # cerradura
+    l.rect(13, 15, 6, 1, h[3])
+    l.rect(15, 18, 2, 3, h[0])
+    l.rect(4, 18, 2, 13, h[1])                        # herrajes laterales
+    l.rect(26, 18, 2, 13, h[1])
+    silueta(l)
+    l.verificar(apoyado=True)
+    return l

@@ -23,6 +23,8 @@ def main():
         ("ui/tab_craft", "Pestaña: fabricar", u.martillo_yunque()),
         ("ui/tab_construir", "Pestaña: construir", u.casita()),
         ("ui/crosshair", "Mira", u.mira()),
+        ("ui/reloj_sol", "Reloj: sol", u.sol()),
+        ("ui/reloj_luna", "Reloj: luna", u.luna()),
         ("ui/menu_tierra", "Menú: Tierra", u.tierra()),
         ("machines/wood_extractor", "Extractor de madera", u.extractor((150, 104, 62), (176, 182, 190))),
         ("machines/stone_extractor", "Extractor de piedra", u.extractor((130, 134, 148), (226, 190, 60))),
