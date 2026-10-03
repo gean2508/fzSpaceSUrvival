@@ -92,7 +92,7 @@
 // el rechazo pasó de ~11 a ~6, y por eso 40 luces cuestan hoy lo que costaban 24.
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
-const MAX_VEIL_LIGHTS: u32 = 40u;
+const MAX_VEIL_LIGHTS: u32 = 64u;
 
 /// Nivel al que la noche cerrada multiplica el albedo del mundo (1 = mediodía).
 /// Es EL número de la noche: `contraste = pozo / esto`. A 0.02 no ves nada, a
@@ -210,11 +210,11 @@ struct NightVeilMaterial {
     _p1: u32,
     _p2: u32,
     // xy = world pos (m), z = **1/alcance²** (no el alcance), w = fuerza 0..1
-    lights: array<vec4<f32>, 40>,
+    lights: array<vec4<f32>, 64>,
     // rgb = color de esa luz (lineal), w = **1/(radio·BULB_R)** para el bulbo
-    tints: array<vec4<f32>, 40>,
+    tints: array<vec4<f32>, 64>,
     // rgb = el mismo color ya saturado (`tints^1,6`, precalculado en la CPU)
-    cols: array<vec4<f32>, 40>,
+    cols: array<vec4<f32>, 64>,
     // Grilla de baldosas: xy = esquina (m), zw = 1/lado (m⁻¹); zw = 0 → sin grilla
     grid: vec4<f32>,
     // Máscara de luces por baldosa, cuatro baldosas por vec4: luces 0..31 y 32..39
@@ -238,7 +238,7 @@ const TILES_Y: u32 = 10u;
 fn mascara(p: vec2<f32>, n: u32) -> vec2<u32> {
     let todas = vec2<u32>(
         select((1u << n) - 1u, 0xffffffffu, n >= 32u),
-        select(0u, (1u << (n - 32u)) - 1u, n > 32u),
+        select(0u, select((1u << (n - 32u)) - 1u, 0xffffffffu, n >= 64u), n > 32u),
     );
     if material.grid.z <= 0.0 {
         return todas;

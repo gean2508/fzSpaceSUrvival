@@ -60,6 +60,10 @@ const NIGHT_VEIL_SHADER_HANDLE: Handle<Shader> =
 /// luces que el velo, la luz nº 17 sería un aura flotando sobre suelo negro —
 /// un hueco marcado que aparece y desaparece al hacer zoom.
 ///
+/// **Subido de 40 a 64 (3 oct 2026)** con la grilla de baldosas ([`TILES_X`]): el costo ya
+/// no es píxeles × luces sino píxeles × luces que se solapan, así que el tope de uniform
+/// dejó de ser el límite de rendimiento.
+///
 /// **Subido de 24 a 40 (ago 2026), y sin pagarlo.** El disparador fue medir el
 /// manifest: de 14.440 sprites sólo CUATRO declaraban emisión, así que el pueblo
 /// de noche estaba negro por falta de emisores, no por falta de presupuesto. Con
@@ -72,7 +76,7 @@ const NIGHT_VEIL_SHADER_HANDLE: Handle<Shader> =
 /// rechaza por distancia AL CUADRADO contra `1/alcance²` precalculado acá abajo
 /// (ver `uniform_lights`), o sea sin raíz ni división. El rechazo pasó de ~11
 /// operaciones a ~6, y el rechazo es lo que se paga 40 veces por píxel.
-pub const VEIL_LIGHTS: usize = 40;
+pub const VEIL_LIGHTS: usize = 64;
 
 /// **Cuántas luces se evalúan de verdad.** El velo y la pasada aditiva recorren TODAS las
 /// luces por cada píxel de la pantalla, así que el costo es píxeles × luces: medido en el
@@ -105,7 +109,7 @@ pub fn presupuesto_de_luces() -> usize {
 ///
 /// Ahora la CPU parte el encuadre en `TILES_X × TILES_Y` baldosas y anota, por
 /// baldosa, una máscara de bits con las luces que la TOCAN (`tiles_lo` = luces
-/// 0..31, `tiles_hi` = 32..39). El shader lee UNA máscara y recorre sólo esos bits:
+/// 0..31, `tiles_hi` = 32..63). El shader lee UNA máscara y recorre sólo esos bits:
 /// el costo pasa a ser píxeles × (luces que se solapan ahí), que en una calle con
 /// faroles es 0, 1 o 2 — no 8 ni 40.
 ///
@@ -305,7 +309,7 @@ pub struct NightVeilUniform {
     pub grid: Vec4,
     /// Máscara de luces 0..31 por baldosa (baldosa `k` = `tiles_lo[k/4][k%4]`).
     pub tiles_lo: [UVec4; TILE_VECS],
-    /// Máscara de luces 32..39 por baldosa.
+    /// Máscara de luces 32..63 por baldosa.
     pub tiles_hi: [UVec4; TILE_VECS],
 }
 
