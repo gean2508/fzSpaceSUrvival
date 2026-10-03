@@ -566,13 +566,17 @@ fn spawn_hud_once(
                     left: Val::Px(layout.insets.left as f32 + 24.0 * k),
                     top: Val::Px(layout.insets.top as f32 + 24.0 * k),
                     width: Val::Px(520.0 * k),
-                    height: Val::Px(190.0 * k),
+                    // El panel CRECE con sus filas: con el oxígeno y el Ki visibles hay cinco barras y la caja fija de 190
+                    // las dejaba colgando afuera del fondo (reporte del 3 oct 2026).
+                    min_height: Val::Px(190.0 * k),
+                    height: Val::Auto,
                     display: Display::Flex,
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(14.0 * k),
                     padding: UiRect {
                         left: Val::Px(22.0 * k),
                         top: Val::Px(16.0 * k),
+                        bottom: Val::Px(16.0 * k),
                         ..default()
                     },
                     ..default()
@@ -1740,6 +1744,7 @@ fn item_label(id: &str) -> &str {
         "orange" => "Naranja",
         "grape" => "Uvas",
         "map_small" => "Mapa",
+        _ if crate::armas::etiqueta_estatica(id).is_some() => crate::armas::etiqueta_estatica(id).unwrap_or(id),
         _ => ha_assets::slots::slot_label(&format!("items/{id}")).unwrap_or(id),
     }
 }

@@ -140,6 +140,16 @@ impl Plugin for AutoDrivePlugin {
             );
             return;
         }
+        if crate::flags::var("HA_ARMASTEST").is_ok() {
+            app.init_resource::<FlyTestState>();
+            app.add_systems(
+                Update,
+                armas_test_drive
+                    .before(aplicar_actuacion_del_driver)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            return;
+        }
         if crate::flags::var("HA_BARRIOTEST").is_ok() {
             app.init_resource::<FlyTestState>().init_resource::<BarrioTestState>();
             app.add_systems(
@@ -2089,6 +2099,78 @@ struct BarrioTestState {
     /// ABIERTA, 3 = terminada.
     paseo: u8,
     paseo_t0: f32,
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_ARMASTEST — equipa un arma, planta infectados en fila y dispara (biblia §19)
+// ---------------------------------------------------------------------------
+
+/// `HA_ARMASTEST=<arma>` (por defecto `gun_thompson__115`): le da el arma y munición, pone cinco infectados a 6-14 m al este,
+/// apunta al más cercano con el cursor fijado y deja tres capturas (`armas-0-apuntando`, `armas-1-tiroteo`,
+/// `armas-2-despues`). Informa en el log cuántos infectados quedan y cuántas balas se gastaron.
+fn armas_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 || !player_ready(world) {
+        return;
+    }
+    let stage = world.resource::<FlyTestState>().stage;
+    let (px, pz) = {
+        let mut q = world.query_filtered::<&SimState, With<Player>>();
+        let s = q.single(world);
+        (s.body.x, s.body.z)
+    };
+    let lado: f32 = if crate::flags::var("HA_ARMASTEST_OESTE").is_ok() { -1.0 } else { 1.0 };
+    let arma = crate::flags::var("HA_ARMASTEST").ok().filter(|a| a.starts_with("gun_")).unwrap_or_else(|| "gun_thompson__115".to_string());
+    if stage == 0 {
+        {
+            let mut ui = world.resource_mut::<crate::hud::inventory_ui::InventoryUiState>();
+            crate::hud::inventory_ui::add_item_to_slots(&mut ui, &arma, 1);
+            for c in crate::armas::Calibre::TODOS {
+                crate::hud::inventory_ui::add_item_to_slots(&mut ui, c.item(), 90);
+            }
+        }
+        world.resource_scope(|world, ui: Mut<crate::hud::inventory_ui::InventoryUiState>| {
+            let mut inv = world.resource_mut::<crate::inventory_persist::PlayerInventory>();
+            crate::hud::inventory_ui::flush_slots_to_inventory(&ui, &mut inv);
+        });
+        world.resource_mut::<crate::input::EquippedItem>().item_id = arma.clone();
+        world.resource_scope(|world, art: Mut<crate::art2d::ArtLibrary>| {
+            let mut commands = world.commands();
+            for k in 0..5u32 {
+                crate::infectados::spawn_guardia(&mut commands, &art, px + lado * (6.0 + k as f32 * 2.0), pz + (k as f32 - 2.0) * 1.1, 7 + k);
+            }
+        });
+        eprintln!("ha-armas: {arma} equipada, 5 infectados en fila");
+        advance_stage(world, now);
+        return;
+    }
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    let t = now - entered;
+    // El dedo apoyado sobre el primer infectado, todo el tiempo.
+    {
+        let mut c = world.resource_mut::<crate::input::AimCursor>();
+        c.locked = true;
+        c.initialized = true;
+        c.active = true;
+        c.world = Vec2::new(px + lado * 7.0, pz);
+    }
+    let shots = world.resource::<FlyTestState>().shots as usize;
+    let nombres = ["armas-0-apuntando", "armas-1-tiroteo", "armas-2-despues"];
+    let cuando = [0.8f32, 2.0, 7.0];
+    if shots < nombres.len() && t > cuando[shots] {
+        shot(world, &format!("{}/{}.png", flytest_dir(), nombres[shots]));
+        world.resource_mut::<FlyTestState>().shots += 1;
+    }
+    if t > 8.5 {
+        let vivos = world.query::<&crate::infectados::Infectado>().iter(world).count();
+        let balas = world.query::<&crate::armas::Bala>().iter(world).count();
+        let cargadas = world.resource::<crate::armas::EstadoArmas>().cargadas_de(&arma);
+        let reserva = world.resource::<crate::inventory_persist::PlayerInventory>().qty(crate::armas::parsear(&arma).map(|(d, _)| d.calibre.item()).unwrap_or(""));
+        eprintln!("ha-armas: infectados vivos {vivos}/5 · balas en vuelo {balas} · cargadas {cargadas:?} · reserva {reserva}");
+        eprintln!("ha-armas: DONE");
+        std::process::exit(0);
+    }
 }
 
 fn barrio_test_drive(world: &mut World) {

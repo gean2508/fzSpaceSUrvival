@@ -295,6 +295,14 @@ impl Civ {
             nombre: per.nombre.clone(),
             pueblo: pu.nombre.clone(),
             recetas,
+            // El diario del pueblo (biblia §20, ítem 2): lo último que pasó en SU pueblo, de la crónica.
+            rumor: m
+                .cronica
+                .hechos
+                .iter()
+                .rev()
+                .find(|h| (h.pueblo == per.pueblo || h.otro == per.pueblo) && h.tipo.peso() >= 1)
+                .map(|h| (h.dia, h.texto.clone())),
         })
     }
 
@@ -364,6 +372,8 @@ pub(crate) struct SaberNpc {
     pub nombre: String,
     pub pueblo: String,
     pub recetas: Vec<Receta>,
+    /// El último hecho de la crónica que toca a su pueblo: (día, texto).
+    pub rumor: Option<(u64, String)>,
 }
 
 fn pueblo_mas_cercano(m: &Mundo, cuerpo: u8, x: f32, z: f32) -> Option<u32> {

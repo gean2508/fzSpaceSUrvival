@@ -198,6 +198,132 @@
         }
       ]
     },
+    "bullet_hit": {
+      "dur": 0.2,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "brown",
+          "at": 0.0,
+          "dur": 0.12,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.7,
+          "attack": 0.04,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 2400.0,
+          "cutoff1": 500.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 160.0,
+          "f1": 70.0,
+          "amp": 0.55,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
+          "peak": 0.9
+        }
+      ]
+    },
+    "bullet_wall": {
+      "dur": 0.3,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.025,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.45,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.01,
+          "dur": 0.22,
+          "f0": 2400.0,
+          "f1": 1700.0,
+          "amp": 0.35,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 2.6,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 3.1,
+          "fm_index": 4.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "bell",
+          "at": 0.02,
+          "dur": 0.26,
+          "f0": 3100.0,
+          "f1": 3100.0,
+          "amp": 0.18,
+          "attack": 0.04,
+          "vibrato": 0.0,
+          "curve": 2.4,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "reverb",
+          "size": 0.3,
+          "mix": 0.12
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.14,
+          "peak": 0.9
+        }
+      ]
+    },
     "chop": {
       "dur": 0.34,
       "rate": 32000,
@@ -1354,6 +1480,61 @@
         }
       ]
     },
+    "dry_fire": {
+      "dur": 0.12,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "pluck",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 1250.0,
+          "f1": 1250.0,
+          "amp": 0.5,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 5.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.03,
+          "f0": 2100.0,
+          "f1": 1400.0,
+          "amp": 0.2,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "highpass",
+          "alpha": 0.05
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.1,
+          "peak": 0.9
+        }
+      ]
+    },
     "eat": {
       "dur": 0.6,
       "rate": 32000,
@@ -2239,6 +2420,765 @@
         {
           "fx": "normalize_rms",
           "rms": 0.14,
+          "peak": 0.9
+        }
+      ]
+    },
+    "ray_hit": {
+      "dur": 0.45,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.3,
+          "f0": 1500.0,
+          "f1": 500.0,
+          "amp": 0.5,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 2.6,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 1.7,
+          "fm_index": 5.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.2,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.35,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 8000.0,
+          "cutoff1": 2000.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "bell",
+          "at": 0.04,
+          "dur": 0.35,
+          "f0": 1760.0,
+          "f1": 1760.0,
+          "amp": 0.25,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 2.4,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "chorus",
+          "depth": 0.003,
+          "rate": 2.3,
+          "mix": 0.3
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
+          "peak": 0.9
+        }
+      ]
+    },
+    "reload_bolt": {
+      "dur": 0.34,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "pluck",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 440.0,
+          "f1": 440.0,
+          "amp": 0.6,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "pink",
+          "at": 0.0,
+          "dur": 0.05,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.5,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 6000.0,
+          "cutoff1": 1800.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "pluck",
+          "at": 0.14,
+          "dur": 0.12,
+          "f0": 300.0,
+          "f1": 300.0,
+          "amp": 0.75,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "bell",
+          "at": 0.15,
+          "dur": 0.16,
+          "f0": 3000.0,
+          "f1": 3000.0,
+          "amp": 0.1,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "normalize_rms",
+          "rms": 0.14,
+          "peak": 0.9
+        }
+      ]
+    },
+    "reload_in": {
+      "dur": 0.26,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "pluck",
+          "at": 0.0,
+          "dur": 0.12,
+          "f0": 330.0,
+          "f1": 330.0,
+          "amp": 0.7,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.08,
+          "f0": 180.0,
+          "f1": 90.0,
+          "amp": 0.5,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "pink",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.5,
+          "attack": 0.04,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 4800.0,
+          "cutoff1": 1600.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "bell",
+          "at": 0.05,
+          "dur": 0.2,
+          "f0": 2800.0,
+          "f1": 2800.0,
+          "amp": 0.12,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "normalize_rms",
+          "rms": 0.14,
+          "peak": 0.9
+        }
+      ]
+    },
+    "reload_out": {
+      "dur": 0.22,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "pluck",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 520.0,
+          "f1": 520.0,
+          "amp": 0.55,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "pink",
+          "at": 0.0,
+          "dur": 0.06,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.5,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 5200.0,
+          "cutoff1": 1400.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "bell",
+          "at": 0.03,
+          "dur": 0.16,
+          "f0": 3300.0,
+          "f1": 3300.0,
+          "amp": 0.14,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "normalize_rms",
+          "rms": 0.14,
+          "peak": 0.9
+        }
+      ]
+    },
+    "shot_pistol": {
+      "dur": 0.55,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.05,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.85,
+          "attack": 0.02,
+          "vibrato": 0.0,
+          "curve": 5.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 9000.0,
+          "cutoff1": 2400.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.14,
+          "f0": 210.0,
+          "f1": 62.0,
+          "amp": 0.8,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "brown",
+          "at": 0.01,
+          "dur": 0.4,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.55,
+          "attack": 0.03,
+          "vibrato": 0.0,
+          "curve": 2.2,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 2600.0,
+          "cutoff1": 380.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "saturate",
+          "drive": 2.6
+        },
+        {
+          "fx": "reverb",
+          "size": 0.5,
+          "mix": 0.22
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
+          "peak": 0.9
+        }
+      ]
+    },
+    "shot_ray": {
+      "dur": 0.7,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.45,
+          "f0": 1900.0,
+          "f1": 260.0,
+          "amp": 0.6,
+          "attack": 0.02,
+          "vibrato": 0.0,
+          "curve": 2.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 2.01,
+          "fm_index": 6.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "saw",
+          "at": 0.0,
+          "dur": 0.3,
+          "f0": 700.0,
+          "f1": 120.0,
+          "amp": 0.35,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 2.5,
+          "sustain": 0.0,
+          "detune": 24.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "bell",
+          "at": 0.02,
+          "dur": 0.5,
+          "f0": 2349.0,
+          "f1": 2349.0,
+          "amp": 0.3,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.03,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.3,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "chorus",
+          "depth": 0.004,
+          "rate": 1.7,
+          "mix": 0.35
+        },
+        {
+          "fx": "reverb",
+          "size": 0.5,
+          "mix": 0.22
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
+          "peak": 0.9
+        }
+      ]
+    },
+    "shot_rifle": {
+      "dur": 0.8,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.07,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.9,
+          "attack": 0.02,
+          "vibrato": 0.0,
+          "curve": 5.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 10000.0,
+          "cutoff1": 2000.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.2,
+          "f0": 170.0,
+          "f1": 48.0,
+          "amp": 0.9,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 3.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "brown",
+          "at": 0.01,
+          "dur": 0.6,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.7,
+          "attack": 0.03,
+          "vibrato": 0.0,
+          "curve": 2.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 2200.0,
+          "cutoff1": 260.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "saw",
+          "at": 0.0,
+          "dur": 0.05,
+          "f0": 900.0,
+          "f1": 300.0,
+          "amp": 0.25,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "saturate",
+          "drive": 3.2
+        },
+        {
+          "fx": "reverb",
+          "size": 0.7,
+          "mix": 0.3
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
+          "peak": 0.9
+        }
+      ]
+    },
+    "shot_shotgun": {
+      "dur": 1.0,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 1.0,
+          "attack": 0.02,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 7000.0,
+          "cutoff1": 1200.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.3,
+          "f0": 130.0,
+          "f1": 34.0,
+          "amp": 1.0,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 2.6,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "brown",
+          "at": 0.01,
+          "dur": 0.8,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.85,
+          "attack": 0.03,
+          "vibrato": 0.0,
+          "curve": 1.8,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 1800.0,
+          "cutoff1": 160.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "saturate",
+          "drive": 3.6
+        },
+        {
+          "fx": "reverb",
+          "size": 0.8,
+          "mix": 0.34
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
+          "peak": 0.9
+        }
+      ]
+    },
+    "shot_smg": {
+      "dur": 0.36,
+      "rate": 32000,
+      "tones": [
+        {
+          "wave": "noise",
+          "at": 0.0,
+          "dur": 0.04,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.8,
+          "attack": 0.02,
+          "vibrato": 0.0,
+          "curve": 5.5,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 8000.0,
+          "cutoff1": 2800.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "sine",
+          "at": 0.0,
+          "dur": 0.1,
+          "f0": 260.0,
+          "f1": 90.0,
+          "amp": 0.7,
+          "attack": 0.05,
+          "vibrato": 0.0,
+          "curve": 4.0,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 0.0,
+          "cutoff1": 0.0,
+          "res": 0.7,
+          "pwm": 0.5
+        },
+        {
+          "wave": "brown",
+          "at": 0.01,
+          "dur": 0.25,
+          "f0": 0.0,
+          "f1": 0.0,
+          "amp": 0.45,
+          "attack": 0.03,
+          "vibrato": 0.0,
+          "curve": 2.6,
+          "sustain": 0.0,
+          "detune": 0.0,
+          "fm_ratio": 0.0,
+          "fm_index": 0.0,
+          "cutoff0": 3000.0,
+          "cutoff1": 500.0,
+          "res": 0.7,
+          "pwm": 0.5
+        }
+      ],
+      "effects": [
+        {
+          "fx": "saturate",
+          "drive": 3.0
+        },
+        {
+          "fx": "reverb",
+          "size": 0.4,
+          "mix": 0.16
+        },
+        {
+          "fx": "normalize_rms",
+          "rms": 0.19,
           "peak": 0.9
         }
       ]

@@ -42,6 +42,8 @@ pub mod red;
 pub mod metas;
 pub mod habilidades;
 pub mod infectados;
+pub mod armas;
+pub mod jugo;
 pub mod estados;
 pub mod alijos;
 pub mod causal;
@@ -374,6 +376,7 @@ fn run_app_inner() {
         // está en el tope de 16 que admite `Plugins` (el mismo motivo por el que
         // el parallax de los menús está aparte).
         .add_plugins(render::fireworks::FireworksPlugin)
+        .add_plugins(jugo::JugoPlugin)
         // **Herramientas de la compu, no del teléfono** (reporte del 29 sep 2026:
         // "las pruebas que hagas, que se queden para la compu"). La sonda de
         // etapas mete siete schedules extra en CADA frame; la ablación y el
@@ -389,6 +392,7 @@ fn run_app_inner() {
         .add_plugins(weather::WeatherPlugin)
         .add_plugins(granja::GranjaPlugin)
         .add_plugins(textos_mundo::TextosMundoPlugin)
+        .add_plugins(armas::ArmasPlugin)
         .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, frutales::FrutalesPlugin, i18n::IdiomaPlugin, multijugador::MultijugadorPlugin, metas::MetasPlugin, habilidades::HabilidadesPlugin, infectados::InfectadosPlugin, estados::EstadosPlugin, alijos::AlijosPlugin, causal::CausalPlugin, equipo::EquipoPlugin, fps_tope::FpsTopePlugin))
         .add_plugins((experimentos::ExperimentosPlugin, casas_npc::CasasNpcPlugin, saber_vivo::SaberVivoPlugin, barrio::BarrioPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.

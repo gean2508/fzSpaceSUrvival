@@ -540,9 +540,12 @@ fn creative_topup_system(
         // Ítems "en la mano" (`held_item.rs`) + almacenamiento: en creativo se
         // prueban al instante sin craftear.
         "sword_iron", "sword_steel",
+        // Armas de fuego (una de cada, con camuflaje 115 y Bacon para ver los aspectos)
+        "gun_pistola", "gun_thompson__115", "gun_ppsh__bacon", "gun_mp40__singularidad", "gun_ak__grafiti",
+        "gun_escopeta__ciclon", "gun_raygun__oscura",
     ];
     // Consumibles/colocables que conviene tener en pila, no de a uno.
-    const KIT_STACKS: &[(&str, u32)] = &[("torch", 16), ("chest", 4)];
+    const KIT_STACKS: &[(&str, u32)] = &[("torch", 16), ("chest", 4), ("ammo_45", 60), ("ammo_9mm", 60), ("ammo_762", 60), ("ammo_cartucho", 24), ("ammo_energia", 40)];
 
     let mut changed = false;
     for &(id, target) in MATERIALS {

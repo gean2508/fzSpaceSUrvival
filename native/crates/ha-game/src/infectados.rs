@@ -102,6 +102,9 @@ const VIDA_PARED_MADERA: f32 = 3.0;
 #[derive(Resource, Default)]
 pub struct Bajas {
     pub total: u32,
+    /// Dónde (x, z) cayeron los que mataste desde la última pasada del barrio (`barrio::el_barrio_te_ve`
+    /// las vacía). Tope 32: si nadie las lee (ningún pueblo cargado), no crecen sin fin.
+    pub recientes: Vec<(f32, f32)>,
 }
 
 #[derive(Resource, Default)]
@@ -133,6 +136,13 @@ pub fn botin_de(n: u32) -> Vec<(&'static str, u32)> {
     }
     if azar(100) < 8 {
         v.push((["gem_blue", "gold_ingot", "iron_ingot"][azar(3) as usize], 1));
+    }
+    // Munición (los infectados eran gente con la mochila puesta) y, rara vez, un arma con o sin camuflaje.
+    if azar(100) < 38 {
+        v.push(crate::armas::municion_al_azar(azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0));
+    }
+    if azar(100) < 5 {
+        v.push((crate::armas::arma_al_azar(azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0), 1));
     }
     if v.is_empty() {
         v.push(("apple", 1));
@@ -184,6 +194,7 @@ impl Plugin for InfectadosPlugin {
                 Update,
                 (aparecer, mover_y_morder, romper_paredes, golpear, cadaveres, amanecer).chain().run_if(in_state(GamePhase::Playing)),
             )
+            .add_systems(Update, balas_a_infectados.in_set(crate::armas::ArmasSet::Impactos).after(crate::armas::ArmasSet::Mover).run_if(in_state(GamePhase::Playing)))
             .add_systems(OnExit(GamePhase::Playing), limpiar);
     }
 }
@@ -269,6 +280,7 @@ fn mover_y_morder(
     vecinos: Query<&crate::society::Npc>,
     mut sfx: EventWriter<crate::audio::PlaySfx>,
     mut sim: Query<&mut SimState, With<Player>>,
+    ruido_de_arma: Res<crate::armas::RuidoDeArma>,
     mut q: Query<(&mut Infectado, &mut Transform, &mut Sprite)>,
     mut ultimo: Local<f32>,
     mut ultimo_z: Local<f32>,
@@ -282,6 +294,8 @@ fn mover_y_morder(
     *ultimo = px;
     *ultimo_z = pz;
     let olfato = if vel_j > 6.0 { OLFATO * 1.6 } else if vel_j < 0.3 { OLFATO * 0.6 } else { OLFATO };
+    // Un disparo se oye desde mucho más lejos que unos pasos.
+    let olfato = if ruido_de_arma.0 > 0.0 { olfato * crate::armas::OIDO_DE_TIRO } else { olfato };
     let mut mordidas = 0u32;
     for (mut i, mut tf, mut sprite) in &mut q {
         i.ataque_cd = (i.ataque_cd - dt).max(0.0);
@@ -408,14 +422,17 @@ fn golpear(
     touch_layout: Res<TouchLayout>,
     blocks: Res<TouchBlockRects>,
     equipped: Res<EquippedItem>,
-    mut bajas: ResMut<Bajas>,
-    mut chests: ResMut<crate::chests::ChestWorld>,
+    (mut bajas, mut chests, mut golpes): (ResMut<Bajas>, ResMut<crate::chests::ChestWorld>, EventWriter<crate::jugo::Golpe>),
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     player: Query<&Transform, (With<Player>, Without<Infectado>)>,
     mut q: Query<(Entity, &mut Infectado, &Sprite, &Transform)>,
 ) {
     acc.golpe = (acc.golpe - time.delta_secs()).max(0.0);
+    // Con un arma de fuego en la mano no se golpea: se dispara (`armas.rs`).
+    if crate::armas::es_arma(&equipped.item_id) {
+        return;
+    }
     let screen = if mouse.just_pressed(MouseButton::Left) {
         windows.get_single().ok().and_then(|w| w.cursor_position())
     } else {
@@ -449,19 +466,43 @@ fn golpear(
     let Some((e, _)) = mejor else { return };
     acc.golpe = GOLPE_CD;
     let Ok((_, mut i, sprite, _)) = q.get_mut(e) else { return };
-    i.vida -= crate::fauna::dano_de(&equipped.item_id);
+    let dano = crate::fauna::dano_de(&equipped.item_id);
+    golpes.send(crate::jugo::Golpe { en: Vec2::new(i.x, i.z), dano, letal: i.vida - dano <= 0.0, color: Color::srgb(0.55, 0.7, 0.35) });
+    herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, dano, Vec2::new(px, pz), 0.5);
+}
+
+/// **Un golpe (de lo que sea) a un infectado**: le baja la vida, lo empuja y, si cae, deja el cuerpo con TODO lo que
+/// llevaba (se abre como un cofre). Lo comparten el golpe cuerpo a cuerpo y las balas.
+#[allow(clippy::too_many_arguments)]
+fn herir(
+    commands: &mut Commands,
+    bajas: &mut Bajas,
+    chests: &mut crate::chests::ChestWorld,
+    ctx: &WorldContextRuntime,
+    planet: &ActivePlanet,
+    e: Entity,
+    i: &mut Infectado,
+    sprite: &Sprite,
+    dano: f32,
+    desde: Vec2,
+    empuje: f32,
+) {
+    i.vida -= dano;
     i.destello = 0.15;
-    // Retroceso: lo empuja lejos de vos.
-    let (dx, dz) = (i.x - px, i.z - pz);
+    // Retroceso: lo empuja lejos de quien pegó.
+    let (dx, dz) = (i.x - desde.x, i.z - desde.y);
     let d = (dx * dx + dz * dz).sqrt().max(1e-3);
-    i.x += dx / d * 0.5;
-    i.z += dz / d * 0.5;
+    i.x += dx / d * empuje;
+    i.z += dz / d * empuje;
     if i.vida <= 0.0 {
         let (x, z) = (i.x, i.z);
         bajas.total += 1;
+        if bajas.recientes.len() < 32 {
+            bajas.recientes.push((x, z));
+        }
         crate::causal::registrar("baja", format!("infectado abatido en ({x:.0},{z:.0}), botín {}", i.botin.len()));
         // El cuerpo queda en el suelo con TODO lo que llevaba: se abre como un cofre.
-        let body = active_surface_body(&ctx, &planet);
+        let body = active_surface_body(ctx, planet);
         let uid = chests.crear_cadaver(body, x, z, &i.botin);
         let mut cuerpo = sprite.clone();
         cuerpo.color = Color::srgb(0.38, 0.5, 0.4);
@@ -476,6 +517,45 @@ fn golpear(
             Name::new("Cadaver"),
         ));
         commands.entity(e).despawn_recursive();
+    }
+}
+
+/// Las balas en vuelo contra los infectados: la que pasa a menos de `RADIO_BLANCO` los hiere (y atraviesa si el arma
+/// atraviesa). El daño cae con la distancia recorrida.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn balas_a_infectados(
+    mut commands: Commands,
+    mut balas: Query<&mut crate::armas::Bala>,
+    mut bajas: ResMut<Bajas>,
+    mut chests: ResMut<crate::chests::ChestWorld>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+    mut q: Query<(Entity, &mut Infectado, &Sprite)>,
+) {
+    const RADIO_BLANCO: f32 = 0.55;
+    for mut b in &mut balas {
+        if !b.viva {
+            continue;
+        }
+        for (e, mut i, sprite) in &mut q {
+            if b.ya_golpeo(e) || i.vida <= 0.0 {
+                continue;
+            }
+            let pos = Vec2::new(i.x, i.z);
+            if crate::armas::distancia_a_segmento(pos, b.prev, b.pos) > RADIO_BLANCO {
+                continue;
+            }
+            let dano = b.dano_ahora();
+            let desde = b.origen;
+            herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, dano, desde, 0.25);
+            crate::armas::chispa_de_impacto(&mut commands, pos, if b.rayo { Color::srgb(0.4, 1.0, 0.6) } else { Color::srgb(0.75, 0.15, 0.12) });
+            sfx.send(crate::audio::PlaySfxAt(b.impacto, Vec2::new(pos.x, -pos.y)));
+            b.registrar(e);
+            if !b.viva {
+                break;
+            }
+        }
     }
 }
 

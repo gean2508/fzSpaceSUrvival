@@ -2887,7 +2887,8 @@ impl Plugin for GranjaAnimalesPlugin {
             )
                 .chain()
                 .run_if(crate::game_phase::world_active),
-        );
+        )
+        .add_systems(Update, balas_a_fauna.in_set(crate::armas::ArmasSet::Impactos).after(crate::armas::ArmasSet::Mover).run_if(crate::game_phase::world_active));
     }
 }
 
@@ -2968,6 +2969,7 @@ fn interactuar_animal(
     (mut bautizo, mut tirados): (ResMut<crate::bautizo::Bautizo>, ResMut<crate::tirados::Tirados>),
     player: Query<&Transform, (With<Player>, Without<Animal>)>,
     mut animals: Query<(&mut Animal, &mut Needs, Option<&Resident>)>,
+    mut golpes: EventWriter<crate::jugo::Golpe>,
 ) {
     use crate::hud::inventory_ui::{consume_from_ui_slots, flush_slots_to_inventory};
     if target.kind != Some(ha_shared::InteractTargetKind::Animal) {
@@ -3088,6 +3090,7 @@ fn interactuar_animal(
     }
     // 5) El golpe.
     let dano = dano_de(&item);
+    golpes.send(crate::jugo::Golpe { en: Vec2::new(a.x, a.z), dano, letal: a.vida - dano <= 0.0, color: Color::srgb(0.75, 0.15, 0.12) });
     a.vida -= dano;
     a.herido_t = 0.35;
     let (dx, dz) = (a.x - px, a.z - pz);
@@ -3117,8 +3120,25 @@ fn interactuar_animal(
         }
         return;
     }
-    // Murió: baja del censo (o del vivario) y suelta su botín en el piso.
-    if resident.is_some() {
+    // Murió.
+    matar_animal(&mut commands, entity, &a, resident.is_some(), body, &mut world, &mut vivarium, &mut eco, &mut tirados, &mut semilla);
+}
+
+/// **La muerte de un animal** (a golpes o a balazos): baja del censo (o del vivario) y suelta su botín en el piso.
+#[allow(clippy::too_many_arguments)]
+fn matar_animal(
+    commands: &mut Commands,
+    entity: Entity,
+    a: &Animal,
+    residente: bool,
+    body: CelestialBody,
+    world: &mut FaunaWorld,
+    vivarium: &mut VivariumWorld,
+    eco: &mut EcologyWorld,
+    tirados: &mut crate::tirados::Tirados,
+    semilla: &mut u32,
+) {
+    if residente {
         vivarium.free_ids.push(a.brain);
         vivarium.alive = vivarium.alive.saturating_sub(1);
     } else {
@@ -3127,14 +3147,66 @@ fn interactuar_animal(
         eco.add_head(body, a.region.0, a.region.1, a.trophic, -1.0);
     }
     if a.edad >= 1.0 {
-        for (it, q) in botin(&a.art_key, || azar(&mut semilla)) {
-            crate::tirados::tirar(&mut tirados, a.x, a.z, it, q);
+        for (it, q) in botin(&a.art_key, || azar(semilla)) {
+            crate::tirados::tirar(tirados, a.x, a.z, it, q);
         }
     }
     if let Some(nombre) = &a.nombre_propio {
-        crate::granja::globo(&mut commands, a.x, a.z, format!("{nombre} murió"));
+        crate::granja::globo(commands, a.x, a.z, format!("{nombre} murió"));
     }
     commands.entity(entity).despawn_recursive();
+}
+
+/// Las balas en vuelo contra los animales. Un animal herido huye (o, si es un perro, se enoja) y uno muerto suelta su botín
+/// como siempre.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn balas_a_fauna(
+    mut commands: Commands,
+    time: Res<Time>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut balas: Query<&mut crate::armas::Bala>,
+    (mut world, mut vivarium, mut eco): (ResMut<FaunaWorld>, ResMut<VivariumWorld>, ResMut<EcologyWorld>),
+    mut tirados: ResMut<crate::tirados::Tirados>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+    mut animals: Query<(Entity, &mut Animal, Option<&Resident>)>,
+) {
+    let body = active_surface_body(&ctx, &planet);
+    let mut semilla = (time.elapsed_secs() * 1000.0) as u32 | 1;
+    for mut b in &mut balas {
+        if !b.viva {
+            continue;
+        }
+        for (entity, mut a, resident) in &mut animals {
+            if b.ya_golpeo(entity) || a.vida <= 0.0 {
+                continue;
+            }
+            let radio = if a.edad < 1.0 { 0.4 } else { 0.55 };
+            if crate::armas::distancia_a_segmento(Vec2::new(a.x, a.z), b.prev, b.pos) > radio {
+                continue;
+            }
+            a.vida -= b.dano_ahora();
+            a.herido_t = 0.35;
+            let dir = b.vel.normalize_or_zero();
+            a.x += dir.x * 0.3;
+            a.z += dir.y * 0.3;
+            if a.art_key == "npc/fauna_dog" {
+                a.enojado = true;
+            } else {
+                a.panico_t = 5.0;
+            }
+            let pos = Vec2::new(a.x, a.z);
+            crate::armas::chispa_de_impacto(&mut commands, pos, if b.rayo { Color::srgb(0.4, 1.0, 0.6) } else { Color::srgb(0.75, 0.15, 0.12) });
+            sfx.send(crate::audio::PlaySfxAt(b.impacto, Vec2::new(pos.x, -pos.y)));
+            b.registrar(entity);
+            if a.vida <= 0.0 {
+                matar_animal(&mut commands, entity, &a, resident.is_some(), body, &mut world, &mut vivarium, &mut eco, &mut tirados, &mut semilla);
+            }
+            if !b.viva {
+                break;
+            }
+        }
+    }
 }
 
 /// El nombre confirmado en el panel: queda puesto, gasta la etiqueta y el animal
