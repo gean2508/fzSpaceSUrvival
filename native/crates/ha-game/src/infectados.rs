@@ -267,6 +267,7 @@ fn mover_y_morder(
     mut golpes: ResMut<GolpesAParedes>,
     player: Query<&Transform, (With<Player>, Without<Infectado>)>,
     vecinos: Query<&crate::society::Npc>,
+    mut sfx: EventWriter<crate::audio::PlaySfx>,
     mut sim: Query<&mut SimState, With<Player>>,
     mut q: Query<(&mut Infectado, &mut Transform, &mut Sprite)>,
     mut ultimo: Local<f32>,
@@ -335,6 +336,7 @@ fn mover_y_morder(
         tf.scale.x = if dx < 0.0 { -1.0 } else { 1.0 };
     }
     if mordidas > 0 {
+        sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Bite));
         if let Ok(mut s) = sim.get_single_mut() {
             s.hp = (s.hp - DANO * mordidas as f32 * (1.0 - s.armadura)).max(0.0);
         }

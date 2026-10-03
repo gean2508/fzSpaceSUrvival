@@ -8565,6 +8565,30 @@ un cuadrado»* + *«lo que dibujaste parece hecho en Paint, no llega a los talon
 * **Falta**: vida propia del subsuelo (hoy está vacío a propósito: sin fauna ni vecinos), pilares/columnas
   generados, y agua y lava subterráneas.
 
+### Sonido y splash, otra vez (2 oct 2026, 4.ª tanda)
+Pedido: *«mejorá la ventana Splash… y los sonidos de todo el juego… y dejalo como skill»*.
+* **Motor de audio v2** (`ha-audio`): ruido rosa/marrón, `Pluck` (Karplus-Strong), `Bell` (parciales inarmónicos), FM, osciladores
+  sin aliasing (PolyBLEP), unísono desafinado, filtro resonante por capa (TPT, estable), caída con exponente y sostén,
+  y efectos nuevos (paso-alto, saturación, coro, compresor, ganancia, **`NormalizeRms`** para igualar sonoridad) con una
+  reverb de Schroeder real. SFX a 32 kHz y música a 22,05 kHz. Todo con valores por defecto: un `audio.json` viejo se lee igual.
+* **Diseño de sonido nuevo** (`ha-audio/src/defaults.rs`): los 24 efectos de antes rehechos en capas (transitorio + cuerpo +
+  cola) y **16 nuevos**: pasos por superficie (arena, madera, nieve), chapuzón, gota/cristales/derrumbe/mena del subsuelo,
+  `discover`/`fizzle` (experimentos), `goal` (meta), `deny`, gemido y mordida de infectado. Música con pad de sierras
+  desafinadas + melodía de cuerda/campana. Sonoridad pareja por categoría.
+* **Lo que suena ahora en el juego**: pasos según el suelo (`footstep_sounds`), pico contra mena (`OrePing`), ambiente del
+  subsuelo por bioma (`ambiente_subsuelo`: gotas, campanitas en el cristal, golpes de mena en el hierro…), gemidos de
+  infectados a menos de 30 celdas (`barrio::gemidos`) y mordidas posicionales, descubrir/fallar un experimento, aprender
+  de un aldeano, cumplir una meta, rechazos.
+* **Laboratorio** `scripts/sfx-lab.py` + `scripts/regenerar-audio.sh`: renderiza todo, mide (pico, RMS activo, cresta,
+  centroide, continua), falla con clipping/silencio/niveles fuera de banda/pitidos, y dibuja el espectrograma de cada
+  sonido (`--sheet`). 47/47 pasan. `cargo test -p ha-audio`: 8 tests.
+* **Skill `audio-sfx`** (`.claude/skills/audio-sfx/SKILL.md`): el listón de sonido.
+* **Splash** (`boot_ui.rs`): las manchas dejan de ser recortes de un color: `sombrear_mancha` les da volumen por bandas (luz
+  arriba-izquierda, canto en sombra, brillo húmedo) con distancia al borde de 8 vecinos; aterrizan con aplastón (squash &
+  stretch); el logo está **extruido** (12 capas del morado al negro bajo la cara crema). El sonido de la marca se
+  sintetiza (`splash_logo`: ocho «plops» por la pentatónica y un acorde con cola) y reemplaza al WAV viejo. Driver
+  `HA_SPLASHSHOT=<ruta> [HA_SPLASHSHOT_T=<s>]` (Xvfb) captura la splash.
+
 ### Falta (honesto)
 * Los NPC no se «siguen» ni te siguen por amistad (la regla «nada de séquito» manda); sí se conversa y se aprende.
 * Un NPC no estudia cuando vos no estás cerca: lo que pasa lejos sigue siendo el cuaderno por pueblo.

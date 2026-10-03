@@ -42,6 +42,8 @@ pub struct Experimentos {
     version: u32,
     dibujado: Option<(bool, u32, usize)>,
     cargado: bool,
+    /// El sonido que le toca a lo último que pasó (lo emite `botones`).
+    pub(crate) sonido: Option<crate::audio::Sfx>,
 }
 
 impl Experimentos {
@@ -401,6 +403,7 @@ fn botones(
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
     botones: Query<(&Interaction, &AccionExp), Changed<Interaction>>,
+    mut sfx: EventWriter<crate::audio::PlaySfx>,
 ) {
     for (i, a) in &botones {
         if *i != Interaction::Pressed {
@@ -444,7 +447,12 @@ fn botones(
                     e.mensaje = "Receta cargada: tocá PROBAR.".into();
                 }
             }
-            AccionExp::Probar => probar(&mut e, &mut inv, &mut persist, time.elapsed().as_micros() as u64),
+            AccionExp::Probar => {
+                probar(&mut e, &mut inv, &mut persist, time.elapsed().as_micros() as u64);
+                if let Some(s) = e.sonido.take() {
+                    sfx.send(crate::audio::PlaySfx(s));
+                }
+            }
         }
         e.tocar();
     }
@@ -453,18 +461,22 @@ fn botones(
 fn probar(e: &mut Experimentos, inv: &mut PlayerInventory, persist: &mut InventoryPersistState, azar: u64) {
     let (Some(ia), ib) = (e.sel_a.clone(), e.sel_b.clone()) else {
         e.mensaje = "Elegí al menos un material.".into();
+        e.sonido = Some(crate::audio::Sfx::Deny);
         return;
     };
     let (Some(a), b) = (material_de_item(&ia), ib.as_deref().and_then(material_de_item)) else {
         e.mensaje = "Eso no es una materia.".into();
+        e.sonido = Some(crate::audio::Sfx::Deny);
         return;
     };
     if ib.as_deref() == Some(ia.as_str()) {
         e.mensaje = "Elegí dos materiales distintos.".into();
+        e.sonido = Some(crate::audio::Sfx::Deny);
         return;
     }
     if inv.qty(&ia) < 1 || ib.as_deref().map(|x| inv.qty(x) < 1).unwrap_or(false) {
         e.mensaje = "Te falta alguno en la mochila.".into();
+        e.sonido = Some(crate::audio::Sfx::Deny);
         return;
     }
     let tmax = calor_jugador(e, inv);
@@ -477,10 +489,12 @@ fn probar(e: &mut Experimentos, inv: &mut PlayerInventory, persist: &mut Invento
         Resultado::Nada => {
             e.cuaderno.anotar(a, b, calor, None, ctx, false);
             e.mensaje = "No pasa nada.".into();
+            e.sonido = Some(crate::audio::Sfx::Fizzle);
         }
         Resultado::Quema => {
             gastar(inv, &ia, 1);
             e.mensaje = "Arde: se consumió.".into();
+            e.sonido = Some(crate::audio::Sfx::Fizzle);
             persist.mark_immediate();
         }
         Resultado::Obtiene(m, ley) => {
@@ -508,6 +522,7 @@ fn probar(e: &mut Experimentos, inv: &mut PlayerInventory, persist: &mut Invento
                 _ => "Mezclados se vuelven otra cosa",
             };
             e.mensaje = format!("{lineas}: {}.{}", m.nombre, if firme_ahora { " ¡Receta confirmada!" } else { "" });
+            e.sonido = Some(if firme_ahora || nuevo_nombre { crate::audio::Sfx::Discover } else { crate::audio::Sfx::Pickup });
             if nuevo_nombre {
                 let u = USOS.iter().map(|u| (utilidad(&m, *u), u.nombre())).fold((0.0f32, ""), |x, y| if y.0 > x.0 { y } else { x });
                 e.log.push(format!("Nuevo: {} (sirve sobre todo para {}).", m.nombre, u.1));

@@ -190,6 +190,7 @@ fn revisar_metas(
     bajas: Res<crate::infectados::Bajas>,
     hab: Res<crate::habilidades::Habilidades>,
     alijos: Res<crate::alijos::Alijos>,
+    mut sfx: EventWriter<crate::audio::PlaySfx>,
 ) {
     if !m.cargado {
         m.hechas = cargar();
@@ -230,6 +231,7 @@ fn revisar_metas(
         multi.decir(&if en { format!("Goal: {nombre}") } else { format!("Meta: {nombre}") });
         m.aviso = Some((txt, 4.0));
         m.version += 1;
+        sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Goal));
     }
 }
 

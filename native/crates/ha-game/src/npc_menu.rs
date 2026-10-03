@@ -592,6 +592,7 @@ fn menu_saber(
     mut exp: ResMut<crate::experimentos::Experimentos>,
     memoria: Res<crate::barrio::Memoria>,
     eds: Res<crate::edificios::Edificios>,
+    mut sfx_ui: EventWriter<crate::audio::PlaySfx>,
     time: Res<Time>,
     mut descanso: Local<std::collections::HashMap<u64, f32>>,
 ) {
@@ -653,9 +654,11 @@ fn menu_saber(
             }
             _ => {
                 if rep < APRENDER_MIN_REP {
+                    sfx_ui.send(crate::audio::PlaySfx(crate::audio::Sfx::Deny));
                     "No te conozco lo bastante como para enseñarte lo mío. Charlemos más.".to_string()
                 } else if let Some(r) = saber.recetas.iter().find(|r| !exp.sabe(&r.entrada)) {
                     let aprendido = exp.aprender(&saber.nombre, r);
+                    sfx_ui.send(crate::audio::PlaySfx(crate::audio::Sfx::Discover));
                     soc.adjust_capped(npc.family, 0.02, 1.0);
                     format!("Mirá: {aprendido}.{}", if r.entrada.ritual { " Ojo, yo lo hago siempre así; a lo mejor no hace falta." } else { "" })
                 } else {

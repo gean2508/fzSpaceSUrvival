@@ -599,9 +599,21 @@ fn sfx_editor(ui: &mut egui::Ui, spec: &mut SfxSpec, is_loop: bool) -> bool {
                 ui.add(egui::Slider::new(&mut op.attack, 0.0..=1.0).text("ataque"));
                 ui.add(egui::Slider::new(&mut op.vibrato, 0.0..=4.0).text("vibrato"));
             });
-            if op.wave == Wave::Noise {
-                ui.label(egui::RichText::new("(ruido: las frecuencias no aplican)").weak().small());
+            if op.wave.es_ruido() {
+                ui.label(egui::RichText::new("(ruido: las frecuencias no aplican; el filtro le da el color)").weak().small());
             }
+            // Motor v2: forma de la caída, coro, FM y filtro por capa.
+            ui.collapsing("avanzado (motor v2)", |ui| {
+                ui.add(egui::Slider::new(&mut op.curve, 0.5..=6.0).text("caida (1 lineal · 4 golpe seco)"));
+                ui.add(egui::Slider::new(&mut op.sustain, 0.0..=0.95).text("sosten"));
+                ui.add(egui::Slider::new(&mut op.detune, 0.0..=60.0).text("desafinacion (coro, centesimas)"));
+                ui.add(egui::Slider::new(&mut op.fm_ratio, 0.0..=8.0).text("FM razon"));
+                ui.add(egui::Slider::new(&mut op.fm_index, 0.0..=8.0).text("FM indice"));
+                ui.add(egui::Slider::new(&mut op.cutoff0, 0.0..=4500.0).text("filtro: corte inicial (Hz, 0 = sin)"));
+                ui.add(egui::Slider::new(&mut op.cutoff1, 0.0..=4500.0).text("filtro: corte final (Hz)"));
+                ui.add(egui::Slider::new(&mut op.res, 0.3..=8.0).text("resonancia"));
+                ui.add(egui::Slider::new(&mut op.pwm, 0.05..=0.95).text("ancho de pulso (cuadrada)"));
+            });
         });
     }
     if let Some(j) = remove {
@@ -617,6 +629,7 @@ fn sfx_editor(ui: &mut egui::Ui, spec: &mut SfxSpec, is_loop: bool) -> bool {
             amp: 0.25,
             attack: 0.05,
             vibrato: 0.0,
+            ..ToneOp::default()
         });
     }
 
@@ -642,6 +655,12 @@ fn effects_ui(ui: &mut egui::Ui, effects: &mut Vec<Effect>) {
                     Effect::FadeOut { .. } => "fundido de salida",
                     Effect::LoopCrossfade { .. } => "cierre de loop",
                     Effect::Normalize { .. } => "normalizar",
+                    Effect::Highpass { .. } => "filtro agudo (paso-alto)",
+                    Effect::Saturate { .. } => "saturacion",
+                    Effect::Chorus { .. } => "coro",
+                    Effect::Compress { .. } => "compresor",
+                    Effect::Gain { .. } => "ganancia",
+                    Effect::NormalizeRms { .. } => "igualar sonoridad (RMS)",
                 };
                 ui.label(egui::RichText::new(name).strong());
                 if j > 0 && ui.small_button("▲").clicked() {
@@ -680,6 +699,28 @@ fn effects_ui(ui: &mut egui::Ui, effects: &mut Vec<Effect>) {
                 Effect::Normalize { peak } => {
                     ui.add(egui::Slider::new(peak, 0.1..=1.0).text("pico"));
                 }
+                Effect::Highpass { alpha } => {
+                    ui.add(egui::Slider::new(alpha, 0.001..=0.5).text("corte (alto = quita mas graves)"));
+                }
+                Effect::Saturate { drive } => {
+                    ui.add(egui::Slider::new(drive, 0.5..=8.0).text("empuje"));
+                }
+                Effect::Chorus { depth, rate, mix } => {
+                    ui.add(egui::Slider::new(depth, 0.0005..=0.01).text("profundidad (s)"));
+                    ui.add(egui::Slider::new(rate, 0.1..=4.0).text("velocidad (Hz)"));
+                    ui.add(egui::Slider::new(mix, 0.0..=1.0).text("mezcla"));
+                }
+                Effect::Compress { threshold, ratio } => {
+                    ui.add(egui::Slider::new(threshold, 0.05..=1.0).text("umbral"));
+                    ui.add(egui::Slider::new(ratio, 1.0..=10.0).text("razon"));
+                }
+                Effect::Gain { gain } => {
+                    ui.add(egui::Slider::new(gain, 0.0..=3.0).text("ganancia"));
+                }
+                Effect::NormalizeRms { rms, peak } => {
+                    ui.add(egui::Slider::new(rms, 0.02..=0.4).text("sonoridad (RMS)"));
+                    ui.add(egui::Slider::new(peak, 0.1..=1.0).text("pico maximo"));
+                }
             }
         });
     }
@@ -695,6 +736,15 @@ fn effects_ui(ui: &mut egui::Ui, effects: &mut Vec<Effect>) {
         }
         if ui.button("+ eco").clicked() {
             effects.push(Effect::Echo { delay: 0.15, feedback: 0.4, mix: 0.5 });
+        }
+        if ui.button("+ igualar sonoridad").clicked() {
+            effects.push(Effect::NormalizeRms { rms: 0.12, peak: 0.9 });
+        }
+        if ui.button("+ saturacion").clicked() {
+            effects.push(Effect::Saturate { drive: 1.8 });
+        }
+        if ui.button("+ coro").clicked() {
+            effects.push(Effect::Chorus { depth: 0.002, rate: 0.4, mix: 0.3 });
         }
         if ui.button("+ filtro grave").clicked() {
             effects.push(Effect::Lowpass { alpha: 0.2 });

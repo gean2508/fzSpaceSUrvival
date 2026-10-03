@@ -82,6 +82,34 @@ pub enum Sfx {
     ClimbLedge,
     /// Descolgarse de un bordillo: golpe seco de los dos pies.
     DropLedge,
+    // — 2 oct 2026 (motor v2): superficies, subsuelo, descubrimiento y peligro —
+    StepSand1,
+    StepSand2,
+    StepWood1,
+    StepWood2,
+    StepSnow,
+    /// Gota en la cueva (reverb largo).
+    Drip,
+    /// Campanitas de cristal (bioma de cristal).
+    CrystalChime,
+    /// Derrumbe suave de roca.
+    Crumble,
+    /// Pico contra mena o gema.
+    OrePing,
+    /// ¡Un experimento salió! (cuaderno del jugador)
+    Discover,
+    /// El experimento no pasó nada / se echó a perder.
+    Fizzle,
+    /// Meta cumplida.
+    Goal,
+    /// «No se puede»: aviso suave de rechazo.
+    Deny,
+    /// Entrar al agua.
+    Splash,
+    /// Gemido de infectado.
+    Groan,
+    /// Mordida.
+    Bite,
 }
 
 impl Sfx {
@@ -112,16 +140,35 @@ impl Sfx {
             Sfx::Pickup => "pickup",
             Sfx::ClimbLedge => "climb_ledge",
             Sfx::DropLedge => "drop_ledge",
+            Sfx::StepSand1 => "step_sand1",
+            Sfx::StepSand2 => "step_sand2",
+            Sfx::StepWood1 => "step_wood1",
+            Sfx::StepWood2 => "step_wood2",
+            Sfx::StepSnow => "step_snow",
+            Sfx::Drip => "drip",
+            Sfx::CrystalChime => "crystal_chime",
+            Sfx::Crumble => "crumble",
+            Sfx::OrePing => "ore_ping",
+            Sfx::Discover => "discover",
+            Sfx::Fizzle => "fizzle",
+            Sfx::Goal => "goal",
+            Sfx::Deny => "deny",
+            Sfx::Splash => "splash",
+            Sfx::Groan => "groan",
+            Sfx::Bite => "bite",
         }
     }
 
-    const ALL: [Sfx; 24] = [
+    const ALL: [Sfx; 40] = [
         Sfx::Click, Sfx::Dig, Sfx::Chop, Sfx::Place, Sfx::Stamp,
         Sfx::StepSoft1, Sfx::StepSoft2, Sfx::StepHard1, Sfx::StepHard2,
         Sfx::BagOpen, Sfx::BagClose, Sfx::Craft, Sfx::Eat, Sfx::Drink,
         Sfx::Hurt, Sfx::Jump, Sfx::Touchdown, Sfx::DoorOpen, Sfx::DoorClose,
         Sfx::Stairs, Sfx::Launch, Sfx::Pickup,
         Sfx::ClimbLedge, Sfx::DropLedge,
+        Sfx::StepSand1, Sfx::StepSand2, Sfx::StepWood1, Sfx::StepWood2, Sfx::StepSnow,
+        Sfx::Drip, Sfx::CrystalChime, Sfx::Crumble, Sfx::OrePing, Sfx::Discover, Sfx::Fizzle,
+        Sfx::Goal, Sfx::Deny, Sfx::Splash, Sfx::Groan, Sfx::Bite,
     ];
 }
 
@@ -232,6 +279,7 @@ impl Plugin for GameAudioPlugin {
                     play_positional_sfx,
                     ui_click_sounds,
                     footstep_sounds,
+                    ambiente_subsuelo,
                     harvest_hit_sounds,
                     survival_sounds,
                     flight_sounds,
@@ -536,6 +584,7 @@ fn footstep_sounds(
     mut prev_pos: Local<Option<Vec2>>,
     mut acc: Local<f32>,
     mut alternate: Local<bool>,
+    mut en_agua: Local<bool>,
     player: Query<&Transform, With<Player>>,
 ) {
     if crate::world2d::surface_region_active(&region).is_none() || fly.flying() {
@@ -566,17 +615,64 @@ fn footstep_sounds(
     let body = crate::world2d::active_surface_body(&ctx, &planet);
     let tx = (tf.translation.x / TILE_M).floor() as i64;
     let tz = (-tf.translation.y / TILE_M).floor() as i64;
-    let soft = matches!(
-        tiles.tile_at(body, tx, tz),
-        Tile::Grass | Tile::Dirt | Tile::Sand
-    );
-    let kind = match (soft, *alternate) {
-        (true, false) => Sfx::StepSoft1,
-        (true, true) => Sfx::StepSoft2,
-        (false, false) => Sfx::StepHard1,
-        (false, true) => Sfx::StepHard2,
+    // Cada superficie suena a su material: pasto/tierra blando, arena que cruje, nieve/hielo, madera hueca y
+    // piedra dura (la galería, la vereda, el piso de piedra). Al meterse en el agua, un chapuzón.
+    let tile = tiles.tile_at(body, tx, tz);
+    if tile.swim() {
+        if !*en_agua {
+            *en_agua = true;
+            sfx.send(PlaySfx(Sfx::Splash));
+        }
+        return;
+    }
+    *en_agua = false;
+    let alt = *alternate;
+    let kind = match tile {
+        Tile::Sand => if alt { Sfx::StepSand2 } else { Sfx::StepSand1 },
+        Tile::Ice => Sfx::StepSnow,
+        Tile::WoodFloor | Tile::Door | Tile::Step | Tile::Stairwell | Tile::Window => if alt { Sfx::StepWood2 } else { Sfx::StepWood1 },
+        Tile::Grass | Tile::Dirt => if alt { Sfx::StepSoft2 } else { Sfx::StepSoft1 },
+        _ => if alt { Sfx::StepHard2 } else { Sfx::StepHard1 },
     };
     sfx.send(PlaySfx(kind));
+}
+
+/// **El aire del subsuelo.** Bajo tierra el silencio también es un sonido: cada 4-12 s, algo lejano —una gota con su
+/// eco, un derrumbe suave, un golpe de mena, campanitas de cristal— según el BIOMA donde estás
+/// (`ha_shared::subsuelo`). Va sin posición (nadie sabe de dónde viene) y bajito: es ambiente, no aviso.
+fn ambiente_subsuelo(
+    time: Res<Time>,
+    tiles: Res<TileWorld>,
+    ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
+    player: Query<&Transform, With<Player>>,
+    mut sfx: EventWriter<PlaySfx>,
+    mut resto: Local<f32>,
+    mut rng: Local<Option<Lcg>>,
+) {
+    use ha_shared::subsuelo::Bioma;
+    if tiles.z >= 0 {
+        *resto = 5.0;
+        return;
+    }
+    *resto -= time.delta_secs();
+    if *resto > 0.0 {
+        return;
+    }
+    let Ok(tf) = player.get_single() else { return };
+    let rng = rng.get_or_insert_with(|| Lcg(0xD21F_5EED));
+    let body = crate::world2d::active_surface_body(&ctx, &planet);
+    let bioma = ha_shared::subsuelo::bioma_en(body, (tf.translation.x / TILE_M).floor() as i64, (-tf.translation.y / TILE_M).floor() as i64);
+    let r = rng.f32();
+    let kind = match bioma {
+        Bioma::Piedra => if r < 0.7 { Sfx::Drip } else { Sfx::Crumble },
+        Bioma::Arcilla => if r < 0.55 { Sfx::Drip } else { Sfx::Crumble },
+        Bioma::Musgo => if r < 0.92 { Sfx::Drip } else { Sfx::Crumble },
+        Bioma::Cristal => if r < 0.55 { Sfx::CrystalChime } else { Sfx::Drip },
+        Bioma::Hierro => if r < 0.4 { Sfx::OrePing } else if r < 0.8 { Sfx::Drip } else { Sfx::Crumble },
+    };
+    sfx.send(PlaySfx(kind));
+    *resto = rng.range(4.0, 12.0) * if bioma == Bioma::Musgo { 0.6 } else { 1.0 };
 }
 
 /// Cada cuánto cae un hachazo/picazo mientras se mantiene el hold (s).
@@ -604,7 +700,8 @@ fn harvest_hit_sounds(
     let kind = hold.locked_kind.or(target.kind);
     let hit = kind.and_then(|k| match k {
         K::Tree => Some(Sfx::Chop),
-        K::Rock | K::Block | K::OreIron | K::OreGold | K::GemBlue | K::GemRed => Some(Sfx::Dig),
+        K::OreIron | K::OreGold | K::GemBlue | K::GemRed => Some(Sfx::OrePing),
+        K::Rock | K::Block => Some(Sfx::Dig),
         _ => None,
     });
     let Some(hit) = hit.filter(|_| hold.active) else {

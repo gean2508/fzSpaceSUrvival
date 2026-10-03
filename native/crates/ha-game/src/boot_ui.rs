@@ -46,7 +46,7 @@ impl Plugin for BootUiPlugin {
             .add_systems(OnExit(GamePhase::MainMenu), despawn_boot)
             .add_systems(
                 Update,
-                (tick_splash, animar_splash, sonar_splash).run_if(in_state(GamePhase::Splash)),
+                (tick_splash, animar_splash, sonar_splash, splash_screenshot).run_if(in_state(GamePhase::Splash)),
             )
             .add_systems(
                 Update,
@@ -387,6 +387,8 @@ fn pintar_mancha(r: f32, color: Color, semilla: u64) -> Image {
         gota(&mut px, centro + largo * a.cos(), centro + largo * a.sin() * 0.82, rr);
     }
 
+    sombrear_mancha(&mut px, lado, rgba);
+
     Image::new(
         Extent3d { width: lado as u32, height: lado as u32, depth_or_array_layers: 1 },
         TextureDimension::D2,
@@ -394,6 +396,118 @@ fn pintar_mancha(r: f32, color: Color, semilla: u64) -> Image {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::RENDER_WORLD,
     )
+}
+
+/// **Volumen de pintura gorda, sin degradado** (2 oct 2026, el listón de la skill `pixel-art`): la mancha
+/// sigue siendo plana por BANDAS —cara de luz, base y cara de sombra, como pinta LimeZu— pero ya no es un
+/// recorte de un solo color: la luz entra desde arriba-izquierda, el canto de abajo-derecha se oscurece y
+/// las manchas grandes llevan un brillo húmedo de dos píxeles. El volumen sale de la distancia al borde
+/// (una cúpula) y de su gradiente, igual que `scripts/lib/volumen.py::esculpir`.
+fn sombrear_mancha(px: &mut [u8], lado: usize, base: [u8; 4]) {
+    let dentro = |px: &[u8], x: usize, y: usize| px[(y * lado + x) * 4 + 3] > 0;
+    // Distancia al borde con chamfer de 8 vecinos (1 y 1,414): casi isótropa, así las facetas son redondas
+    // y no rectángulos. Fuera = 0; el borde de la imagen cuenta como "fuera".
+    let inf = 1.0e6f32;
+    let mut dist = vec![0.0f32; lado * lado];
+    for y in 0..lado {
+        for x in 0..lado {
+            if dentro(px, x, y) {
+                dist[y * lado + x] = inf;
+            }
+        }
+    }
+    const D: f32 = std::f32::consts::SQRT_2;
+    let get = |dist: &Vec<f32>, x: isize, y: isize| -> f32 {
+        if x < 0 || y < 0 || x >= lado as isize || y >= lado as isize {
+            0.0
+        } else {
+            dist[y as usize * lado + x as usize]
+        }
+    };
+    for y in 0..lado as isize {
+        for x in 0..lado as isize {
+            let i = y as usize * lado + x as usize;
+            if dist[i] == 0.0 {
+                continue;
+            }
+            let m = (get(&dist, x - 1, y) + 1.0)
+                .min(get(&dist, x, y - 1) + 1.0)
+                .min(get(&dist, x - 1, y - 1) + D)
+                .min(get(&dist, x + 1, y - 1) + D);
+            dist[i] = dist[i].min(m);
+        }
+    }
+    for y in (0..lado as isize).rev() {
+        for x in (0..lado as isize).rev() {
+            let i = y as usize * lado + x as usize;
+            if dist[i] == 0.0 {
+                continue;
+            }
+            let m = (get(&dist, x + 1, y) + 1.0)
+                .min(get(&dist, x, y + 1) + 1.0)
+                .min(get(&dist, x + 1, y + 1) + D)
+                .min(get(&dist, x - 1, y + 1) + D);
+            dist[i] = dist[i].min(m);
+        }
+    }
+    let dmax = dist.iter().cloned().filter(|v| *v < inf).fold(1.0f32, f32::max);
+    let at = |x: isize, y: isize| -> f32 {
+        let (x, y) = (x.clamp(0, lado as isize - 1) as usize, y.clamp(0, lado as isize - 1) as usize);
+        dist[y * lado + x].min(dmax)
+    };
+    let mult = |c: [u8; 4], k: f32| -> [u8; 4] {
+        let f = |v: u8| ((v as f32 * k).clamp(0.0, 255.0)) as u8;
+        [f(c[0]), f(c[1]), f(c[2]), c[3]]
+    };
+    let mut mejor_brillo: Option<(usize, usize, f32)> = None;
+    let mut salida = px.to_vec();
+    for y in 0..lado {
+        for x in 0..lado {
+            let o = (y * lado + x) * 4;
+            if px[o + 3] == 0 {
+                continue;
+            }
+            let (xi, yi) = (x as isize, y as isize);
+            // gradiente sobre una ventana de 3 px: facetas anchas y suaves, no escalones de a un píxel
+            let gx = at(xi + 3, yi) - at(xi - 3, yi);
+            let gy = at(xi, yi + 3) - at(xi, yi - 3);
+            // normal hacia afuera = -grad; luz desde arriba-izquierda
+            let luz = 0.55 * gx + 0.75 * gy;
+            let d = dist[y * lado + x];
+            let c = if d <= 1.5 && luz < -0.6 {
+                mult(base, 0.52) // el canto en sombra
+            } else if luz > 2.4 {
+                mult(base, 1.24) // la cara de luz
+            } else if luz < -2.4 {
+                mult(base, 0.74) // la cara de sombra
+            } else {
+                base
+            };
+            salida[o..o + 4].copy_from_slice(&c);
+            // candidato a brillo húmedo: adentro, en el cuarto de arriba-izquierda de la cúpula
+            let relieve = d / dmax;
+            if relieve > 0.4 && luz > 1.2 && mejor_brillo.map(|m| relieve > m.2).unwrap_or(true) {
+                mejor_brillo = Some((x, y, relieve));
+            }
+        }
+    }
+    // El brillo: sólo en las manchas con cuerpo (dmax grande), dos píxeles y un acompañante.
+    if dmax >= 6.0 {
+        if let Some((bx, by, _)) = mejor_brillo {
+            for (dx, dy, k) in [(0usize, 0usize, 0.78f32), (1, 0, 0.78), (0, 1, 0.5)] {
+                let (x, y) = (bx + dx, by + dy);
+                if x < lado && y < lado {
+                    let o = (y * lado + x) * 4;
+                    if salida[o + 3] > 0 {
+                        for ch in 0..3 {
+                            salida[o + ch] = (salida[o + ch] as f32 + (255.0 - salida[o + ch] as f32) * k) as u8;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    px.copy_from_slice(&salida);
 }
 
 /// **La splash: FZ STUDIOS con manchas de pintura.**
@@ -446,8 +560,13 @@ fn spawn_splash(
                     ));
                 }
                 // El logo. La sombra va primero, corrida como en el mockup.
-                for (sombra, color) in [(true, Color::srgba(0.157, 0.125, 0.157, 0.75)), (false, CREMA)] {
-                    let d = if sombra { 10.0 } else { 0.0 };
+                // El logo EXTRUIDO: ocho capas de volumen que bajan del morado al negro, y la cara crema arriba.
+                let mut capas: Vec<(f32, Color)> = (1..=12)
+                    .rev()
+                    .map(|n| (n as f32 * 1.9, Color::srgb((0.50 - 0.036 * n as f32).max(0.05), (0.27 - 0.02 * n as f32).max(0.03), (0.86 - 0.06 * n as f32).max(0.10))))
+                    .collect();
+                capas.push((0.0, CREMA));
+                for (d, color) in capas {
                     l.spawn(Node {
                         position_type: PositionType::Absolute,
                         left: Val::Px(d * k),
@@ -510,10 +629,13 @@ fn animar_splash(
         }
         let crecer = k * (1.12 - 0.12 * k);
         let lado = m.lado * crecer;
-        nodo.width = Val::Px(lado * m.k);
-        nodo.height = Val::Px(lado * m.k);
-        nodo.left = Val::Px((m.centro.x - lado / 2.0) * m.k);
-        nodo.top = Val::Px((m.centro.y - lado / 2.0) * m.k);
+        // Aplastón al caer: ancha y baja al tocar, y se recupera (squash & stretch de dibujo animado).
+        let aplasta = (1.0 - k).powi(2) * 0.16;
+        let (w, h) = (lado * (1.0 + aplasta), lado * (1.0 - aplasta));
+        nodo.width = Val::Px(w * m.k);
+        nodo.height = Val::Px(h * m.k);
+        nodo.left = Val::Px((m.centro.x - w / 2.0) * m.k);
+        nodo.top = Val::Px((m.centro.y - h / 2.0 + (lado - h) * 0.5) * m.k);
     }
     for (mut color, mut fuente, t) in &mut textos {
         if paso <= t.desde {
@@ -1250,6 +1372,27 @@ fn settings_button_system(
 struct MenuShot {
     frames: u32,
     done: bool,
+}
+
+/// QA de dev: `HA_SPLASHSHOT=<ruta.png>` captura la splash ya asentada (todas las manchas y el logo) y sale.
+/// `HA_SPLASHSHOT_T=<s>` elige el instante (por defecto 2,3 s) para mirar la animación a mitad de camino.
+fn splash_screenshot(timer: Res<SplashTimer>, mut shot: ResMut<MenuShot>, mut commands: Commands, mut exit: EventWriter<AppExit>) {
+    let Ok(path) = crate::flags::var("HA_SPLASHSHOT") else { return };
+    let t: f32 = crate::flags::var("HA_SPLASHSHOT_T").ok().and_then(|v| v.parse().ok()).unwrap_or(2.3);
+    if shot.done {
+        return;
+    }
+    if shot.frames == 0 && timer.0 >= t {
+        shot.frames = 1;
+        commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+        eprintln!("ha-splashshot: capturando splash en t={:.2}", timer.0);
+    } else if shot.frames > 0 {
+        shot.frames += 1;
+        if shot.frames > 20 {
+            shot.done = true;
+            exit.send(AppExit::Success);
+        }
+    }
 }
 
 fn menu_screenshot(mut shot: ResMut<MenuShot>, mut commands: Commands, mut exit: EventWriter<AppExit>) {

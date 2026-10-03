@@ -162,7 +162,7 @@ impl Plugin for BarrioPlugin {
             .add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), crate::salir::reiniciar::<Memoria>)
             .add_systems(
                 Update,
-                (cargar_y_guardar, morder_vecinos, vecinos_reaccionan, goteras).run_if(crate::game_phase::world_active),
+                (cargar_y_guardar, morder_vecinos, vecinos_reaccionan, goteras, gemidos).run_if(crate::game_phase::world_active),
             );
     }
 }
@@ -182,6 +182,7 @@ fn morder_vecinos(
     mut civ: ResMut<Civ>,
     mut memoria: ResMut<Memoria>,
     mut speech: ResMut<SpeechQueue>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
 ) {
     let (px, pz) = player.get_single().map(|t| (t.translation.x, -t.translation.y)).unwrap_or((1.0e9, 1.0e9));
     let mut muertos: Vec<Entity> = Vec::new();
@@ -204,6 +205,7 @@ fn morder_vecinos(
         }
         let Some((e, _)) = mejor else { continue };
         i.ataque_cd = ATAQUE_CD;
+        sfx.send(crate::audio::PlaySfxAt(crate::audio::Sfx::Bite, crate::world2d::render_xy(i.x, i.z)));
         let Ok((_, mut n)) = npcs.get_mut(e) else { continue };
         n.health -= MORDIDA;
         let (tx, tz) = (n.town_x, n.town_z);
@@ -230,6 +232,34 @@ fn morder_vecinos(
                 push_history(&mut w.history, &format!("Mataron a {nombre}."));
             }
         }
+    }
+}
+
+/// Los infectados gimen: cada tanto, el más cercano a vos (a menos de 30 celdas) suelta un gemido en su lugar.
+/// Es lo que avisa que algo se acerca ANTES de verlo.
+fn gemidos(
+    time: Res<Time>,
+    infectados: Query<&Infectado>,
+    player: Query<&Transform, With<Player>>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+    mut resto: Local<f32>,
+) {
+    *resto -= time.delta_secs();
+    if *resto > 0.0 {
+        return;
+    }
+    let Ok(pt) = player.get_single() else { return };
+    let (px, pz) = (pt.translation.x, -pt.translation.y);
+    let cerca = infectados
+        .iter()
+        .map(|i| (((i.x - px).powi(2) + (i.z - pz).powi(2)).sqrt(), i.x, i.z))
+        .filter(|(d, _, _)| *d < 30.0)
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    if let Some((_, x, z)) = cerca {
+        sfx.send(crate::audio::PlaySfxAt(crate::audio::Sfx::Groan, crate::world2d::render_xy(x, z)));
+        *resto = 6.0 + (x.abs() as u32 % 7) as f32;
+    } else {
+        *resto = 1.5;
     }
 }
 
