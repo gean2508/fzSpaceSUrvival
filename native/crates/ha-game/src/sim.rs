@@ -112,6 +112,10 @@ pub struct PlayerVisual {
     /// El jugador está en líquido de poco fondo. Lo escribe `tick_sim` desde el
     /// estado del cuerpo y lo lee `face_player_sprite` para pedir la pose `swim_*`.
     pub swimming: bool,
+    /// Hacia dónde mira el dibujo, en el orden de la hoja del pack (`R, U, L, D`
+    /// = 0..4, ver `chargen_index::AnimDirs`). Lo decide `face_player_sprite` con
+    /// histéresis; lo lee el objeto en la mano para no discrepar del cuerpo.
+    pub dir4: u8,
 }
 
 pub(crate) fn tick_sim(
@@ -389,40 +393,103 @@ fn pose_directions(to_rot: f32) -> [&'static str; 2] {
     ]
 }
 
+/// Cuánto más allá de la diagonal (45°) hay que girar el stick para que el
+/// dibujo cambie de lado. Sin margen, un pulgar apoyado justo en la diagonal
+/// hacía parpadear al personaje entre dos poses cuadro a cuadro.
+const HISTERESIS_DIR: f32 = 0.18;
+
+/// Ángulo (convención de `body.rot`: `atan2(dz, dx)`, +z = abajo en pantalla) del
+/// centro de cada dirección de la hoja, en su orden `R, U, L, D`.
+fn centro_dir4(dir: u8) -> f32 {
+    use std::f32::consts::{FRAC_PI_2, PI};
+    match dir {
+        0 => 0.0,
+        1 => -FRAC_PI_2,
+        2 => PI,
+        _ => FRAC_PI_2,
+    }
+}
+
+/// **Hacia dónde mira el dibujo**, en el orden de la hoja del pack (`R, U, L, D`).
+///
+/// Es la misma partición en cuadrantes que `pose_direction`, más histéresis:
+/// mientras el rumbo siga a menos de 45° + [`HISTERESIS_DIR`] de la dirección
+/// que ya tenía, no cambia.
+pub(crate) fn dir4_de_rumbo(rot: f32, previa: Option<u8>) -> u8 {
+    if let Some(p) = previa {
+        let d = (rot - centro_dir4(p) + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        if d.abs() <= std::f32::consts::FRAC_PI_4 + HISTERESIS_DIR {
+            return p;
+        }
+    }
+    match pose_direction(rot) {
+        "right" => 0,
+        "up" => 1,
+        "left" => 2,
+        _ => 3,
+    }
+}
+
 /// Orient the character sprite to the facing direction. Si el slot
 /// `player/character` trae **poses** del editor (idle/walk × 4 direcciones),
-/// las usa (con mirror left↔right si sólo se sliceó un lado). Si no hay poses
-/// definidas, cae al atlas LimeZu de 3 frames hardcodeado (row-0: 0=down,
-/// 1=up, 2=side+flip) — comportamiento previo intacto.
+/// las usa (con mirror left↔right si sólo se sliceó un lado). Es el caso normal:
+/// `art2d::registrar_poses_de_personaje` deriva esas poses del índice del
+/// generador. Si faltaran, anima la hoja del pack con `chargen_index::char_cell`.
+///
+/// **El orden de esa hoja es `R, U, L, D`.** La reserva vieja suponía "0 = abajo,
+/// 1 = arriba, 2 = perfil + espejo" y sólo ponía la pose quieta.
 pub(crate) fn face_player_sprite(
     art: Res<crate::art2d::ArtLibrary>,
+    time: Res<Time>,
     mut commands: Commands,
     accion: Res<crate::pose_jugador::AccionJugador>,
     reposo: Res<crate::pose_jugador::Reposo>,
     descanso: Res<crate::descanso::Descanso>,
     equipped: Res<crate::input::EquippedItem>,
-    mut query: Query<(Entity, &PlayerVisual, &mut Sprite, &mut CurrentPose), With<Player>>,
+    mut reloj: Local<f32>,
+    mut query: Query<(Entity, &mut PlayerVisual, &mut Sprite, &mut CurrentPose), With<Player>>,
 ) {
+    use ha_assets::chargen_index::{char_anim, char_cell};
     let use_poses = art.has_poses(PLAYER_ART_KEY);
-    for (entity, visual, mut sprite, mut current) in &mut query {
+    for (entity, mut visual, mut sprite, mut current) in &mut query {
+        let previa = if current.0.is_empty() { None } else { Some(visual.dir4) };
+        let dir = dir4_de_rumbo(visual.to_rot, previa);
+        visual.dir4 = dir;
+        let paso = Vec2::new(visual.to_x - visual.from_x, visual.to_z - visual.from_z).length();
+        let moving = paso > 1e-4;
         if !use_poses {
             if sprite.texture_atlas.is_none() {
                 continue;
             }
-            let (dx, dz) = (visual.to_rot.cos(), visual.to_rot.sin());
-            let (index, flip) = if dz.abs() >= dx.abs() {
-                if dz > 0.0 { (0, false) } else { (1, false) }
+            // El paso se acelera con la velocidad (correr pisa más rápido) y
+            // vuelve a cero al frenar, así arranca siempre con el mismo pie.
+            let velocidad = paso * ha_shared::TICK_RATE as f32;
+            let (anim, ritmo) = if moving {
+                ("walk", (velocidad / 5.2).clamp(0.6, 1.8))
             } else {
-                (2, dx < 0.0)
+                ("idle", 1.0)
             };
-            if let Some(atlas) = &mut sprite.texture_atlas {
-                atlas.index = index;
+            let Some(anim) = char_anim(anim) else { continue };
+            let clave = if moving { "walk" } else { "idle" };
+            if !current.0.starts_with(clave) {
+                *reloj = 0.0;
             }
-            sprite.flip_x = flip;
+            *reloj += time.delta_secs() * anim.fps * ritmo;
+            let index = char_cell(anim, u32::from(dir), *reloj as u32) as usize;
+            if let Some(atlas) = &mut sprite.texture_atlas {
+                if atlas.index != index {
+                    atlas.index = index;
+                }
+            }
+            if sprite.flip_x {
+                sprite.flip_x = false;
+            }
+            if !current.0.starts_with(clave) {
+                current.0 = clave.to_string();
+            }
             continue;
         }
-
-        let moving = (visual.to_x - visual.from_x).abs() > 1e-4 || (visual.to_z - visual.from_z).abs() > 1e-4;
         // QUÉ hace lo decide `pose_jugador` (acción > caminar > arma > reposo; el agua manda sobre
         // todo). Acá sólo se le pone la dirección. Una acción con blanco (talar, pegarle a un
         // infectado) mira al blanco aunque el último paso haya sido hacia otro lado.
@@ -435,8 +502,20 @@ pub(crate) fn face_player_sprite(
             reposo.pose(),
             descanso.pose(),
         );
-        let rumbo = en_curso.and_then(|(_, r)| r).unwrap_or(visual.to_rot);
-        let [diag, card] = pose_directions(rumbo);
+        // Con blanco, mira al blanco. Sin él, la cardinal sale de `dir` (con histéresis), no del cuadrante crudo:
+        // así el pulgar en la diagonal no hace parpadear la pose; la diagonal sólo se usa si el pack la trae y
+        // es del mismo lado.
+        let (diag, card) = match en_curso.and_then(|(_, r)| r) {
+            Some(rumbo) => {
+                let [d, c] = pose_directions(rumbo);
+                (d, c)
+            }
+            None => {
+                let card = ["right", "up", "left", "down"][usize::from(dir)];
+                let [diag_cruda, _] = pose_directions(visual.to_rot);
+                (if diag_cruda.contains(card) { diag_cruda } else { card }, card)
+            }
+        };
 
         // Orden de preferencia: diagonal → cardinal → mismo verbo espejado →
         // el mismo verbo de frente (las filas de UNA dirección del pack: celular,
@@ -564,5 +643,47 @@ mod tests_vuelo {
         assert!(s * g / 13.0 <= VUELO_MAX_REL_PANTALLA + 1e-3, "tamaño relativo {}", s * g / 13.0);
         // Y jamás por debajo de 1.
         assert!(escala_en_vuelo(1.0, 1.0, 1.0) >= 1.0);
+    }
+}
+
+#[cfg(test)]
+mod tests_orientacion {
+    use super::*;
+
+    /// El rumbo que deja la sim para un stick `(x, y)` en pantalla (+y = abajo):
+    /// `topdown::step_topdown_movement_full` hace `rot = mz.atan2(mx)`.
+    fn rumbo_de_stick(x: f32, y: f32) -> f32 {
+        y.atan2(x)
+    }
+
+    /// **El dibujo mira hacia donde empujás el joystick.** La hoja del pack va
+    /// `R, U, L, D`; antes "abajo" pedía el cuadro 0 (perfil derecho) y los
+    /// costados salían al revés.
+    #[test]
+    fn cada_direccion_del_stick_pide_su_pose() {
+        assert_eq!(dir4_de_rumbo(rumbo_de_stick(1.0, 0.0), None), 0, "derecha");
+        assert_eq!(dir4_de_rumbo(rumbo_de_stick(0.0, -1.0), None), 1, "arriba");
+        assert_eq!(dir4_de_rumbo(rumbo_de_stick(-1.0, 0.0), None), 2, "izquierda");
+        assert_eq!(dir4_de_rumbo(rumbo_de_stick(0.0, 1.0), None), 3, "abajo");
+        // Y la celda de la hoja es la de esa dirección (caminar, primer cuadro).
+        let walk = ha_assets::chargen_index::char_anim("walk").unwrap();
+        for (dir, col) in [(0u32, 0u32), (1, 6), (2, 12), (3, 18)] {
+            assert_eq!(
+                ha_assets::chargen_index::char_cell(walk, dir, 0),
+                walk.row * ha_assets::chargen_index::STRIP_COLS + col
+            );
+        }
+    }
+
+    /// Con el pulgar quieto sobre la diagonal, la pose no parpadea entre dos
+    /// direcciones; hace falta girar de verdad para que cambie.
+    #[test]
+    fn la_diagonal_no_hace_parpadear_la_pose() {
+        let diag = rumbo_de_stick(1.0, 1.0); // 45°: frontera derecha/abajo
+        assert_eq!(dir4_de_rumbo(diag + 0.01, Some(0)), 0, "venía mirando a la derecha: sigue");
+        assert_eq!(dir4_de_rumbo(diag - 0.01, Some(3)), 3, "venía mirando abajo: sigue");
+        // Bien pasado el margen, cambia.
+        assert_eq!(dir4_de_rumbo(rumbo_de_stick(0.0, 1.0), Some(0)), 3);
+        assert_eq!(dir4_de_rumbo(rumbo_de_stick(-1.0, 0.0), Some(0)), 2);
     }
 }
