@@ -157,7 +157,62 @@ pub fn climb_rate(alt: f32) -> f32 {
 /// El tope está por ENCIMA de la velocidad orbital de los planetas (~4 km/s a
 /// esta escala): si no, un destino se te escaparía y no habría forma de llegar.
 pub fn lateral_speed(alt: f32) -> f32 {
-    (45.0 + alt.max(0.0) * 0.035).min(30_000.0)
+    (45.0 + alt.max(0.0) * 0.035).min(LATERAL_MAX)
+}
+
+/// Techo de la velocidad lateral (m/s). Ver [`lateral_speed`].
+const LATERAL_MAX: f32 = 30_000.0;
+
+/// Ritmo de crucero en el VACÍO: m/s de más por metro de hueco hasta la superficie
+/// más cercana.
+///
+/// **Por qué existe** (3 oct 2026, "en el espacio tengo que seguirle dando a subir
+/// para poder ir hacia la Luna"). Con [`lateral_speed`] sola, irse de lado desde el
+/// borde de la Tierra arrancaba a 45 m/s y la velocidad crecía con el hueco a
+/// 0,035 por segundo — se duplicaba cada ~20 s. Subir, en cambio, abre la altura a
+/// ×1,65 por segundo ([`climb_rate`]). O sea que el stick no te llevaba a ningún
+/// lado y el atajo era apretar SUBIR para que la altura arrastrara la velocidad: el
+/// "subir" de la Tierra mandaba sobre un viaje que es de lado.
+///
+/// Con este término el viaje por el vacío tiene su propio ritmo, del orden del de
+/// la subida: el hueco crece ×1,6 por segundo al irte y se cierra igual al llegar
+/// —la aproximación se frena sola, como en SFS— y la Luna queda a medio minuto de
+/// stick sin tocar SUBIR. Sobre el disco el hueco es cero, así que caminar y volar
+/// sobre tu mundo (los 10 minutos de cruzarlo) no cambian.
+pub const SPACE_CRUISE_RATE: f32 = 0.45;
+
+/// Velocidad lateral en vuelo: la de la altura ([`lateral_speed`]) más la de
+/// crucero en el vacío ([`SPACE_CRUISE_RATE`]) por el hueco al cuerpo más cercano.
+pub fn cruise_speed(alt: f32, gap: f32) -> f32 {
+    (lateral_speed(alt) + gap.max(0.0) * SPACE_CRUISE_RATE).min(LATERAL_MAX)
+}
+
+/// El encuadre del vuelo en un punto del marco: el MÍNIMO, entre los cuerpos
+/// aterrizables, del encuadre que te daría cada uno con tu altura sobre él.
+///
+/// [`view_h_for_alt`] depende del cuerpo (la rama lejana es proporcional a su
+/// radio), así que evaluarla sólo con el cuerpo de referencia daba un ESCALÓN al
+/// rebasar el marco: a mitad de camino a la Luna el encuadre pasaba de golpe del
+/// radio de la Tierra al de la Luna (×1,79 medido). La cámara lo suavizaba, pero
+/// se veía igual: es el "corte" de ir de la Tierra a la Luna.
+///
+/// El mínimo de funciones continuas es continuo: cerca de un cuerpo manda él (su
+/// hueco es el chico), y en el cruce el relevo es suave, rebase o no.
+pub fn flight_view_h(ref_body: CelestialBody, here: Vec2, vert: f32, t: f32) -> f32 {
+    let mut best = f32::MAX;
+    for &b in CelestialBody::all() {
+        if !body_landable(b) {
+            continue;
+        }
+        let gap = ((here - body_offset(b, ref_body, t)).length() - body_walk_radius(b)).max(0.0);
+        let alt = (vert * vert + gap * gap).sqrt();
+        best = best.min(view_h_for_alt(b, alt));
+    }
+    if best == f32::MAX {
+        view_h_for_alt(ref_body, vert)
+    } else {
+        best
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -313,11 +368,128 @@ fn limb_color(body: CelestialBody) -> [f32; 3] {
     }
 }
 
-/// La cara nocturna de un cuerpo: disco oscuro desplazado hacia el lado opuesto
-/// al Sol. Lo que queda sin tapar es el creciente iluminado.
+/// La cara nocturna de un cuerpo: una MÁSCARA del mismo círculo que el disco
+/// (misma malla, mismo centro), con la sombra pintada según de dónde viene la luz.
+///
+/// **Era un sprite oscuro desplazado** hacia el anti-Sol, de 2,2 radios, que no
+/// estaba recortado al planeta. Dos bugs salían de ahí (3 oct 2026, "al salir de
+/// la Tierra y volver a entrar la sombra reemplaza al dibujo de la Tierra"):
+///
+/// 1. Se salía del disco: una mancha negra sobre el halo y el espacio, del lado
+///    de noche.
+/// 2. Para el cuerpo que pisás la sombra se centraba en el JUGADOR (por la hora),
+///    pero sólo a menos de 1,6 radios del centro; más lejos, por la órbita. Al
+///    volver de la Luna, cruzar ese radio la teletransportaba de golpe encima de
+///    vos: de noche, el planeta entero se volvía sombra en un frame.
+///
+/// Ahora la sombra es iluminación de una esfera (`n·L` en bandas de píxel), así
+/// que nunca sale del disco, y la luz pasa de "la de la hora" a "la de la órbita"
+/// fundida con la distancia ([`night_light_dir`]), sin saltos.
 #[derive(Component)]
 struct BodyNightSide {
     body: CelestialBody,
+    /// Luz cuantizada con la que se pintó la máscara vigente.
+    key: Option<[i32; 3]>,
+}
+
+/// Lado de la máscara de noche: el mismo que el disco pixelado
+/// (`DISC_PIXEL_N`), así los píxeles de la sombra caen sobre los del planeta.
+const NIGHT_MASK_N: usize = 128;
+
+/// Pasos de cuantización de la luz por unidad: repintar la máscara (16 k
+/// píxeles) sólo cuando la luz se movió algo visible, no cada frame.
+const NIGHT_KEY_STEPS: f32 = 48.0;
+
+/// Alto del Sol sobre el plano del sistema visto desde un cuerpo AJENO (seno).
+/// Negativo a propósito: deja un creciente algo menor que la mitad, que es como
+/// se leía (y se quiere seguir leyendo) un planeta desde fuera de su órbita.
+const ORBIT_SUN_ELEV: f32 = -0.25;
+
+/// Dirección de la luz (unitaria; x derecha, y arriba, z hacia la cámara) que
+/// ilumina el disco de `body`.
+///
+/// - Visto de afuera, la de su órbita: el Sol en el plano, algo por detrás.
+/// - El cuerpo que pisás obedece al RELOJ (`daylight`, el mismo dato que el velo
+///   de la superficie): a pleno día el Sol te queda encima, al atardecer el
+///   terminador pasa por tus pies, de noche quedás adentro de la sombra.
+/// - Entre una y otra se FUNDE con la distancia del jugador al cuerpo (1 → 1,6
+///   radios). Antes era un corte en 1,6 radios: el salto de la sombra.
+fn night_light_dir(sun: Vec2, pie: Option<Vec2>, r: f32, daylight: f32) -> Vec3 {
+    let (ce, se) = ((1.0 - ORBIT_SUN_ELEV * ORBIT_SUN_ELEV).sqrt(), ORBIT_SUN_ELEV);
+    let orbit = Vec3::new(sun.x * ce, sun.y * ce, se);
+    let Some(p) = pie else { return orbit };
+    let w = 1.0 - smootherstep(r, r * 1.6, p.length());
+    if w <= 0.0 {
+        return orbit;
+    }
+    // Normal de la esfera bajo el jugador (si está afuera del disco, en el borde).
+    let q = (p / r).clamp_length_max(0.98);
+    let n = Vec3::new(q.x, q.y, (1.0 - q.length_squared()).max(0.0).sqrt());
+    // Cuán alto está el Sol sobre el jugador: 1 a pleno día, −0,75 a medianoche.
+    let c = (-0.75 + 1.75 * daylight).clamp(-1.0, 1.0);
+    // Hacia dónde cae: del lado del Sol de verdad, así el terminador queda
+    // orientado igual que visto desde afuera.
+    let s3 = Vec3::new(sun.x, sun.y, 0.0);
+    let mut tang = s3 - n * s3.dot(n);
+    if tang.length_squared() < 1e-6 {
+        tang = n.any_orthonormal_vector();
+    }
+    let clock = n * c + tang.normalize() * (1.0 - c * c).max(0.0).sqrt();
+    // Giro y no mezcla lineal: interpolar y normalizar pasa cerca de cero cuando
+    // las dos luces se oponen, y ahí la dirección pegaría el salto que esto evita.
+    let arco = Quat::from_rotation_arc(orbit, clock.normalize());
+    (Quat::IDENTITY.slerp(arco, w) * orbit).normalize()
+}
+
+/// Pinta la máscara de noche para la luz `l`: tres bandas duras de píxel (como el
+/// resto del planeta) y nada fuera del círculo. Fila 0 = arriba.
+fn paint_night_mask(data: &mut [u8], l: Vec3) {
+    let n = NIGHT_MASK_N;
+    for py in 0..n {
+        for px in 0..n {
+            let u = (px as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = 1.0 - (py as f32 + 0.5) / n as f32 * 2.0;
+            let r2 = u * u + v * v;
+            let i = (py * n + px) * 4;
+            data[i..i + 3].copy_from_slice(&[255, 255, 255]);
+            if r2 > 1.0 {
+                data[i + 3] = 0;
+                continue;
+            }
+            let ndl = Vec3::new(u, v, (1.0 - r2).sqrt()).dot(l);
+            let a = if ndl > 0.10 {
+                0.0
+            } else if ndl > -0.02 {
+                0.33
+            } else if ndl > -0.16 {
+                0.66
+            } else {
+                1.0
+            };
+            data[i + 3] = (a * 255.0) as u8;
+        }
+    }
+}
+
+fn night_key(l: Vec3) -> [i32; 3] {
+    [
+        (l.x * NIGHT_KEY_STEPS).round() as i32,
+        (l.y * NIGHT_KEY_STEPS).round() as i32,
+        (l.z * NIGHT_KEY_STEPS).round() as i32,
+    ]
+}
+
+fn new_night_mask() -> Image {
+    let n = NIGHT_MASK_N;
+    let mut img = Image::new(
+        Extent3d { width: n as u32, height: n as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        vec![0u8; n * n * 4],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    );
+    img.sampler = bevy::image::ImageSampler::nearest();
+    img
 }
 
 #[derive(Component)]
@@ -394,32 +566,6 @@ fn spawn_glow_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>)
     image.sampler = bevy::image::ImageSampler::linear();
     commands.insert_resource(GlowTexture(images.add(image)));
 
-    // **La NOCHE del cuerpo, en pixel art** (28 sep 2026): la cara oscura giraba
-    // con el Sol pero era un degradé suave encima de un disco de píxeles. Ésta es
-    // la misma sombra en tres bandas duras, 48 px y vecino más próximo.
-    const M: usize = 48;
-    let mut noche = vec![0u8; M * M * 4];
-    for y in 0..M {
-        for x in 0..M {
-            let u = (x as f32 + 0.5) / M as f32 - 0.5;
-            let v = (y as f32 + 0.5) / M as f32 - 0.5;
-            let d = (u * u + v * v).sqrt() * 2.0;
-            let a = if d < 0.62 { 1.0 } else if d < 0.80 { 0.66 } else if d < 0.93 { 0.33 } else { 0.0 };
-            let i = (y * M + x) * 4;
-            noche[i..i + 3].copy_from_slice(&[255, 255, 255]);
-            noche[i + 3] = (a * 255.0) as u8;
-        }
-    }
-    let mut img = Image::new(
-        Extent3d { width: M as u32, height: M as u32, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        noche,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-    img.sampler = bevy::image::ImageSampler::nearest();
-    commands.insert_resource(NightTexture(images.add(img)));
-
     // **El SOL en pixel art**: núcleo claro y bandas hacia el naranja del borde,
     // 64 px, vecino más próximo. Era un círculo plano de un solo color.
     const S: usize = 64;
@@ -458,17 +604,15 @@ fn spawn_glow_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>)
 #[derive(Resource)]
 pub struct SunTexture(pub Handle<Image>);
 
-/// La sombra del lado de noche de un cuerpo, en bandas (ver `spawn_glow_texture`).
-#[derive(Resource)]
-pub struct NightTexture(pub Handle<Image>);
-
 /// Mantiene la cara nocturna de cada cuerpo mirando en contra del Sol.
 fn sync_terminators(
     frame: Res<UniverseFrame>,
     clock: Res<SolarSystemClock>,
     dia: Res<crate::sky2d::DayClock>,
     jugador: Query<&crate::sim::SimState, With<crate::sim::Player>>,
-    mut night: Query<(&BodyNightSide, &mut Transform)>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut night: Query<(&mut BodyNightSide, &mut Transform, &MeshMaterial2d<ColorMaterial>)>,
     mut limb: Query<(&BodyLimb, &mut Transform), Without<BodyNightSide>>,
     mut log_una_vez: Local<u32>,
 ) {
@@ -485,35 +629,33 @@ fn sync_terminators(
         let z = tf.translation.z;
         tf.translation = Vec3::new(o.x + toward.x, o.y + toward.y, z);
     }
-    for (n, mut tf) in &mut night {
+    for (mut n, mut tf, mat) in &mut night {
+        // La máscara va CENTRADA en el cuerpo, igual que el disco: la sombra se
+        // dibuja adentro de la esfera, no como un disco aparte que se corre.
         let o = body_offset(n.body, frame.ref_body, t);
-        let r = body_radius(n.body);
-        let dir = -sun_dir_from(n.body, t);
-        // Desplazado 0.78 radios hacia el anti-Sol: deja un creciente iluminado
-        // de un tercio del disco, que es como se ve un planeta desde fuera de su
-        // órbita. Al orbitar, el creciente gira solo.
-        let mut centro = o + dir * r * 0.78;
-        // **El cuerpo que pisás obedece al RELOJ, no a la órbita** (29 sep 2026).
-        // La sombra se orientaba sólo por la posición heliocéntrica, así que a las
-        // 08:29 el jugador podía quedar en la mitad oscura del disco: subías de día
-        // y arriba "era de noche", y al alejar/acercar la vista alternaba entre el
-        // suelo (de día) y el disco (de noche) — el titileo claro/oscuro. Ahora la
-        // noche se corre desde el jugador según la luz del día: a mediodía queda
-        // del otro lado del disco, al atardecer el terminador pasa por tus pies y
-        // a medianoche estás en el medio de la sombra. Mismo dato que el velo de
-        // la superficie (`DayClock::daylight`), así no pueden contradecirse.
-        if n.body == frame.ref_body {
-            if let Some(p) = pie.filter(|p| p.distance(o) < r * 1.6) {
-                let d = r * 1.1 * (0.15 + 1.85 * dia.daylight());
-                centro = p + dir * d;
-                if *log_una_vez < 1 && crate::flags::var("HA_FLYTEST").is_ok() {
-                    *log_una_vez += 1;
-                    eprintln!("ha-terminador: pie a {:.0} m del centro (r {:.0}), día {:.2}", p.distance(o), r, dia.daylight());
-                }
-            }
-        }
         let z = tf.translation.z; // épsilon por cuerpo — ver `spawn_universe`
-        tf.translation = Vec3::new(centro.x, centro.y, z);
+        tf.translation = Vec3::new(o.x, o.y, z);
+        let r = body_radius(n.body);
+        let pie_aca = if n.body == frame.ref_body { pie.map(|p| p - o) } else { None };
+        let l = night_light_dir(sun_dir_from(n.body, t), pie_aca, r, dia.daylight());
+        let key = night_key(l);
+        if n.key == Some(key) {
+            continue;
+        }
+        if *log_una_vez < 1 && crate::flags::var("HA_FLYTEST").is_ok() {
+            *log_una_vez += 1;
+            eprintln!("ha-terminador: {:?} luz {:?} día {:.2}", n.body, l, dia.daylight());
+        }
+        // Una imagen NUEVA en vez de mutar la vigente: el material la toma en el
+        // mismo frame y no hay un cuadro con la máscara a medio subir. La vieja
+        // se libera sola al soltar su handle.
+        let mut img = new_night_mask();
+        paint_night_mask(&mut img.data, l);
+        let h = images.add(img);
+        if let Some(m) = materials.get_mut(&mat.0) {
+            m.texture = Some(h);
+        }
+        n.key = Some(key);
     }
 }
 
@@ -554,7 +696,6 @@ impl Plugin for UniversePlugin {
 fn spawn_universe(
     mut commands: Commands,
     glow: Res<GlowTexture>,
-    noche: Res<NightTexture>,
     sol: Res<SunTexture>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -583,9 +724,12 @@ fn spawn_universe(
         } else {
             Color::srgb(base[0], base[1], base[2])
         };
+        // La MISMA malla para el disco y su noche: la sombra no puede salirse del
+        // planeta porque tiene literalmente su contorno.
+        let disc_mesh = meshes.add(Circle::new(r));
         commands.spawn((
             BodyDisc { body, textured: false },
-            Mesh2d(meshes.add(Circle::new(r))),
+            Mesh2d(disc_mesh.clone()),
             MeshMaterial2d(materials.add(if body == CelestialBody::Sun {
                 ColorMaterial { color: Color::WHITE, texture: Some(sol.0.clone()), ..default() }
             } else {
@@ -667,23 +811,22 @@ fn spawn_universe(
                 ));
             }
         } else {
-            // TERMINADOR: la mitad que no mira al Sol está a oscuras. Es un
-            // disco oscuro del mismo radio, desplazado hacia el anti-Sol — el
-            // creciente que queda es la parte iluminada, y gira solo conforme
-            // el cuerpo recorre su órbita.
+            // TERMINADOR: la mitad que no mira al Sol está a oscuras. Es una
+            // máscara sobre el mismo círculo del disco, repintada cuando la luz
+            // se mueve (`sync_terminators` → `night_light_dir`).
+            let image = images.add(new_night_mask());
             commands.spawn((
-                BodyNightSide { body },
-                Sprite {
-                    image: noche.0.clone(),
-                    // Sombra SUAVE, no un disco recortado: un círculo oscuro
-                    // desplazado se salía del planeta y se leía como anillos
-                    // negros concéntricos encima del halo. Con el degradado
-                    // radial la noche se difumina y el limbo queda limpio.
+                BodyNightSide { body, key: None },
+                Mesh2d(disc_mesh.clone()),
+                MeshMaterial2d(materials.add(ColorMaterial {
                     color: Color::srgba(0.01, 0.01, 0.03, 0.62),
-                    custom_size: Some(Vec2::splat(r * 2.2)),
+                    texture: Some(image),
                     ..default()
-                },
-                Transform::from_xyz(0.0, 0.0, -19.5 + dz),
+                })),
+                // Justo encima de SU disco y debajo del disco del cuerpo siguiente
+                // (los épsilons van de a 0.01): con −19.5 fijo, la noche de la
+                // Tierra oscurecía a la Luna cuando pasaba por delante.
+                Transform::from_xyz(0.0, 0.0, -20.0 + dz + 0.005),
             ));
         }
 
@@ -922,6 +1065,18 @@ fn sync_terrain_lod(
         return;
     };
     if view_h < LOD_ON_VIEW_H || !body_landable(body) {
+        drop_it(&mut commands, &lod);
+        state.body = None;
+        job.0 = None;
+        return;
+    }
+
+    // **La malla de OTRO cuerpo no se sigue dibujando** (3 oct 2026). Al rebasar
+    // el marco (Tierra → Luna → Tierra) la malla vieja quedaba viva hasta que
+    // terminara la nueva —segundos en el celu— con sus vértices en coordenadas del
+    // cuerpo anterior: el suelo de la Luna pintado encima del centro de la Tierra.
+    // Mejor nada (el disco ya cubre a esta altura) que el planeta equivocado.
+    if state.body.is_some_and(|b| b != body) {
         drop_it(&mut commands, &lod);
         state.body = None;
         job.0 = None;
@@ -2039,5 +2194,155 @@ mod tests {
             colors.windows(2).any(|w| w[0] != w[1]),
             "todos los vertices del mismo color: el terreno seria un manchon plano"
         );
+    }
+
+    /// Vuela de lado desde la orilla de la Tierra hacia la Luna, SIN subir
+    /// (`vert` = 0), con la misma cuenta que `creative_fly_step`. Devuelve los
+    /// segundos hasta pisar el disco de la Luna (o el tope si no llega).
+    fn moon_by_stick_secs(speed: impl Fn(f32, f32) -> f32) -> f32 {
+        let earth = CelestialBody::Earth;
+        let moon = body_offset(CelestialBody::Moon, earth, 0.0);
+        let dir = moon.normalize();
+        let mut p = dir * body_walk_radius(earth);
+        let mut secs = 0.0;
+        while secs < 3_600.0 {
+            let (b, d) = nearest_landable(p, earth, 0.0);
+            let gap = (d - body_walk_radius(b)).max(0.0);
+            if b == CelestialBody::Moon && gap <= 0.0 {
+                break;
+            }
+            p += dir * speed(gap, gap) * 0.05;
+            secs += 0.05;
+        }
+        secs
+    }
+
+    #[test]
+    fn a_la_luna_con_el_stick_sin_tener_que_subir() {
+        // "En el espacio tengo que seguirle dando a subir para poder ir hacia la
+        // Luna": con la velocidad atada sólo a la altura, irse de lado era eterno y
+        // el atajo era subir. El viaje de lado tiene que ser un viaje, no una espera.
+        let ahora = moon_by_stick_secs(cruise_speed);
+        let antes = moon_by_stick_secs(|alt, _| lateral_speed(alt));
+        assert!((8.0..=90.0).contains(&ahora), "a la Luna con el stick: {ahora:.0} s");
+        assert!(ahora * 3.0 < antes, "ahora {ahora:.0} s, antes {antes:.0} s");
+    }
+
+    #[test]
+    fn el_crucero_del_vacio_no_toca_el_vuelo_sobre_el_planeta() {
+        // Sobre el disco el hueco es cero: los 10 minutos de cruzar el mundo quedan.
+        for alt in [0.0, 300.0, 1_400.0, 30_000.0] {
+            assert_eq!(cruise_speed(alt, 0.0), lateral_speed(alt));
+        }
+    }
+
+    #[test]
+    fn el_encuadre_no_salta_al_pasar_de_la_tierra_a_la_luna() {
+        // El "corte" de ir a la Luna: el encuadre se evaluaba con el radio del
+        // cuerpo de referencia y saltaba ×1,79 al rebasar el marco. Recorriendo la
+        // línea Tierra→Luna a pasos de 50 m, ningún paso puede cambiar el encuadre
+        // más de un 1 %, y tiene que dar lo mismo visto desde cualquiera de los
+        // dos marcos.
+        let earth = CelestialBody::Earth;
+        let moon_o = body_offset(CelestialBody::Moon, earth, 0.0);
+        let dir = moon_o.normalize();
+        for vert in [0.0f32, 2_000.0, 60_000.0] {
+            let mut prev: Option<f32> = None;
+            let mut s = body_walk_radius(earth);
+            while s < moon_o.length() - body_walk_radius(CelestialBody::Moon) {
+                let p = dir * s;
+                let ref_body = nearest_landable(p, earth, 0.0).0;
+                let local = p - body_offset(ref_body, earth, 0.0);
+                let h = flight_view_h(ref_body, local, vert, 0.0);
+                let desde_tierra = flight_view_h(earth, p, vert, 0.0);
+                assert!((h / desde_tierra - 1.0).abs() < 1e-3, "el marco cambia el encuadre en {s:.0} m");
+                if let Some(q) = prev {
+                    let k = (h / q).max(q / h);
+                    assert!(k < 1.01, "salto ×{k:.3} en {s:.0} m (vert {vert})");
+                }
+                prev = Some(h);
+                s += 50.0;
+            }
+        }
+    }
+
+    #[test]
+    fn el_encuadre_de_vuelo_coincide_con_la_curva_sobre_el_planeta() {
+        // Sobre tu mundo manda el cuerpo que tenés debajo: la curva de despegue y
+        // aterrizaje (y sus tests de cámara) no cambian.
+        let earth = CelestialBody::Earth;
+        for vert in [0.0, 50.0, 1_000.0, 20_000.0] {
+            let a = flight_view_h(earth, Vec2::new(1_000.0, -2_000.0), vert, 0.0);
+            assert!((a - view_h_for_alt(earth, vert)).abs() < 1e-2, "vert {vert}: {a}");
+        }
+    }
+
+    fn mask_alpha_at(l: Vec3, u: f32, v: f32) -> u8 {
+        let n = NIGHT_MASK_N;
+        let mut data = vec![0u8; n * n * 4];
+        paint_night_mask(&mut data, l);
+        let px = (((u + 1.0) * 0.5 * n as f32) as usize).min(n - 1);
+        let py = (((1.0 - v) * 0.5 * n as f32) as usize).min(n - 1);
+        data[(py * n + px) * 4 + 3]
+    }
+
+    #[test]
+    fn la_noche_nunca_se_sale_del_disco() {
+        // La sombra era un sprite de 2,2 radios corrido 0,78 radios: se salía del
+        // planeta como una mancha negra sobre el halo. Ahora, para cualquier luz,
+        // fuera del círculo no hay ni un píxel de sombra.
+        let n = NIGHT_MASK_N;
+        for l in [Vec3::X, -Vec3::X, Vec3::Z, -Vec3::Z, Vec3::new(0.3, -0.8, -0.5).normalize()] {
+            let mut data = vec![0u8; n * n * 4];
+            paint_night_mask(&mut data, l);
+            for py in 0..n {
+                for px in 0..n {
+                    let u = (px as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+                    let v = 1.0 - (py as f32 + 0.5) / n as f32 * 2.0;
+                    if u * u + v * v > 1.0 {
+                        assert_eq!(data[(py * n + px) * 4 + 3], 0, "sombra fuera del disco con luz {l:?}");
+                    }
+                }
+            }
+        }
+        // Luz de frente: nada de sombra. Luz de atrás: todo sombra.
+        assert_eq!(mask_alpha_at(Vec3::Z, 0.0, 0.0), 0);
+        assert_eq!(mask_alpha_at(-Vec3::Z, 0.0, 0.0), 255);
+    }
+
+    #[test]
+    fn la_sombra_no_salta_al_volver_al_planeta() {
+        // "Al salir de la Tierra y volver a entrar, la sombra reemplaza al dibujo de
+        // la Tierra": la luz del cuerpo propio pasaba de la órbita a la hora en UN
+        // frame al cruzar 1,6 radios. Acercándose a pasos de 0,001 radios, la luz
+        // tiene que moverse de a poco, de día y de noche.
+        let r = body_radius(CelestialBody::Earth);
+        let sun = Vec2::new(-1.0, 0.2).normalize();
+        for daylight in [0.0, 0.5, 1.0] {
+            let mut prev: Option<Vec3> = None;
+            for i in 0..2_500 {
+                let d = r * (2.5 - i as f32 * 0.001);
+                let pie = Vec2::new(0.6, 0.8) * d;
+                let l = night_light_dir(sun, Some(pie), r, daylight);
+                assert!((l.length() - 1.0).abs() < 1e-3);
+                if let Some(q) = prev {
+                    assert!(l.dot(q) > 0.995, "la luz saltó a {:.3} radios (día {daylight})", d / r);
+                }
+                prev = Some(l);
+            }
+        }
+    }
+
+    #[test]
+    fn de_dia_el_jugador_queda_al_sol_y_de_noche_a_la_sombra() {
+        // La noche del disco y el velo de la superficie leen el mismo `daylight`:
+        // subir de día no puede mostrarte abajo de noche (el titileo de 29 sep).
+        let r = body_radius(CelestialBody::Earth);
+        let sun = Vec2::new(0.0, 1.0);
+        let pie = Vec2::new(0.3, -0.2) * r;
+        let dia = night_light_dir(sun, Some(pie), r, 1.0);
+        let noche = night_light_dir(sun, Some(pie), r, 0.0);
+        assert_eq!(mask_alpha_at(dia, 0.3, -0.2), 0, "de día hay sombra a tus pies");
+        assert_eq!(mask_alpha_at(noche, 0.3, -0.2), 255, "de noche estás al sol");
     }
 }

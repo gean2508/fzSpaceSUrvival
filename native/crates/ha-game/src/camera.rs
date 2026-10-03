@@ -138,6 +138,9 @@ pub struct CameraTrauma(pub f32);
 #[derive(Resource, Default)]
 pub struct ApproachFraming {
     pub lead: Vec2,
+    /// Último rumbo del stick en este vuelo (render, unitario; cero = todavía no
+    /// te moviste). El adelanto sigue a ESTO, no al cuerpo más cercano.
+    pub dir: Vec2,
 }
 
 pub struct FollowCameraPlugin;
@@ -432,8 +435,15 @@ fn follow_player_camera(
     //    por metro de altura, el "se aleja de golpe" ya no tiene de dónde salir: el
     //    ritmo de reencuadre queda por debajo de ×1/s (lo clava
     //    `el_despegue_no_se_aleja_de_golpe`).
-    let alt = if fly.flying() { fly.alt } else { 0.0 };
-    zoom.auto_view_h = crate::universe::view_h_for_alt(fly.body, alt);
+    // En vuelo manda `flight_view_h` (lo calcula `creative_fly`): es la misma curva,
+    // pero continua al rebasar el marco — evaluarla sólo con el cuerpo de referencia
+    // daba un escalón a mitad de camino entre dos cuerpos (ver esa función).
+    zoom.auto_view_h = if fly.flying() && fly.view_h > 0.0 {
+        fly.view_h
+    } else {
+        let alt = if fly.flying() { fly.alt } else { 0.0 };
+        crate::universe::view_h_for_alt(fly.body, alt)
+    };
     // UN SOLO RANGO, VUELE O NO. El rango angosto de superficie (12–45 m) era una cosa
     // que movía la cámara sola: aterrizar con el encuadre abierto lo recortaba a 45 m,
     // o sea un reencuadre de ~8 s que el jugador no pidió. Se puede sacar sin riesgo
