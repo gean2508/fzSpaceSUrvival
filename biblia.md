@@ -3873,6 +3873,26 @@ El presupuesto subió de 24 a 40 luces y el costo BAJÓ. Tres cambios:
 | con 40 luces + rechazo al cuadrado | 1.219 |
 | \+ sin teñir el arte plano | **503** |
 
+##### Luces por baldosas (3 oct 2026) — el costo deja de ser píxeles × luces
+
+Medido en el Redmi: cada luz costaba ~4 ms de GPU (por eso el tope de 8 en Android), porque
+las dos pasadas recorrían TODAS las luces en CADA píxel, aunque casi ninguna llegara. En una
+Mali cada vuelta es además una lectura del uniform con índice dinámico.
+
+- **Grilla de baldosas** (`light2d::TILES_X × TILES_Y` = 20 × 10 sobre el encuadre + margen,
+  anclada a múltiplos de baldosa). La CPU (`light_tiles`, 20 Hz) anota por baldosa una máscara
+  de bits con las luces cuyo pozo la toca (`tiles_lo` = 0..31, `tiles_hi` = 32..39). El shader
+  lee una máscara y recorre sólo los bits prendidos (`firstTrailingBit`), así que el costo pasa
+  a ser píxeles × luces que se SOLAPAN ahí.
+- **Se ve idéntico**: una luz fuera de la máscara es una que el bucle viejo saltaba con
+  `continue`; los bits se recorren en el mismo orden (el producto `cover` redondea igual); fuera
+  de la grilla va la máscara completa. Lo clava el test `la_mascara_nunca_pierde_una_luz_que_llega`.
+- `pow(color, 1.6)` de la aditiva se precalcula por luz (`cols`): tres `pow` menos por luz y píxel.
+- **De día `light_sprites` duerme**: sin luces activas ya no recorre todos los sprites del mundo
+  20 veces por segundo (una vuelta final devuelve el color a los teñidos, sin corte por distancia).
+- Con eso `presupuesto_de_luces()` en Android pasó de **8 a 16**. Medir en el celu con
+  `HA_LUCES=n` (8/16/24) en la ciudad de noche; si `resto` no baja, volver a 8 es un número.
+
 #### FUEGOS ARTIFICIALES (`render/fireworks.rs`, 28 ago 2026)
 
 La pieza que le faltaba a la noche: con los faroles encendidos el pueblo ya se lee,
@@ -7076,7 +7096,7 @@ con el celu enchufado** (lo desconectaba) y nunca mandarle toques si el usuario 
 | parado en el pasto | 23-28 fps, `fx_tick_sim` 12-15 ms | ~30 (tope), `fx_tick_sim` 0,0 | colisión del jugador aun quieto: ahora no consulta el mundo (`topdown.rs::quieto`) |
 | caminando | 28 fps, `ob_decor` 9,2 ms | 29,9 parejo, p95 40 ms | `surface_decor_at` memoizado por celda (`worldgen.rs`) + `topdown_tile` memoizado (`topdown.rs`) |
 | ciudad a pie (vecinos) | `tick_society` 56 ms | 0,8-1,6 ms | `decor_hits_box` escaneaba ~300 celdas por pregunta (alcance de la casa autorada más grande); ahora el alcance es el de árboles/rocas y lo autorado va por lista |
-| ciudad al amanecer/noche | 9 fps (`resto` 55-74 ms) | 26-29 fps con 6-8 luces | el velo y la aditiva recorren TODAS las luces por píxel: cada luz ~4 ms de GPU. `light2d::presupuesto_de_luces()` = 8 en Android (`HA_LUCES=n` para medir) |
+| ciudad al amanecer/noche | 9 fps (`resto` 55-74 ms) | 26-29 fps con 6-8 luces | el velo y la aditiva recorren TODAS las luces por píxel: cada luz ~4 ms de GPU. `light2d::presupuesto_de_luces()` = 8 en Android (`HA_LUCES=n` para medir). **3 oct: luces por baldosas (§7 Luz y cielo), tope 16 — sin medir todavía en el Redmi** |
 | vuelo Ki (a mano, mantener SALTAR) | 8,7 fps, `sync_terrain_lod` 82-88 ms | **23,5 fps parejos** (p50 42,5 ms, hilo principal 7 ms) | el horneado de la malla lejana y del disco del planeta pasó a un hilo de fondo (`AsyncComputeTaskPool`, copia liviana de las ediciones: `TileWorld::copia_para_lod`). Lo que queda es GPU (`resto` ~22 ms): la malla de 37 000 quads + sprites |
 
 Notas: el mundo arranca a las 06:47 (amanecer), o sea que **todas las partidas nuevas empiezan
