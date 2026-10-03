@@ -99,7 +99,7 @@ impl CreativeFlight {
 
 /// Mantener SALTO este tiempo en el suelo antes de despegar. Por debajo, un
 /// SALTO es un salto normal.
-const TAKEOFF_HOLD: f32 = 0.4;
+pub const TAKEOFF_HOLD: f32 = 0.4;
 /// Bajada al quedarse SIN Ki. No es "gravedad": es el aterrizaje forzoso, y es
 /// suave a propósito para que se pueda elegir dónde caer.
 ///

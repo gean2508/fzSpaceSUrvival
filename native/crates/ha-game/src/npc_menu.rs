@@ -133,9 +133,9 @@ fn npc_menu_autoshot(
 }
 
 #[derive(Resource, Default)]
-struct NpcMenu {
+pub(crate) struct NpcMenu {
     /// NPC abierto (uid) o `None` = cerrado.
-    open_uid: Option<u64>,
+    pub(crate) open_uid: Option<u64>,
     /// uid ya renderizado (para reconstruir sólo al cambiar).
     shown_uid: Option<u64>,
     /// forzar reconstrucción (tras Hablar, etc.).
@@ -634,6 +634,9 @@ fn menu_saber(
                 }
                 if let Some(n) = crate::barrio::noticias(&memoria.de(npc.town_x, npc.town_z)) {
                     t += &format!(" Del barrio: {n}");
+                }
+                if let Some((dia, r)) = &saber.rumor {
+                    t += &format!(" Lo que se dice en {} ({}): {r}", saber.pueblo, ha_shared::civ::cronica::fecha(*dia));
                 }
                 if descanso.get(&uid).copied().unwrap_or(0.0) <= ahora {
                     descanso.insert(uid, ahora + PREGUNTAR_DESCANSO);

@@ -8873,8 +8873,22 @@ todo a la más vulnerable. **Regla de Ki**: la gente vuelve porque quiere, no po
 
 ### D. Prioridad (impacto ÷ costo, respetando el Redmi)
 
-1. **Jugo del golpe y de la carga de Ki** — barato, mejora cada segundo de juego.
-2. **El diario del pueblo + vecinos que recuerdan** — la sim ya existe; sólo hay que contarla.
+1. ✅ **Jugo del golpe y de la carga de Ki** — hecho el 3 oct 2026 (`ha-game/src/jugo.rs`). Quien pega
+   cuerpo a cuerpo (`infectados::golpear`, `fauna::interactuar_animal`) manda un `jugo::Golpe` y el módulo
+   responde con parada de golpe (el tiempo virtual a ×0,06 durante 45 ms, 75 ms si mata, tope 120 ms,
+   contado en tiempo REAL), chispas del color del blanco, número de daño que salta (dorado si mata, coma
+   decimal), sonido de impacto en el lugar (`BulletHit`) y sacudida que crece con el daño y satura. Las
+   balas no paran el tiempo (una ráfaga tartamudearía). La carga de Ki en tierra levanta polvo y
+   piedritas de los pies (6 → 30 por segundo según la carga), tiembla cada vez más y el aura se prende
+   con la carga (`light2d::ki_aura`); al despegar, anillo de polvo y sacudida. Cupo: 48 partículas vivas
+   del módulo en total. Tests: `jugo::tests`. Sin probar en el celu todavía.
+2. ✅ **Vecinos que recuerdan + rumor del pueblo** (3 oct 2026, primera parte; falta la hoja diaria de
+   titulares). `barrio::el_barrio_te_ve`: cada infectado que matás con vecinos a ≤25 celdas queda en
+   `Lecciones::por_vos` de SU pueblo (`barrio.json`, `#[serde(default)]`), en la historia de cada testigo,
+   en la fama de su familia (+0,04, tope 0,6), en el rastro causal (`testigos`) y un testigo lo festeja
+   (1.º, 5.º y cada 10.º). Al abrir el menú de un vecino (`te_reconocen`, una vez por vecino) te
+   reconoce; PREGUNTAR suma «vos solo acabaste con N acá» a las noticias y **el último hecho de la
+   crónica de su pueblo** (`SaberNpc::rumor`). Tests: `barrio::tests::el_barrio_te_recuerda_…`.
 3. **Técnicas de Ki + aura personal** — la identidad del juego; nadie más la tiene.
 4. **Torneo de las Artes Marciales** — evento recurrente con rivales, público y premio.
 5. **Fuego que se propaga** (química al mundo, reusa `materia.rs`).

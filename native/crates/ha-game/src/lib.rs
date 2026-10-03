@@ -43,6 +43,7 @@ pub mod metas;
 pub mod habilidades;
 pub mod infectados;
 pub mod armas;
+pub mod jugo;
 pub mod estados;
 pub mod alijos;
 pub mod causal;
@@ -375,6 +376,7 @@ fn run_app_inner() {
         // está en el tope de 16 que admite `Plugins` (el mismo motivo por el que
         // el parallax de los menús está aparte).
         .add_plugins(render::fireworks::FireworksPlugin)
+        .add_plugins(jugo::JugoPlugin)
         // **Herramientas de la compu, no del teléfono** (reporte del 29 sep 2026:
         // "las pruebas que hagas, que se queden para la compu"). La sonda de
         // etapas mete siete schedules extra en CADA frame; la ablación y el
