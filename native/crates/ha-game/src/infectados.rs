@@ -102,6 +102,9 @@ const VIDA_PARED_MADERA: f32 = 3.0;
 #[derive(Resource, Default)]
 pub struct Bajas {
     pub total: u32,
+    /// Dónde (x, z) cayeron los que mataste desde la última pasada del barrio (`barrio::el_barrio_te_ve`
+    /// las vacía). Tope 32: si nadie las lee (ningún pueblo cargado), no crecen sin fin.
+    pub recientes: Vec<(f32, f32)>,
 }
 
 #[derive(Resource, Default)]
@@ -419,8 +422,7 @@ fn golpear(
     touch_layout: Res<TouchLayout>,
     blocks: Res<TouchBlockRects>,
     (equipped, mut pose): (Res<EquippedItem>, ResMut<crate::pose_jugador::AccionJugador>),
-    mut bajas: ResMut<Bajas>,
-    mut chests: ResMut<crate::chests::ChestWorld>,
+    (mut bajas, mut chests, mut golpes): (ResMut<Bajas>, ResMut<crate::chests::ChestWorld>, EventWriter<crate::jugo::Golpe>),
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     player: Query<&Transform, (With<Player>, Without<Infectado>)>,
@@ -465,7 +467,9 @@ fn golpear(
     acc.golpe = GOLPE_CD;
     let Ok((_, mut i, sprite, _)) = q.get_mut(e) else { return };
     pose.golpe(&equipped.item_id, Vec2::new(px, pz), Vec2::new(i.x, i.z));
-    herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, crate::fauna::dano_de(&equipped.item_id), Vec2::new(px, pz), 0.5);
+    let dano = crate::fauna::dano_de(&equipped.item_id);
+    golpes.send(crate::jugo::Golpe { en: Vec2::new(i.x, i.z), dano, letal: i.vida - dano <= 0.0, color: Color::srgb(0.55, 0.7, 0.35) });
+    herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, dano, Vec2::new(px, pz), 0.5);
 }
 
 /// **Un golpe (de lo que sea) a un infectado**: le baja la vida, lo empuja y, si cae, deja el cuerpo con TODO lo que
@@ -494,6 +498,9 @@ fn herir(
     if i.vida <= 0.0 {
         let (x, z) = (i.x, i.z);
         bajas.total += 1;
+        if bajas.recientes.len() < 32 {
+            bajas.recientes.push((x, z));
+        }
         crate::causal::registrar("baja", format!("infectado abatido en ({x:.0},{z:.0}), botín {}", i.botin.len()));
         // El cuerpo queda en el suelo con TODO lo que llevaba: se abre como un cofre.
         let body = active_surface_body(ctx, planet);

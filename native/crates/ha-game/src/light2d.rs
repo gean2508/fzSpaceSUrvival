@@ -1670,7 +1670,15 @@ fn ki_aura(
         // 0.18 hacia que el jugador fuese una farola azul andante: no es un
         // emisor de luz, y siendo la unica luz siempre en el centro del cuadro
         // le tenia todo el suelo tenido de cian.
-        let target = if fly.flying() { 1.0 } else { 0.0 };
+        // Cargando en tierra el aura se prende de a poco con la carga (biblia §20: que
+        // la carga se SIENTA); al despegar llega a pleno.
+        let target = if fly.flying() {
+            1.0
+        } else if fly.charging {
+            0.8 * (fly.charge_t / crate::creative_fly::TAKEOFF_HOLD).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         light.intensity += (target - light.intensity) * 0.15;
         return;
     }
