@@ -300,10 +300,12 @@ fn interpolate_player_visual(
         // sin necesidad de fundir nada (`escaleras.rs`).
         transform.translation =
             Vec3::new(r.x, r.y + bob.y + subida.y, sort_z(z) + crate::layers::HAIR);
-        // Facing: flip horizontally when moving west (left half of the circle).
-        let facing_left = visual.to_rot.abs() > std::f32::consts::FRAC_PI_2;
+        // SIN espejo por escala. La dirección la dibuja la POSE (`walk_left` ya mira al oeste) y, si una
+        // hoja sólo trae un lado, `face_player_sprite` espeja con `flip_x`. Acá había además un
+        // `scale.x = -1` al ir al oeste: los dos espejos se cancelaban y el jugador caminaba al oeste
+        // MIRANDO AL ESTE (lo cazó `HA_POSETEST` el 3 oct 2026: `idle_left` con escala −1).
         transform.rotation = Quat::IDENTITY;
-        transform.scale = Vec3::new(if facing_left { -1.0 } else { 1.0 }, 1.0, 1.0);
+        transform.scale = Vec3::ONE;
     }
 }
 
@@ -334,6 +336,13 @@ const PLAYER_ART_KEY: &str = "player/character";
 /// no cambió). Vacía en el spawn.
 #[derive(Component, Default)]
 pub struct CurrentPose(String);
+
+impl CurrentPose {
+    /// `"<pose>#<flip>"` de la última pose aplicada (lo leen los drivers de QA).
+    pub fn nombre(&self) -> &str {
+        &self.0
+    }
+}
 
 fn pose_direction(to_rot: f32) -> &'static str {
     let (dx, dz) = (to_rot.cos(), to_rot.sin());

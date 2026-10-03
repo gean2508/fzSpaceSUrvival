@@ -67,7 +67,9 @@ visible, aunque no pase nada).
 ## Cómo se prueba
 
 - `cargo test -p ha-game --lib pose_jugador` y `cargo test -p ha-assets chargen_index`.
-- En la compu: el driver de QA del juego con captura (skill `swarm-sim`); quieto 10 s debe sacar el celular.
+- En la compu: `HA_POSETEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./ha-game` — 14 poses, dos capturas cada una, y una
+  línea `ha-posetest: <nombre> pose=… escala_x=… rot=…` por captura (si dos capturas de una pose salen iguales,
+  no anima; si `escala_x=-1` con una pose `_left`, volvió el doble espejo).
 - En el celu (sólo cuando el usuario avisa): talar, comer una manzana, disparar, quedarse quieto.
 
 ## Qué NO hacer
@@ -75,4 +77,6 @@ visible, aunque no pase nada).
 - No pintar a 1 px de 32 lo que va encima del cuerpo: se ve de otro juego.
 - No poner `sleep` sin cama: la fila es una cabeza sobre la almohada; sin la cama se ve una cabeza suelta.
 - No colgar la animación de un sonido SIN posición (`PlaySfx`): no sabés de quién es. Con posición y alcance, sí.
+- No espejar el personaje con `scale.x = -1` si la hoja ya trae el perfil izquierdo: los dos espejos se cancelan y
+  camina al oeste mirando al este (pasó hasta el 3 oct 2026). Espejo sólo con `flip_x` y sólo cuando falta el lado.
 - No bloquear el movimiento por una animación: si camina, camina (la acción sigue en curso y vuelve al soltar).

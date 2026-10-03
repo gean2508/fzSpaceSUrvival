@@ -7509,6 +7509,17 @@ fn pose_test_drive(world: &mut World) {
     }
     let momentos = [0.35f32, 0.95];
     if (fotos as usize) < momentos.len() && t >= momentos[fotos as usize] {
+        {
+            let mut q = world.query_filtered::<(&crate::sim::CurrentPose, &Transform, &SimState), With<Player>>();
+            if let Ok((pose, tf, sim)) = q.get_single(world) {
+                eprintln!(
+                    "ha-posetest: {nombre} pose={} escala_x={} rot={:.2}",
+                    pose.nombre(),
+                    tf.scale.x,
+                    sim.body.rot
+                );
+            }
+        }
         shot(world, &format!("{}/pose-{nombre}-{fotos}.png", flytest_dir()));
         world.resource_mut::<PoseTestState>().fotos += 1;
     }

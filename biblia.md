@@ -5217,6 +5217,14 @@ Medidas que gobiernan el dibujo (escala 16, sobre `Bodies/Body_32x32_01.png`):
 la marca con los libros). La fila 6 son tres tramos: saca 0-2, usa 3-8 («4-9 loop»), guarda 9-11; `CharAnim.first`
 permite tramos que no arrancan en 0. Lo clava `las_animaciones_caben_en_su_fila_y_respetan_la_guia_del_pack`.
 
+**Bug de paso: el jugador caminaba al oeste mirando al este.** `sim::interpolate_player_visual` ponía
+`scale.x = −1` al ir al oeste, de cuando la hoja tenía un solo perfil; con las poses `_left` del pack el espejo se
+aplicaba dos veces y se cancelaba (también al ítem en la mano, que ya calcula su lado). Lo cazó `HA_POSETEST`
+imprimiendo `pose=idle_left escala_x=-1`. Ahora la escala queda en 1 y la dirección la pone sólo la pose.
+
+**Prueba en la compu:** `HA_POSETEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./ha-game` recorre 14 poses (dos capturas
+cada una a 0,35 y 0,95 s, más el oeste) e imprime `ha-posetest: <nombre> pose=… escala_x=… rot=…`.
+
 Lo que NO se hizo, y por qué: dormir y sentarse en muebles. Las filas existen (`sleep`, `sit`), pero el jugador no
 tiene todavía el verbo de usar una cama o un banco (`Interaccion::verbo` del manifest no lo ejecuta nadie); la
 fila de dormir del pack es la cabeza sobre la almohada y sin cama se ve una cabeza suelta. Va con esa feature.
