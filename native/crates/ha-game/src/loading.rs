@@ -36,7 +36,7 @@
 
 use bevy::asset::RecursiveDependencyLoadState;
 use bevy::prelude::*;
-use ha_shared::Ps1Retro;
+use crate::ui_pack as up;
 
 use crate::art2d::ArtLibrary;
 use crate::chargen::ChargenJobs;
@@ -83,9 +83,6 @@ const MAX_SECS: f32 = 20.0;
 /// desaparece en dos frames y queda un parpadeo negro feo.
 const MIN_SECS: f32 = 0.6;
 
-const NEON_CYAN: Color = Color::srgb(Ps1Retro::TEXT[0], Ps1Retro::TEXT[1], Ps1Retro::TEXT[2]);
-const NEON_MAGENTA: Color = Color::srgb(Ps1Retro::SELECT[0], Ps1Retro::SELECT[1], Ps1Retro::SELECT[2]);
-const VOID: Color = Color::srgb(Ps1Retro::VOID[0], Ps1Retro::VOID[1], Ps1Retro::VOID[2]);
 
 /// Lo que se lee mientras carga. Son las cosas que el juego NO te explica en
 /// ningún lado; la pantalla de carga es el único rato en que alguien las lee.
@@ -290,8 +287,7 @@ fn spawn_curtain(
     art.precargar(claves_del_mundo());
     state.art = art.image_handles();
     state.art_total = state.art.len();
-    let vh = touch.height.max(240.0);
-    let s = (vh / 720.0).clamp(0.45, 1.15);
+    let k = crate::ui_pack::k(&touch);
     // Un consejo distinto por partida (la hora alcanza: no hace falta que sea
     // determinista).
     let tip = CONSEJOS[(std::time::SystemTime::now()
@@ -300,6 +296,10 @@ fn spawn_curtain(
         .unwrap_or(0))
         % CONSEJOS.len()];
 
+    // **La cortina es una postal del kit**, no un fondo negro con una barra
+    // neón: el mismo panel, cartel y barra que el resto de la interfaz, y una
+    // viñeta de mundo en el medio para que la espera ya diga a qué vas a jugar.
+    // Sigue OPACA: su trabajo es tapar el mundo mientras se arma.
     commands
         .spawn((
             Node {
@@ -308,14 +308,9 @@ fn spawn_curtain(
                 top: Val::Px(0.0),
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(14.0 * s),
-                padding: UiRect::horizontal(Val::Px(24.0)),
                 ..default()
             },
-            BackgroundColor(VOID),
+            BackgroundColor(FONDO),
             // Por encima de TODO: del HUD, del menú y de cualquier cosa que se
             // encienda antes de tiempo. La cortina no puede tener rendijas.
             GlobalZIndex(2000),
@@ -324,44 +319,30 @@ fn spawn_curtain(
             Name::new("LoadingCurtain"),
         ))
         .with_children(|root| {
-            root.spawn((
-                Text::new("PREPARANDO EL MUNDO"),
-                TextFont { font_size: (26.0 * s).clamp(16.0, 34.0), ..default() },
-                TextColor(NEON_CYAN),
-            ));
-            // Barra de progreso: marco fijo + relleno que crece.
-            root.spawn((
-                Node {
-                    width: Val::Percent(70.0),
-                    max_width: Val::Px(420.0),
-                    height: Val::Px((16.0 * s).clamp(10.0, 18.0)),
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BorderColor(NEON_CYAN),
-                BackgroundColor(Color::srgb(0.06, 0.08, 0.12)),
-            ))
-            .with_children(|bar| {
-                bar.spawn((
-                    Node { width: Val::Percent(0.0), height: Val::Percent(100.0), ..default() },
-                    BackgroundColor(NEON_MAGENTA),
-                    ProgressBar,
-                ));
+            root.spawn(up::lienzo(k)).with_children(|l| {
+                let (px, py, pw, ph) = (560.0, 290.0, 1280.0, 520.0);
+                up::marco(l, &art, up::marco::PANEL, px, py, pw, ph, k);
+                up::vineta(
+                    l, &art, px + 60.0, py + 78.0, pw - 120.0, 210.0,
+                    &["nature/arbol_1", "room/casa_1", "prop/farol_de_calle_1", "nature/arbol_10"],
+                    2.0, true, 7, k,
+                );
+                up::barra(
+                    l, &art, px + 60.0, py + 322.0, pw - 120.0, 56.0, up::Pack::ACENTO, 0.0, ProgressBar, k,
+                );
+                up::texto_marcado(
+                    l, "generando terreno...", 30.0, up::Pack::SUAVE, px + pw / 2.0, py + 430.0,
+                    up::Ancla::Medio, k, ProgressText,
+                );
+                up::cartel(l, &art, "PREPARANDO EL MUNDO", px + pw / 2.0, py - 48.0, 820.0, 96.0, 46.0, k);
+                up::texto(l, "CONSEJO", 28.0, up::Pack::ACENTO, 1200.0, 880.0, up::Ancla::Medio, k);
+                up::texto(l, tip, 34.0, up::Pack::TEXTO, 1200.0, 930.0, up::Ancla::Medio, k);
             });
-            root.spawn((
-                Text::new("generando terreno..."),
-                TextFont { font_size: (13.0 * s).clamp(10.0, 15.0), ..default() },
-                TextColor(Color::srgb(0.7, 0.75, 0.85)),
-                ProgressText,
-            ));
-            root.spawn((
-                Text::new(format!("CONSEJO: {tip}")),
-                TextFont { font_size: (13.0 * s).clamp(10.0, 15.0), ..default() },
-                TextColor(Color::srgb(0.55, 0.6, 0.72)),
-                Node { margin: UiRect::top(Val::Px(18.0 * s)), ..default() },
-            ));
         });
 }
+
+/// El fondo de la cortina: la noche cálida del kit, no el azul del viejo PS1.
+const FONDO: Color = Color::srgb(0.090, 0.074, 0.106);
 
 fn despawn_curtain(mut commands: Commands, q: Query<Entity, With<CurtainRoot>>) {
     for e in &q {

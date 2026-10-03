@@ -126,7 +126,7 @@ fn colony_button_system(
             colony.dirty = true;
         }
 
-        *bg = BackgroundColor(if can && affordable {
+        crate::ui_theme::pintar_boton(&mut bg, if can && affordable {
             crate::ui_theme::button_bg(
                 crate::ui_theme::UiButtonTone::Primary,
                 crate::ui_theme::interaction_state(*interaction, false),

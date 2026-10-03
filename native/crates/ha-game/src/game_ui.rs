@@ -125,7 +125,7 @@ pub fn apply_bottom_center(node: &mut Node, layout: &TouchLayout, width: f32, bo
 }
 
 pub const MENU_BUTTON_WIDTH: f32 = MENU_W;
-pub const MENU_BUTTON_HEIGHT: f32 = 28.0;
+pub const MENU_BUTTON_HEIGHT: f32 = 34.0;
 
 /// Borde de arriba del botón MENU, respetando el notch.
 pub fn menu_button_top(layout: &TouchLayout) -> f32 {

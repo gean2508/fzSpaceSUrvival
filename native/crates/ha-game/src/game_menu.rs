@@ -1,52 +1,58 @@
-//! GTA V-style full-screen menu with a Spaceflight-Simulator orbital minimap.
+//! **El menú de pausa** — lo que abre el botón MENÚ en partida.
 //!
-//! Opens on the MENU button (shares `UiEditorState.menu_open`; the old vertical
-//! editor panel is gated to edit-UI mode only). The hero is a top-down solar
-//! map — Sun centre, orbit rings, live body positions from the shared
-//! ephemeris, and your ship marker. A bottom bar keeps the big-button feel and
-//! reuses the existing dev `UiEditorCommand`s (no logic duplication).
+//! Hasta el 3 oct 2026 era el menú "estilo GTA V" de la época de las naves: un
+//! fondo azul opaco, botones de borde cian y, ocupando media pantalla, un mapa
+//! ORBITAL del sistema solar con el marcador de "tu nave". En un sandbox de
+//! vuelo Ki ese mapa no decía nada (siempre eras un punto magenta pegado a la
+//! Tierra) y el estilo no tenía nada que ver con el resto de la interfaz. Se
+//! rehízo con el kit del pack (`ui_pack`), en el mismo lienzo de 2400 × 1080 que
+//! el menú principal:
+//!
+//! - **El juego se ve atenuado detrás** (`ui_pack::velo`): pausar no es salir.
+//! - **REANUDAR primero, grande y en amarillo**: es lo que se quiere el 90 % de
+//!   las veces que se abre una pausa.
+//! - A la izquierda, **tu personaje** con sus barras; a la derecha las opciones
+//!   en casillas con icono (objetivos de toque grandes, como en la mochila).
+//! - Las herramientas de prueba (saltos de mundo, PERF, SONDA) sólo en
+//!   escritorio, en una fila chica aparte.
+//!
+//! El mapa del terreno ya vive en el juego como objeto (`map_item.rs`); el
+//! orbital no se reemplazó por nada a propósito.
+//!
+//! Los botones reusan los mismos componentes de siempre (`UiEditorCommand`,
+//! `BotonMundo`, `BotonMultijugador`, `BotonExperimentar`, `ColonyButton`):
+//! la lógica no se duplica, sólo cambió cómo se dibujan.
 
 use bevy::prelude::*;
-use ha_shared::Ps1Retro;
-use bevy::ui::{FocusPolicy, Overflow};
-use ha_shared::{body_center_at, body_def, CelestialBody};
+use bevy::ui::FocusPolicy;
+use ha_shared::{body_def, CelestialBody};
 
-use crate::flight::Flight;
+use crate::art2d::ArtLibrary;
+use crate::input::TouchLayout;
 use crate::scene::RegionId;
-use crate::solar_system_clock::SolarSystemClock;
-use crate::ui_editor::UiEditorState;
-
-const NEON_CYAN: Color = Color::srgb(Ps1Retro::TEXT[0], Ps1Retro::TEXT[1], Ps1Retro::TEXT[2]);
-const NEON_MAGENTA: Color = Color::srgb(Ps1Retro::SELECT[0], Ps1Retro::SELECT[1], Ps1Retro::SELECT[2]);
-// OPAQUE on purpose: the fullscreen menu covers the whole screen, so a
-// semi-transparent panel forced the GPU to alpha-blend a fullscreen layer OVER
-// the still-rendering 3D scene every frame — on the fill-rate-bound Redmi (§6)
-// that alone dropped the map to ~4 fps. Opaque = no blend, no overdraw tax.
-const PANEL_BG: Color = Color::srgb(0.03, 0.045, 0.08);
-
-/// Map projection: solar X/Z (flight metres) → normalized panel space, centrado
-/// en el Sol. Debe cubrir el radio orbital MÁS lejano (Neptuno ~630 km del Sol)
-/// en ±0.5 → span ≈ 2·radio. Antes 520 km recortaba: los planetas exteriores se
-/// salían de la ventana del mapa.
-const MAP_SPAN_M: f32 = 1_400_000.0;
+use crate::sim::SimState;
+use crate::ui_editor::{UiEditorCommand as C, UiEditorState};
+use crate::ui_pack::{self as up, Ancla, Pack};
 
 pub struct GameMenuPlugin;
 
 impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<GameMenuState>,));
-        app.init_resource::<GameMenuState>()
-            .add_systems(
-                Update,
-                (
-                    sync_game_menu,
-                    sync_menu_edit_mode.after(sync_game_menu),
-                    update_map_markers,
-                    update_terrain_minimap,
-                    update_luna_base_monitor,
-                )
-                    .chain(),
-            );
+        app.add_systems(
+            bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing),
+            (crate::salir::reiniciar::<GameMenuState>,),
+        );
+        app.init_resource::<GameMenuState>().add_systems(
+            Update,
+            (
+                sync_game_menu,
+                sync_menu_edit_mode.after(sync_game_menu),
+                barras_de_la_pausa,
+                update_luna_base_monitor,
+                foto_de_la_pausa,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -58,37 +64,47 @@ struct GameMenuState {
 
 #[derive(Component)]
 struct GameMenuRoot;
+/// Los dos paneles (personaje y pausa): se esconden en EDITAR UI.
 #[derive(Component)]
-struct MapViewport;
-/// A live body dot — repositioned each frame from the ephemeris.
-#[derive(Component)]
-struct MapBody(CelestialBody);
-#[derive(Component)]
-struct MapShipMarker;
-/// Wraps the orbital dots/rings/sun/ship — shown in Space, hidden on a surface.
-#[derive(Component)]
-struct OrbitalLayer;
-/// The map title text — swapped between "MAPA ORBITAL" and the body name.
-#[derive(Component)]
-struct MapTitle;
-/// The UI-editing toolbar (element selectors + scale) — shown only in edit mode.
+struct MenuPaneles;
+/// La barra de edición de la UI — visible sólo en EDITAR UI.
 #[derive(Component)]
 struct EditToolbar;
-/// Remote camp monitor line — fed from `MachineWorld` while the menu is open.
+/// La línea del campamento lunar (antena) — vacía si no hay antena.
 #[derive(Component)]
 struct LunaBaseMonitor;
+/// El relleno de una barra del personaje (0 hambre, 1 sed, 2 ki).
+#[derive(Component)]
+struct BarraPausa(usize);
+
+/// Todo lo que el menú necesita para armarse, juntado en un solo parámetro.
+#[derive(bevy::ecs::system::SystemParam)]
+struct Insumos<'w, 's> {
+    art: Res<'w, ArtLibrary>,
+    layout: Res<'w, TouchLayout>,
+    assets: Res<'w, AssetServer>,
+    hoja: Res<'w, up::HojaPj>,
+    halo: Res<'w, up::HaloTex>,
+    cg: Option<Res<'w, crate::chargen::Chargen>>,
+    pj: Res<'w, crate::game_phase::SelectedCharacter>,
+    reloj: Res<'w, crate::sky2d::DayClock>,
+    region: Res<'w, crate::scene::RegionRuntime>,
+    jugador: Query<'w, 's, (&'static Transform, &'static SimState), With<crate::sim::Player>>,
+}
 
 fn sync_game_menu(
     editor: Res<UiEditorState>,
     civ: Res<crate::civilizacion::Civ>,
     mut state: ResMut<GameMenuState>,
     mut commands: Commands,
+    ins: Insumos,
 ) {
-    // ONE menu: shown whenever open. Edit-UI mode keeps it (goes see-through
-    // via `sync_menu_edit_mode`); only the CALIBRATION sub-dialog replaces it.
+    // UN menú: se ve mientras esté abierto. EDITAR UI lo deja (se vuelve
+    // transparente en `sync_menu_edit_mode`); sólo AJUSTES y el panel MUNDO lo
+    // reemplazan.
     let want = editor.menu_open && !editor.settings_open && !civ.panel;
     if want && !state.spawned {
-        state.root = Some(spawn_menu(&mut commands));
+        state.root = Some(spawn_menu(&mut commands, &ins, editor.creative));
         state.spawned = true;
     } else if !want && state.spawned {
         if let Some(root) = state.root.take() {
@@ -98,441 +114,44 @@ fn sync_game_menu(
     }
 }
 
-/// Edit-UI mode: the SAME menu goes see-through (map hidden, background clear)
-/// so the on-screen controls + their drag handles are visible/editable — no
-/// second panel. Exits back to the normal opaque map menu.
-#[allow(clippy::type_complexity)]
+/// EDITAR UI: el MISMO menú se vuelve transparente (paneles fuera, velo fuera)
+/// para que se vean los controles de pantalla y sus manijas — no hay un segundo
+/// panel. Queda sólo la barra de edición abajo.
 #[allow(clippy::type_complexity)]
 fn sync_menu_edit_mode(
     editor: Res<UiEditorState>,
     mut roots: Query<(&mut BackgroundColor, &mut FocusPolicy), With<GameMenuRoot>>,
-    mut sets: ParamSet<(
-        Query<&mut Visibility, With<MapViewport>>,
-        Query<&mut Node, With<EditToolbar>>,
-    )>,
+    mut sets: ParamSet<(Query<&mut Node, With<MenuPaneles>>, Query<&mut Node, With<EditToolbar>>)>,
 ) {
     let Ok((mut bg, mut fp)) = roots.get_single_mut() else {
         return;
     };
-    // La barra de edición va por `Display` y no por `Visibility`: un nodo
-    // `Visibility::Hidden` SIGUE ocupando su lugar en el layout, así que en el
-    // menú normal reservaba una franja invisible que se traducía en scroll
-    // muerto — llegabas al fondo y no había nada.
-    let (map_vis, toolbar_display) = if editor.enabled {
-        *bg = BackgroundColor(Color::NONE);
-        *fp = FocusPolicy::Pass;
-        (Visibility::Hidden, Display::Flex)
+    let (velo, foco, paneles, barra) = if editor.enabled {
+        (Color::NONE, FocusPolicy::Pass, Display::None, Display::Flex)
     } else {
-        *bg = BackgroundColor(PANEL_BG);
-        *fp = FocusPolicy::Block;
-        (Visibility::Inherited, Display::None)
+        (up::VELO, FocusPolicy::Block, Display::Flex, Display::None)
     };
-    for mut v in &mut sets.p0() {
-        if *v != map_vis {
-            *v = map_vis;
+    if bg.0 != velo {
+        bg.0 = velo;
+    }
+    if *fp != foco {
+        *fp = foco;
+    }
+    // `Display` y no `Visibility`: un nodo oculto sigue ocupando su lugar, y
+    // tocar un `Node` sin que cambie relayoutea el árbol entero (§10, cambio 3).
+    for mut n in &mut sets.p0() {
+        if n.display != paneles {
+            n.display = paneles;
         }
     }
-    for mut node in &mut sets.p1() {
-        // Sólo al CAMBIAR: tocar un `Node` lo marca sucio y taffy recalcula el
-        // árbol entero (§10, cambio 3).
-        if node.display != toolbar_display {
-            node.display = toolbar_display;
+    for mut n in &mut sets.p1() {
+        if n.display != barra {
+            n.display = barra;
         }
     }
 }
 
-fn spawn_menu(commands: &mut Commands) -> Entity {
-    // **TODO EN UNA PANTALLA, SIN SCROLL.** La versión en columna no entraba en
-    // apaisado de teléfono (~400 px de alto lógico): el mapa se lleva media
-    // pantalla y AJUSTES/CERRAR quedaban abajo del pliegue. Se probó ponerle
-    // scroll y el pedido fue explícito: en un menú no se scrollea, se ve todo.
-    //
-    // Como la app está clavada en apaisado (`AndroidManifest`,
-    // `screenOrientation="landscape"`), lo que sobra es ANCHO: el mapa va a la
-    // izquierda y todo lo demás en una columna a la derecha. El mapa se mide en
-    // `Vh` y las filas de botones envuelven (`FlexWrap::Wrap`), así que el
-    // conjunto se acomoda solo a cualquier pantalla en vez de depender de que
-    // los números elegidos a mano den justo.
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                column_gap: Val::Px(16.0),
-                padding: UiRect::all(Val::Px(12.0)),
-                ..default()
-            },
-            BackgroundColor(PANEL_BG),
-            GlobalZIndex(900),
-            FocusPolicy::Block,
-            GameMenuRoot,
-            Name::new("GameMenu"),
-        ))
-        .with_children(|root| {
-            // Square map viewport (keeps the top-down projection undistorted).
-            root.spawn((
-                Node {
-                    // Square sized to the SMALLER screen dimension (VMin) so it
-                    // always fits both orientations and stays square → orbit
-                    // circles never distort. This also sidesteps the bug that
-                    // pushed the map off-panel: `ComputedNode.size()` is in
-                    // PHYSICAL px, but `Node` offsets are LOGICAL px, so on a
-                    // high-DPI phone (UI scale ~2.8) the old pixel-measured
-                    // layout multiplied every marker position and threw the
-                    // whole system to the right. Markers are now positioned in
-                    // PERCENT (see `update_map_markers`), no measurement needed.
-                    // Square viewport sized off the viewport HEIGHT (Vh) so it is
-                    // always laid out with an explicit size — `VMin` was collapsing
-                    // to ~0 here, leaving the map blank. Kept square so orbit circles
-                    // don't distort; markers are positioned in PERCENT.
-                    width: Val::Vh(76.0),
-                    height: Val::Vh(76.0),
-                    flex_shrink: 0.0,
-                    border: UiRect::all(Val::Px(2.0)),
-                    // Clip orbit rings / body dots to the panel — nothing the
-                    // marker system positions can bleed outside the map window.
-                    overflow: Overflow::clip(),
-                    ..default()
-                },
-                BorderColor(NEON_CYAN),
-                BackgroundColor(Color::srgb(0.05, 0.07, 0.12)),
-                MapViewport,
-            ))
-            .with_children(|map| {
-                // ── Orbital layer (shown in Space): rings + body dots + ship.
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    OrbitalLayer,
-                ))
-                .with_children(|orb| {
-                    // Orbit rings + body dots (positions set by update_map_markers).
-                    for &body in CelestialBody::all() {
-                        if body == CelestialBody::Sun {
-                            continue;
-                        }
-                        let rgb = body_def(body).color;
-                        let color = Color::srgb(rgb[0], rgb[1], rgb[2]);
-                        // Orbit ring (thin bordered circle centred on the Sun).
-                        orb.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-                            },
-                            BorderColor(color.with_alpha(0.20)),
-                            BorderRadius::all(Val::Percent(50.0)),
-                            MapOrbitRing(body),
-                        ));
-                        // Body dot. Negative margin = half its size so the percent
-                        // position (its top-left) lands the dot's CENTRE on the point.
-                        orb.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                width: Val::Px(9.0),
-                                height: Val::Px(9.0),
-                                margin: UiRect::all(Val::Px(-4.5)),
-                                ..default()
-                            },
-                            BackgroundColor(color),
-                            BorderRadius::all(Val::Percent(50.0)),
-                            MapBody(body),
-                        ));
-                    }
-                    // Sun at centre.
-                    orb.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            width: Val::Px(16.0),
-                            height: Val::Px(16.0),
-                            margin: UiRect::all(Val::Px(-8.0)),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(1.0, 0.86, 0.35)),
-                        BorderRadius::all(Val::Percent(50.0)),
-                        MapBody(CelestialBody::Sun),
-                    ));
-                    // Your ship marker (magenta).
-                    orb.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            width: Val::Px(10.0),
-                            height: Val::Px(10.0),
-                            border: UiRect::all(Val::Px(2.0)),
-                            margin: UiRect::all(Val::Px(-5.0)),
-                            ..default()
-                        },
-                        BorderColor(Color::WHITE),
-                        BackgroundColor(NEON_MAGENTA),
-                        BorderRadius::all(Val::Percent(50.0)),
-                        MapShipMarker,
-                    ));
-                });
-
-            });
-
-            // ── Columna derecha: TODO lo que no es el mapa. `flex_grow` + ancho
-            // mínimo cero para que se lleve lo que quede de ancho y las filas de
-            // botones envuelvan solas en vez de desbordar.
-            root.spawn(Node {
-                flex_grow: 1.0,
-                flex_shrink: 1.0,
-                min_width: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                row_gap: Val::Px(8.0),
-                ..default()
-            })
-            .with_children(|root| {
-            root.spawn((
-                Text::new("MAPA ORBITAL"),
-                TextFont {
-                    font_size: 20.0,
-                    ..default()
-                },
-                TextColor(NEON_CYAN),
-                MapTitle,
-            ));
-
-            root.spawn((
-                Text::new("+ tu     o orbitas    * Sol"),
-                TextFont {
-                    font_size: 12.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.7, 0.75, 0.85)),
-            ));
-
-            // Remote base monitor — the antenna's uplink (Act II "agencia").
-            // Text stays empty until an antenna exists on the Moon.
-            root.spawn((
-                Text::new(""),
-                TextFont {
-                    font_size: 13.0,
-                    ..default()
-                },
-                TextColor(NEON_CYAN),
-                LunaBaseMonitor,
-                Name::new("LunaBaseMonitor"),
-            ));
-
-            // Colony uplink actions — hidden until the antenna is up
-            // (`colony::colony_button_system` owns visibility + costs).
-            root.spawn((
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(10.0),
-                    ..default()
-                },
-                Name::new("ColonyUplinkRow"),
-            ))
-            .with_children(|row| {
-                use crate::colony::{ColonyAction, ColonyButton};
-                menu_button(row, "COLONO (5 manz)", ColonyButton(ColonyAction::SendColonist));
-                menu_button(row, "VIVERES (3 manz)", ColonyButton(ColonyAction::SendSupplies));
-            });
-
-            // ── Menú principal: SOLO funciones de menú (viaje, modos, opciones).
-            // Los controles del jugador (mover/saltar/usar) viven en el HUD, no
-            // acá; los selectores del editor salen a la barra de edición (abajo),
-            // visible sólo en "EDITAR UI".
-            menu_row(root, |bar| {
-                use crate::ui_editor::UiEditorCommand as C;
-                // Los saltos de mundo, el medidor y la sonda son herramientas
-                // de prueba: en el teléfono no aparecen (29 sep 2026).
-                #[cfg(not(target_os = "android"))]
-                {
-                    menu_button(bar, "TIERRA", C::GoEarth);
-                    menu_button(bar, "LUNA", C::GoLuna);
-                    menu_button(bar, "ESPACIO", C::GoSpace);
-                }
-                menu_button(bar, "CREATIVO", C::ToggleCreative);
-                #[cfg(not(target_os = "android"))]
-                {
-                    menu_button(bar, "PERF", C::TogglePerf);
-                    menu_button(bar, "SONDA", C::ToggleProbe);
-                }
-            });
-            menu_row(root, |bar| {
-                use crate::ui_editor::UiEditorCommand as C;
-                menu_button(bar, "MUNDO", crate::civilizacion::BotonMundo);
-                menu_button(bar, "EDITAR UI", C::Toggle);
-                menu_button(bar, "AJUSTES", C::OpenSettings);
-                menu_button(bar, "MENÚ PRINCIPAL", C::SalirAlMenu);
-                menu_button(bar, "CERRAR", C::CloseMenu);
-            });
-            menu_row(root, |bar| {
-                menu_button(bar, "MULTIJUGADOR", crate::multijugador::BotonMultijugador);
-                menu_button(bar, "EXPERIMENTAR", crate::experimentos::BotonExperimentar);
-            });
-
-            // ── Barra de EDICIÓN de UI (oculta salvo en modo EDITAR UI). Estos
-            // botones eligen QUÉ control reposicionar y su escala — no controlan
-            // al jugador. Se muestran/ocultan en `sync_menu_edit_mode`.
-            root.spawn((
-                Node {
-                    margin: UiRect::top(Val::Px(8.0)),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    row_gap: Val::Px(6.0),
-                    // Arranca fuera del layout: ver `sync_menu_edit_mode`.
-                    display: Display::None,
-                    ..default()
-                },
-                EditToolbar,
-            ))
-            .with_children(|col| {
-                col.spawn((
-                    Text::new("EDITAR UI · elegí un control y movelo/escalalo:"),
-                    TextFont {
-                        font_size: 13.0,
-                        ..default()
-                    },
-                    TextColor(NEON_CYAN),
-                ));
-                menu_row(col, |bar| {
-                    use crate::ui_editor::UiEditorCommand as C;
-                    menu_button(bar, "> Stick", C::SelectMove);
-                    menu_button(bar, "> Usar", C::SelectUse);
-                    menu_button(bar, "> Saltar", C::SelectJump);
-                    menu_button(bar, "-", C::ScaleDown);
-                    menu_button(bar, "+", C::ScaleUp);
-                    menu_button(bar, "RESET", C::Reset);
-                    menu_button(bar, "GUARDAR", C::Save);
-                });
-            });
-            });
-        })
-        .id()
-}
-
-fn menu_row(parent: &mut ChildBuilder, build: impl FnOnce(&mut ChildBuilder)) {
-    parent
-        .spawn(Node {
-            margin: UiRect::top(Val::Px(8.0)),
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            justify_content: JustifyContent::Center,
-            column_gap: Val::Px(8.0),
-            row_gap: Val::Px(8.0),
-            ..default()
-        })
-        .with_children(build);
-}
-
-fn menu_button(parent: &mut ChildBuilder, label: &str, cmd: impl Bundle) {
-    parent
-        .spawn((
-            Button,
-            Node {
-                width: Val::Px(112.0),
-                height: Val::Px(44.0),
-                border: UiRect::all(Val::Px(2.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            BorderColor(NEON_CYAN),
-            BackgroundColor(Color::srgb(0.10, 0.14, 0.22)),
-            cmd,
-            Name::new(format!("GameMenuBtn_{label}")),
-        ))
-        .with_children(|b| {
-            b.spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: 15.0,
-                    ..default()
-                },
-                TextColor(NEON_CYAN),
-            ));
-        });
-}
-
-#[derive(Component)]
-struct MapOrbitRing(CelestialBody);
-
-/// Solar position → percent of the (square) viewport, Sun at centre. All map
-/// layout is in PERCENT so it is resolution- and UI-scale-independent: no
-/// `ComputedNode` pixel measurement (which returns PHYSICAL px while `Node`
-/// offsets are LOGICAL px — the mismatch that threw the whole map off-panel to
-/// the right on a high-DPI phone). Markers carry a negative margin of half
-/// their size, so the percent (their top-left) lands their centre on the point.
-fn map_percent(pos: [f32; 3], sun: [f32; 3]) -> (f32, f32) {
-    let nx = (0.5 + (pos[0] - sun[0]) / MAP_SPAN_M).clamp(0.0, 1.0);
-    let nz = (0.5 + (pos[2] - sun[2]) / MAP_SPAN_M).clamp(0.0, 1.0);
-    (nx * 100.0, nz * 100.0)
-}
-
-#[allow(clippy::type_complexity)]
-fn update_map_markers(
-    menu: Res<GameMenuState>,
-    clock: Res<SolarSystemClock>,
-    flight: Res<Flight>,
-    region: Res<crate::scene::RegionRuntime>,
-    mut sets: ParamSet<(
-        Query<(&MapBody, &mut Node)>,
-        Query<(&MapOrbitRing, &mut Node)>,
-        Query<&mut Node, With<MapShipMarker>>,
-    )>,
-) {
-    if !menu.spawned {
-        return;
-    }
-    let t = clock.t;
-    let sun = ha_shared::sun_position();
-
-    for (body, mut node) in &mut sets.p0() {
-        let (px, pz) = map_percent(body_center_at(body.0, t), sun);
-        node.left = Val::Percent(px);
-        node.top = Val::Percent(pz);
-    }
-    // Orbit rings: diameter = 2·(heliocentric distance / span), centred on the
-    // panel. The viewport is square, so a percent width == percent height →
-    // circles stay circular. Radius capped to half so the ring can't exceed it.
-    for (ring, mut node) in &mut sets.p1() {
-        let bc = body_center_at(ring.0, t);
-        let r_frac = (((bc[0] - sun[0]).powi(2) + (bc[2] - sun[2]).powi(2)).sqrt() / MAP_SPAN_M)
-            .clamp(0.004, 0.5);
-        node.width = Val::Percent(r_frac * 200.0);
-        node.height = Val::Percent(r_frac * 200.0);
-        node.left = Val::Percent(50.0 - r_frac * 100.0);
-        node.top = Val::Percent(50.0 - r_frac * 100.0);
-    }
-    // Ship marker: use the flight position, else the body you stand on.
-    if let Ok(mut node) = sets.p2().get_single_mut() {
-        let ship_world = if flight.active {
-            flight.pos.to_array()
-        } else {
-            let body = match region.active {
-                RegionId::Luna => CelestialBody::Moon,
-                RegionId::Planet(b) => b,
-                _ => CelestialBody::Earth,
-            };
-            body_center_at(body, t)
-        };
-        let (px, pz) = map_percent(ship_world, sun);
-        node.left = Val::Percent(px);
-        node.top = Val::Percent(pz);
-    }
-}
-
-/// The surface body you're standing on, or None when in Space/Transit (the
-/// orbital map). Digging only changes the tile layer (`TileWorld.z`), not the
-/// region, so a cave still reports its body — the minimap shows that depth.
+/// El cuerpo donde estás parado, o `None` en el espacio / en tránsito.
 fn surface_body(region: &RegionId) -> Option<CelestialBody> {
     match region {
         RegionId::Overworld { .. } => Some(CelestialBody::Earth),
@@ -546,47 +165,300 @@ fn body_menu_name(b: CelestialBody) -> String {
     match b {
         CelestialBody::Earth => "TIERRA".to_string(),
         CelestialBody::Moon => "LUNA".to_string(),
-        other => body_def(other).label.to_string(),
+        other => body_def(other).label.to_uppercase(),
     }
 }
 
-/// **El minimapa de terreno ya no vive acá.** Era un recuadro de 24×24 celdas que
-/// en el teléfono no se veía y que obligaba a salir del juego para mirarlo; ahora
-/// el mapa es un OBJETO que se craftea y se abre en la mano (`map_item.rs`), y se
-/// puede colgar en la pared. Lo que queda en el menú es el mapa ORBITAL, que sí es
-/// información de menú (dónde está cada cuerpo del sistema).
-///
-/// Este sistema mantiene el título y deja el mapa orbital siempre visible.
-#[allow(clippy::type_complexity)]
-fn update_terrain_minimap(
+/// El icono de la chapa de la barra: el globo que corresponde.
+fn icono_del_cuerpo(b: Option<CelestialBody>) -> &'static str {
+    match b {
+        Some(CelestialBody::Moon) => "ui/menu_luna",
+        None => "ui/menu_espacio",
+        _ => up::CUERPO_TIERRA,
+    }
+}
+
+/// Las coordenadas del mockup de cada pieza de la pausa.
+mod geo {
+    /// Panel del personaje.
+    pub const PJ: (f32, f32, f32, f32) = (60.0, 186.0, 900.0, 828.0);
+    /// Panel de la pausa.
+    pub const PAUSA: (f32, f32, f32, f32) = (1020.0, 186.0, 1320.0, 828.0);
+    /// Margen interior de un panel del kit.
+    pub const MARGEN: f32 = 42.0;
+    /// Separación entre casillas.
+    pub const GAP: f32 = 24.0;
+}
+
+fn spawn_menu(commands: &mut Commands, ins: &Insumos, creativo: bool) -> Entity {
+    let k = up::k(&ins.layout);
+    let art = &*ins.art;
+    let cuerpo = surface_body(&ins.region.active);
+    let ficha = crate::partida::ficha_activa();
+    let (h, m) = ins.reloj.clock_hm();
+    let dia = ins.reloj.day_index() as u32 + 1;
+
+    commands
+        .spawn((
+            up::velo(),
+            GlobalZIndex(900),
+            FocusPolicy::Block,
+            GameMenuRoot,
+            Name::new("GameMenu"),
+        ))
+        .with_children(|root| {
+            root.spawn(up::lienzo(k)).with_children(|l| {
+                // ── La barra de arriba: dónde estás y cuándo ─────────────────
+                let fichas = [
+                    up::Ficha {
+                        icono: "ui/ic_casa",
+                        etiqueta: "PARTIDA",
+                        valor: ficha.as_ref().map(|f| f.nombre.clone()).unwrap_or_else(|| "Sin nombre".into()),
+                    },
+                    up::Ficha { icono: "ui/ic_reloj", etiqueta: "DÍA", valor: format!("{dia} · {h:02}:{m:02}") },
+                    up::Ficha {
+                        icono: "ui/ic_grilla",
+                        etiqueta: "SEMILLA",
+                        valor: ficha
+                            .as_ref()
+                            .map(|f| crate::boot_ui::separar_miles(f.semilla))
+                            .unwrap_or_else(|| "—".into()),
+                    },
+                    up::Ficha {
+                        icono: "ui/ic_persona",
+                        etiqueta: "MODO",
+                        valor: if creativo { "Creativo".into() } else { "Supervivencia".into() },
+                    },
+                ];
+                let nombre_cuerpo = cuerpo.map(body_menu_name).unwrap_or_else(|| "ESPACIO".into());
+                up::barra_estado_en(l, art, icono_del_cuerpo(cuerpo), &nombre_cuerpo, &fichas, k);
+
+                l.spawn((up::caja(0.0, 0.0, up::ANCHO, up::ALTO, k), MenuPaneles))
+                    .with_children(|p| {
+                        panel_personaje(p, ins, cuerpo, k);
+                        panel_pausa(p, art, k);
+                    });
+
+                // ── El campamento lunar (sólo con antena) ────────────────────
+                up::texto_marcado(l, "", 26.0, Pack::TEXTO, 60.0, 1046.0, Ancla::Izq, k, LunaBaseMonitor);
+                for (i, (et, accion)) in [
+                    ("COLONO (5 manz.)", crate::colony::ColonyAction::SendColonist),
+                    ("VÍVERES (3 manz.)", crate::colony::ColonyAction::SendSupplies),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    up::boton(
+                        l, art, 1640.0 + i as f32 * 340.0, 1022.0, 320.0, 56.0, Some(et), None, false, 24.0,
+                        (
+                            crate::colony::ColonyButton(accion),
+                            BackgroundColor(Color::NONE),
+                            Visibility::Hidden,
+                            Name::new("ColonyUplinkRow"),
+                        ),
+                        k,
+                    );
+                }
+
+                barra_de_edicion(l, art, k);
+            });
+        })
+        .id()
+}
+
+/// **Tu personaje**: el muñeco con su claro de luz, el nombre, dónde estás y las
+/// tres barras. Es lo que hace que la pausa se sienta tuya y no un formulario.
+fn panel_personaje(p: &mut ChildBuilder, ins: &Insumos, cuerpo: Option<CelestialBody>, k: f32) {
+    let art = &*ins.art;
+    let (x, y, w, hh) = geo::PJ;
+    let cx = x + w / 2.0;
+    up::marco(p, art, up::marco::PANEL, x, y, w, hh, k);
+
+    up::halo(p, &ins.halo, cx, 500.0, 250.0, k);
+    up::sombra(p, cx, 664.0, 92.0, 15.0, k);
+    if let (Some(cg), Some(look)) = (ins.cg.as_deref(), ins.pj.look.as_ref()) {
+        if cg.available() {
+            let escala = 5.0;
+            let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * escala;
+            up::muneco(p, look, cg, &ins.assets, &ins.hoja, 3, cx - cel.x / 2.0, 684.0 - cel.y, escala, k);
+        }
+    }
+    let nombre = if ins.pj.name.trim().is_empty() { "Viajero".to_string() } else { ins.pj.name.clone() };
+    up::texto(p, nombre, 50.0, Pack::TINTA, cx, 728.0, Ancla::Medio, k);
+
+    let donde = match (cuerpo, ins.jugador.get_single()) {
+        (Some(b), Ok((tf, _))) => format!(
+            "{} · {:.0}, {:.0}",
+            body_def(b).label,
+            tf.translation.x,
+            -tf.translation.y
+        ),
+        (None, _) => "En el espacio".to_string(),
+        (Some(b), Err(_)) => body_def(b).label.to_string(),
+    };
+    up::texto(p, donde, 28.0, Pack::SUAVE, cx, 778.0, Ancla::Medio, k);
+
+    let valores = ins.jugador.get_single().map(|(_, s)| valores_de(s)).unwrap_or([1.0; 3]);
+    for (i, (et, color)) in [("HAMBRE", up::BARRA_HAMBRE), ("SED", up::BARRA_SED), ("KI", up::BARRA_KI)]
+        .into_iter()
+        .enumerate()
+    {
+        let by = 826.0 + i as f32 * 58.0;
+        up::texto(p, et, 28.0, Pack::ETIQUETA, x + 66.0, by + 21.0, Ancla::Izq, k);
+        up::barra(p, art, x + 250.0, by, w - 316.0, 42.0, color, valores[i], BarraPausa(i), k);
+    }
+}
+
+/// Hambre, sed y aguante del jugador, de 0 a 1 (lo mismo que muestra la mochila).
+fn valores_de(sim: &SimState) -> [f32; 3] {
+    [
+        (sim.survival.hunger / ha_shared::HUNGER_MAX).clamp(0.0, 1.0),
+        (sim.survival.thirst / ha_shared::THIRST_MAX).clamp(0.0, 1.0),
+        if sim.body.max_stamina > 0.0 { (sim.body.stamina / sim.body.max_stamina).clamp(0.0, 1.0) } else { 0.0 },
+    ]
+}
+
+/// **El panel PAUSA**: REANUDAR arriba y grande, las opciones en casillas con
+/// icono, y MENÚ PRINCIPAL abajo (lejos de REANUDAR: salir no puede estar a un
+/// dedo resbalado de volver al juego).
+fn panel_pausa(p: &mut ChildBuilder, art: &ArtLibrary, k: f32) {
+    let (x, y, w, hh) = geo::PAUSA;
+    let cx = x + w / 2.0;
+    up::marco(p, art, up::marco::PANEL, x, y, w, hh, k);
+    let ix = x + geo::MARGEN;
+    let iw = w - geo::MARGEN * 2.0;
+
+    up::boton(p, art, ix, y + 84.0, iw, 150.0, Some("REANUDAR"), None, true, 56.0,
+              (C::CloseMenu, BackgroundColor(Color::NONE)), k);
+
+    // Seis casillas, 3 × 2.
+    let tw = (iw - geo::GAP * 2.0) / 3.0;
+    let th = 196.0;
+    let y0 = y + 84.0 + 150.0 + geo::GAP + 6.0;
+    let casillas: [(&str, &str); 6] = [
+        ("AJUSTES", "ui/ic_engranaje"),
+        ("MUNDO", up::CUERPO_TIERRA),
+        ("MULTIJUGADOR", "ui/ic_persona"),
+        ("CREATIVO", "ui/menu_creativo"),
+        ("EXPERIMENTAR", "ui/ic_interrogacion"),
+        ("EDITAR UI", "ui/ic_lapiz"),
+    ];
+    for (i, (et, ic)) in casillas.into_iter().enumerate() {
+        let tx = ix + (i % 3) as f32 * (tw + geo::GAP);
+        let ty = y0 + (i / 3) as f32 * (th + geo::GAP);
+        let mut casilla = up::marco(p, art, up::marco::SLOT, tx, ty, tw, th, k);
+        casilla.insert((Button, BackgroundColor(Color::NONE), Name::new(format!("GameMenuBtn_{et}"))));
+        match et {
+            "AJUSTES" => casilla.insert(C::OpenSettings),
+            "MUNDO" => casilla.insert(crate::civilizacion::BotonMundo),
+            "MULTIJUGADOR" => casilla.insert(crate::multijugador::BotonMultijugador),
+            "CREATIVO" => casilla.insert(C::ToggleCreative),
+            "EXPERIMENTAR" => casilla.insert(crate::experimentos::BotonExperimentar),
+            _ => casilla.insert(C::Toggle),
+        };
+        up::icono(p, art, ic, tx + tw / 2.0 - 46.0, ty + 26.0, 92.0, k);
+        up::texto(p, et, 32.0, Pack::TINTA, tx + tw / 2.0, ty + th - 38.0, Ancla::Medio, k);
+    }
+
+    // La fila de abajo: MENÚ PRINCIPAL (y en escritorio, las herramientas).
+    let yb = y + hh - 42.0 - 112.0;
+    #[cfg(target_os = "android")]
+    let ancho_salir = iw;
+    #[cfg(not(target_os = "android"))]
+    let ancho_salir = 560.0;
+    up::boton(p, art, ix, yb, ancho_salir, 112.0, Some("MENÚ PRINCIPAL"), None, false, 38.0,
+              (C::SalirAlMenu, BackgroundColor(Color::NONE)), k);
+    // Los saltos de mundo, el medidor y la sonda son herramientas de prueba: en
+    // el teléfono no aparecen (29 sep 2026).
+    #[cfg(not(target_os = "android"))]
+    {
+        let herramientas: [(&str, C); 5] = [
+            ("TIERRA", C::GoEarth),
+            ("LUNA", C::GoLuna),
+            ("ESPACIO", C::GoSpace),
+            ("PERF", C::TogglePerf),
+            ("SONDA", C::ToggleProbe),
+        ];
+        let x0 = ix + ancho_salir + geo::GAP;
+        let bw = (iw - ancho_salir - geo::GAP - 4.0 * 10.0) / 5.0;
+        for (i, (et, cmd)) in herramientas.into_iter().enumerate() {
+            up::boton(p, art, x0 + i as f32 * (bw + 10.0), yb, bw, 112.0, Some(et), None, false, 24.0,
+                      (cmd, BackgroundColor(Color::NONE)), k);
+        }
+    }
+
+    up::cartel(p, art, "PAUSA", cx, y - 48.0, 420.0, 96.0, 54.0, k);
+    // La cruz de cerrar, en la esquina: el icono del kit ya es un botón entero.
+    if let Some(img) = art.ui_icon("ui/ic_equis") {
+        p.spawn((
+            up::caja(x + w - 118.0, y + 6.0, 96.0, 96.0, k),
+            img,
+            Button,
+            BackgroundColor(Color::NONE),
+            C::CloseMenu,
+            ZIndex(5),
+            Name::new("GameMenuBtn_CERRAR"),
+        ));
+    }
+}
+
+/// **La barra de EDITAR UI**: elegir qué control mover, escalarlo y guardarlo.
+/// Va abajo, sobre el juego transparente, y LISTO vuelve a la pausa.
+fn barra_de_edicion(l: &mut ChildBuilder, art: &ArtLibrary, k: f32) {
+    let (x, y, w, h) = (180.0, 852.0, 2040.0, 210.0);
+    let mut nodo = up::caja(x, y, w, h, k);
+    nodo.display = Display::None;
+    let mut barra = match art.ui_frame_node(up::marco::LISO) {
+        Some(img) => l.spawn((nodo, img, EditToolbar)),
+        None => l.spawn((nodo, BackgroundColor(Color::srgb(0.796, 0.706, 0.580)), EditToolbar)),
+    };
+    let botones: [(&str, C, bool); 8] = [
+        ("> STICK", C::SelectMove, false),
+        ("> USAR", C::SelectUse, false),
+        ("> SALTAR", C::SelectJump, false),
+        ("-", C::ScaleDown, false),
+        ("+", C::ScaleUp, false),
+        ("RESET", C::Reset, false),
+        ("GUARDAR", C::Save, false),
+        ("LISTO", C::Toggle, true),
+    ];
+    barra.with_children(|b| {
+        up::texto(b, "EDITAR UI · elegí un control, arrastralo y escalalo", 30.0, Pack::TINTA, w / 2.0, 46.0,
+                  Ancla::Medio, k);
+        let gap = 14.0;
+        let bw = (w - 60.0 - gap * 7.0) / 8.0;
+        for (i, (et, cmd, fuerte)) in botones.into_iter().enumerate() {
+            up::boton(b, art, 30.0 + i as f32 * (bw + gap), 84.0, bw, 96.0, Some(et), None, fuerte, 30.0,
+                      (cmd, BackgroundColor(Color::NONE)), k);
+        }
+    });
+}
+
+/// Las barras del personaje dicen la verdad mientras la pausa está abierta (el
+/// juego no se detiene: en multijugador no puede).
+fn barras_de_la_pausa(
     menu: Res<GameMenuState>,
-    region: Res<crate::scene::RegionRuntime>,
-    mut sets: ParamSet<(
-        Query<&mut Visibility, With<OrbitalLayer>>,
-        Query<&mut Text, With<MapTitle>>,
-    )>,
+    player: Query<&SimState, With<crate::sim::Player>>,
+    mut barras: Query<(&mut Node, &BarraPausa)>,
+    mut ultimo: Local<[f32; 3]>,
 ) {
     if !menu.spawned {
         return;
     }
-    for mut v in &mut sets.p0() {
-        if *v != Visibility::Inherited {
-            *v = Visibility::Inherited;
-        }
+    let Ok(sim) = player.get_single() else { return };
+    let v = valores_de(sim);
+    // Sólo si se movió algo visible: tocar un `Node` relayoutea todo (§10).
+    if v.iter().zip(ultimo.iter()).all(|(a, b)| (a - b).abs() < 0.004) {
+        return;
     }
-    let title = match surface_body(&region.active) {
-        None => "MAPA ORBITAL".to_string(),
-        Some(b) => format!("{} - MAPA ORBITAL", body_menu_name(b)),
-    };
-    if let Ok(mut t) = sets.p1().get_single_mut() {
-        if t.0 != title {
-            t.0 = title;
-        }
+    *ultimo = v;
+    for (mut nodo, b) in &mut barras {
+        nodo.width = Val::Percent(v[b.0.min(2)] * 100.0);
     }
 }
 
-/// Antenna uplink — while the menu is open, show the lunar camp status line:
-/// drills placed, iron banked while you were away, and the O₂ tether.
+/// Antena lunar — con el menú abierto, el estado del campamento: taladros,
+/// hierro juntado mientras no estabas y colonos.
 fn update_luna_base_monitor(
     menu: Res<GameMenuState>,
     machines: Res<crate::machines::MachineWorld>,
@@ -608,21 +480,18 @@ fn update_luna_base_monitor(
             .on_body(CelestialBody::Moon)
             .filter(|m| m.machine_id == ha_shared::HABITAT.id)
             .count() as u32;
-        let banked: u32 = machines
-            .on_body(CelestialBody::Moon)
-            .map(|m| m.stored_output)
-            .sum();
+        let banked: u32 = machines.on_body(CelestialBody::Moon).map(|m| m.stored_output).sum();
         let crew = colony.state.colonists;
         let cap = ha_shared::colony_capacity(habitats);
         let fed = if crew == 0 {
             ""
         } else if ha_shared::colony_fed(&colony.state) {
-            " (trabajando x1.5)"
+            " (trabajando x1,5)"
         } else {
-            " (SIN VIVERES)"
+            " (SIN VÍVERES)"
         };
         format!(
-            "BASE LUNA - antena OK | taladros {drills} | hierro {banked} | colonos {crew}/{cap}{fed} | viveres {:.0}",
+            "Base Luna · antena OK · taladros {drills} · hierro {banked} · colonos {crew}/{cap}{fed} · víveres {:.0}",
             colony.state.food_stock
         )
     } else {
@@ -630,5 +499,61 @@ fn update_luna_base_monitor(
     };
     if text.0 != line {
         text.0 = line;
+    }
+}
+
+/// `HA_PAUSASHOT=/ruta.png`: abre la pausa en partida, la fotografía y cierra el
+/// juego. Es como se compara contra la maqueta sin el teléfono (biblia §7).
+fn foto_de_la_pausa(
+    mut cuadros: Local<u32>,
+    fase: Res<State<crate::game_phase::GamePhase>>,
+    mut editor: ResMut<UiEditorState>,
+    mut commands: Commands,
+    mut exit: EventWriter<AppExit>,
+) {
+    use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+    let Ok(ruta) = crate::flags::var("HA_PAUSASHOT") else { return };
+    if *fase.get() != crate::game_phase::GamePhase::Playing {
+        return;
+    }
+    *cuadros += 1;
+    match *cuadros {
+        90 => editor.menu_open = true,
+        130 => {
+            commands.spawn(Screenshot::primary_window()).observe(save_to_disk(ruta.clone()));
+            eprintln!("ha-pausashot: pausa");
+        }
+        140 => editor.enabled = true,
+        175 => {
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(ruta.replace(".png", "-editar.png")));
+            eprintln!("ha-pausashot: editar");
+        }
+        200 => {
+            exit.send(AppExit::Success);
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Las seis casillas, REANUDAR y la fila de abajo entran en el panel.
+    #[test]
+    fn la_pausa_entra_en_su_panel() {
+        let (x, y, w, h) = geo::PAUSA;
+        let iw = w - geo::MARGEN * 2.0;
+        let th = 196.0;
+        let y0 = y + 84.0 + 150.0 + geo::GAP + 6.0;
+        let fin_casillas = y0 + 2.0 * th + geo::GAP;
+        let yb = y + h - 42.0 - 112.0;
+        assert!(fin_casillas <= yb - 8.0, "las casillas pisan MENÚ PRINCIPAL: {fin_casillas} > {yb}");
+        assert!(x + geo::MARGEN + iw <= up::ANCHO);
+        assert!(y + h <= up::ALTO, "el panel se sale del lienzo");
+        let (px, _, pw, _) = geo::PJ;
+        assert!(px + pw <= x, "los dos paneles se pisan");
     }
 }

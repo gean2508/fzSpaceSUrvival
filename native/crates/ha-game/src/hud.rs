@@ -659,9 +659,9 @@ fn spawn_menu_button(parent: &mut ChildBuilder, layout: &TouchLayout) {
         ))
         .with_children(|b| {
             b.spawn((
-                Text::new("MENU"),
-                TextFont { font_size: 12.0, ..default() },
-                TextColor(ui_theme::text_primary()),
+                Text::new("MENÚ"),
+                TextFont { font_size: 14.0, ..default() },
+                TextColor(crate::ui_pack::Pack::TINTA),
             ));
         });
 }
@@ -3789,6 +3789,7 @@ fn skin_ui_from_art(
         ),
     >,
     panels: Query<(Entity, Option<&bevy::ui::widget::ImageNode>), Or<(Added<BagPanelRoot>, Added<MachinePanelRoot>)>>,
+    (children, mut text_colors): (Query<&Children>, Query<&mut TextColor>),
 ) {
     for (e, ya) in &generic {
         // **El que ya trae marco, no se toca.** Las pantallas nuevas
@@ -3799,8 +3800,26 @@ fn skin_ui_from_art(
         if ya.is_some() {
             continue;
         }
-        if let Some(img) = art.ui_frame_node("ui/button") {
-            commands.entity(e).try_insert(img);
+        // **La pieza de botón del kit, no `ui/button`.** `ui/button` es otra hoja
+        // (interior marrón oscuro) y dejaba al menú de NPC, a MENU/CAM y a las
+        // tarjetas con una mezcla de marcos de madera y bordes neón de colores.
+        // Va la misma madera que las pantallas del mockup, sin borde ni fondo
+        // plano debajo, y el rótulo pasa a la tinta del kit (el cian sobre
+        // pergamino no se leía).
+        if let Some(img) = art
+            .ui_frame_node(crate::ui_pack::marco::BOTON)
+            .or_else(|| art.ui_frame_node("ui/button"))
+        {
+            commands
+                .entity(e)
+                .try_insert((img, BorderColor(Color::NONE), BackgroundColor(Color::NONE)));
+            if let Ok(hijos) = children.get(e) {
+                for h in hijos.iter() {
+                    if let Ok(mut col) = text_colors.get_mut(*h) {
+                        col.0 = crate::ui_pack::Pack::TINTA;
+                    }
+                }
+            }
         }
     }
     for (e, ya) in &panels {
