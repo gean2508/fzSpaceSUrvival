@@ -2939,6 +2939,9 @@ fn spawn_chunk_decor(
                 },
                 crate::harvest::PropArt(std::borrow::Cow::Owned(d.key.clone())),
             ));
+            if let Some(u) = crate::descanso::MuebleDeUso::nuevo(&d.key, wx, foot_z, size[1]) {
+                ent.insert(u);
+            }
         }
         if layer == Some(ha_assets::ArtLayer::Roof) {
             // Techo autorado: se desvanece cuando el jugador camina por debajo.
@@ -3125,6 +3128,13 @@ fn spawn_chunk_small_decor(
                     },
                     crate::harvest::PropArt(std::borrow::Cow::Borrowed(e.key)),
                 ));
+            }
+            // La cama, la silla, el banco: se usan con un toque (ver `descanso.rs`). `wz` es la fila del pie
+            // con la que se Y-sortea, `wx` el centro del sprite.
+            if !crate::layers::es_piso(capa_slot) {
+                if let Some(u) = crate::descanso::MuebleDeUso::nuevo(e.key, wx, wz, e.size[1]) {
+                    ent.insert(u);
+                }
             }
             // El ropero, la heladera, la cómoda: se abren (ver `chests.rs`).
             if let (Some(m), Some(tipo)) = (mueble, ha_shared::amueblado::contenedor_de(e.key)) {

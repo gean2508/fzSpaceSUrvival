@@ -23,7 +23,7 @@ visible, aunque no pase nada).
    tocan los sistemas donde la señal no existe afuera (el golpe a infectados y animales: una línea
    `pose.golpe(...)`).
 3. **Un verbo final con orden de mando** (`verbo_del_cuerpo`, función pura y testeada):
-   agua > acción > caminar > arma en la mano > reposo > respirar.
+   agua > descansando en un mueble (`sit`/`sleep`) > acción > caminar > arma en la mano > reposo > respirar.
 4. **La dirección la pone otro** (`sim::face_player_sprite`): diagonal → cardinal → espejo → el mismo verbo de frente
    (filas de una sola dirección) → respirar. Nunca queda sin sprite.
 5. **Reposo** (`Reposo`): 9 s quieto → celular (saca 0-2, usa 3-8) o libro, alternando; 40 s → sentado en el piso.
@@ -75,7 +75,9 @@ visible, aunque no pase nada).
 ## Qué NO hacer
 
 - No pintar a 1 px de 32 lo que va encima del cuerpo: se ve de otro juego.
-- No poner `sleep` sin cama: la fila es una cabeza sobre la almohada; sin la cama se ve una cabeza suelta.
+- No poner `sleep` sin cama: la fila es una cabeza sobre la almohada; sin la cama se ve una cabeza suelta. Por eso
+  `sleep`/`sit` sólo salen desde `descanso.rs` (toque sobre un mueble de uso), nunca desde el reposo.
+- No Y-sortear al jugador por su propia z cuando descansa sobre un mueble: se ordena como el mueble.
 - No colgar la animación de un sonido SIN posición (`PlaySfx`): no sabés de quién es. Con posición y alcance, sí.
 - No espejar el personaje con `scale.x = -1` si la hoja ya trae el perfil izquierdo: los dos espejos se cancelan y
   camina al oeste mirando al este (pasó hasta el 3 oct 2026). Espejo sólo con `flip_x` y sólo cuando falta el lado.

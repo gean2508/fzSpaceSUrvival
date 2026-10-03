@@ -177,9 +177,14 @@ pub fn verbo_del_cuerpo(
     accion: Option<&'static str>,
     arma_en_mano: bool,
     reposo: Option<&'static str>,
+    descanso: Option<&'static str>,
 ) -> &'static str {
     if nadando {
         return "swim";
+    }
+    // Sentado o acostado en un mueble (`descanso.rs`): ni caminás ni pegás hasta que te levantás.
+    if let Some(d) = descanso {
+        return d;
     }
     if let Some(a) = accion.filter(|a| !moviendo || !cede_al_caminar(a)) {
         return match a {
@@ -203,6 +208,10 @@ pub fn verbo_del_cuerpo(
 fn cede_al_caminar(verbo: &str) -> bool {
     matches!(verbo, "comer" | "beber" | "pick_up" | "lift" | "grab_gun")
 }
+
+/// Los sistemas que deciden la pose del jugador; `descanso` corre antes.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PoseSet;
 
 /// La capa hija que lleva lo que el jugador tiene en la mano (libro, comida, taza).
 #[derive(Component)]
@@ -228,6 +237,7 @@ impl Plugin for PoseJugadorPlugin {
                     sincronizar_capas,
                 )
                     .chain()
+                    .in_set(PoseSet)
                     .before(crate::sim::FacePlayerSet),
             );
     }
@@ -362,6 +372,7 @@ fn observar_colocar(
 fn pasar_tiempo(
     time: Res<Time>,
     fly: Res<crate::creative_fly::CreativeFlight>,
+    descanso: Res<crate::descanso::Descanso>,
     jugador: Query<&PlayerVisual, With<Player>>,
     mut accion: ResMut<AccionJugador>,
     mut reposo: ResMut<Reposo>,
@@ -370,7 +381,7 @@ fn pasar_tiempo(
     accion.pasar(dt);
     let Ok(v) = jugador.get_single() else { return };
     let moviendo = (v.to_x - v.from_x).abs() > 1e-4 || (v.to_z - v.from_z).abs() > 1e-4;
-    if moviendo || v.swimming || fly.flying() || accion.actual().is_some() {
+    if moviendo || v.swimming || fly.flying() || accion.actual().is_some() || descanso.descansando() {
         if reposo.quieto_s >= REPOSO_ENTRETENERSE_S {
             reposo.turno = reposo.turno.wrapping_add(1);
         }
@@ -387,6 +398,7 @@ fn sincronizar_capas(
     art: Res<crate::art2d::ArtLibrary>,
     accion: Res<AccionJugador>,
     reposo: Res<Reposo>,
+    descanso: Res<crate::descanso::Descanso>,
     jugador: Query<&PlayerVisual, With<Player>>,
     mut mano: Query<(Entity, &mut Sprite, &mut Visibility), (With<CapaEnMano>, Without<OndasNado>)>,
     mut ondas: Query<(Entity, &mut Sprite, &mut Visibility), (With<OndasNado>, Without<CapaEnMano>)>,
@@ -395,7 +407,7 @@ fn sincronizar_capas(
     let Ok(v) = jugador.get_single() else { return };
     let moviendo = (v.to_x - v.from_x).abs() > 1e-4 || (v.to_z - v.from_z).abs() > 1e-4;
     // La capa sigue al CUERPO: sólo se ve cuando el cuerpo está en la pose que la sostiene.
-    let capa = if v.swimming || moviendo {
+    let capa = if v.swimming || moviendo || descanso.descansando() {
         None
     } else {
         match accion.actual().map(|(a, _)| a) {
@@ -484,16 +496,19 @@ mod tests {
 
     #[test]
     fn el_agua_manda_y_el_arma_sólo_cuando_estás_parado() {
-        assert_eq!(verbo_del_cuerpo(true, true, Some("hit"), true, None), "swim");
-        assert_eq!(verbo_del_cuerpo(false, true, Some("hurt"), false, None), "hurt");
-        assert_eq!(verbo_del_cuerpo(false, false, Some("comer"), false, None), "hands_chest");
+        assert_eq!(verbo_del_cuerpo(true, true, Some("hit"), true, None, None), "swim");
+        assert_eq!(verbo_del_cuerpo(false, true, Some("hurt"), false, None, None), "hurt");
+        assert_eq!(verbo_del_cuerpo(false, false, Some("comer"), false, None, None), "hands_chest");
         // Comer caminando: camina; pegar caminando: pega.
-        assert_eq!(verbo_del_cuerpo(false, true, Some("comer"), false, None), "walk");
-        assert_eq!(verbo_del_cuerpo(false, true, Some("punch"), false, None), "punch");
-        assert_eq!(verbo_del_cuerpo(false, true, None, true, None), "walk");
-        assert_eq!(verbo_del_cuerpo(false, false, None, true, Some("read")), "gun_idle");
-        assert_eq!(verbo_del_cuerpo(false, false, None, false, Some("read")), "read");
-        assert_eq!(verbo_del_cuerpo(false, false, None, false, None), "idle");
+        assert_eq!(verbo_del_cuerpo(false, true, Some("comer"), false, None, None), "walk");
+        // Sentado/acostado manda sobre caminar, acciones y arma; el agua sobre todo.
+        assert_eq!(verbo_del_cuerpo(false, true, Some("hit"), true, None, Some("sit")), "sit");
+        assert_eq!(verbo_del_cuerpo(true, false, None, false, None, Some("sleep")), "swim");
+        assert_eq!(verbo_del_cuerpo(false, true, Some("punch"), false, None, None), "punch");
+        assert_eq!(verbo_del_cuerpo(false, true, None, true, None, None), "walk");
+        assert_eq!(verbo_del_cuerpo(false, false, None, true, Some("read"), None), "gun_idle");
+        assert_eq!(verbo_del_cuerpo(false, false, None, false, Some("read"), None), "read");
+        assert_eq!(verbo_del_cuerpo(false, false, None, false, None, None), "idle");
     }
 
     #[test]
@@ -501,7 +516,7 @@ mod tests {
         use ha_assets::chargen_index::char_anim;
         for v in [
             "idle", "walk", "hit", "punch", "stab", "pick_up", "lift", "hurt", "shoot", "grab_gun", "gun_idle",
-            "phone_intro", "phone", "read", "sit_floor", "hands_chest",
+            "phone_intro", "phone", "read", "sit_floor", "hands_chest", "sit", "sleep",
         ] {
             assert!(char_anim(v).is_some(), "la hoja no tiene `{v}`");
         }

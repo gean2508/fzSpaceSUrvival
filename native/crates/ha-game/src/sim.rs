@@ -224,6 +224,7 @@ fn interpolate_player_visual(
     zoom: Res<crate::camera::CameraZoom>,
     bob: Res<crate::vault::VaultBob>,
     subida: Res<crate::escaleras::Subida>,
+    descanso: Res<crate::descanso::Descanso>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
     // Volando: el personaje NUNCA cambia de sitio (marco único — `universe.rs`),
@@ -299,7 +300,13 @@ fn interpolate_player_visual(
         // cancela EXACTAMENTE el que da el mundo. Por eso subir se ve continuo
         // sin necesidad de fundir nada (`escaleras.rs`).
         transform.translation =
-            Vec3::new(r.x, r.y + bob.y + subida.y, sort_z(z) + crate::layers::HAIR);
+            Vec3::new(
+                r.x,
+                r.y + bob.y + subida.y - descanso.bajar_m(),
+                // Acostado/sentado en un mueble se ordena como EL MUEBLE (+ un pelo): si no, el
+                // respaldo o la cama (cuyo pie está más al sur) te taparían entero.
+                sort_z(descanso.orden_z().unwrap_or(z)) + crate::layers::HAIR,
+            );
         // SIN espejo por escala. La dirección la dibuja la POSE (`walk_left` ya mira al oeste) y, si una
         // hoja sólo trae un lado, `face_player_sprite` espeja con `flip_x`. Acá había además un
         // `scale.x = -1` al ir al oeste: los dos espejos se cancelaban y el jugador caminaba al oeste
@@ -391,6 +398,7 @@ fn face_player_sprite(
     mut commands: Commands,
     accion: Res<crate::pose_jugador::AccionJugador>,
     reposo: Res<crate::pose_jugador::Reposo>,
+    descanso: Res<crate::descanso::Descanso>,
     equipped: Res<crate::input::EquippedItem>,
     mut query: Query<(Entity, &PlayerVisual, &mut Sprite, &mut CurrentPose), With<Player>>,
 ) {
@@ -424,6 +432,7 @@ fn face_player_sprite(
             en_curso.map(|(v, _)| v),
             crate::armas::es_arma(&equipped.item_id),
             reposo.pose(),
+            descanso.pose(),
         );
         let rumbo = en_curso.and_then(|(_, r)| r).unwrap_or(visual.to_rot);
         let [diag, card] = pose_directions(rumbo);

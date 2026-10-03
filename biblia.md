@@ -5225,9 +5225,25 @@ imprimiendo `pose=idle_left escala_x=-1`. Ahora la escala queda en 1 y la direcc
 **Prueba en la compu:** `HA_POSETEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./ha-game` recorre 14 poses (dos capturas
 cada una a 0,35 y 0,95 s, más el oeste) e imprime `ha-posetest: <nombre> pose=… escala_x=… rot=…`.
 
-Lo que NO se hizo, y por qué: dormir y sentarse en muebles. Las filas existen (`sleep`, `sit`), pero el jugador no
-tiene todavía el verbo de usar una cama o un banco (`Interaccion::verbo` del manifest no lo ejecuta nadie); la
-fila de dormir del pack es la cabeza sobre la almohada y sin cama se ve una cabeza suelta. Va con esa feature.
+### Sentarse y dormir en muebles — 3 oct 2026
+
+`descanso.rs`. El catálogo de slots ya sabe qué es una cama y qué es un asiento (por su etiqueta en castellano:
+`Cama…`, `Colchón…`, `Silla…`, `Sillón`, `Sofá`, `Banco…`, `Banqueta`, `Puf`, `Reposera`; NO `Silla de ruedas`,
+`Banco de trabajo`, `Banqueta de piano` ni `Colchoneta`), pero nadie ejecutaba `Interaccion::verbo`. Ahora:
+
+- **Un TOQUE** sobre el mueble te sienta (`sit`, de perfil) o te acuesta (`sleep`, la cabeza sobre la almohada).
+  Mantener sigue levantándolo, como todo lo demás. Funciona con el mueble sembrado, el del editor de mundo y el que
+  colocaste vos (`MuebleDeUso` se agrega en los tres sitios donde nace: `world2d.rs` ×2, `structures.rs`).
+- Lejos (> 3,6 m), volando o nadando: suena «no se puede» y no pasa nada.
+- Te levantás con cualquier movimiento, saltando, si te lastiman o si te ponés a volar.
+- **Cura**: sentado 2 vida/s, dormido 3 vida/s. NO adelanta el reloj del día (sería otra feature; un nombre que
+  prometa más de lo que hace es justo lo que el checklist §2 prohíbe).
+- **Dibujo:** el jugador se ordena como EL MUEBLE (`Descanso::orden_z`), no por su propia z, o el respaldo y la cama
+  —cuyo pie está más al sur— lo taparían. Dormido se baja `11/64 × 1,9 m`: la figura de `sleep` mide 34 de los 64 px de
+  la celda y está 11 px por encima del centro (bbox y 4..38 medido sobre `art/player/character.png`).
+- Driver: `HA_DESCANSOTEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./ha-game` planta una cama y una silla, las toca por la
+  misma puerta que el juego y comprueba pose, posición, orden, cura y «lejos no hace nada».
+
 Skill: `.claude/skills/animacion-del-jugador/`.
 
 ### En la calzada no va un cajero automático — 4 ago 2026

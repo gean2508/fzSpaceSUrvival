@@ -339,6 +339,10 @@ fn stream_structures(
         if layer == Some(ha_assets::ArtLayer::Roof) {
             ent.insert(crate::layers::Overhead::techo((s.cx, s.cz), (fw, fh)));
         }
+        // Tu cama, tu silla, tu banco: un toque y te sentás o te acostás (ver `descanso.rs`).
+        if let Some(u) = crate::descanso::MuebleDeUso::nuevo(&s.art, base_x * TILE_M, base_z * TILE_M, dibujo.y) {
+            ent.insert(u);
+        }
         // Casas/faroles/hogueras construidas: su luz (y su pose `Luces` — las
         // ventanas encendidas) sale del slot, no de código por tipo.
         crate::light2d::attach(&mut ent, &art, &[s.art.as_str()], dibujo);
