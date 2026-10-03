@@ -2,6 +2,7 @@
 //! + Terraria-style diggable surfaces (rewrite-2d).
 
 mod art2d;
+mod manos;
 mod flags;
 mod fuente;
 mod prueba_overlay;
@@ -416,6 +417,7 @@ fn run_app_inner() {
             held_item::HeldItemPlugin,
             chests::ChestsPlugin,
         ))
+        .add_plugins(manos::ManosPlugin)
         .add_plugins(civ_vida::CivVidaPlugin)
         .add_systems(Startup, apply_android_frame_cap)
         .run();

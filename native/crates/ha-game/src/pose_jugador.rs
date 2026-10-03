@@ -190,7 +190,7 @@ pub fn verbo_del_cuerpo(
         };
     }
     if moviendo {
-        return "walk";
+        return if arma_en_mano { "walk_gun" } else { "walk" };
     }
     if arma_en_mano {
         return "gun_idle";
@@ -490,7 +490,7 @@ mod tests {
         // Comer caminando: camina; pegar caminando: pega.
         assert_eq!(verbo_del_cuerpo(false, true, Some("comer"), false, None), "walk");
         assert_eq!(verbo_del_cuerpo(false, true, Some("punch"), false, None), "punch");
-        assert_eq!(verbo_del_cuerpo(false, true, None, true, None), "walk");
+        assert_eq!(verbo_del_cuerpo(false, true, None, true, None), "walk_gun");
         assert_eq!(verbo_del_cuerpo(false, false, None, true, Some("read")), "gun_idle");
         assert_eq!(verbo_del_cuerpo(false, false, None, false, Some("read")), "read");
         assert_eq!(verbo_del_cuerpo(false, false, None, false, None), "idle");
@@ -501,7 +501,7 @@ mod tests {
         use ha_assets::chargen_index::char_anim;
         for v in [
             "idle", "walk", "hit", "punch", "stab", "pick_up", "lift", "hurt", "shoot", "grab_gun", "gun_idle",
-            "phone_intro", "phone", "read", "sit_floor", "hands_chest",
+            "phone_intro", "phone", "read", "sit_floor", "hands_chest", "walk_gun",
         ] {
             assert!(char_anim(v).is_some(), "la hoja no tiene `{v}`");
         }

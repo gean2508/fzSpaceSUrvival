@@ -5174,6 +5174,41 @@ andaban en el creador de personaje y en el juego no.
 `art2d::registrar_poses_de_personaje` deriva **1.491 poses** del mismo índice al
 cargar. No se inventa geometría: si mañana se rehornea la hoja, siguen calzando.
 
+### Las manos AGARRAN lo que llevan (jugador y aldeanos) — 3 oct 2026
+
+Pedido: *«se ve horrible que el jugador dispare y su mano no se vea agarrando el arma u otros objetos, así con todo»* y
+*«la ropa no tiene que ir sobre la mano, sino verse puesta»*. Antes el ítem flotaba a un offset fijo del cuerpo y el arma
+a 0,62 m del pecho; una prenda seleccionada se dibujaba en la mano como un icono doblado.
+
+**`manos.rs` + `scripts/medir-manos.py` (todo MEDIDO, nada a ojo).**
+- *Dónde está la mano:* las capas del Character Generator comparten esqueleto; la piel que NINGUNA de las 132 ropas
+  tapa (< 15 %) por debajo del mentón es mano. Sale en las 9 pieles con la misma posición (el script corta si no).
+  `art/chargen/manos.json` guarda, por `animación:columna`, el agarre (`ancla`, px de la celda 32×64) y si las manos
+  quedan detrás (mirando arriba). `art/chargen/manos/NNN.png` es una lámina por piel con SÓLO los píxeles de las
+  manos (+ contorno) en las filas `filas` del json.
+- *Con qué se agarra cada objeto:* `objetos["items/<id>"].agarre` (px de su recorte): armas = la empuñadura de su
+  diseño (`lib/armas_diseno.py`); largos (hacha, pico, antorcha) = el mango, a 18 % del extremo; chicos = desde abajo
+  al centro; el farol = la manija (sobre el cuerpo opaco, su halo pintado no cuenta).
+- *Cómo se ve agarrado:* el objeto es un hijo del personaje con `Sprite.anchor` en su agarre, puesto en la mano del
+  cuadro ACTUAL (pose de `CurrentPose`/`NpcPose` + índice del atlas → `char_cell`); encima, la lámina de manos
+  recortada en ese cuadro con el mismo tinte: los dedos tapan el mango. Mirando arriba el objeto va detrás y no hay
+  dedos. Z: cuerpo ± `DZ` (1e-5 < un escalón de Y-sort). Escala `M_POR_PX` = 0,02 m/px (un arma de 56 px ≈ 1,1 m).
+- *Armas:* `armas::visual_del_arma` ya no la pone a 0,62 m: gira alrededor de la mano (`ManoDelJugador`) por su
+  empuñadura, con el retroceso; sin mano a la vista (nadando, comiendo) no se dibuja. De perfil se empuña con la mano
+  de atrás; de frente, el punto medio de las dos.
+- *Caminar con el arma (`walk_gun`):* el pack no trae «caminar apuntando». Se empalma con SU arte: torso de `gun_idle`
+  (y < 56) sobre las piernas de `walk`, en las celdas libres de la fila 17 (cols 24..47, vacías en las 432 capas: lo
+  verifica el script). `chargen::empalmar_walk_gun` lo hace al componer la hoja del jugador; el script, en la hoja por
+  defecto. `CHAR_ANIMS` lo declara (`first = WALK_GUN_COL0`) y `verbo_del_cuerpo` lo pide con arma en la mano y andando.
+- *Aldeanos:* llevan la herramienta de su oficio (`society::herramienta_de`: granjero balde, minero pico, constructor
+  martillo); los niños (hoja infantil, sin lámina de manos) y los sin oficio van con las manos libres.
+- *La ropa se VISTE, no se empuña:* `held_item::shows_in_hand` excluye toda prenda (`armadura::prenda`). Equiparla
+  (VESTIR) recompone la hoja con ese conjunto en lugar del que traía (`equipo::look_con_ropa`: `ropa_NN` = el
+  estilo `ROPA NN` del creador, y el sombrero por la capa de accesorio). Las botas sólo protegen.
+
+Regenerar: `python3 scripts/medir-manos.py [--vista]` (vista: `/tmp/claude-1000/manos.png` y `agarres.png`). Hay que
+volver a correrlo si cambia el pack, un arma (`lib/armas_diseno.py`) o los ítems del manifest.
+
 ### El jugador HACE lo que hace: acciones, reposo y lo que tiene en la mano — 3 oct 2026
 
 Pedido: *«del jugador cuando nada, o realiza actividades debería haber asset para esas cosas o animaciones»*.

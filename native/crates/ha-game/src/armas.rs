@@ -803,7 +803,8 @@ fn visual_del_arma(
     cursor: Res<AimCursor>,
     estado: Res<EstadoArmas>,
     player: Query<(&Transform, &PlayerVisual), (With<Player>, Without<ArmaVisual>, Without<MiraDeArma>)>,
-    mut visual: Query<(Entity, &mut Transform, &mut Sprite, &Name), (With<ArmaVisual>, Without<MiraDeArma>)>,
+    mut visual: Query<(Entity, &mut Transform, &mut Sprite, &mut Visibility, &Name), (With<ArmaVisual>, Without<MiraDeArma>)>,
+    mano: Res<crate::manos::ManoDelJugador>,
     mut mira: Query<(Entity, &mut Transform, &mut Sprite), (With<MiraDeArma>, Without<ArmaVisual>)>,
     mut ultimo: Local<String>,
 ) {
@@ -829,22 +830,44 @@ fn visual_del_arma(
             commands.entity(e).despawn_recursive();
         }
         *ultimo = equipped.item_id.clone();
-        let tam = Vec2::splat(1.9);
-        if let Some((sprite, _)) = art.world_sprite(&format!("items/{}", equipped.item_id), tam) {
-            commands.spawn((ArmaVisual, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Name::new("ArmaVisual")));
+        let clave = format!("items/{}", equipped.item_id);
+        // El tamaño y el punto de agarre salen del dibujo (`manos.json`): el arma se empuña por su
+        // empuñadura, no por el centro.
+        if let (Some(ag), Some(_)) = (crate::manos::objeto(&clave), art.get(&clave)) {
+            let tam = ag.tam_en_mundo();
+            if let Some((mut sprite, _)) = art.world_sprite(&clave, tam) {
+                sprite.custom_size = Some(tam);
+                sprite.anchor = bevy::sprite::Anchor::Custom(Vec2::new(ag.agarre[0] / ag.tam[0] - 0.5, 0.5 - ag.agarre[1] / ag.tam[1]));
+                commands.spawn((ArmaVisual, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
+            }
         }
     }
     let ang = dir.y.atan2(dir.x); // en el mundo (x, z)
     // En pantalla el eje y es -z: el ángulo de render es -ang.
     let izquierda = dir.x < 0.0;
-    for (_, mut tf, mut s, _) in &mut visual {
+    let agarre = crate::manos::objeto(&format!("items/{}", equipped.item_id));
+    for (_, mut tf, mut s, mut vis, _) in &mut visual {
+        // El arma se agarra con la mano que dibuja la hoja (`manos.rs`): sin mano a la vista (nadando, comiendo,
+        // sentado) no se dibuja, y mirando hacia arriba queda detrás del cuerpo.
+        if !mano.vigente {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+        *vis = Visibility::Inherited;
         let retro = dir * -(estado.kick * 0.35);
-        let centro = pos + dir * 0.62 + retro;
-        // Los pies del personaje están en `pos`; el arma va a la altura de la mano.
-        tf.translation = Vec3::new(centro.x, -centro.y - 0.28, if dir.y < -0.5 { ptf.translation.z - 0.0005 } else { ptf.translation.z + 0.0006 });
-        // Mirando a la izquierda el sprite se espeja (en vertical) para no quedar patas arriba.
+        tf.translation = Vec3::new(
+            mano.pos.x + retro.x,
+            mano.pos.y - retro.y,
+            if mano.detras { mano.z - crate::manos::DZ } else { mano.z + crate::manos::DZ },
+        );
+        // Mirando a la izquierda el sprite se espeja (en vertical) para no quedar patas arriba; el agarre
+        // se espeja con él.
         tf.rotation = Quat::from_rotation_z(-ang);
         s.flip_y = izquierda;
+        if let Some(ag) = agarre {
+            let y = 0.5 - ag.agarre[1] / ag.tam[1];
+            s.anchor = bevy::sprite::Anchor::Custom(Vec2::new(ag.agarre[0] / ag.tam[0] - 0.5, if izquierda { -y } else { y }));
+        }
     }
     // La mira: un aro donde está el dedo.
     if apuntando {
