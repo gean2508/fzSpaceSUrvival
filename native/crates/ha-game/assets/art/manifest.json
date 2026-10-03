@@ -3251,18 +3251,6 @@
     {
      "id": "3",
      "label": "Casa chica 3"
-    },
-    {
-     "id": "4",
-     "label": "Casa chica 4"
-    },
-    {
-     "id": "5",
-     "label": "Casa chica 5"
-    },
-    {
-     "id": "6",
-     "label": "Casa chica 6"
     }
    ]
   },
@@ -3276,10 +3264,6 @@
     {
      "id": "2",
      "label": "Casa country 2"
-    },
-    {
-     "id": "3",
-     "label": "Casa country 3"
     }
    ]
   },
@@ -3293,14 +3277,6 @@
     {
      "id": "2",
      "label": "Casa grande 2"
-    },
-    {
-     "id": "3",
-     "label": "Casa grande 3"
-    },
-    {
-     "id": "4",
-     "label": "Casa grande 4"
     }
    ]
   },
@@ -3343,10 +3319,6 @@
     {
      "id": "2",
      "label": "Casa mediana 2"
-    },
-    {
-     "id": "3",
-     "label": "Casa mediana 3"
     }
    ]
   },
@@ -3537,19 +3509,6 @@
   },
   "building/changuito_verde_2": {
    "label": "Tacho de basura verde"
-  },
-  "building/comisaria": {
-   "label": "Comisaria",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Comisaria 1"
-    },
-    {
-     "id": "2",
-     "label": "Comisaria 2"
-    }
-   ]
   },
   "building/comisaria_chica": {
    "label": "Comisaría chica",
@@ -3761,19 +3720,6 @@
     }
    ]
   },
-  "building/correo_edificio": {
-   "label": "Correo edificio",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Correo edificio 1"
-    },
-    {
-     "id": "2",
-     "label": "Correo edificio 2"
-    }
-   ]
-  },
   "building/couple_asientos_verde": {
    "label": "Couple asientos verde",
    "variants": [
@@ -3801,10 +3747,6 @@
     {
      "id": "2",
      "label": "Deposito 2"
-    },
-    {
-     "id": "3",
-     "label": "Deposito 3"
     }
    ]
   },
@@ -3854,19 +3796,6 @@
     {
      "id": "11",
      "label": "Dormitorio cartel 11"
-    }
-   ]
-  },
-  "building/duplex": {
-   "label": "Duplex",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Duplex 1"
-    },
-    {
-     "id": "2",
-     "label": "Duplex 2"
     }
    ]
   },
@@ -5162,19 +5091,6 @@
     }
    ]
   },
-  "building/torre": {
-   "label": "Torre",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Torre 1"
-    },
-    {
-     "id": "2",
-     "label": "Torre 2"
-    }
-   ]
-  },
   "building/tren_y_subte": {
    "label": "Cartel de subte"
   },
@@ -5307,10 +5223,6 @@
     {
      "id": "2",
      "label": "Villa 2"
-    },
-    {
-     "id": "3",
-     "label": "Villa 3"
     }
    ]
   },
@@ -33570,7 +33482,6 @@
   "art/pack/completos_0.png": "exterior",
   "art/pack/completos_1.png": "exterior",
   "art/pack/completos_2.png": "exterior",
-  "art/pack/completos_3.png": "exterior",
   "art/pack/condominium_0.png": "interior",
   "art/pack/conference_hall_0.png": "interior",
   "art/pack/fire_station_0.png": "exterior",
@@ -56252,7 +56163,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56269,7 +56180,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56282,7 +56193,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56299,7 +56210,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56426,7 +56337,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56443,7 +56354,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56456,7 +56367,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56473,7 +56384,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56600,7 +56511,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56617,7 +56528,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56630,7 +56541,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -56647,7 +56558,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -60777,14 +60688,14 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_2.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_2.png",
      "rect": {
       "col": 0,
       "h": 10,
@@ -60878,14 +60789,14 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_2.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_2.png",
      "rect": {
       "col": 0,
       "h": 10,
@@ -60979,19 +60890,19 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 13,
-      "h": 10,
-      "row": 0,
-      "w": 13
+      "col": 0,
+      "h": 15,
+      "row": 34,
+      "w": 12
      }
     },
     "closed": {
@@ -61069,10 +60980,10 @@
     }
    },
    "rect": {
-    "col": 13,
-    "h": 10,
-    "row": 0,
-    "w": 13
+    "col": 0,
+    "h": 15,
+    "row": 34,
+    "w": 12
    }
   },
   "building/casa_chica#3": {
@@ -61080,18 +60991,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 0,
-      "h": 15,
-      "row": 10,
+      "col": 18,
+      "h": 16,
+      "row": 18,
       "w": 12
      }
     },
@@ -61104,7 +61015,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -61121,7 +61032,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -61134,7 +61045,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -61151,7 +61062,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -61170,224 +61081,9 @@
     }
    },
    "rect": {
-    "col": 0,
-    "h": 15,
-    "row": 10,
-    "w": 12
-   }
-  },
-  "building/casa_chica#4": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 12,
+    "col": 18,
     "h": 16,
-    "row": 10,
-    "w": 12
-   }
-  },
-  "building/casa_chica#5": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 0,
-      "h": 15,
-      "row": 26,
-      "w": 12
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 78,
-      "row": 1630,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 78,
-      "row": 1630,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 78,
-      "row": 1630,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 78,
-      "row": 1630,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 78,
-      "row": 384,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 15,
-    "row": 26,
-    "w": 12
-   }
-  },
-  "building/casa_chica#6": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 12,
-      "h": 15,
-      "row": 26,
-      "w": 12
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 78,
-      "row": 1708,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 78,
-      "row": 1708,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 78,
-      "row": 1708,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 78,
-      "row": 1708,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 222,
-      "h": 78,
-      "row": 384,
-      "w": 96
-     }
-    }
-   },
-   "rect": {
-    "col": 12,
-    "h": 15,
-    "row": 26,
+    "row": 18,
     "w": 12
    }
   },
@@ -61418,9 +61114,9 @@
      ],
      "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 0,
+      "col": 27,
       "h": 14,
-      "row": 25,
+      "row": 34,
       "w": 23
      }
     },
@@ -61499,9 +61195,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 27,
     "h": 14,
-    "row": 25,
+    "row": 34,
     "w": 23
    }
   },
@@ -61519,9 +61215,9 @@
      ],
      "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 0,
+      "col": 27,
       "h": 14,
-      "row": 25,
+      "row": 34,
       "w": 23
      }
     },
@@ -61600,9 +61296,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 27,
     "h": 14,
-    "row": 25,
+    "row": 34,
     "w": 23
    }
   },
@@ -61611,19 +61307,19 @@
     32,
     32
    ],
-   "png": "art/pack/completos_1.png",
+   "png": "art/pack/completos_0.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_1.png",
+     "png": "art/pack/completos_0.png",
      "rect": {
       "col": 0,
-      "h": 14,
-      "row": 39,
-      "w": 23
+      "h": 22,
+      "row": 34,
+      "w": 18
      }
     },
     "closed": {
@@ -61633,10 +61329,10 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 896,
+      "col": 0,
       "h": 80,
-      "row": 1542,
-      "w": 64
+      "row": 1630,
+      "w": 32
      }
     },
     "closing": {
@@ -61650,10 +61346,10 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 1344,
+      "col": 224,
       "h": 80,
-      "row": 1542,
-      "w": 64
+      "row": 1630,
+      "w": 32
      }
     },
     "open": {
@@ -61663,10 +61359,10 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 1344,
+      "col": 224,
       "h": 80,
-      "row": 1542,
-      "w": 64
+      "row": 1630,
+      "w": 32
      }
     },
     "opening": {
@@ -61680,10 +61376,10 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 896,
+      "col": 0,
       "h": 80,
-      "row": 1542,
-      "w": 64
+      "row": 1630,
+      "w": 32
      }
     },
     "puerta_en_sprite": {
@@ -61696,27 +61392,14 @@
       "col": 544,
       "h": 80,
       "row": 288,
-      "w": 64
+      "w": 32
      }
     }
    },
    "rect": {
     "col": 0,
-    "h": 14,
-    "row": 39,
-    "w": 23
-   }
-  },
-  "building/casa_country#3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 0,
     "h": 22,
-    "row": 53,
+    "row": 34,
     "w": 18
    }
   },
@@ -62104,7 +61787,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62121,7 +61804,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62134,7 +61817,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62151,7 +61834,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62205,7 +61888,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62222,7 +61905,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62235,7 +61918,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62252,7 +61935,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62317,7 +62000,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 0,
+      "col": 448,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62334,7 +62017,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 448,
+      "col": 896,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62347,7 +62030,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 448,
+      "col": 896,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62364,7 +62047,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 0,
+      "col": 448,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62420,7 +62103,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62437,7 +62120,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62450,7 +62133,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62467,7 +62150,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62521,7 +62204,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62538,7 +62221,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62551,7 +62234,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62568,7 +62251,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62622,7 +62305,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62639,7 +62322,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62652,7 +62335,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62669,7 +62352,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62721,7 +62404,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 0,
+      "col": 448,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62738,7 +62421,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 448,
+      "col": 896,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62751,7 +62434,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 448,
+      "col": 896,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62768,7 +62451,7 @@
      ],
      "png": "art/pack/edificios_puertas_0.png",
      "rect": {
-      "col": 0,
+      "col": 448,
       "h": 78,
       "row": 1630,
       "w": 64
@@ -62824,7 +62507,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62841,7 +62524,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62854,7 +62537,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62871,7 +62554,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -62925,7 +62608,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62942,7 +62625,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62955,7 +62638,7 @@
      "rect": {
       "col": 672,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -62972,7 +62655,7 @@
      "rect": {
       "col": 0,
       "h": 66,
-      "row": 1862,
+      "row": 1864,
       "w": 96
      }
     },
@@ -63039,7 +62722,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -63056,7 +62739,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -63069,7 +62752,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -63086,7 +62769,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -63194,11 +62877,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
     "col": 0,
     "h": 16,
-    "row": 71,
+    "row": 18,
     "w": 18
    }
   },
@@ -63207,11 +62890,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
     "col": 0,
     "h": 16,
-    "row": 71,
+    "row": 18,
     "w": 18
    }
   },
@@ -63220,38 +62903,12 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 0,
-    "h": 16,
-    "row": 87,
-    "w": 18
-   }
-  },
-  "building/casa_grande#3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 18,
-    "h": 22,
-    "row": 87,
-    "w": 12
-   }
-  },
-  "building/casa_grande#4": {
-   "grid": [
-    32,
-    32
-   ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
-    "h": 25,
-    "row": 0,
-    "w": 16
+    "col": 30,
+    "h": 16,
+    "row": 18,
+    "w": 18
    }
   },
   "building/casa_hilera": {
@@ -64106,7 +63763,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -64123,7 +63780,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -64136,7 +63793,7 @@
      "rect": {
       "col": 672,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -64153,7 +63810,7 @@
      "rect": {
       "col": 0,
       "h": 78,
-      "row": 1708,
+      "row": 1710,
       "w": 96
      }
     },
@@ -64568,18 +64225,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
       "col": 0,
       "h": 14,
-      "row": 41,
+      "row": 49,
       "w": 16
      }
     },
@@ -64660,7 +64317,7 @@
    "rect": {
     "col": 0,
     "h": 14,
-    "row": 41,
+    "row": 49,
     "w": 16
    }
   },
@@ -64669,18 +64326,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
       "col": 0,
       "h": 14,
-      "row": 41,
+      "row": 49,
       "w": 16
      }
     },
@@ -64761,7 +64418,7 @@
    "rect": {
     "col": 0,
     "h": 14,
-    "row": 41,
+    "row": 49,
     "w": 16
    }
   },
@@ -64770,18 +64427,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_0.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 16,
+      "col": 12,
       "h": 14,
-      "row": 41,
+      "row": 34,
       "w": 15
      }
     },
@@ -64860,23 +64517,10 @@
     }
    },
    "rect": {
-    "col": 16,
+    "col": 12,
     "h": 14,
-    "row": 41,
+    "row": 34,
     "w": 15
-   }
-  },
-  "building/casa_mediana#3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 0,
-    "h": 16,
-    "row": 55,
-    "w": 18
    }
   },
   "building/casa_mesa_bebidas_chiquita_1": {
@@ -66805,510 +66449,16 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_2.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 0,
-      "h": 18,
-      "row": 94,
-      "w": 21
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1358,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1358,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 560,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 812,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 102,
-      "h": 50,
-      "row": 302,
-      "w": 36
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 812,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 560,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta3_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 644,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 342,
-      "h": 58,
-      "row": 472,
-      "w": 36
-     }
-    },
-    "puerta3_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 644,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 82,
-      "h": 64,
-      "row": 416,
-      "w": 66
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 18,
-    "row": 94,
-    "w": 21
-   }
-  },
-  "building/comisaria#1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_2.png",
-     "rect": {
-      "col": 0,
-      "h": 18,
-      "row": 94,
-      "w": 21
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1358,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1358,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 560,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 812,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 102,
-      "h": 50,
-      "row": 302,
-      "w": 36
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 812,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 560,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta3_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 644,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 342,
-      "h": 58,
-      "row": 472,
-      "w": 36
-     }
-    },
-    "puerta3_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 644,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 82,
-      "h": 64,
-      "row": 416,
-      "w": 66
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 18,
-    "row": 94,
-    "w": 21
-   }
-  },
-  "building/comisaria#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_3.png",
-     "rect": {
-      "col": 0,
+      "col": 35,
       "h": 18,
       "row": 0,
       "w": 21
@@ -67535,7 +66685,7 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 35,
     "h": 18,
     "row": 0,
     "w": 21
@@ -70777,18 +69927,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_3.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 11,
+      "col": 16,
       "h": 13,
-      "row": 30,
+      "row": 49,
       "w": 8
      }
     },
@@ -70867,211 +70017,9 @@
     }
    },
    "rect": {
-    "col": 11,
+    "col": 16,
     "h": 13,
-    "row": 30,
-    "w": 8
-   }
-  },
-  "building/correo_edificio#1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_3.png",
-     "rect": {
-      "col": 11,
-      "h": 13,
-      "row": 30,
-      "w": 8
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 58,
-      "h": 64,
-      "row": 352,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 11,
-    "h": 13,
-    "row": 30,
-    "w": 8
-   }
-  },
-  "building/correo_edificio#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_3.png",
-     "rect": {
-      "col": 19,
-      "h": 13,
-      "row": 30,
-      "w": 8
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 58,
-      "h": 64,
-      "row": 352,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 13,
-    "row": 30,
+    "row": 49,
     "w": 8
    }
   },
@@ -71327,11 +70275,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_2.png",
    "rect": {
-    "col": 0,
+    "col": 21,
     "h": 9,
-    "row": 18,
+    "row": 0,
     "w": 11
    }
   },
@@ -71340,11 +70288,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_2.png",
    "rect": {
-    "col": 0,
+    "col": 21,
     "h": 9,
-    "row": 18,
+    "row": 0,
     "w": 11
    }
   },
@@ -71353,18 +70301,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_3.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 11,
+      "col": 42,
       "h": 12,
-      "row": 18,
+      "row": 49,
       "w": 11
      }
     },
@@ -71377,7 +70325,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71394,7 +70342,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71407,7 +70355,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71424,7 +70372,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71516,183 +70464,9 @@
     }
    },
    "rect": {
-    "col": 11,
+    "col": 42,
     "h": 12,
-    "row": 18,
-    "w": 11
-   }
-  },
-  "building/deposito#3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_3.png",
-     "rect": {
-      "col": 0,
-      "h": 12,
-      "row": 30,
-      "w": 11
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 1928,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 208,
-      "h": 46,
-      "row": 228,
-      "w": 62
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 32,
-      "h": 64,
-      "row": 256,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 12,
-    "row": 30,
+    "row": 49,
     "w": 11
    }
   },
@@ -71764,7 +70538,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71781,7 +70555,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71794,7 +70568,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71811,7 +70585,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71938,7 +70712,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71955,7 +70729,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71968,7 +70742,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -71985,7 +70759,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72125,7 +70899,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72142,7 +70916,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72155,7 +70929,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72172,7 +70946,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72595,7 +71369,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72612,7 +71386,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72625,7 +71399,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72642,7 +71416,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -72696,7 +71470,7 @@
      "rect": {
       "col": 0,
       "h": 18,
-      "row": 88,
+      "row": 0,
       "w": 16
      }
     },
@@ -72850,355 +71624,7 @@
    "rect": {
     "col": 0,
     "h": 18,
-    "row": 88,
-    "w": 16
-   }
-  },
-  "building/duplex#1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 0,
-      "h": 18,
-      "row": 88,
-      "w": 16
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 64,
-      "h": 96,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 384,
-      "h": 64,
-      "row": 480,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 18,
-    "row": 88,
-    "w": 16
-   }
-  },
-  "building/duplex#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 16,
-      "h": 18,
-      "row": 88,
-      "w": 16
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 352,
-      "h": 96,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 64,
-      "row": 480,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 16,
-    "h": 18,
-    "row": 88,
+    "row": 0,
     "w": 16
    }
   },
@@ -76890,18 +75316,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_0.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_2.png",
+     "png": "art/pack/completos_0.png",
      "rect": {
-      "col": 0,
+      "col": 25,
       "h": 23,
-      "row": 71,
+      "row": 0,
       "w": 24
      }
     },
@@ -76914,7 +75340,7 @@
      "rect": {
       "col": 0,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -76931,7 +75357,7 @@
      "rect": {
       "col": 672,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -76944,7 +75370,7 @@
      "rect": {
       "col": 672,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -76961,7 +75387,7 @@
      "rect": {
       "col": 0,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -76980,9 +75406,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 25,
     "h": 23,
-    "row": 71,
+    "row": 0,
     "w": 24
    }
   },
@@ -77015,7 +75441,7 @@
      "rect": {
       "col": 0,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -77032,7 +75458,7 @@
      "rect": {
       "col": 672,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -77045,7 +75471,7 @@
      "rect": {
       "col": 672,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -77062,7 +75488,7 @@
      "rect": {
       "col": 0,
       "h": 76,
-      "row": 1786,
+      "row": 1788,
       "w": 96
      }
     },
@@ -79701,18 +78127,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_0.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_2.png",
+     "png": "art/pack/completos_0.png",
      "rect": {
-      "col": 0,
+      "col": 18,
       "h": 21,
-      "row": 16,
+      "row": 34,
       "w": 27
      }
     },
@@ -79864,9 +78290,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 21,
-    "row": 16,
+    "row": 34,
     "w": 27
    }
   },
@@ -84723,7 +83149,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84740,7 +83166,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84753,7 +83179,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84770,7 +83196,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84897,7 +83323,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84914,7 +83340,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84927,7 +83353,7 @@
      "rect": {
       "col": 448,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -84944,7 +83370,7 @@
      "rect": {
       "col": 0,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -85071,7 +83497,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -85088,7 +83514,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -85101,7 +83527,7 @@
      "rect": {
       "col": 1344,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -85118,7 +83544,7 @@
      "rect": {
       "col": 896,
       "h": 64,
-      "row": 1928,
+      "row": 1930,
       "w": 64
      }
     },
@@ -85434,18 +83860,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_1.png",
+   "png": "art/pack/completos_0.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_1.png",
+     "png": "art/pack/completos_0.png",
      "rect": {
-      "col": 0,
+      "col": 45,
       "h": 19,
-      "row": 106,
+      "row": 34,
       "w": 12
      }
     },
@@ -85670,9 +84096,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 45,
     "h": 19,
-    "row": 106,
+    "row": 34,
     "w": 12
    }
   },
@@ -85681,18 +84107,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_1.png",
+   "png": "art/pack/completos_0.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_1.png",
+     "png": "art/pack/completos_0.png",
      "rect": {
-      "col": 0,
+      "col": 45,
       "h": 19,
-      "row": 106,
+      "row": 34,
       "w": 12
      }
     },
@@ -85917,9 +84343,9 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 45,
     "h": 19,
-    "row": 106,
+    "row": 34,
     "w": 12
    }
   },
@@ -85937,9 +84363,9 @@
      ],
      "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 12,
+      "col": 16,
       "h": 18,
-      "row": 106,
+      "row": 0,
       "w": 19
      }
     },
@@ -86018,9 +84444,9 @@
     }
    },
    "rect": {
-    "col": 12,
+    "col": 16,
     "h": 18,
-    "row": 106,
+    "row": 0,
     "w": 19
    }
   },
@@ -100348,9 +98774,9 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_2.png",
    "rect": {
-    "col": 21,
+    "col": 13,
     "h": 9,
     "row": 0,
     "w": 8
@@ -100400,18 +98826,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_1.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_2.png",
+     "png": "art/pack/completos_1.png",
      "rect": {
-      "col": 0,
+      "col": 48,
       "h": 16,
-      "row": 0,
+      "row": 18,
       "w": 13
      }
     },
@@ -100563,358 +98989,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 48,
     "h": 16,
-    "row": 0,
+    "row": 18,
     "w": 13
-   }
-  },
-  "building/torre#1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_2.png",
-     "rect": {
-      "col": 0,
-      "h": 16,
-      "row": 0,
-      "w": 13
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 13.71,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 12.8,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 64,
-      "row": 416,
-      "w": 96
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 256,
-      "h": 96,
-      "row": 416,
-      "w": 128
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 16,
-    "row": 0,
-    "w": 13
-   }
-  },
-  "building/torre#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_2.png",
-     "rect": {
-      "col": 13,
-      "h": 16,
-      "row": 0,
-      "w": 14
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 13.71,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 256,
-      "h": 96,
-      "row": 384,
-      "w": 128
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 12.8,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 64,
-      "row": 384,
-      "w": 96
-     }
-    }
-   },
-   "rect": {
-    "col": 13,
-    "h": 16,
-    "row": 0,
-    "w": 14
    }
   },
   "building/torre_de_vigilancia": {
@@ -102310,18 +100388,18 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_0.png",
    "poses": {
     "base": {
      "grid": [
       32,
       32
      ],
-     "png": "art/pack/completos_2.png",
+     "png": "art/pack/completos_0.png",
      "rect": {
       "col": 0,
       "h": 34,
-      "row": 37,
+      "row": 0,
       "w": 25
      }
     },
@@ -102475,7 +100553,7 @@
    "rect": {
     "col": 0,
     "h": 34,
-    "row": 37,
+    "row": 0,
     "w": 25
    }
   },
@@ -102604,9 +100682,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 18,
+    "col": 24,
     "h": 13,
-    "row": 53,
+    "row": 49,
     "w": 9
    }
   },
@@ -102617,9 +100695,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 18,
+    "col": 24,
     "h": 13,
-    "row": 53,
+    "row": 49,
     "w": 9
    }
   },
@@ -102630,22 +100708,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
+    "col": 33,
     "h": 13,
-    "row": 75,
-    "w": 9
-   }
-  },
-  "building/villa#3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 9,
-    "h": 13,
-    "row": 75,
+    "row": 49,
     "w": 9
    }
   },
@@ -107505,24 +105570,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
     "col": 0,
     "h": 16,
-    "row": 71,
-    "w": 18
-   }
-  },
-  "completo/additional_houses_country_house_no_banisters": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 0,
-    "h": 16,
-    "row": 55,
+    "row": 18,
     "w": 18
    }
   },
@@ -107531,11 +105583,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 16,
+    "col": 12,
     "h": 14,
-    "row": 41,
+    "row": 34,
     "w": 15
    }
   },
@@ -107546,22 +105598,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
+    "col": 27,
     "h": 14,
-    "row": 25,
-    "w": 23
-   }
-  },
-  "completo/additional_houses_modern_house_unadorned": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 0,
-    "h": 14,
-    "row": 39,
+    "row": 34,
     "w": 23
    }
   },
@@ -107570,11 +105609,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
     "col": 0,
     "h": 14,
-    "row": 41,
+    "row": 49,
     "w": 16
    }
   },
@@ -107583,22 +105622,9 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_2.png",
    "rect": {
     "col": 0,
-    "h": 10,
-    "row": 0,
-    "w": 13
-   }
-  },
-  "completo/additional_houses_post_apocalyptic_house_2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 13,
     "h": 10,
     "row": 0,
     "w": 13
@@ -107609,11 +105635,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
     "col": 0,
     "h": 15,
-    "row": 10,
+    "row": 34,
     "w": 12
    }
   },
@@ -107622,51 +105648,12 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 12,
-    "h": 16,
-    "row": 10,
-    "w": 12
-   }
-  },
-  "completo/additional_houses_terraced_house_4": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 0,
-    "h": 15,
-    "row": 26,
-    "w": 12
-   }
-  },
-  "completo/additional_houses_terraced_house_6": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 12,
-    "h": 15,
-    "row": 26,
-    "w": 12
-   }
-  },
-  "completo/additional_houses_victorian_house_1": {
-   "grid": [
-    32,
-    32
-   ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
-    "h": 25,
-    "row": 0,
-    "w": 16
+    "col": 18,
+    "h": 16,
+    "row": 18,
+    "w": 12
    }
   },
   "completo/additional_houses_victorian_house_4": {
@@ -107674,11 +105661,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_1.png",
+   "png": "art/pack/completos_0.png",
    "rect": {
     "col": 0,
     "h": 22,
-    "row": 53,
+    "row": 34,
     "w": 18
    }
   },
@@ -107687,25 +105674,12 @@
     32,
     32
    ],
-   "png": "art/pack/completos_0.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
+    "col": 30,
     "h": 16,
-    "row": 87,
+    "row": 18,
     "w": 18
-   }
-  },
-  "completo/additional_houses_victorian_house_6": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 18,
-    "h": 22,
-    "row": 87,
-    "w": 12
    }
   },
   "completo/garden_palace_example_1": {
@@ -107713,11 +105687,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_0.png",
    "rect": {
     "col": 0,
     "h": 34,
-    "row": 37,
+    "row": 0,
     "w": 25
    }
   },
@@ -107730,20 +105704,7 @@
    "rect": {
     "col": 0,
     "h": 18,
-    "row": 88,
-    "w": 16
-   }
-  },
-  "completo/generic_building_condo_4_39": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 16,
-    "h": 18,
-    "row": 88,
+    "row": 0,
     "w": 16
    }
   },
@@ -107752,25 +105713,12 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
+    "col": 48,
     "h": 16,
-    "row": 0,
+    "row": 18,
     "w": 13
-   }
-  },
-  "completo/generic_building_condo_6_example": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_2.png",
-   "rect": {
-    "col": 13,
-    "h": 16,
-    "row": 0,
-    "w": 14
    }
   },
   "completo/generic_building_hardware_store": {
@@ -107778,9 +105726,9 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_2.png",
    "rect": {
-    "col": 21,
+    "col": 13,
     "h": 9,
     "row": 0,
     "w": 8
@@ -107791,11 +105739,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_0.png",
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 21,
-    "row": 16,
+    "row": 34,
     "w": 27
    }
   },
@@ -107804,24 +105752,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_2.png",
    "rect": {
-    "col": 0,
+    "col": 21,
     "h": 9,
-    "row": 18,
-    "w": 11
-   }
-  },
-  "completo/military_base_dormitory_2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "rect": {
-    "col": 11,
-    "h": 12,
-    "row": 18,
+    "row": 0,
     "w": 11
    }
   },
@@ -107830,11 +105765,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
+    "col": 42,
     "h": 12,
-    "row": 30,
+    "row": 49,
     "w": 11
    }
   },
@@ -107843,11 +105778,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_1.png",
+   "png": "art/pack/completos_0.png",
    "rect": {
-    "col": 0,
+    "col": 45,
     "h": 19,
-    "row": 106,
+    "row": 34,
     "w": 12
    }
   },
@@ -107858,9 +105793,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 12,
+    "col": 16,
     "h": 18,
-    "row": 106,
+    "row": 0,
     "w": 19
    }
   },
@@ -107869,22 +105804,9 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
-    "h": 18,
-    "row": 94,
-    "w": 21
-   }
-  },
-  "completo/police_station_police_station_2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "rect": {
-    "col": 0,
+    "col": 35,
     "h": 18,
     "row": 0,
     "w": 21
@@ -107895,24 +105817,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_3.png",
+   "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 11,
+    "col": 16,
     "h": 13,
-    "row": 30,
-    "w": 8
-   }
-  },
-  "completo/post_office_building_3": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_3.png",
-   "rect": {
-    "col": 19,
-    "h": 13,
-    "row": 30,
+    "row": 49,
     "w": 8
    }
   },
@@ -107921,11 +105830,11 @@
     32,
     32
    ],
-   "png": "art/pack/completos_2.png",
+   "png": "art/pack/completos_0.png",
    "rect": {
-    "col": 0,
+    "col": 25,
     "h": 23,
-    "row": 71,
+    "row": 0,
     "w": 24
    }
   },
@@ -107936,9 +105845,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 18,
+    "col": 24,
     "h": 13,
-    "row": 53,
+    "row": 49,
     "w": 9
    }
   },
@@ -107949,22 +105858,9 @@
    ],
    "png": "art/pack/completos_1.png",
    "rect": {
-    "col": 0,
+    "col": 33,
     "h": 13,
-    "row": 75,
-    "w": 9
-   }
-  },
-  "completo/villas_villa_5": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 9,
-    "h": 13,
-    "row": 75,
+    "row": 49,
     "w": 9
    }
   },

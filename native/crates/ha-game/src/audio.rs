@@ -222,7 +222,19 @@ pub struct SfxBank {
 struct AudioEars;
 
 /// Versión del motor de música: sube cuando cambia CÓMO suena una pista, para invalidar el caché de disco.
-const MUSICA_VERSION: u32 = 1;
+use ha_audio::{hash_pista, MUSICA_VERSION};
+
+/// Qué pistas trae YA compuestas el APK (`assets/audio/musica/<nombre>.wav`) y con qué huella. Componer en el celu
+/// costaba decenas de segundos de CPU por pieza —un hilo entero compitiendo con el render en un Helio G88— y ése era
+/// uno de los motivos del lag; ahora sólo se compone lo que el índice no cubre (una partitura editada en el estudio).
+const MUSICA_PRERENDERIZADA: &str = include_str!("../assets/audio/musica.json");
+
+fn prerenderizada(t: &ha_audio::TrackSpec) -> bool {
+    serde_json::from_str::<HashMap<String, String>>(MUSICA_PRERENDERIZADA)
+        .ok()
+        .and_then(|m| m.get(&t.name).cloned())
+        .map_or(false, |h| h == format!("{:08x}", hash_pista(t)))
+}
 
 /// **Las pistas se componen cuando hacen falta, no al arrancar.** Una pieza de dos minutos tarda ~2 s en la laptop y
 /// bastante más en el Redmi: sintetizar once en el boot lo dejaría minutos con la pantalla trabada. Ahora el banco
@@ -236,12 +248,25 @@ pub struct MusicBank {
     listas: HashMap<String, Handle<AudioSource>>,
     /// La que se está componiendo ahora (una sola a la vez).
     en_curso: Option<(String, bevy::tasks::Task<Vec<u8>>)>,
+    /// Para cargar las pistas pre-renderizadas del APK.
+    server: Option<AssetServer>,
 }
 
 impl MusicBank {
     /// Pide componer `t` en segundo plano si no está lista ni hay otra en curso.
     fn pedir(&mut self, t: &ha_audio::TrackSpec) {
-        if self.listas.contains_key(&t.name) || self.en_curso.is_some() {
+        if self.listas.contains_key(&t.name) {
+            return;
+        }
+        // La pista ya viene compuesta en el APK: se carga como un asset más, sin gastar CPU.
+        if let Some(server) = &self.server {
+            if prerenderizada(t) {
+                let h = server.load(format!("audio/musica/{}.wav", t.name));
+                self.listas.insert(t.name.clone(), h);
+                return;
+            }
+        }
+        if self.en_curso.is_some() {
             return;
         }
         let spec = t.clone();
@@ -256,11 +281,7 @@ impl MusicBank {
 
 /// El WAV de una pista: del caché de disco si ya se compuso con esta versión y esta partitura; si no, se compone.
 fn wav_de_pista(t: &ha_audio::TrackSpec) -> Vec<u8> {
-    let json = serde_json::to_string(t).unwrap_or_default();
-    let mut h: u32 = 0x811c_9dc5 ^ MUSICA_VERSION;
-    for b in json.bytes() {
-        h = (h ^ b as u32).wrapping_mul(0x0100_0193);
-    }
+    let h = hash_pista(t);
     let dir = crate::inventory_persist::base_dir().join("musica");
     let ruta = dir.join(format!("{}-{:08x}.wav", t.name, h));
     if let Ok(b) = std::fs::read(&ruta) {
@@ -364,6 +385,7 @@ fn build_audio_banks(
     mut audio_assets: ResMut<Assets<AudioSource>>,
     mut bank: ResMut<SfxBank>,
     mut music: ResMut<MusicBank>,
+    server: Res<AssetServer>,
     mut settings: ResMut<AudioSettings>,
     mut director: ResMut<MusicDirector>,
 ) {
@@ -408,6 +430,7 @@ fn build_audio_banks(
     for track in &spec.tracks {
         music.specs.entry(track.mood.clone()).or_default().push(track.clone());
     }
+    music.server = Some(server.clone());
     // La música del menú se compone YA (en un hilo aparte): es lo primero que se oye.
     if let Some(t) = music.primera("menu").cloned() {
         music.pedir(&t);

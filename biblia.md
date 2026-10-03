@@ -8648,3 +8648,14 @@ deja seis: `art/npc/char_21..26.png`. Les faltan `sit_floor`/`pick_up`/`punch`: 
 `society::skin_de(uid, edad, padre, madre)` elige la hoja por etapa (niño → 21..26, el resto `uid % 20`); al crecer cambia
 a la adulta en el próximo cambio de pose. El bebé recién nacido se achica (70 %→100 % de una hoja que ya es ~70 % de un
 adulto). **Pendiente conocido**: el retrato del diálogo sigue siendo el del generador de adultos.
+
+### Lag en el Redmi: la música ya no se compone en el celu, y las fachadas pesan menos (3 oct 2026)
+
+El usuario reportó que el juego iba tan lagueado que Android mató procesos (Tailscale, adb). Dos causas que SÍ eran mías:
+1. **Componer música en el teléfono.** Una pieza tarda 2-5 s en la laptop (130 s de audio) y varias veces más en un Helio G88,
+   en un hilo que compite con el render. Ahora **viajan pre-renderizadas en el APK** (`assets/audio/musica/*.wav` + índice
+   `assets/audio/musica.json` con la huella `ha_audio::hash_pista`). Regenerar: `MUSICA_DIR=$PWD/native/crates/ha-game/assets/audio/musica
+   cargo run -p ha-audio --bin render_all --profile qa -- /tmp/x assets/audio.json` (desde `native/`). Si una partitura se edita en el
+   estudio y la huella no coincide, cae al camino viejo (componer en un hilo, caché en disco).
+2. **Texturas de fachadas**: 49 MB → ~26 MB de contenido (23 edificios, 1-3 variantes por lote, páginas de 2048).
+Pendiente de medir en el celu: RAM y fps con ambos cambios.

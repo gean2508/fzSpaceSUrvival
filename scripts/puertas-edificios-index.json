@@ -141,22 +141,6 @@
    "closing",
    "puerta_en_sprite"
   ],
-  "building/casa_chica#5": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite"
-  ],
-  "building/casa_chica#6": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite"
-  ],
   "building/casa_country": [
    "base",
    "closed",
@@ -390,42 +374,6 @@
    "puerta3_closing",
    "puerta3_en_sprite"
   ],
-  "building/comisaria#1": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite",
-   "puerta3_closed",
-   "puerta3_open",
-   "puerta3_opening",
-   "puerta3_closing",
-   "puerta3_en_sprite"
-  ],
-  "building/comisaria#2": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite",
-   "puerta3_closed",
-   "puerta3_open",
-   "puerta3_opening",
-   "puerta3_closing",
-   "puerta3_en_sprite"
-  ],
   "building/comisaria_1": [
    "base",
    "closed",
@@ -560,36 +508,7 @@
    "closing",
    "puerta_en_sprite"
   ],
-  "building/correo_edificio#1": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite"
-  ],
-  "building/correo_edificio#2": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite"
-  ],
   "building/deposito#2": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
-  "building/deposito#3": [
    "base",
    "closed",
    "open",
@@ -658,32 +577,6 @@
    "puerta_en_sprite"
   ],
   "building/duplex": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
-  "building/duplex#1": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
-  "building/duplex#2": [
    "base",
    "closed",
    "open",
@@ -1684,32 +1577,6 @@
    "puerta_en_sprite"
   ],
   "building/torre": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
-  "building/torre#1": [
-   "base",
-   "closed",
-   "open",
-   "opening",
-   "closing",
-   "puerta_en_sprite",
-   "puerta2_closed",
-   "puerta2_open",
-   "puerta2_opening",
-   "puerta2_closing",
-   "puerta2_en_sprite"
-  ],
-  "building/torre#2": [
    "base",
    "closed",
    "open",

@@ -1070,3 +1070,19 @@ mod tests {
         }
     }
 }
+
+
+/// Versión del motor de música: sube cuando cambia CÓMO suena una pista, e invalida el caché de disco y las pistas
+/// pre-renderizadas que viajan en el APK (`assets/audio/musica/`).
+pub const MUSICA_VERSION: u32 = 1;
+
+/// Huella (FNV-1a) de una partitura + la versión del motor. La misma cuenta la hace el juego para saber si el WAV
+/// pre-renderizado que trae el APK corresponde a la partitura que tiene delante.
+pub fn hash_pista(t: &TrackSpec) -> u32 {
+    let json = serde_json::to_string(t).unwrap_or_default();
+    let mut h: u32 = 0x811c_9dc5 ^ MUSICA_VERSION;
+    for b in json.bytes() {
+        h = (h ^ b as u32).wrapping_mul(0x0100_0193);
+    }
+    h
+}

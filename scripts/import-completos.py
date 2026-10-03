@@ -40,29 +40,31 @@ MANIFEST = os.path.join(ASSETS, "art/manifest.json")
 SORTER = os.path.join(ROOT, "PRUEBAS-CODIGOS/modernexteriors-win/Modern_Exteriors_32x32/ME_Theme_Sorter_32x32")
 INDEX = os.path.join(ROOT, "scripts/completos-import-index.json")
 CELDA = 32
-ANCHO_PAGINA = 1024
-ALTO_MAX = 4096
+ANCHO_PAGINA = 2048
+ALTO_MAX = 2048
 
 #: slot de lote → [(carpeta de la hoja, nombre EXACTO del archivo sin prefijo ni «_32x32.png»), …]
 A = "24_Additional_Houses_Singles_32x32"
 V = "7_Villas_Singles_32x32"
 G = "4_Generic_Building_Singles_32x32"
 SLOTS = {
-    "building/casa_chica": [(A, f"Post_Apocalyptic_House_{i}") for i in (1, 2)] + [(A, f"Terraced_House_{i}") for i in (1, 3, 4, 6)],
-    "building/casa_mediana": [(A, "One_Story_House"), (A, "Japanese_House"), (A, "Country_House_No_Banisters")],
-    "building/casa_grande": [(A, "Country_House"), (A, "Victorian_House_5"), (A, "Victorian_House_6"), (A, "Victorian_House_1")],
-    "building/casa_country": [(A, "Modern_House"), (A, "Modern_House_Unadorned"), (A, "Victorian_House_4")],
-    "building/villa": [(V, f"Villa_{i}") for i in (1, 3, 5)],
-    "building/duplex": [(G, "Condo_4_38"), (G, "Condo_4_39")],
+    # **Pocas variantes por lote, a propósito**: cada edificio entero son 1-4 MB de textura en una GPU móvil con la RAM
+    # justa (el Redmi mataba procesos con 49 MB de fachadas). El barrio varía igual: la variante se sortea por parcela.
+    "building/casa_chica": [(A, "Post_Apocalyptic_House_1"), (A, "Terraced_House_1"), (A, "Terraced_House_3")],
+    "building/casa_mediana": [(A, "One_Story_House"), (A, "Japanese_House")],
+    "building/casa_grande": [(A, "Country_House"), (A, "Victorian_House_5")],
+    "building/casa_country": [(A, "Modern_House"), (A, "Victorian_House_4")],
+    "building/villa": [(V, "Villa_1"), (V, "Villa_3")],
+    "building/duplex": [(G, "Condo_4_38")],
     "building/oficina": [("16_Office_Singles_32x32", "Example_1"), ("16_Office_Singles_32x32", "Example_2")],
-    "building/torre": [(G, "Condo_6"), (G, "Condo_6_Example")],
+    "building/torre": [(G, "Condo_6")],
     "building/hospital": [("12_Hotel_and_Hospital_Singles_32x32", "Hospital_1")],
     "building/universidad": [("17_Garden_Singles_32x32", "Palace_Example_1")],
     "building/escuela": [("13_School_Singles_32x32", "School_1")],
-    "building/comisaria": [("15_Police_Station_Singles_32x32", f"Police_Station_{i}") for i in (1, 2)],
+    "building/comisaria": [("15_Police_Station_Singles_32x32", "Police_Station_1")],
     "building/tienda": [(G, "Hardware_Store")],
-    "building/deposito": [("23_MIlitary_Base_Singles_32x32", f"Dormitory_{i}") for i in (1, 2, 4)],
-    "building/correo_edificio": [("22_Post_Office_Singles_32x32", f"Building_{i}") for i in (1, 3)],
+    "building/deposito": [("23_MIlitary_Base_Singles_32x32", f"Dormitory_{i}") for i in (1, 4)],
+    "building/correo_edificio": [("22_Post_Office_Singles_32x32", "Building_1")],
 }
 
 
@@ -129,6 +131,8 @@ def main():
         for c, n in lista:
             if (slug(c, n), unicos[slug(c, n)]) not in orden:
                 orden.append((slug(c, n), unicos[slug(c, n)]))
+    # Estantes por ALTO decreciente: el desperdicio de un estante es lo que sobra bajo los más bajos.
+    orden.sort(key=lambda kv: (-kv[1].height, kv[0]))
     paginas, pos = empaquetar(orden)
     with open(MANIFEST) as fh:
         man = json.load(fh)
