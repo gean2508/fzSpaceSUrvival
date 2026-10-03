@@ -123,10 +123,13 @@ pub(crate) fn tick_sim(
     planet_ctx: Res<ActivePlanet>,
     obs: crate::obstaculos::Obstaculos,
     editor: Res<crate::ui_editor::UiEditorState>,
+    manejando: Res<crate::vehiculos::Manejando>,
+    autos: Query<&crate::vehiculos::Vehiculo>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     let _p = crate::debug::probe("fx_tick_sim");
-    if flight.blocks_walking() {
+    // Al volante, el que se mueve es el vehículo (`vehiculos::fisica_vehiculos`).
+    if flight.blocks_walking() || manejando.activo() {
         return;
     }
     let dt = fixed_delta_secs(&time);
@@ -180,7 +183,10 @@ pub(crate) fn tick_sim(
                 // en metros y no en el grid. Un farol delgado frena en su poste y
                 // rozar un árbol deja de sentirse un choque fantasma.
                 let r = ha_shared::topdown::PLAYER_RADIUS;
-                let wall_hit = |x: f32, z: f32| obs.caja_frena(body_surface, x, z, r);
+                // Los vehículos también frenan a quien camina: un auto es una pared con ruedas.
+                let wall_hit = |x: f32, z: f32| {
+                    obs.caja_frena(body_surface, x, z, r) || crate::vehiculos::frena_a_pie(autos.iter(), x, z, r)
+                };
                 // Nadar: el bajío no frena, pero se cruza a media velocidad y con
                 // la pose de natación. Sale del TILE (que ya incluye tus ediciones),
                 // así que rellenar un charco con bloques deja de mojarte.

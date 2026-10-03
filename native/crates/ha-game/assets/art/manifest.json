@@ -33269,6 +33269,9 @@
   "vehicle/basura": {
    "label": "Camión de basura"
   },
+  "vehicle/bici": {
+   "label": "Bicicleta"
+  },
   "vehicle/bomberos": {
    "label": "Autobomba"
   },
@@ -33379,6 +33382,84 @@
      "label": "Casa rodante (izquierda) 4"
     }
    ]
+  },
+  "vehicle/coche_1": {
+   "label": "Coche hatchback 1"
+  },
+  "vehicle/coche_10": {
+   "label": "Coche sedán 10"
+  },
+  "vehicle/coche_11": {
+   "label": "Taxi (manejable)"
+  },
+  "vehicle/coche_12": {
+   "label": "Coche sedán 12"
+  },
+  "vehicle/coche_13": {
+   "label": "Coche sedán 13"
+  },
+  "vehicle/coche_14": {
+   "label": "Coche suv 14"
+  },
+  "vehicle/coche_15": {
+   "label": "Coche suv 15"
+  },
+  "vehicle/coche_16": {
+   "label": "Coche suv 16"
+  },
+  "vehicle/coche_17": {
+   "label": "Coche suv 17"
+  },
+  "vehicle/coche_18": {
+   "label": "Coche suv 18"
+  },
+  "vehicle/coche_19": {
+   "label": "Coche suv 19"
+  },
+  "vehicle/coche_2": {
+   "label": "Coche hatchback 2"
+  },
+  "vehicle/coche_20": {
+   "label": "Coche suv 20"
+  },
+  "vehicle/coche_21": {
+   "label": "Coche compacto 21"
+  },
+  "vehicle/coche_22": {
+   "label": "Coche compacto 22"
+  },
+  "vehicle/coche_23": {
+   "label": "Coche compacto 23"
+  },
+  "vehicle/coche_24": {
+   "label": "Coche compacto 24"
+  },
+  "vehicle/coche_25": {
+   "label": "Coche compacto 25"
+  },
+  "vehicle/coche_26": {
+   "label": "Coche compacto 26"
+  },
+  "vehicle/coche_3": {
+   "label": "Coche hatchback 3"
+  },
+  "vehicle/coche_4": {
+   "label": "Coche hatchback 4"
+  },
+  "vehicle/coche_5": {
+   "label": "Coche hatchback 5"
+  },
+  "vehicle/coche_6": {
+   "label": "Coche hatchback 6"
+  },
+  "vehicle/coche_7": {
+   "label": "Coche sedán 7"
+  },
+  "vehicle/coche_8": {
+   "label": "Coche sedán 8"
+  },
+  "vehicle/coche_9": {
+   "label": "Coche sedán 9"
   },
   "vehicle/colectivo_1": {
    "label": "Colectivo 1"
@@ -33644,6 +33725,9 @@
   },
   "vehicle/lancha": {
    "label": "Lancha"
+  },
+  "vehicle/moto": {
+   "label": "Moto"
   },
   "vehicle/pancho_carro_1": {
    "label": "Pancho carro 1",
@@ -270553,1224 +270637,54 @@
   },
   "vehicle/auto_1": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 2,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 68,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 258,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 134,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 2,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_10": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1718,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1642,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 2,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1794,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 1718,
-    "h": 142,
-    "row": 118,
-    "w": 74
-   }
-  },
-  "vehicle/auto_11": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 234,
-      "h": 142,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 158,
-      "h": 144,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 466,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 310,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 234,
-    "h": 142,
-    "row": 264,
-    "w": 74
-   }
-  },
-  "vehicle/auto_12": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 698,
-      "h": 142,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 622,
-      "h": 144,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 930,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 774,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 698,
-    "h": 142,
-    "row": 264,
-    "w": 74
-   }
-  },
-  "vehicle/auto_13": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1162,
-      "h": 142,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1086,
-      "h": 144,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1394,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1238,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 1162,
-    "h": 142,
-    "row": 264,
-    "w": 74
-   }
-  },
-  "vehicle/auto_14": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1550,
-      "h": 124,
-      "row": 264,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1622,
-      "h": 124,
-      "row": 264,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1828,
-      "h": 74,
-      "row": 264,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1694,
-      "h": 74,
-      "row": 264,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1550,
-    "h": 124,
-    "row": 264,
-    "w": 70
-   }
-  },
-  "vehicle/auto_15": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1962,
-      "h": 124,
-      "row": 264,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 2,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 208,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 74,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1962,
-    "h": 124,
-    "row": 264,
-    "w": 70
-   }
-  },
-  "vehicle/auto_16": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 342,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 414,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 620,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 486,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 342,
-    "h": 124,
-    "row": 410,
-    "w": 70
-   }
-  },
-  "vehicle/auto_17": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 754,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 826,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1032,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 898,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 754,
-    "h": 124,
-    "row": 410,
-    "w": 70
-   }
-  },
-  "vehicle/auto_18": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1166,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1238,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1444,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1310,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1166,
-    "h": 124,
-    "row": 410,
-    "w": 70
-   }
-  },
-  "vehicle/auto_19": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1578,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1650,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1856,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1722,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1578,
-    "h": 124,
-    "row": 410,
-    "w": 70
+    "col": 0,
+    "h": 3,
+    "row": 12,
+    "w": 5
    }
   },
   "vehicle/auto_2": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 382,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 448,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 638,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 514,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 382,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_20": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 2,
-      "h": 124,
-      "row": 536,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 74,
-      "h": 124,
-      "row": 536,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 280,
-      "h": 74,
-      "row": 536,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 146,
-      "h": 74,
-      "row": 536,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 2,
-    "h": 124,
-    "row": 536,
-    "w": 70
-   }
-  },
-  "vehicle/auto_21": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 490,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 414,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 710,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 566,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 490,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_22": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 930,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 854,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1150,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1006,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 930,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_23": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1370,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1294,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1590,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1446,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 1370,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_24": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1810,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1734,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 2,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1886,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 1810,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_25": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 222,
-      "h": 132,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 146,
-      "h": 134,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 442,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 298,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 222,
-    "h": 132,
-    "row": 672,
-    "w": 74
-   }
-  },
-  "vehicle/auto_26": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 662,
-      "h": 132,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 586,
-      "h": 134,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 882,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 738,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 662,
-    "h": 132,
-    "row": 672,
-    "w": 74
+    "col": 5,
+    "h": 3,
+    "row": 12,
+    "w": 5
    }
   },
   "vehicle/auto_3": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 762,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 828,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1018,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 894,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 762,
-    "h": 114,
-    "row": 2,
-    "w": 64
+    "col": 8,
+    "h": 5,
+    "row": 7,
+    "w": 2
    }
   },
   "vehicle/auto_4": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1142,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1208,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1398,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1274,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 1142,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_5": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1522,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1588,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1778,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1654,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
-   "rect": {
-    "col": 1522,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_6": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1902,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1968,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 126,
-      "h": 74,
-      "row": 118,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 2,
-      "h": 74,
-      "row": 118,
-      "w": 122
-     }
-    }
-   },
-   "rect": {
-    "col": 1902,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_7": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 326,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 250,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 558,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 402,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 326,
-    "h": 142,
-    "row": 118,
-    "w": 74
-   }
-  },
-  "vehicle/auto_8": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 790,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 714,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1022,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 866,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 790,
-    "h": 142,
-    "row": 118,
-    "w": 74
-   }
-  },
-  "vehicle/auto_9": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1254,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1178,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1486,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1330,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 1254,
-    "h": 142,
-    "row": 118,
-    "w": 74
+    "col": 10,
+    "h": 5,
+    "row": 7,
+    "w": 2
    }
   },
   "vehicle/auto_abajo_1": {
@@ -273796,6 +272710,53 @@
     "w": 88
    }
   },
+  "vehicle/bici": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos_dibujados.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 186,
+      "h": 50,
+      "row": 2,
+      "w": 18
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 206,
+      "h": 50,
+      "row": 2,
+      "w": 18
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 276,
+      "h": 22,
+      "row": 2,
+      "w": 48
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 226,
+      "h": 22,
+      "row": 2,
+      "w": 48
+     }
+    }
+   },
+   "rect": {
+    "col": 186,
+    "h": 50,
+    "row": 2,
+    "w": 18
+   }
+  },
   "vehicle/bomberos": {
    "grid": [
     1,
@@ -274741,6 +273702,1228 @@
     "h": 4,
     "row": 4,
     "w": 6
+   }
+  },
+  "vehicle/coche_1": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 68,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 258,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 134,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_10": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1718,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1642,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1794,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1718,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/coche_11": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 234,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 158,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 466,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 310,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 234,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/coche_12": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 698,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 622,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 930,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 774,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 698,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/coche_13": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1162,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1086,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1394,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1238,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1162,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/coche_14": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1550,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1622,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1828,
+      "h": 74,
+      "row": 264,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1694,
+      "h": 74,
+      "row": 264,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1550,
+    "h": 124,
+    "row": 264,
+    "w": 70
+   }
+  },
+  "vehicle/coche_15": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1962,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 208,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 74,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1962,
+    "h": 124,
+    "row": 264,
+    "w": 70
+   }
+  },
+  "vehicle/coche_16": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 342,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 414,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 620,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 486,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 342,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_17": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 754,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 826,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1032,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 898,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 754,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_18": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1166,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1238,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1444,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1310,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1166,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_19": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1578,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1650,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1856,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1722,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1578,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_2": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 382,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 448,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 638,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 514,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 382,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_20": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 536,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 74,
+      "h": 124,
+      "row": 536,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 280,
+      "h": 74,
+      "row": 536,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 146,
+      "h": 74,
+      "row": 536,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 124,
+    "row": 536,
+    "w": 70
+   }
+  },
+  "vehicle/coche_21": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 490,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 414,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 710,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 566,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 490,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_22": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 930,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 854,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1150,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1006,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 930,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_23": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1370,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1294,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1590,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1446,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 1370,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_24": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1810,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1734,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1886,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 1810,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_25": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 222,
+      "h": 132,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 146,
+      "h": 134,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 442,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 298,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 222,
+    "h": 132,
+    "row": 672,
+    "w": 74
+   }
+  },
+  "vehicle/coche_26": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 662,
+      "h": 132,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 586,
+      "h": 134,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 882,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 738,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 662,
+    "h": 132,
+    "row": 672,
+    "w": 74
+   }
+  },
+  "vehicle/coche_3": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 762,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 828,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1018,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 894,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 762,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_4": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1142,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1208,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1398,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1274,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1142,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_5": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1522,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1588,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1778,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1654,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1522,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_6": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1902,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1968,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 126,
+      "h": 74,
+      "row": 118,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 2,
+      "h": 74,
+      "row": 118,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1902,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_7": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 326,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 250,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 558,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 402,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 326,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/coche_8": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 790,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 714,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1022,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 866,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 790,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/coche_9": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1254,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1178,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1486,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1330,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1254,
+    "h": 142,
+    "row": 118,
+    "w": 74
    }
   },
   "vehicle/colectivo_1": {
@@ -276035,6 +276218,53 @@
     "h": 104,
     "row": 1326,
     "w": 58
+   }
+  },
+  "vehicle/moto": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos_dibujados.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 62,
+      "row": 2,
+      "w": 26
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 30,
+      "h": 62,
+      "row": 2,
+      "w": 26
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 122,
+      "h": 28,
+      "row": 2,
+      "w": 62
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 58,
+      "h": 28,
+      "row": 2,
+      "w": 62
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 62,
+    "row": 2,
+    "w": 26
    }
   },
   "vehicle/pancho_carro_1": {
