@@ -259,7 +259,7 @@ fn interpolate_player_visual(
         let live = zoom.live_view_h;
         let de_altura = live / zoom.user_mult.max(1e-3);
         let screen_f = 1.0 - 0.35 * crate::universe::smootherstep(20_000.0, 200_000.0, de_altura);
-        let s = (de_altura / crate::universe::GROUND_VIEW_H * screen_f).max(1.0);
+        let s = escala_en_vuelo(de_altura, live, screen_f);
         for (visual, mut transform, mut vis) in &mut query {
             *vis = Visibility::Visible;
             let wx = visual.from_x.lerp(visual.to_x, t);
@@ -305,6 +305,21 @@ fn interpolate_player_visual(
         transform.rotation = Quat::IDENTITY;
         transform.scale = Vec3::new(if facing_left { -1.0 } else { 1.0 }, 1.0, 1.0);
     }
+}
+
+/// Cuánto más grande que a pie puede verse el personaje volando (en pantalla), pase lo que pase con el pellizco.
+const VUELO_MAX_REL_PANTALLA: f32 = 2.5;
+
+/// **Escala del personaje volando.** La altura lo agranda (`de_altura / GROUND_VIEW_H`) para que se vea a cualquier altura,
+/// pero el encuadre real (`live`) lo manda el pellizco: con un pellizco muy cerrado (o dos dedos libres que la pantalla
+/// leyó como pellizco) el encuadre queda en 10 m y el personaje —agrandado por la altura— llenaba la pantalla (reporte del
+/// 3 oct 2026, celu). Se acota a ×2,5 del tamaño que tiene en pantalla pisando el suelo.
+pub(crate) fn escala_en_vuelo(de_altura: f32, live: f32, screen_f: f32) -> f32 {
+    let g = crate::universe::GROUND_VIEW_H;
+    let por_altura = (de_altura / g * screen_f).max(1.0);
+    // tamaño relativo en pantalla = s * g / live  →  s <= REL * live / g
+    let tope = (VUELO_MAX_REL_PANTALLA * live / g).max(1.0);
+    por_altura.min(tope)
 }
 
 /// Clave del slot de arte del jugador (coincide con `art/player/character.png`
@@ -491,4 +506,22 @@ pub(crate) fn cerca_frena(es_cerca: &dyn Fn(i64, i64) -> bool, caja: [f32; 4]) -
         }
     }
     false
+}
+
+
+#[cfg(test)]
+mod tests_vuelo {
+    use super::*;
+
+    #[test]
+    fn el_personaje_volando_nunca_llena_la_pantalla() {
+        let g = crate::universe::GROUND_VIEW_H;
+        // Pellizco normal (mult 1): crece con la altura, igual que antes.
+        assert!((escala_en_vuelo(g * 4.0, g * 4.0, 1.0) - 4.0).abs() < 1e-3);
+        // Pellizco cerrado al máximo a 135 m de "altura de encuadre": el encuadre queda en 13 m.
+        let s = escala_en_vuelo(g * 4.5, 13.0, 1.0);
+        assert!(s * g / 13.0 <= VUELO_MAX_REL_PANTALLA + 1e-3, "tamaño relativo {}", s * g / 13.0);
+        // Y jamás por debajo de 1.
+        assert!(escala_en_vuelo(1.0, 1.0, 1.0) >= 1.0);
+    }
 }
