@@ -173,6 +173,12 @@ fn ficha_path(id: &str) -> PathBuf {
     carpeta(id).join("partida.json")
 }
 
+/// La ficha de la partida abierta (nombre, semilla, día), si hay una. La lee el
+/// menú de pausa al abrirse: una lectura de disco por apertura, no por cuadro.
+pub fn ficha_activa() -> Option<Ficha> {
+    leer_ficha(&activa()?)
+}
+
 fn leer_ficha(id: &str) -> Option<Ficha> {
     let txt = std::fs::read_to_string(ficha_path(id)).ok()?;
     let mut f: Ficha = serde_json::from_str(&txt).ok()?;

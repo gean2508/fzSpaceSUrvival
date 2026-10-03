@@ -1211,7 +1211,7 @@ fn settings_button(parent: &mut ChildBuilder, label: &str, action: SettingsActio
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn menu_button_system(
     mut interactions: Query<
-        (&Interaction, &MenuAction, Option<&mut ImageNode>),
+        (&Interaction, &MenuAction),
         Changed<Interaction>,
     >,
     mut next: ResMut<NextState<GamePhase>>,
@@ -1224,14 +1224,9 @@ fn menu_button_system(
     mut rehacer: ResMut<RehacerMenu>,
     mut multi: ResMut<crate::multijugador::Multi>,
 ) {
-    for (interaction, action, img) in &mut interactions {
-        if let Some(mut img) = img {
-            img.color = match interaction {
-                Interaction::Pressed => Color::srgb(0.82, 0.82, 0.82),
-                Interaction::Hovered => Color::srgb(0.93, 0.93, 0.93),
-                Interaction::None => Color::WHITE,
-            };
-        }
+    // El tinte de "tocado" lo pone `ui_pack::realce_botones` para TODOS los
+    // botones con arte; tenerlo también acá lo aplicaba dos veces.
+    for (interaction, action) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }

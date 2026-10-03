@@ -463,7 +463,7 @@ fn calibration_button_system(
                 }
             }
         }
-        *bg = BackgroundColor(ui_theme::button_bg(
+        crate::ui_theme::pintar_boton(&mut bg, ui_theme::button_bg(
             UiButtonTone::Primary,
             ui_theme::interaction_state(*interaction, false),
         ));
@@ -735,7 +735,7 @@ fn editor_button_system(
                 }
             }
         }
-        *bg = BackgroundColor(ui_theme::button_bg(
+        crate::ui_theme::pintar_boton(&mut bg, ui_theme::button_bg(
             UiButtonTone::Primary,
             ui_theme::interaction_state(*interaction, false),
         ));

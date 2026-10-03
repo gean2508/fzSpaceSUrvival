@@ -98,6 +98,20 @@ pub enum Destino {
 #[derive(Resource, Default)]
 pub struct BorradoPendiente(pub Option<String>);
 
+/// **Qué página de PARTIDAS se ve.** En el panel entran tres filas; antes se
+/// dibujaban todas una abajo de la otra y la cuarta ya salía por debajo del
+/// marco, encima del bosque.
+#[derive(Resource, Default)]
+pub struct PaginaPartidas(pub usize);
+
+/// Las filas de PARTIDAS que entran en el panel sin pisar el pie.
+pub const FILAS_POR_PAGINA: usize = 3;
+
+/// La página válida más cercana a la pedida, para `n` partidas.
+pub fn pagina_valida(pedida: usize, n: usize) -> usize {
+    pedida.min(n.saturating_sub(1) / FILAS_POR_PAGINA)
+}
+
 // ---------------------------------------------------------------------------
 // Componentes
 // ---------------------------------------------------------------------------
@@ -144,6 +158,8 @@ pub enum AccionLista {
     Crear,
     /// MULTIJUGADOR: conectar a esta dirección (`ip:puerto`).
     Unirse(String),
+    /// PARTIDAS: pasar de página (−1 arriba, +1 abajo).
+    Pagina(i32),
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +173,7 @@ impl Plugin for MenuListasPlugin {
         app.init_resource::<Pantalla>()
             .init_resource::<BorradorPartida>()
             .init_resource::<BorradoPendiente>()
+            .init_resource::<PaginaPartidas>()
             .init_resource::<Tecleando>()
             .init_resource::<ListaShot>()
             .add_systems(OnEnter(GamePhase::MainMenu), al_entrar)
@@ -176,9 +193,14 @@ impl Plugin for MenuListasPlugin {
 
 /// El menú siempre abre pelado: si saliste de PARTIDAS entrando a un mundo y
 /// volvés, no te encontrás la lista abierta de antes.
-fn al_entrar(mut pantalla: ResMut<Pantalla>, mut pendiente: ResMut<BorradoPendiente>) {
+fn al_entrar(
+    mut pantalla: ResMut<Pantalla>,
+    mut pendiente: ResMut<BorradoPendiente>,
+    mut pagina: ResMut<PaginaPartidas>,
+) {
     *pantalla = Pantalla::Ninguna;
     pendiente.0 = None;
+    pagina.0 = 0;
 }
 
 /// **El overlay se crea cuando el menú ya existe, no en el mismo `OnEnter`.**
@@ -262,7 +284,7 @@ fn redibujar(
     assets: Res<AssetServer>,
     seleccionado: Res<SelectedCharacter>,
     tecleando: Res<Tecleando>,
-    multi: Res<crate::multijugador::Multi>,
+    (multi, pagina): (Res<crate::multijugador::Multi>, Res<PaginaPartidas>),
 ) {
     let Ok(mut panel) = paneles.get_single_mut() else { return };
     let abierta = *pantalla != Pantalla::Ninguna;
@@ -285,7 +307,7 @@ fn redibujar(
         c.spawn(crate::ui_pack::lienzo(k)).with_children(|l| {
             match *pantalla {
                 Pantalla::Ninguna => {}
-                Pantalla::Partidas => dibujar_partidas(l, &ctx, pend.as_deref()),
+                Pantalla::Partidas => dibujar_partidas(l, &ctx, pend.as_deref(), pagina.0),
                 Pantalla::Personajes => {
                     dibujar_personajes(l, &ctx, pend.as_deref(), &seleccionado)
                 }
@@ -372,7 +394,7 @@ fn dibujar_multijugador(l: &mut ChildBuilder, ctx: &Ctx, multi: &crate::multijug
     up::boton(l, ctx.art, 40.0, 134.0, 200.0, 76.0, Some("VOLVER"), None, false, 30.0, AccionLista::Cerrar, k);
 }
 
-fn dibujar_partidas(l: &mut ChildBuilder, ctx: &Ctx, pendiente: Option<&str>) {
+fn dibujar_partidas(l: &mut ChildBuilder, ctx: &Ctx, pendiente: Option<&str>, pagina: usize) {
     use crate::ui_pack::{self as up, Ancla, Pack};
     let k = ctx.k;
     let fichas = partida::listar();
@@ -386,7 +408,9 @@ fn dibujar_partidas(l: &mut ChildBuilder, ctx: &Ctx, pendiente: Option<&str>) {
             up::Ficha {
                 icono: "ui/ic_lista",
                 etiqueta: "PARTIDAS",
-                valor: format!("{} de {}", fichas.len(), MAX_PARTIDAS),
+                // El total, no "N de MÁXIMO": el tope es de la pantalla vieja y
+                // con más mundos guardados decía "75 de 5".
+                valor: fichas.len().to_string(),
             },
             up::Ficha {
                 icono: "ui/ic_persona",
@@ -429,9 +453,28 @@ fn dibujar_partidas(l: &mut ChildBuilder, ctx: &Ctx, pendiente: Option<&str>) {
             k,
         );
     }
-    for (i, f) in fichas.iter().take(MAX_PARTIDAS).enumerate() {
+    let pagina = pagina_valida(pagina, fichas.len());
+    let paginas = fichas.len().div_ceil(FILAS_POR_PAGINA).max(1);
+    // Las filas dejan a la derecha la columna de las flechas de página.
+    let ancho_fila = pw - 132.0 - 120.0;
+    if paginas > 1 {
+        let ax = ix + ancho_fila + 24.0;
+        let alto_lista = FILAS_POR_PAGINA as f32 * (fila_h + sep) - sep;
+        if pagina > 0 {
+            up::boton(l, ctx.art, ax, iy, 96.0, 96.0, None, Some("ui/ic_flecha_arriba"), false, 30.0,
+                      AccionLista::Pagina(-1), k);
+        }
+        up::texto(l, format!("{}/{}", pagina + 1, paginas), 30.0, Pack::SUAVE, ax + 48.0,
+                  iy + alto_lista / 2.0, Ancla::Medio, k);
+        if pagina + 1 < paginas {
+            up::boton(l, ctx.art, ax, iy + alto_lista - 96.0, 96.0, 96.0, None, Some("ui/ic_bajar"), false,
+                      30.0, AccionLista::Pagina(1), k);
+        }
+    }
+    for (i, f) in fichas.iter().skip(pagina * FILAS_POR_PAGINA).take(FILAS_POR_PAGINA).enumerate() {
         let y = iy + i as f32 * (fila_h + sep);
-        up::marco(l, ctx.art, up::marco::SLOT, ix, y, pw - 132.0, fila_h, k);
+        let primera = pagina == 0 && i == 0;
+        up::marco(l, ctx.art, up::marco::SLOT, ix, y, ancho_fila, fila_h, k);
         let deco = DECOS[(f.semilla as usize) % DECOS.len()];
         up::vineta(l, ctx.art, ix + 20.0, y + 20.0, 300.0, fila_h - 40.0, &deco, 2.0, false,
                    f.semilla as u64 + 3, k);
@@ -450,8 +493,8 @@ fn dibujar_partidas(l: &mut ChildBuilder, ctx: &Ctx, pendiente: Option<&str>) {
             up::muneco(l, &look, ctx.cg, ctx.assets, ctx.hoja, 3,
                        ix + 500.0 + j as f32 * 46.0, y + 112.0, 1.0, k);
         }
-        let der = ix + pw - 132.0;
-        up::boton(l, ctx.art, der - 520.0, y + 46.0, 260.0, 92.0, Some("JUGAR"), None, i == 0,
+        let der = ix + ancho_fila;
+        up::boton(l, ctx.art, der - 520.0, y + 46.0, 260.0, 92.0, Some("JUGAR"), None, primera,
                   32.0, AccionLista::Jugar(f.id.clone()), k);
         let (et, ic) = if pendiente == Some(f.id.as_str()) {
             (Some("¿SEGURO?"), None)
@@ -779,7 +822,7 @@ fn tocar(
     mut next: ResMut<NextState<GamePhase>>,
     mut editor: ResMut<crate::ui_editor::UiEditorState>,
     mut tecleando: ResMut<Tecleando>,
-    mut multi: ResMut<crate::multijugador::Multi>,
+    (mut multi, mut pagina): (ResMut<crate::multijugador::Multi>, ResMut<PaginaPartidas>),
 ) {
     for (interaccion, accion) in &mut interacciones {
         if *interaccion != Interaction::Pressed {
@@ -797,6 +840,11 @@ fn tocar(
                     multi.cerrar_todo();
                 }
                 *pantalla = Pantalla::Ninguna;
+            }
+            AccionLista::Pagina(d) => {
+                let n = partida::listar().len();
+                pagina.0 = pagina_valida((pagina.0 as i32 + d).max(0) as usize, n);
+                pantalla.set_changed();
             }
             AccionLista::Unirse(dir) => {
                 let nombre = if seleccionado.name.is_empty() { "Viajero".to_string() } else { seleccionado.name.clone() };

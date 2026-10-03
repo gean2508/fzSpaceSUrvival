@@ -41,7 +41,6 @@ const FOUND_COOLDOWN: f32 = 8.0;
 const NEON_CYAN: Color = Color::srgb(Ps1Retro::TEXT[0], Ps1Retro::TEXT[1], Ps1Retro::TEXT[2]);
 const NEON_MAGENTA: Color = Color::srgb(Ps1Retro::SELECT[0], Ps1Retro::SELECT[1], Ps1Retro::SELECT[2]);
 const PANEL_BG: Color = Color::srgb(0.05, 0.07, 0.12);
-const BTN_IDLE: Color = Color::srgb(0.10, 0.14, 0.22);
 
 pub struct NpcMenuPlugin;
 
@@ -439,7 +438,7 @@ fn sync_menu(
                 // Debajo de la energía Y del reloj del día (`hud::spawn_day_clock`,
                 // misma esquina): si sube más, los tapa.
                 top: Val::Px(112.0),
-                width: Val::Px(300.0),
+                width: Val::Px(380.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(8.0),
                 padding: UiRect::all(Val::Px(12.0)),
@@ -447,7 +446,6 @@ fn sync_menu(
                 ..default()
             },
             BackgroundColor(PANEL_BG),
-            BorderColor(NEON_CYAN),
             crate::ui_pack::MarcoDeHud(crate::ui_pack::marco::PANEL),
             GlobalZIndex(800),
             FocusPolicy::Block,
@@ -457,10 +455,13 @@ fn sync_menu(
         ))
         .with_children(|root| {
             // Cabecera: retrato a la izquierda, nombre/rol/oficio a la derecha.
+            // El margen de arriba es aire sobre la moldura: sin él la primera
+            // línea (el nombre) quedaba mordida por el filo oscuro del marco.
             root.spawn(Node {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(10.0),
+                margin: UiRect::top(Val::Px(6.0)),
                 ..default()
             })
             .with_children(|head| {
@@ -527,10 +528,13 @@ fn sync_menu(
                 }
             });
             // Botones según rol.
+            // **Grilla de 3, todos del mismo ancho** (`Display::Grid`, no
+            // `flex_wrap`: ver biblia §7). Con wrap cada botón medía lo que su
+            // palabra y la columna caía en escalera hasta tapar la hotbar.
             root.spawn((
                 Node {
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
+                    display: Display::Grid,
+                    grid_template_columns: RepeatedGridTrack::flex(3, 1.0),
                     column_gap: Val::Px(6.0),
                     row_gap: Val::Px(6.0),
                     margin: UiRect::top(Val::Px(6.0)),
@@ -676,24 +680,31 @@ fn menu_saber(
     }
 }
 
-fn npc_button(parent: &mut ChildBuilder, label: &str, action: NpcAction, color: Color) {
+/// Un botón del menú de NPC. Lleva la madera del kit (la pone
+/// `hud::skin_ui_from_art`) y la tinta del pack: antes cada acción tenía su
+/// color neón y el panel parecía un tablero de luces. El `_tono` queda como
+/// documentación de qué tipo de acción es (charla, comercio, fe, salir).
+fn npc_button(parent: &mut ChildBuilder, label: &str, action: NpcAction, _tono: Color) {
     parent
         .spawn((
             Button,
             Node {
                 height: Val::Px(38.0),
-                border: UiRect::all(Val::Px(2.0)),
-                padding: UiRect::horizontal(Val::Px(12.0)),
+                padding: UiRect::horizontal(Val::Px(4.0)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BorderColor(color),
-            BackgroundColor(BTN_IDLE),
+            BackgroundColor(Color::NONE),
             action,
         ))
         .with_children(|b| {
-            b.spawn((Text::new(label), TextFont { font_size: 15.0, ..default() }, TextColor(color)));
+            b.spawn((
+                Text::new(label),
+                TextFont { font_size: 13.0, ..default() },
+                TextColor(crate::ui_pack::Pack::TINTA),
+                TextLayout::new_with_no_wrap(),
+            ));
         });
 }
 
@@ -1045,7 +1056,6 @@ fn sync_menu_companero(
                 ..default()
             },
             BackgroundColor(PANEL_BG),
-            BorderColor(NEON_CYAN),
             crate::ui_pack::MarcoDeHud(crate::ui_pack::marco::PANEL),
             GlobalZIndex(800),
             FocusPolicy::Block,
@@ -1074,19 +1084,35 @@ fn sync_menu_companero(
                     ("EXPLORAR", CompanionTask::Gather),
                     ("REZAR", CompanionTask::Pray),
                 ] {
-                    let color = if order.0 == task { NEON_MAGENTA } else { NEON_CYAN };
-                    row.spawn((Button, boton_companero(), BorderColor(color), BackgroundColor(BTN_IDLE), CompaneroAccion(task)))
+                    let elegida = order.0 == task;
+                    row.spawn((Button, boton_companero(), BackgroundColor(Color::NONE), CompaneroAccion(task)))
                         .with_children(|b| {
-                            b.spawn((Text::new(label), TextFont { font_size: 14.0, ..default() }, TextColor(color)));
+                            b.spawn((Text::new(label), TextFont { font_size: 14.0, ..default() }, TextColor(crate::ui_pack::Pack::TINTA)));
+                            // La orden vigente lleva el recuadro amarillo del kit
+                            // ("esto está elegido"), no un color de texto distinto.
+                            if elegida {
+                                b.spawn((
+                                    Node {
+                                        position_type: PositionType::Absolute,
+                                        left: Val::Px(-3.0),
+                                        top: Val::Px(-3.0),
+                                        right: Val::Px(-3.0),
+                                        bottom: Val::Px(-3.0),
+                                        border: UiRect::all(Val::Px(3.0)),
+                                        ..default()
+                                    },
+                                    BorderColor(crate::ui_pack::Pack::ACENTO),
+                                ));
+                            }
                         });
                 }
-                row.spawn((Button, boton_companero(), BorderColor(NEON_CYAN), BackgroundColor(BTN_IDLE), CompaneroCharlar))
+                row.spawn((Button, boton_companero(), BackgroundColor(Color::NONE), CompaneroCharlar))
                     .with_children(|b| {
-                        b.spawn((Text::new("CHARLAR"), TextFont { font_size: 14.0, ..default() }, TextColor(NEON_CYAN)));
+                        b.spawn((Text::new("CHARLAR"), TextFont { font_size: 14.0, ..default() }, TextColor(crate::ui_pack::Pack::TINTA)));
                     });
-                row.spawn((Button, boton_companero(), BorderColor(NEON_MAGENTA), BackgroundColor(BTN_IDLE), CompaneroCerrar))
+                row.spawn((Button, boton_companero(), BackgroundColor(Color::NONE), CompaneroCerrar))
                     .with_children(|b| {
-                        b.spawn((Text::new("CERRAR"), TextFont { font_size: 14.0, ..default() }, TextColor(NEON_MAGENTA)));
+                        b.spawn((Text::new("CERRAR"), TextFont { font_size: 14.0, ..default() }, TextColor(crate::ui_pack::Pack::TINTA)));
                     });
             });
         });

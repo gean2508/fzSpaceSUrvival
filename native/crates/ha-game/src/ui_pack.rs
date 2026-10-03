@@ -338,7 +338,7 @@ pub fn relleno_fuerte(c: &mut ChildBuilder, x: f32, y: f32, w: f32, h: f32, k: f
 /// toques de cada pantalla; se le agrega `Button` para que Bevy le siga la
 /// `Interaction`.
 #[allow(clippy::too_many_arguments)]
-pub fn boton<A: Component>(
+pub fn boton<A: Bundle>(
     c: &mut ChildBuilder,
     art: &ArtLibrary,
     x: f32,
@@ -427,6 +427,19 @@ pub struct Ficha<'a> {
 /// Es la misma en las cinco pantallas de menú; lo único que cambia son las
 /// fichas. Sale literal de `mock_menu::barra_estado`.
 pub fn barra_estado(c: &mut ChildBuilder, art: &ArtLibrary, cuerpo: &str, fichas: &[Ficha], k: f32) {
+    barra_estado_en(c, art, cuerpo, "TIERRA", fichas, k);
+}
+
+/// Como [`barra_estado`], diciendo el nombre del cuerpo donde estás (el menú de
+/// pausa se abre también en la Luna o en otro planeta).
+pub fn barra_estado_en(
+    c: &mut ChildBuilder,
+    art: &ArtLibrary,
+    cuerpo: &str,
+    nombre_cuerpo: &str,
+    fichas: &[Ficha],
+    k: f32,
+) {
     marco(c, art, marco::LISO, 18.0, 12.0, ANCHO - 36.0, 114.0, k);
     marco(c, art, marco::BOTON, 36.0, 24.0, 570.0, 90.0, k);
     texto(c, "KI", 56.0, Pack::TINTA, 66.0, 66.0, Ancla::Izq, k);
@@ -434,7 +447,7 @@ pub fn barra_estado(c: &mut ChildBuilder, art: &ArtLibrary, cuerpo: &str, fichas
     texto(c, "ABIERTO", 26.0, Pack::ETIQUETA, 146.0, 82.0, Ancla::Izq, k);
     c.spawn((caja(300.0, 40.0, 4.0, 58.0, k), BackgroundColor(Pack::SEPARADOR)));
     icono(c, art, cuerpo, 356.0 - 29.0, 68.0 - 29.0, 58.0, k);
-    texto(c, "TIERRA", 30.0, Pack::TINTA, 400.0, 68.0, Ancla::Izq, k);
+    texto(c, nombre_cuerpo, 30.0, Pack::TINTA, 400.0, 68.0, Ancla::Izq, k);
     let mut x = 700.0;
     for (i, f) in fichas.iter().enumerate() {
         c.spawn((caja(x - 30.0, 32.0, 4.0, 62.0, k), BackgroundColor(Pack::SEPARADOR)));
@@ -518,9 +531,150 @@ impl Plugin for UiPackPlugin {
             .init_resource::<HaloTex>()
             .add_systems(Startup, preparar_halo)
             .add_systems(Update, (preparar_hoja, rehacer_pantalla_si_cambia_k))
-            .add_systems(Update, enmarcar_paneles)
+            .add_systems(Update, (enmarcar_paneles, realce_botones))
             .add_systems(PostUpdate, escala_de_los_marcos.before(bevy::ui::UiSystem::Layout));
     }
+}
+
+// ---------------------------------------------------------------------------
+// El toque se ve
+// ---------------------------------------------------------------------------
+
+/// Lo que el realce le cambió a un botón: el color que tenía y el que le puso.
+#[derive(Component)]
+pub struct Realce {
+    base: Color,
+    puesto: Color,
+}
+
+/// Cuánto se aclara un botón con el puntero encima (escritorio).
+pub const REALCE_ENCIMA: f32 = 1.12;
+/// Cuánto se oscurece mientras se aprieta: la madera "se hunde".
+pub const REALCE_APRETADO: f32 = 0.74;
+
+/// El color de un botón según su estado, partiendo del que tenía en reposo.
+pub fn color_realzado(base: Color, i: Interaction) -> Color {
+    let f = match i {
+        Interaction::Pressed => REALCE_APRETADO,
+        Interaction::Hovered => REALCE_ENCIMA,
+        Interaction::None => return base,
+    };
+    let l = base.to_linear();
+    Color::LinearRgba(LinearRgba::new(l.red * f, l.green * f, l.blue * f, l.alpha))
+}
+
+/// **Todo botón con arte responde al dedo.** Los marcos del kit no traen pieza
+/// de "apretado", y un botón que no cambia al tocarlo se siente roto aunque
+/// funcione (el clic suena, pero el ojo no se entera). Esto tiñe la imagen del
+/// botón: más clara con el puntero encima, más oscura mientras se aprieta.
+///
+/// Sólo corre con `Changed<Interaction>`, o sea casi nunca. Y si otro sistema le
+/// cambió el color al botón mientras tanto (una casilla deshabilitada, la
+/// elegida de la hotbar), al soltar se respeta lo suyo en vez de pisarlo.
+fn realce_botones(
+    mut commands: Commands,
+    mut botones: Query<
+        (Entity, &Interaction, &mut ImageNode, Option<&mut Realce>),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (e, i, mut img, realce) in &mut botones {
+        match realce {
+            Some(mut r) => {
+                // Alguien más tocó el color: ése pasa a ser el de reposo.
+                if img.color != r.puesto {
+                    r.base = img.color;
+                }
+                let c = color_realzado(r.base, *i);
+                r.puesto = c;
+                img.color = c;
+            }
+            None => {
+                let base = img.color;
+                let c = color_realzado(base, *i);
+                img.color = c;
+                commands.entity(e).try_insert(Realce { base, puesto: c });
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Velo y barra
+// ---------------------------------------------------------------------------
+
+/// El oscurecido de un menú que se abre sobre el juego.
+pub const VELO: Color = Color::srgba(0.051, 0.039, 0.071, 0.64);
+
+/// **El velo de un menú en partida**: el mundo sigue ahí, atenuado. Tapar todo
+/// con un color opaco hacía que pausar se sintiera como salir del juego.
+pub fn velo() -> (Node, BackgroundColor) {
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(VELO),
+    )
+}
+
+/// El color de cada barra de estado (hambre, sed, ki): el mismo de la mochila.
+pub const BARRA_HAMBRE: Color = Color::srgb(0.851, 0.627, 0.278);
+pub const BARRA_SED: Color = Color::srgb(0.294, 0.525, 0.851);
+pub const BARRA_KI: Color = Color::srgb(0.353, 0.784, 0.886);
+
+/// **Una barra con marco**: canaleta hundida del kit y relleno con brillo
+/// arriba. Devuelve nada; el relleno lleva `marca` para que un sistema le
+/// cambie el ancho (`Val::Percent`).
+#[allow(clippy::too_many_arguments)]
+pub fn barra<M: Component>(
+    c: &mut ChildBuilder,
+    art: &ArtLibrary,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    color: Color,
+    lleno: f32,
+    marca: M,
+    k: f32,
+) {
+    marco(c, art, marco::HUECO, x, y, w, h, k).with_children(|b| {
+        let pad = 6.0;
+        b.spawn(Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(pad * k),
+            top: Val::Px(pad * k),
+            width: Val::Px((w - pad * 2.0) * k),
+            height: Val::Px((h - pad * 2.0) * k),
+            overflow: Overflow::clip(),
+            ..default()
+        })
+        .with_children(|canal| {
+            canal
+                .spawn((
+                    Node {
+                        width: Val::Percent((lleno * 100.0).clamp(0.0, 100.0)),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(color),
+                    marca,
+                ))
+                .with_children(|r| {
+                    // El brillo de arriba: lo que separa una barra del pack de
+                    // un rectángulo de color.
+                    r.spawn((
+                        Node { width: Val::Percent(100.0), height: Val::Percent(30.0), ..default() },
+                        BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.22)),
+                    ));
+                });
+        });
+    });
 }
 
 /// Esquina de un marco del kit que todavía no se ajustó (la pone
@@ -822,22 +976,83 @@ pub fn vineta(
             }
         }
         let mut estado = semilla.wrapping_mul(6364136223846793005).wrapping_add(7);
-        for (j, clave) in props.iter().enumerate() {
-            let Some(px) = art.ui_icon_px(clave) else { continue };
-            let Some(img) = art.ui_icon(clave) else { continue };
-            let (pw, ph) = (px.x * escala, px.y * escala);
+        let mut azar = move || {
+            estado = estado.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (estado >> 33) as u32
+        };
+
+        // **El pasto del pack es UN color plano** (71,151,87 en `suelo.png`): solo,
+        // la viñeta era un rectángulo verde «de Paint» con un poste encima. El
+        // mundo lo salva sembrando las variantes con marca (`#m1..#m4`); acá se
+        // hace lo mismo, una de cada tres celdas, con la semilla de la viñeta.
+        let celda = AZULEJO_VINETA;
+        let (cols, filas) = ((w / celda).ceil() as i32, (h / celda).ceil() as i32);
+        for cy in 0..filas {
+            for cx in 0..cols {
+                let r = azar();
+                if r % 3 != 0 {
+                    continue;
+                }
+                let clave = MARCAS_PASTO[(r / 3) as usize % MARCAS_PASTO.len()];
+                let Some(img) = art.ui_icon(clave) else { continue };
+                v.spawn((caja(cx as f32 * celda, cy as f32 * celda, celda, celda, k), img));
+            }
+        }
+
+        // La luz del cuadrito: la moldura de arriba hace sombra sobre el pasto.
+        // Dos escalones (no un degradado): es como sombrea el propio pack.
+        for (alto, alfa) in [(h * 0.30, 0.10), (h * 0.14, 0.10)] {
+            v.spawn((caja(0.0, 0.0, w, alto, k), BackgroundColor(Color::srgba(0.06, 0.09, 0.05, alfa))));
+        }
+
+        // **Cada prop entra entero.** Antes iban a x2 fijo: un árbol de 128 px
+        // medía 256 en una viñeta de 120 y sólo asomaba la base del tronco.
+        let medidas: Vec<(ImageNode, f32, f32)> = props
+            .iter()
+            .filter_map(|clave| {
+                let px = art.ui_icon_px(clave)?;
+                let img = art.ui_icon(clave)?;
+                let e = escala_que_entra(px, escala, w, h, props.len());
+                Some((img, px.x * e, px.y * e))
+            })
+            .collect();
+        let total: f32 = medidas.iter().map(|m| m.1).sum();
+        let hueco = ((w - total) / (medidas.len() as f32 + 1.0)).max(4.0);
+        let mut cursor = hueco;
+        for (img, pw, ph) in medidas {
             let (px_x, px_y) = if separados {
-                (40.0 + j as f32 * 150.0, h - ph - 6.0)
+                (cursor, h - ph - 8.0)
             } else {
-                estado = estado.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                let rx = ((estado >> 11) % 1000) as f32 / 1000.0;
-                estado = estado.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                let ry = ((estado >> 11) % 20) as f32;
-                ((w - pw).max(1.0) * rx, h - ph - ry)
+                let rx = (azar() % 1000) as f32 / 1000.0;
+                let ry = (azar() % 14) as f32;
+                (((w - pw).max(1.0) * rx).min(w - pw), h - ph - 6.0 - ry)
             };
-            let mut nodo = caja(px_x, px_y, pw, ph, k);
-            nodo.position_type = PositionType::Absolute;
-            v.spawn((nodo, img));
+            cursor += pw + hueco;
+            // Sombra de contacto: la misma elipse translúcida que trae el pack
+            // debajo de cada objeto; sin ella el prop flota sobre el pasto.
+            sombra(v, px_x + pw / 2.0, px_y + ph - 7.0, pw * 0.36, 5.0, k);
+            v.spawn((caja(px_x, px_y, pw, ph, k), img));
         }
     });
+}
+
+/// Las variantes de pasto con marca que siembra el mundo (ver `vineta`).
+const MARCAS_PASTO: [&str; 4] = ["tiles/grass#m1", "tiles/grass#m2", "tiles/grass#m3", "tiles/grass#m4"];
+
+/// **La escala a la que un prop entra en su viñeta.** Nunca más grande que la
+/// pedida, nunca más alto que el cuadro (con aire para la sombra) ni más ancho
+/// que su parte del ancho. Se prefieren escalas enteras —el pixel queda
+/// parejo— y sólo si ni x1 entra se achica lo justo.
+pub fn escala_que_entra(px: Vec2, pedida: f32, w: f32, h: f32, cuantos: usize) -> f32 {
+    if px.x <= 0.0 || px.y <= 0.0 {
+        return pedida;
+    }
+    let tope_alto = (h - 12.0).max(8.0) / px.y;
+    let tope_ancho = (w * 0.9 / cuantos.max(1) as f32) / px.x;
+    let tope = tope_alto.min(tope_ancho).min(pedida);
+    if tope >= 1.0 {
+        tope.floor()
+    } else {
+        tope
+    }
 }

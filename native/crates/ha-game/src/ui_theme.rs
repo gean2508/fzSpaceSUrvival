@@ -210,3 +210,14 @@ pub fn interaction_state(interaction: Interaction, disabled: bool) -> UiButtonSt
 fn rgb(rgb: [f32; 3]) -> Color {
     Color::srgb(rgb[0], rgb[1], rgb[2])
 }
+
+/// **Pinta el fondo de un botón sólo si tiene fondo.** Los botones con marco del
+/// kit (o reenmarcados por `hud::skin_ui_from_art`) llevan el fondo
+/// transparente: la madera es su imagen. Si un handler viejo les escribía su
+/// color plano al tocarlos, el rectángulo oscuro asomaba por las esquinas del
+/// marco. El realce del toque de esos botones lo hace `ui_pack::realce_botones`.
+pub fn pintar_boton(bg: &mut BackgroundColor, color: Color) {
+    if bg.0.alpha() > 0.0 {
+        bg.0 = color;
+    }
+}
