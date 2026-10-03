@@ -270,6 +270,9 @@ están **acoplados**; lo verifica el test
 lateral libre. Aura dorada procedural (`fx/aura_saiyan`). El Ki reemplaza al
 combustible. **Salvo cuando el botón dice TREPAR** —hay un borde delante bajo
 tierra—: ahí no carga nada, porque el botón hace lo que dice (§5).
+**En el vacío** el stick viaja solo (`cruise_speed`: el hueco a la superficie más
+cercana suma velocidad, la Luna queda a ~medio minuto sin tocar SUBIR) y **BAJAR
+baja hacia el cuerpo más cercano**, no hacia la Tierra: mantenerlo te posa en él.
 
 **Espacio vivo** (`space_fx.rs`): halo radial translúcido (la misma pieza sirve para
 atmósfera, corona solar y cabeza de cometa), terminador por cuerpo girando con su
@@ -302,6 +305,42 @@ corrimiento —0.09 radios, poco a propósito— es lo que rompe la lectura de "
 aire brilla del lado iluminado y se apaga hacia el terminador, como en un planeta de
 verdad. Con más desplazamiento el halo se despega del disco por el lado oscuro y se
 ve el truco.
+
+#### Sombra, encuadre y controles entre cuerpos (3 oct 2026)
+
+Reporte: "al salir de la Tierra y volver a entrar, la sombra reemplaza al dibujo de
+la Tierra", "hay un corte al ir a la Luna" y "en el espacio tengo que seguirle dando
+a subir para ir a la Luna". Cinco causas, todas en `universe.rs` / `creative_fly.rs`:
+
+1. **La noche era un sprite oscuro de 2,2 radios corrido 0,78 radios**, sin recorte:
+   se salía del planeta. Y para el cuerpo propio se centraba en el JUGADOR (por la
+   hora) sólo a menos de 1,6 radios; al volver, cruzar ese radio la teletransportaba
+   encima tuyo y de noche tapaba el planeta en un frame. Ahora es una **máscara
+   sobre la misma malla del disco** (`BodyNightSide`, 128 px como el disco pixelado,
+   tres bandas de `n·L`): no puede salirse, y la luz se **funde** entre la de la hora
+   y la de la órbita con la distancia (`night_light_dir`, giro con cuaternión). Su z
+   va pegada a su disco (`−20 + dz + 0.005`): con −19,5 fijo la noche de la Tierra
+   oscurecía a la Luna cuando pasaba por delante. Tests: `la_noche_nunca_se_sale_del_disco`,
+   `la_sombra_no_salta_al_volver_al_planeta`, `de_dia_el_jugador_queda_al_sol_y_de_noche_a_la_sombra`.
+2. **La malla satelital del cuerpo anterior seguía viva tras el rebase** hasta que
+   terminaba la nueva (segundos en el celu), con coordenadas del otro cuerpo: el
+   suelo de la Luna pintado sobre el centro de la Tierra. `sync_terrain_lod` la tira
+   en cuanto cambia el `ref_body`.
+3. **El encuadre saltaba ×1,79 al rebasar**: `view_h_for_alt` depende del radio del
+   cuerpo. En vuelo la cámara usa `flight_view_h` = el mínimo, entre los cuerpos
+   aterrizables, del encuadre que daría cada uno (continuo; sobre tu mundo es la
+   misma curva). Test: `el_encuadre_no_salta_al_pasar_de_la_tierra_a_la_luna`.
+4. **El adelanto de cámara apuntaba al cuerpo más cercano**: la primera mitad del
+   viaje miraba para atrás (a la Tierra) y a mitad de camino giraba 180°. Ahora
+   sigue el rumbo del stick (`ApproachFraming::dir`, se recuerda al soltarlo).
+5. **Ir de lado por el vacío era eterno** (la velocidad sólo crecía con la altura,
+   ×2 cada ~20 s) y el atajo era SUBIR. `cruise_speed` suma `SPACE_CRUISE_RATE` por
+   metro de hueco: se acelera al irte y se frena solo al llegar, como en SFS. Sobre
+   el disco el hueco es cero y nada cambia. Y **BAJAR en el vacío cierra el hueco
+   hacia el cuerpo más cercano** — antes bajaba `vert`, que entre cuerpos no movía
+   nada visible (el botón estaba muerto). Sin Ki pasa igual, más lento: el
+   aterrizaje forzoso te lleva a tierra. Tests: `a_la_luna_con_el_stick_sin_tener_que_subir`,
+   `el_crucero_del_vacio_no_toca_el_vuelo_sobre_el_planeta`.
 
 ---
 
