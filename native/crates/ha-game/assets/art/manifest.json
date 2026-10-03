@@ -24918,6 +24918,21 @@
   "interior/grocery_store_butchershop_carcass_stale": {
    "label": "Carne colgada"
   },
+  "items/ammo_45": {
+   "label": "Balas .45"
+  },
+  "items/ammo_762": {
+   "label": "Balas 7,62"
+  },
+  "items/ammo_9mm": {
+   "label": "Balas 9 mm"
+  },
+  "items/ammo_cartucho": {
+   "label": "Cartuchos"
+  },
+  "items/ammo_energia": {
+   "label": "Celdas de energía"
+  },
   "items/apple": {
    "label": "Manzana"
   },
@@ -25004,6 +25019,195 @@
   },
   "items/grape": {
    "label": "Uvas"
+  },
+  "items/gun_ak": {
+   "label": "Fusil de asalto AK"
+  },
+  "items/gun_ak__115": {
+   "label": "Fusil de asalto AK · Weaponized 115"
+  },
+  "items/gun_ak__bacon": {
+   "label": "Fusil de asalto AK · Bacon"
+  },
+  "items/gun_ak__ciclon": {
+   "label": "Fusil de asalto AK · Ciclón"
+  },
+  "items/gun_ak__grafiti": {
+   "label": "Fusil de asalto AK · Grafiti"
+  },
+  "items/gun_ak__oscura": {
+   "label": "Fusil de asalto AK · Materia oscura"
+  },
+  "items/gun_ak__singularidad": {
+   "label": "Fusil de asalto AK · Singularidad"
+  },
+  "items/gun_escopeta": {
+   "label": "Escopeta de ánima lisa"
+  },
+  "items/gun_escopeta__115": {
+   "label": "Escopeta de ánima lisa · Weaponized 115"
+  },
+  "items/gun_escopeta__bacon": {
+   "label": "Escopeta de ánima lisa · Bacon"
+  },
+  "items/gun_escopeta__ciclon": {
+   "label": "Escopeta de ánima lisa · Ciclón"
+  },
+  "items/gun_escopeta__grafiti": {
+   "label": "Escopeta de ánima lisa · Grafiti"
+  },
+  "items/gun_escopeta__oscura": {
+   "label": "Escopeta de ánima lisa · Materia oscura"
+  },
+  "items/gun_escopeta__singularidad": {
+   "label": "Escopeta de ánima lisa · Singularidad"
+  },
+  "items/gun_mp40": {
+   "label": "MP40"
+  },
+  "items/gun_mp40__115": {
+   "label": "MP40 · Weaponized 115"
+  },
+  "items/gun_mp40__bacon": {
+   "label": "MP40 · Bacon"
+  },
+  "items/gun_mp40__ciclon": {
+   "label": "MP40 · Ciclón"
+  },
+  "items/gun_mp40__grafiti": {
+   "label": "MP40 · Grafiti"
+  },
+  "items/gun_mp40__oscura": {
+   "label": "MP40 · Materia oscura"
+  },
+  "items/gun_mp40__singularidad": {
+   "label": "MP40 · Singularidad"
+  },
+  "items/gun_pistola": {
+   "label": "Pistola M1911"
+  },
+  "items/gun_pistola__115": {
+   "label": "Pistola M1911 · Weaponized 115"
+  },
+  "items/gun_pistola__bacon": {
+   "label": "Pistola M1911 · Bacon"
+  },
+  "items/gun_pistola__ciclon": {
+   "label": "Pistola M1911 · Ciclón"
+  },
+  "items/gun_pistola__grafiti": {
+   "label": "Pistola M1911 · Grafiti"
+  },
+  "items/gun_pistola__oscura": {
+   "label": "Pistola M1911 · Materia oscura"
+  },
+  "items/gun_pistola__singularidad": {
+   "label": "Pistola M1911 · Singularidad"
+  },
+  "items/gun_pps43": {
+   "label": "PPS-43"
+  },
+  "items/gun_pps43__115": {
+   "label": "PPS-43 · Weaponized 115"
+  },
+  "items/gun_pps43__bacon": {
+   "label": "PPS-43 · Bacon"
+  },
+  "items/gun_pps43__ciclon": {
+   "label": "PPS-43 · Ciclón"
+  },
+  "items/gun_pps43__grafiti": {
+   "label": "PPS-43 · Grafiti"
+  },
+  "items/gun_pps43__oscura": {
+   "label": "PPS-43 · Materia oscura"
+  },
+  "items/gun_pps43__singularidad": {
+   "label": "PPS-43 · Singularidad"
+  },
+  "items/gun_ppsh": {
+   "label": "PPSh-41"
+  },
+  "items/gun_ppsh__115": {
+   "label": "PPSh-41 · Weaponized 115"
+  },
+  "items/gun_ppsh__bacon": {
+   "label": "PPSh-41 · Bacon"
+  },
+  "items/gun_ppsh__ciclon": {
+   "label": "PPSh-41 · Ciclón"
+  },
+  "items/gun_ppsh__grafiti": {
+   "label": "PPSh-41 · Grafiti"
+  },
+  "items/gun_ppsh__oscura": {
+   "label": "PPSh-41 · Materia oscura"
+  },
+  "items/gun_ppsh__singularidad": {
+   "label": "PPSh-41 · Singularidad"
+  },
+  "items/gun_raygun": {
+   "label": "Pistola de rayos"
+  },
+  "items/gun_raygun__115": {
+   "label": "Pistola de rayos · Weaponized 115"
+  },
+  "items/gun_raygun__bacon": {
+   "label": "Pistola de rayos · Bacon"
+  },
+  "items/gun_raygun__ciclon": {
+   "label": "Pistola de rayos · Ciclón"
+  },
+  "items/gun_raygun__grafiti": {
+   "label": "Pistola de rayos · Grafiti"
+  },
+  "items/gun_raygun__oscura": {
+   "label": "Pistola de rayos · Materia oscura"
+  },
+  "items/gun_raygun__singularidad": {
+   "label": "Pistola de rayos · Singularidad"
+  },
+  "items/gun_suomi": {
+   "label": "Suomi KP/-31"
+  },
+  "items/gun_suomi__115": {
+   "label": "Suomi KP/-31 · Weaponized 115"
+  },
+  "items/gun_suomi__bacon": {
+   "label": "Suomi KP/-31 · Bacon"
+  },
+  "items/gun_suomi__ciclon": {
+   "label": "Suomi KP/-31 · Ciclón"
+  },
+  "items/gun_suomi__grafiti": {
+   "label": "Suomi KP/-31 · Grafiti"
+  },
+  "items/gun_suomi__oscura": {
+   "label": "Suomi KP/-31 · Materia oscura"
+  },
+  "items/gun_suomi__singularidad": {
+   "label": "Suomi KP/-31 · Singularidad"
+  },
+  "items/gun_thompson": {
+   "label": "Thompson M1A1"
+  },
+  "items/gun_thompson__115": {
+   "label": "Thompson M1A1 · Weaponized 115"
+  },
+  "items/gun_thompson__bacon": {
+   "label": "Thompson M1A1 · Bacon"
+  },
+  "items/gun_thompson__ciclon": {
+   "label": "Thompson M1A1 · Ciclón"
+  },
+  "items/gun_thompson__grafiti": {
+   "label": "Thompson M1A1 · Grafiti"
+  },
+  "items/gun_thompson__oscura": {
+   "label": "Thompson M1A1 · Materia oscura"
+  },
+  "items/gun_thompson__singularidad": {
+   "label": "Thompson M1A1 · Singularidad"
   },
   "items/hammer": {
    "label": "Martillo"
@@ -32399,6 +32603,9 @@
   "ui/tab_inventario": {
    "label": "Pestaña: mochila"
   },
+  "vehicle/ambulancia": {
+   "label": "Ambulancia"
+  },
   "vehicle/ambulancia_abajo": {
    "label": "Ambulancia (abajo)",
    "variants": [
@@ -32424,6 +32631,84 @@
      "label": "Ambulancia (arriba) 2"
     }
    ]
+  },
+  "vehicle/auto_1": {
+   "label": "Auto hatchback 1"
+  },
+  "vehicle/auto_10": {
+   "label": "Auto sedán 10"
+  },
+  "vehicle/auto_11": {
+   "label": "Taxi"
+  },
+  "vehicle/auto_12": {
+   "label": "Auto sedán 12"
+  },
+  "vehicle/auto_13": {
+   "label": "Auto sedán 13"
+  },
+  "vehicle/auto_14": {
+   "label": "Auto suv 14"
+  },
+  "vehicle/auto_15": {
+   "label": "Auto suv 15"
+  },
+  "vehicle/auto_16": {
+   "label": "Auto suv 16"
+  },
+  "vehicle/auto_17": {
+   "label": "Auto suv 17"
+  },
+  "vehicle/auto_18": {
+   "label": "Auto suv 18"
+  },
+  "vehicle/auto_19": {
+   "label": "Auto suv 19"
+  },
+  "vehicle/auto_2": {
+   "label": "Auto hatchback 2"
+  },
+  "vehicle/auto_20": {
+   "label": "Auto suv 20"
+  },
+  "vehicle/auto_21": {
+   "label": "Auto compacto 21"
+  },
+  "vehicle/auto_22": {
+   "label": "Auto compacto 22"
+  },
+  "vehicle/auto_23": {
+   "label": "Auto compacto 23"
+  },
+  "vehicle/auto_24": {
+   "label": "Auto compacto 24"
+  },
+  "vehicle/auto_25": {
+   "label": "Auto compacto 25"
+  },
+  "vehicle/auto_26": {
+   "label": "Auto compacto 26"
+  },
+  "vehicle/auto_3": {
+   "label": "Auto hatchback 3"
+  },
+  "vehicle/auto_4": {
+   "label": "Auto hatchback 4"
+  },
+  "vehicle/auto_5": {
+   "label": "Auto hatchback 5"
+  },
+  "vehicle/auto_6": {
+   "label": "Auto hatchback 6"
+  },
+  "vehicle/auto_7": {
+   "label": "Auto sedán 7"
+  },
+  "vehicle/auto_8": {
+   "label": "Auto sedán 8"
+  },
+  "vehicle/auto_9": {
+   "label": "Auto sedán 9"
   },
   "vehicle/auto_abajo_1": {
    "label": "Auto (abajo) 1",
@@ -32981,6 +33266,12 @@
   "vehicle/barco_barra_silla_2": {
    "label": "Silla (no es vehículo)"
   },
+  "vehicle/basura": {
+   "label": "Camión de basura"
+  },
+  "vehicle/bomberos": {
+   "label": "Autobomba"
+  },
   "vehicle/bus": {
    "label": "Colectivo"
   },
@@ -33041,6 +33332,12 @@
   "vehicle/calle_comida_silla": {
    "label": "Silla (no es vehículo)"
   },
+  "vehicle/camion": {
+   "label": "Camión de reparto"
+  },
+  "vehicle/casa_rodante": {
+   "label": "Casa rodante"
+  },
   "vehicle/casa_rodante_derecha": {
    "label": "Casa rodante (derecha)",
    "variants": [
@@ -33082,6 +33379,24 @@
      "label": "Casa rodante (izquierda) 4"
     }
    ]
+  },
+  "vehicle/colectivo_1": {
+   "label": "Colectivo 1"
+  },
+  "vehicle/colectivo_2": {
+   "label": "Colectivo 2"
+  },
+  "vehicle/colectivo_3": {
+   "label": "Colectivo 3"
+  },
+  "vehicle/colectivo_4": {
+   "label": "Colectivo 4"
+  },
+  "vehicle/colectivo_5": {
+   "label": "Colectivo 5"
+  },
+  "vehicle/colectivo_6": {
+   "label": "Colectivo 6"
   },
   "vehicle/colectivo_abajo": {
    "label": "Colectivo (abajo)",
@@ -33327,6 +33642,9 @@
   "vehicle/helicoptero_6": {
    "label": "Cajero (no es helicóptero)"
   },
+  "vehicle/lancha": {
+   "label": "Lancha"
+  },
   "vehicle/pancho_carro_1": {
    "label": "Pancho carro 1",
    "variants": [
@@ -33435,210 +33753,6 @@
      "label": "Helicóptero 2"
     }
    ]
-  },
-  "items/gun_pistola": {
-   "label": "Pistola M1911"
-  },
-  "items/gun_pistola__115": {
-   "label": "Pistola M1911 · Weaponized 115"
-  },
-  "items/gun_pistola__singularidad": {
-   "label": "Pistola M1911 · Singularidad"
-  },
-  "items/gun_pistola__grafiti": {
-   "label": "Pistola M1911 · Grafiti"
-  },
-  "items/gun_pistola__bacon": {
-   "label": "Pistola M1911 · Bacon"
-  },
-  "items/gun_pistola__ciclon": {
-   "label": "Pistola M1911 · Ciclón"
-  },
-  "items/gun_pistola__oscura": {
-   "label": "Pistola M1911 · Materia oscura"
-  },
-  "items/gun_thompson": {
-   "label": "Thompson M1A1"
-  },
-  "items/gun_thompson__115": {
-   "label": "Thompson M1A1 · Weaponized 115"
-  },
-  "items/gun_thompson__singularidad": {
-   "label": "Thompson M1A1 · Singularidad"
-  },
-  "items/gun_thompson__grafiti": {
-   "label": "Thompson M1A1 · Grafiti"
-  },
-  "items/gun_thompson__bacon": {
-   "label": "Thompson M1A1 · Bacon"
-  },
-  "items/gun_thompson__ciclon": {
-   "label": "Thompson M1A1 · Ciclón"
-  },
-  "items/gun_thompson__oscura": {
-   "label": "Thompson M1A1 · Materia oscura"
-  },
-  "items/gun_ppsh": {
-   "label": "PPSh-41"
-  },
-  "items/gun_ppsh__115": {
-   "label": "PPSh-41 · Weaponized 115"
-  },
-  "items/gun_ppsh__singularidad": {
-   "label": "PPSh-41 · Singularidad"
-  },
-  "items/gun_ppsh__grafiti": {
-   "label": "PPSh-41 · Grafiti"
-  },
-  "items/gun_ppsh__bacon": {
-   "label": "PPSh-41 · Bacon"
-  },
-  "items/gun_ppsh__ciclon": {
-   "label": "PPSh-41 · Ciclón"
-  },
-  "items/gun_ppsh__oscura": {
-   "label": "PPSh-41 · Materia oscura"
-  },
-  "items/gun_mp40": {
-   "label": "MP40"
-  },
-  "items/gun_mp40__115": {
-   "label": "MP40 · Weaponized 115"
-  },
-  "items/gun_mp40__singularidad": {
-   "label": "MP40 · Singularidad"
-  },
-  "items/gun_mp40__grafiti": {
-   "label": "MP40 · Grafiti"
-  },
-  "items/gun_mp40__bacon": {
-   "label": "MP40 · Bacon"
-  },
-  "items/gun_mp40__ciclon": {
-   "label": "MP40 · Ciclón"
-  },
-  "items/gun_mp40__oscura": {
-   "label": "MP40 · Materia oscura"
-  },
-  "items/gun_suomi": {
-   "label": "Suomi KP/-31"
-  },
-  "items/gun_suomi__115": {
-   "label": "Suomi KP/-31 · Weaponized 115"
-  },
-  "items/gun_suomi__singularidad": {
-   "label": "Suomi KP/-31 · Singularidad"
-  },
-  "items/gun_suomi__grafiti": {
-   "label": "Suomi KP/-31 · Grafiti"
-  },
-  "items/gun_suomi__bacon": {
-   "label": "Suomi KP/-31 · Bacon"
-  },
-  "items/gun_suomi__ciclon": {
-   "label": "Suomi KP/-31 · Ciclón"
-  },
-  "items/gun_suomi__oscura": {
-   "label": "Suomi KP/-31 · Materia oscura"
-  },
-  "items/gun_pps43": {
-   "label": "PPS-43"
-  },
-  "items/gun_pps43__115": {
-   "label": "PPS-43 · Weaponized 115"
-  },
-  "items/gun_pps43__singularidad": {
-   "label": "PPS-43 · Singularidad"
-  },
-  "items/gun_pps43__grafiti": {
-   "label": "PPS-43 · Grafiti"
-  },
-  "items/gun_pps43__bacon": {
-   "label": "PPS-43 · Bacon"
-  },
-  "items/gun_pps43__ciclon": {
-   "label": "PPS-43 · Ciclón"
-  },
-  "items/gun_pps43__oscura": {
-   "label": "PPS-43 · Materia oscura"
-  },
-  "items/gun_ak": {
-   "label": "Fusil de asalto AK"
-  },
-  "items/gun_ak__115": {
-   "label": "Fusil de asalto AK · Weaponized 115"
-  },
-  "items/gun_ak__singularidad": {
-   "label": "Fusil de asalto AK · Singularidad"
-  },
-  "items/gun_ak__grafiti": {
-   "label": "Fusil de asalto AK · Grafiti"
-  },
-  "items/gun_ak__bacon": {
-   "label": "Fusil de asalto AK · Bacon"
-  },
-  "items/gun_ak__ciclon": {
-   "label": "Fusil de asalto AK · Ciclón"
-  },
-  "items/gun_ak__oscura": {
-   "label": "Fusil de asalto AK · Materia oscura"
-  },
-  "items/gun_escopeta": {
-   "label": "Escopeta de ánima lisa"
-  },
-  "items/gun_escopeta__115": {
-   "label": "Escopeta de ánima lisa · Weaponized 115"
-  },
-  "items/gun_escopeta__singularidad": {
-   "label": "Escopeta de ánima lisa · Singularidad"
-  },
-  "items/gun_escopeta__grafiti": {
-   "label": "Escopeta de ánima lisa · Grafiti"
-  },
-  "items/gun_escopeta__bacon": {
-   "label": "Escopeta de ánima lisa · Bacon"
-  },
-  "items/gun_escopeta__ciclon": {
-   "label": "Escopeta de ánima lisa · Ciclón"
-  },
-  "items/gun_escopeta__oscura": {
-   "label": "Escopeta de ánima lisa · Materia oscura"
-  },
-  "items/gun_raygun": {
-   "label": "Pistola de rayos"
-  },
-  "items/gun_raygun__115": {
-   "label": "Pistola de rayos · Weaponized 115"
-  },
-  "items/gun_raygun__singularidad": {
-   "label": "Pistola de rayos · Singularidad"
-  },
-  "items/gun_raygun__grafiti": {
-   "label": "Pistola de rayos · Grafiti"
-  },
-  "items/gun_raygun__bacon": {
-   "label": "Pistola de rayos · Bacon"
-  },
-  "items/gun_raygun__ciclon": {
-   "label": "Pistola de rayos · Ciclón"
-  },
-  "items/gun_raygun__oscura": {
-   "label": "Pistola de rayos · Materia oscura"
-  },
-  "items/ammo_45": {
-   "label": "Balas .45"
-  },
-  "items/ammo_9mm": {
-   "label": "Balas 9 mm"
-  },
-  "items/ammo_762": {
-   "label": "Balas 7,62"
-  },
-  "items/ammo_cartucho": {
-   "label": "Cartuchos"
-  },
-  "items/ammo_energia": {
-   "label": "Celdas de energía"
   }
  },
  "origen": {
@@ -205825,6 +205939,71 @@
    },
    "strip_dir": "Right"
   },
+  "items/ammo_45": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/ammo_762": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/ammo_9mm": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/ammo_cartucho": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/ammo_energia": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
   "items/apple": {
    "grid": [
     32,
@@ -206200,6 +206379,825 @@
     "h": 1,
     "row": 0,
     "w": 1
+   }
+  },
+  "items/gun_ak": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_ak__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_ak__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_ak__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_ak__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_ak__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_ak__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_escopeta__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_mp40": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_mp40__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_mp40__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_mp40__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_mp40__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_mp40__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_mp40__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_pistola": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pistola__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pistola__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pistola__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pistola__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pistola__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pistola__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_pps43": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_pps43__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_pps43__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_pps43__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_pps43__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_pps43__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_pps43__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_ppsh__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_raygun": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_raygun__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_raygun__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "h": 2,
+    "row": 8,
+    "w": 2
+   }
+  },
+  "items/gun_raygun__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "h": 2,
+    "row": 8,
+    "w": 2
+   }
+  },
+  "items/gun_raygun__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "h": 2,
+    "row": 8,
+    "w": 2
+   }
+  },
+  "items/gun_raygun__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "h": 2,
+    "row": 8,
+    "w": 2
+   }
+  },
+  "items/gun_raygun__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "h": 2,
+    "row": 6,
+    "w": 2
+   }
+  },
+  "items/gun_suomi": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_suomi__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_suomi__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_suomi__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_suomi__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_suomi__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_suomi__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "h": 2,
+    "row": 4,
+    "w": 2
+   }
+  },
+  "items/gun_thompson": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_thompson__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_thompson__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_thompson__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_thompson__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "h": 2,
+    "row": 0,
+    "w": 2
+   }
+  },
+  "items/gun_thompson__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "h": 2,
+    "row": 2,
+    "w": 2
+   }
+  },
+  "items/gun_thompson__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "h": 2,
+    "row": 0,
+    "w": 2
    }
   },
   "items/hammer": {
@@ -269341,6 +270339,85 @@
     }
    }
   },
+  "vehicle/ambulancia": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1350,
+      "h": 220,
+      "row": 1104,
+      "w": 96
+     }
+    },
+    "abajo_luz": {
+     "rect": {
+      "col": 1448,
+      "h": 220,
+      "row": 1104,
+      "w": 96
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1546,
+      "h": 200,
+      "row": 1104,
+      "w": 96
+     }
+    },
+    "arriba_luz": {
+     "rect": {
+      "col": 1644,
+      "h": 200,
+      "row": 1104,
+      "w": 96
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 134,
+      "row": 1326,
+      "w": 228
+     }
+    },
+    "derecha_luz": {
+     "rect": {
+      "col": 462,
+      "h": 134,
+      "row": 1326,
+      "w": 228
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1742,
+      "h": 134,
+      "row": 1104,
+      "w": 228
+     }
+    },
+    "izquierda_luz": {
+     "rect": {
+      "col": 232,
+      "h": 134,
+      "row": 1326,
+      "w": 228
+     }
+    }
+   },
+   "rect": {
+    "col": 1350,
+    "h": 220,
+    "row": 1104,
+    "w": 96
+   }
+  },
   "vehicle/ambulancia_abajo": {
    "grid": [
     32,
@@ -269476,54 +270553,1224 @@
   },
   "vehicle/auto_1": {
    "grid": [
-    32,
-    32
+    1,
+    1
    ],
-   "png": "art/pack/police_station_3.png",
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 68,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 258,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 134,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
    "rect": {
-    "col": 0,
-    "h": 3,
-    "row": 12,
-    "w": 5
+    "col": 2,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/auto_10": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1718,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1642,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1794,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1718,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/auto_11": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 234,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 158,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 466,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 310,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 234,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/auto_12": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 698,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 622,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 930,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 774,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 698,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/auto_13": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1162,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1086,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1394,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1238,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1162,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/auto_14": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1550,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1622,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1828,
+      "h": 74,
+      "row": 264,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1694,
+      "h": 74,
+      "row": 264,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1550,
+    "h": 124,
+    "row": 264,
+    "w": 70
+   }
+  },
+  "vehicle/auto_15": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1962,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 208,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 74,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1962,
+    "h": 124,
+    "row": 264,
+    "w": 70
+   }
+  },
+  "vehicle/auto_16": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 342,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 414,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 620,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 486,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 342,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/auto_17": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 754,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 826,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1032,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 898,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 754,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/auto_18": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1166,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1238,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1444,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1310,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1166,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/auto_19": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1578,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1650,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1856,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1722,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1578,
+    "h": 124,
+    "row": 410,
+    "w": 70
    }
   },
   "vehicle/auto_2": {
    "grid": [
-    32,
-    32
+    1,
+    1
    ],
-   "png": "art/pack/police_station_3.png",
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 382,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 448,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 638,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 514,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
    "rect": {
-    "col": 5,
-    "h": 3,
-    "row": 12,
-    "w": 5
+    "col": 382,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/auto_20": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 536,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 74,
+      "h": 124,
+      "row": 536,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 280,
+      "h": 74,
+      "row": 536,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 146,
+      "h": 74,
+      "row": 536,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 124,
+    "row": 536,
+    "w": 70
+   }
+  },
+  "vehicle/auto_21": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 490,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 414,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 710,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 566,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 490,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/auto_22": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 930,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 854,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1150,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1006,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 930,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/auto_23": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1370,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1294,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1590,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1446,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 1370,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/auto_24": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1810,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1734,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1886,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 1810,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/auto_25": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 222,
+      "h": 132,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 146,
+      "h": 134,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 442,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 298,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 222,
+    "h": 132,
+    "row": 672,
+    "w": 74
+   }
+  },
+  "vehicle/auto_26": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 662,
+      "h": 132,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 586,
+      "h": 134,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 882,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 738,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 662,
+    "h": 132,
+    "row": 672,
+    "w": 74
    }
   },
   "vehicle/auto_3": {
    "grid": [
-    32,
-    32
+    1,
+    1
    ],
-   "png": "art/pack/police_station_3.png",
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 762,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 828,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1018,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 894,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
    "rect": {
-    "col": 8,
-    "h": 5,
-    "row": 7,
-    "w": 2
+    "col": 762,
+    "h": 114,
+    "row": 2,
+    "w": 64
    }
   },
   "vehicle/auto_4": {
    "grid": [
-    32,
-    32
+    1,
+    1
    ],
-   "png": "art/pack/police_station_3.png",
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1142,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1208,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1398,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1274,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
    "rect": {
-    "col": 10,
-    "h": 5,
-    "row": 7,
-    "w": 2
+    "col": 1142,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/auto_5": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1522,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1588,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1778,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1654,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1522,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/auto_6": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1902,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1968,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 126,
+      "h": 74,
+      "row": 118,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 2,
+      "h": 74,
+      "row": 118,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1902,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/auto_7": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 326,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 250,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 558,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 402,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 326,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/auto_8": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 790,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 714,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1022,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 866,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 790,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/auto_9": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1254,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1178,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1486,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1330,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1254,
+    "h": 142,
+    "row": 118,
+    "w": 74
    }
   },
   "vehicle/auto_abajo_1": {
@@ -271502,6 +273749,100 @@
     "w": 16
    }
   },
+  "vehicle/basura": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1736,
+      "h": 240,
+      "row": 1326,
+      "w": 88
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1826,
+      "h": 236,
+      "row": 1326,
+      "w": 84
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 234,
+      "h": 152,
+      "row": 1570,
+      "w": 232
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 2,
+      "h": 152,
+      "row": 1570,
+      "w": 230
+     }
+    }
+   },
+   "rect": {
+    "col": 1736,
+    "h": 240,
+    "row": 1326,
+    "w": 88
+   }
+  },
+  "vehicle/bomberos": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 468,
+      "h": 308,
+      "row": 1570,
+      "w": 106
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 576,
+      "h": 290,
+      "row": 1570,
+      "w": 106
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 974,
+      "h": 158,
+      "row": 1570,
+      "w": 288
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 684,
+      "h": 158,
+      "row": 1570,
+      "w": 288
+     }
+    }
+   },
+   "rect": {
+    "col": 468,
+    "h": 308,
+    "row": 1570,
+    "w": 106
+   }
+  },
   "vehicle/bomberos_camion_escalera_de_mano_abajo": {
    "grid": [
     32,
@@ -271812,6 +274153,53 @@
     "h": 1,
     "row": 27,
     "w": 1
+   }
+  },
+  "vehicle/camion": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1020,
+      "h": 242,
+      "row": 1326,
+      "w": 108
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1130,
+      "h": 240,
+      "row": 1326,
+      "w": 108
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1240,
+      "h": 150,
+      "row": 1326,
+      "w": 246
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1488,
+      "h": 150,
+      "row": 1326,
+      "w": 246
+     }
+    }
+   },
+   "rect": {
+    "col": 1020,
+    "h": 242,
+    "row": 1326,
+    "w": 108
    }
   },
   "vehicle/camion_abajo": {
@@ -272152,6 +274540,53 @@
     "w": 8
    }
   },
+  "vehicle/casa_rodante": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 842,
+      "h": 180,
+      "row": 1104,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 908,
+      "h": 180,
+      "row": 1104,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1160,
+      "h": 112,
+      "row": 1104,
+      "w": 188
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 974,
+      "h": 112,
+      "row": 1104,
+      "w": 184
+     }
+    }
+   },
+   "rect": {
+    "col": 842,
+    "h": 180,
+    "row": 1104,
+    "w": 64
+   }
+  },
   "vehicle/casa_rodante_abajo": {
    "grid": [
     32,
@@ -272306,6 +274741,288 @@
     "h": 4,
     "row": 4,
     "w": 6
+   }
+  },
+  "vehicle/colectivo_1": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1026,
+      "h": 214,
+      "row": 672,
+      "w": 84
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1112,
+      "h": 212,
+      "row": 672,
+      "w": 82
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1420,
+      "h": 124,
+      "row": 672,
+      "w": 222
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1196,
+      "h": 124,
+      "row": 672,
+      "w": 222
+     }
+    }
+   },
+   "rect": {
+    "col": 1026,
+    "h": 214,
+    "row": 672,
+    "w": 84
+   }
+  },
+  "vehicle/colectivo_2": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1644,
+      "h": 214,
+      "row": 672,
+      "w": 84
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1730,
+      "h": 212,
+      "row": 672,
+      "w": 82
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 888,
+      "w": 222
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1814,
+      "h": 124,
+      "row": 672,
+      "w": 222
+     }
+    }
+   },
+   "rect": {
+    "col": 1644,
+    "h": 214,
+    "row": 672,
+    "w": 84
+   }
+  },
+  "vehicle/colectivo_3": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 226,
+      "h": 214,
+      "row": 888,
+      "w": 84
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 312,
+      "h": 212,
+      "row": 888,
+      "w": 82
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 620,
+      "h": 124,
+      "row": 888,
+      "w": 222
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 396,
+      "h": 124,
+      "row": 888,
+      "w": 222
+     }
+    }
+   },
+   "rect": {
+    "col": 226,
+    "h": 214,
+    "row": 888,
+    "w": 84
+   }
+  },
+  "vehicle/colectivo_4": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 844,
+      "h": 214,
+      "row": 888,
+      "w": 84
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 930,
+      "h": 212,
+      "row": 888,
+      "w": 82
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1238,
+      "h": 124,
+      "row": 888,
+      "w": 222
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1014,
+      "h": 124,
+      "row": 888,
+      "w": 222
+     }
+    }
+   },
+   "rect": {
+    "col": 844,
+    "h": 214,
+    "row": 888,
+    "w": 84
+   }
+  },
+  "vehicle/colectivo_5": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1462,
+      "h": 214,
+      "row": 888,
+      "w": 84
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1548,
+      "h": 212,
+      "row": 888,
+      "w": 80
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 1104,
+      "w": 222
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1630,
+      "h": 124,
+      "row": 888,
+      "w": 222
+     }
+    }
+   },
+   "rect": {
+    "col": 1462,
+    "h": 214,
+    "row": 888,
+    "w": 84
+   }
+  },
+  "vehicle/colectivo_6": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 226,
+      "h": 214,
+      "row": 1104,
+      "w": 84
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 312,
+      "h": 212,
+      "row": 1104,
+      "w": 80
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 618,
+      "h": 124,
+      "row": 1104,
+      "w": 222
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 394,
+      "h": 124,
+      "row": 1104,
+      "w": 222
+     }
+    }
+   },
+   "rect": {
+    "col": 226,
+    "h": 214,
+    "row": 1104,
+    "w": 84
    }
   },
   "vehicle/colectivo_abajo": {
@@ -273271,6 +275988,53 @@
     "h": 12,
     "row": 0,
     "w": 7
+   }
+  },
+  "vehicle/lancha": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 752,
+      "h": 104,
+      "row": 1326,
+      "w": 58
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 692,
+      "h": 106,
+      "row": 1326,
+      "w": 58
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 916,
+      "h": 54,
+      "row": 1326,
+      "w": 102
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 812,
+      "h": 54,
+      "row": 1326,
+      "w": 102
+     }
+    }
+   },
+   "rect": {
+    "col": 752,
+    "h": 104,
+    "row": 1326,
+    "w": 58
    }
   },
   "vehicle/pancho_carro_1": {
@@ -278028,890 +280792,6 @@
     "h": 1,
     "row": 18,
     "w": 1
-   }
-  },
-  "items/gun_pistola": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_45": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_9mm": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_762": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_cartucho": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_energia": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 0,
-    "w": 2,
-    "h": 2
    }
   }
  }

@@ -1689,6 +1689,54 @@ const VEHICLE_KEYS: &[(&str, &str)] = &[
     ("vehicle/tanque", "Tanque"),
 ];
 
+/// **Los vehículos que se MANEJAN** (`ha-game/src/vehiculos.rs`): una clave por
+/// modelo con cuatro poses de rumbo (`abajo`/`arriba`/`izquierda`/`derecha`).
+/// Los publica `scripts/import-vehiculos.py`, que mide cada pieza del pack; moto
+/// y bici no vienen en el pack y las dibuja `scripts/dibujar-vehiculos.py`.
+/// Qué clase de vehículo es cada clave lo dice `ha_shared::vehiculos::Modelo`.
+const VEHICULO_KEYS: &[(&str, &str)] = &[
+    ("vehicle/ambulancia", "Ambulancia"),
+    ("vehicle/auto_1", "Auto hatchback 1"),
+    ("vehicle/auto_10", "Auto sedán 10"),
+    ("vehicle/auto_11", "Taxi"),
+    ("vehicle/auto_12", "Auto sedán 12"),
+    ("vehicle/auto_13", "Auto sedán 13"),
+    ("vehicle/auto_14", "Auto suv 14"),
+    ("vehicle/auto_15", "Auto suv 15"),
+    ("vehicle/auto_16", "Auto suv 16"),
+    ("vehicle/auto_17", "Auto suv 17"),
+    ("vehicle/auto_18", "Auto suv 18"),
+    ("vehicle/auto_19", "Auto suv 19"),
+    ("vehicle/auto_2", "Auto hatchback 2"),
+    ("vehicle/auto_20", "Auto suv 20"),
+    ("vehicle/auto_21", "Auto compacto 21"),
+    ("vehicle/auto_22", "Auto compacto 22"),
+    ("vehicle/auto_23", "Auto compacto 23"),
+    ("vehicle/auto_24", "Auto compacto 24"),
+    ("vehicle/auto_25", "Auto compacto 25"),
+    ("vehicle/auto_26", "Auto compacto 26"),
+    ("vehicle/auto_3", "Auto hatchback 3"),
+    ("vehicle/auto_4", "Auto hatchback 4"),
+    ("vehicle/auto_5", "Auto hatchback 5"),
+    ("vehicle/auto_6", "Auto hatchback 6"),
+    ("vehicle/auto_7", "Auto sedán 7"),
+    ("vehicle/auto_8", "Auto sedán 8"),
+    ("vehicle/auto_9", "Auto sedán 9"),
+    ("vehicle/basura", "Camión de basura"),
+    ("vehicle/bomberos", "Autobomba"),
+    ("vehicle/camion", "Camión de reparto"),
+    ("vehicle/casa_rodante", "Casa rodante"),
+    ("vehicle/colectivo_1", "Colectivo 1"),
+    ("vehicle/colectivo_2", "Colectivo 2"),
+    ("vehicle/colectivo_3", "Colectivo 3"),
+    ("vehicle/colectivo_4", "Colectivo 4"),
+    ("vehicle/colectivo_5", "Colectivo 5"),
+    ("vehicle/colectivo_6", "Colectivo 6"),
+    ("vehicle/lancha", "Lancha"),
+    ("vehicle/moto", "Moto"),
+    ("vehicle/bici", "Bicicleta"),
+];
+
 /// Flora/decoración natural extra (LimeZu `17_Garden`). Complementa los
 /// `decor/tree_*` existentes — no los duplica.
 /// **La huerta** (`ha-game/src/granja.rs`). La tierra arada va debajo de toda
@@ -10356,6 +10404,9 @@ pub fn game_slots() -> Vec<SlotDef> {
     }
     for &(k, l) in VEHICLE_KEYS {
         out.push(anim(k, l, "vehicle"));
+    }
+    for &(k, l) in VEHICULO_KEYS {
+        out.push(s(k, l, "vehicle"));
     }
     for &(k, l) in NATURE_KEYS {
         out.push(s(k, l, "nature"));
