@@ -7677,6 +7677,32 @@ marco rompió la Luna por no ver que la cámara asumía el marco estático.
   una hoja grande eso es caro. `setup_art_atlases` avisa por `warn!` si alguna vez cae un
   sprite sólo-GPU sin grilla.
 
+  **Reincidencia (3 oct 2026): las hojas propias de las POSES.** El Redmi volvió a
+  matar a Tailscale con el juego en 527 MB de PSS. `HA_RAMART` (que ahora lista las
+  15 imágenes más pesadas con su ruta y su `asset_usage`) dio **273 MB de CPU en 117
+  imágenes**: `completos_0/1`, `edificios_puertas_0/1`, `military_base_*`,
+  `additional_houses_*`… todas páginas con `grid`. La fuga era `load_art_manifest`:
+  las poses con `png` propio (375 puertas animadas, completos, bases) se cargaban
+  **en el arranque** y con `load` pelado. Como Bevy deduplica por RUTA, ese primer
+  `load` con copia de CPU además anulaba el sólo-GPU de todas las claves de la misma
+  página. Ahora `PoseInfo` guarda la ruta (`hoja`) y `pose_image` la pide tarde y
+  sólo-GPU (`hoja_de_pose`):
+
+  ```
+  antes:   117 imagenes = 273.3 MB de CPU   RSS escritorio 867 MB
+  después:  62 imagenes =  27.7 MB de CPU   RSS escritorio 480 MB
+  ```
+
+  ⚠ Regla: **todo `load` de una página del pack pasa por `cargar_png`**. Un solo
+  `asset_server.load(png)` suelto sobre una hoja compartida le devuelve la copia de
+  CPU a todas las claves de esa hoja.
+
+  ⚠ Ojo con el `target` compartido entre worktrees: cargo les da el mismo hash a
+  los crates de dos worktrees con el mismo layout, y un build ajeno puede dejarte
+  un `ha-assets` compilado con OTRA fuente (el 3 oct dio slots fantasma
+  `player/en_mano`). Si un test falla por algo que tu fuente no tiene, `touch` el
+  archivo y recompilá antes de creerle.
+
   *Sospecha investigada y NO confirmada — no volver a darla por hecha sin medir.*
   En Bevy 0.15, `commands.entity(e).insert(...)` y `with_children(...)` sobre una
   entidad **ya despawneada** son `panic!` (B0003), y los sistemas que *decoran*

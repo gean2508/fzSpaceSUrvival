@@ -132,6 +132,7 @@ fn registrar_poses_de_personaje(art: &mut ArtLibrary) {
                             fps: anim.fps,
                         }),
                         layer: None,
+                        hoja: None,
                         image: None,
                     },
                 );
@@ -220,6 +221,14 @@ struct PoseInfo {
     layer: Option<ha_assets::ArtLayer>,
     /// Hoja PROPIA de la pose (assets armados con varios PNG: uno por dirección
     /// o estado). `None` = la hoja del slot. Ver `ArtLibrary::pose_image`.
+    ///
+    /// Es la RUTA, no el handle: la hoja se pide la primera vez que alguien usa
+    /// la pose. Antes se cargaban todas en el arranque y con la copia de CPU —
+    /// medido con `HA_RAMART` (3 oct 2026): las puertas, los completos y las
+    /// bases militares eran ~110 MB de píxeles en RAM que nadie leía, más la
+    /// misma textura en la GPU, aunque no hubiera un edificio a la vista.
+    hoja: Option<FuenteArte>,
+    /// Hoja ya hecha en memoria (poses de respaldo de `set_procedural_pose`).
     image: Option<Handle<Image>>,
 }
 
@@ -280,6 +289,9 @@ pub struct ArtLibrary {
     /// Hojas (PNG) que ya se pidieron. Es la cuenta que importa para la memoria:
     /// las claves son miles y comparten página.
     paginas: RwLock<std::collections::HashSet<String>>,
+    /// Hojas propias de poses ya pedidas (ruta → handle). Las retiene vivas igual
+    /// que `sprites` y le dice a la pantalla de carga qué esperar.
+    hojas_de_pose: RwLock<HashMap<String, Handle<Image>>>,
     /// Animación de imagen completa (tira) — compat.
     anims: HashMap<String, ArtAnim>,
     /// Recorte estático px `[x, y, w, h]` (sheets con `rect`).
@@ -377,12 +389,7 @@ impl ArtLibrary {
     /// decodificarse. Se llama unas pocas veces por partida, no por frame.
     pub fn image_handles(&self) -> Vec<Handle<Image>> {
         let mut out: Vec<Handle<Image>> = self.sprites.read().unwrap().values().cloned().collect();
-        out.extend(
-            self.poses
-                .values()
-                .flat_map(|m| m.values())
-                .filter_map(|p| p.image.clone()),
-        );
+        out.extend(self.hojas_de_pose.read().unwrap().values().cloned());
         out
     }
 
@@ -457,7 +464,7 @@ impl ArtLibrary {
         }
         self.poses.entry(key.to_string()).or_default().insert(
             pose.to_string(),
-            PoseInfo { rect_px: [0, 0, px, px], anim: None, layer: None, image: Some(image) },
+            PoseInfo { rect_px: [0, 0, px, px], anim: None, layer: None, hoja: None, image: Some(image) },
         );
         self.procedural.insert(key.to_string());
     }
@@ -853,8 +860,22 @@ impl ArtLibrary {
     pub fn pose_image(&self, key: &str, name: &str) -> Option<Handle<Image>> {
         match self.poses.get(key).and_then(|m| m.get(name)) {
             Some(PoseInfo { image: Some(img), .. }) => Some(img.clone()),
+            Some(PoseInfo { hoja: Some(fuente), .. }) => self.hoja_de_pose(fuente),
             _ => self.get(key),
         }
+    }
+
+    /// Carga tarde (y sólo GPU) la hoja propia de una pose.
+    fn hoja_de_pose(&self, fuente: &FuenteArte) -> Option<Handle<Image>> {
+        if let Some(h) = self.hojas_de_pose.read().unwrap().get(&fuente.png) {
+            return Some(h.clone());
+        }
+        let handle = cargar_png(self.servidor.as_ref()?, fuente);
+        self.hojas_de_pose.write().unwrap().insert(fuente.png.clone(), handle.clone());
+        if self.paginas.write().unwrap().insert(fuente.png.clone()) {
+            eprintln!("ha-art: hoja {} de pose (viven {})", fuente.png, self.paginas.read().unwrap().len());
+        }
+        Some(handle)
     }
 
     /// Capa etiquetada de una pose (editor F2). `None` = sin etiqueta (Object).
@@ -1291,6 +1312,7 @@ impl Plugin for Art2dPlugin {
 /// poco y una sola foto temprana miente.
 fn medir_ram_de_imagenes(
     images: Res<Assets<Image>>,
+    servidor: Res<AssetServer>,
     time: Res<Time>,
     mut acc: Local<f32>,
     mut primera: Local<bool>,
@@ -1307,11 +1329,21 @@ fn medir_ram_de_imagenes(
     let mut total = 0usize;
     let mut n = 0usize;
     let mut mayor = 0usize;
-    for (_, img) in images.iter() {
+    let mut pesadas: Vec<(usize, String)> = Vec::new();
+    for (id, img) in images.iter() {
         let b = img.data.len();
         total += b;
         mayor = mayor.max(b);
         n += 1;
+        if b > 0 {
+            let ruta = servidor.get_path(id).map(|p| p.to_string()).unwrap_or_else(|| "(sin ruta)".into());
+            pesadas.push((b, format!("{ruta} {:?}", img.asset_usage)));
+        }
+    }
+    // Quién es quién: sin ruta el total no dice a quién soltar.
+    pesadas.sort_by(|a, b| b.0.cmp(&a.0));
+    for (b, ruta) in pesadas.iter().take(15) {
+        eprintln!("ha-ramart:   {:6.1} MB  {ruta}", *b as f32 / 1024.0 / 1024.0);
     }
     eprintln!(
         "ha-ramart: {n} imagenes en Assets<Image> = {:.1} MB de CPU (la mas grande {:.1} MB)",
@@ -1567,7 +1599,12 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
                 for (name, pose) in poses {
                     // Hoja propia de la pose (asset armado con varios PNG: uno
                     // por dirección/estado) → se carga aparte y con SU grilla.
-                    let own = pose.png.as_ref().map(|p| asset_server.load(p.to_string()));
+                    // La geometría de la pose sale entera del manifest (grilla +
+                    // rect + tira): nadie necesita sus píxeles en RAM.
+                    let own = pose.png.as_ref().map(|p| FuenteArte {
+                        png: p.to_string(),
+                        solo_gpu: crate::flags::var("HA_ART_CPU").is_err(),
+                    });
                     let (pw, ph) = pose.grid_or((gw, gh));
                     let rect_px = [pose.rect.col * pw, pose.rect.row * ph, pose.rect.w * pw, pose.rect.h * ph];
                     let dir = pose.dir.unwrap_or_default();
@@ -1585,7 +1622,7 @@ fn load_art_manifest(asset_server: Res<AssetServer>, mut art: ResMut<ArtLibrary>
                         }
                         si
                     });
-                    m.insert(name.clone(), PoseInfo { rect_px, anim, layer: pose.layer, image: own });
+                    m.insert(name.clone(), PoseInfo { rect_px, anim, layer: pose.layer, hoja: own, image: None });
                 }
                 if !m.is_empty() {
                     art.poses.insert(key.clone(), m);
@@ -1768,6 +1805,7 @@ impl ArtLibrary {
                     rect_px: [0, 0, celdas.0 * 32, celdas.1 * 32],
                     anim: None,
                     layer: None,
+                    hoja: None,
                     image: None,
                 },
             );
