@@ -41,3 +41,4 @@ export {
   type UpdateCheckResult,
 } from "./updates.js";
 export * from "./content/index.js";
+export * from "./tienda.js";

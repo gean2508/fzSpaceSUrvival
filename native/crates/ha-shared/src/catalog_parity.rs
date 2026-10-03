@@ -164,6 +164,43 @@ pub fn rust_module_entries(module_id: &str) -> Option<Vec<ParityEntry>> {
             entries.sort_by(|a, b| a.id.cmp(&b.id));
             Some(entries)
         }
+        "tienda" => {
+            let mut entries: Vec<ParityEntry> = crate::tienda::catalogo()
+                .iter()
+                .map(|i| {
+                    let mut f = BTreeMap::new();
+                    f.insert("tipo".into(), json_str(i.tipo.como_str()));
+                    f.insert("gemas".into(), json_num(i.gemas));
+                    f.insert("monedas".into(), json_num(i.monedas));
+                    f.insert("da".into(), json_str(&i.da.join(",")));
+                    ParityEntry { id: i.id.clone(), fields: f }
+                })
+                .collect();
+            for g in &crate::tienda::TIENDA_GEMAS {
+                let mut f = BTreeMap::new();
+                f.insert("gemas".into(), json_num(g.gemas));
+                f.insert("extra".into(), json_num(g.extra));
+                f.insert("centavos".into(), json_num(g.centavos));
+                entries.push(ParityEntry { id: format!("paquete:{}", g.id), fields: f });
+            }
+            let t = &crate::tienda::PASE_TEMPORADA;
+            for n in 1..=t.niveles {
+                let (g, p) = crate::tienda::recompensa_pase(n);
+                let mut f = BTreeMap::new();
+                f.insert("gratis".into(), json_str(&g));
+                f.insert("premium".into(), json_str(&p));
+                entries.push(ParityEntry { id: format!("nivel:{n:02}"), fields: f });
+            }
+            let mut f = BTreeMap::new();
+            f.insert("niveles".into(), json_num(t.niveles));
+            f.insert("xpPorNivel".into(), json_num(t.xp_por_nivel));
+            f.insert("gemasPremium".into(), json_num(t.gemas_premium));
+            f.insert("desde".into(), json_str(t.desde));
+            f.insert("hasta".into(), json_str(t.hasta));
+            entries.push(ParityEntry { id: format!("temporada:{}", t.id), fields: f });
+            entries.sort_by(|a, b| a.id.cmp(&b.id));
+            Some(entries)
+        }
         // Items catalog not ported to Rust yet — TS snapshot validates; add here when ported.
         "items" => None,
         _ => None,
