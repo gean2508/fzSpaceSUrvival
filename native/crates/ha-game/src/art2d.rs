@@ -138,6 +138,35 @@ fn registrar_poses_de_personaje(art: &mut ArtLibrary) {
                 total += 1;
             }
         }
+        // NADAR: el pack no lo trae. Es CAMINAR cortado en la cintura (los pies pedaleando quedan
+        // bajo el agua): misma fila, misma geometría, celda más baja. Las ondas van aparte
+        // (`player/ondas`, `pose_jugador.rs`). Sólo el jugador: los aldeanos no nadan.
+        if !es_npc {
+            if let Some(walk) = ha_assets::chargen_index::char_anim("walk") {
+                for (dir, nombre) in DIRS {
+                    let celda = char_cell(walk, dir, 0);
+                    let origen = UVec2::new((celda % STRIP_COLS) * cw, (celda / STRIP_COLS) * ch);
+                    let alto = crate::pose_jugador::NADO_ALTO_PX;
+                    poses.insert(
+                        format!("swim_{nombre}"),
+                        PoseInfo {
+                            rect_px: [origen.x, origen.y, cw, alto],
+                            anim: Some(StripInfo {
+                                origin: origen,
+                                cell: UVec2::new(cw, alto),
+                                step: UVec2::new(cw, 0),
+                                frames: walk.frames,
+                                // Brazada: más lenta que el paso.
+                                fps: walk.fps * 0.6,
+                            }),
+                            layer: None,
+                            image: None,
+                        },
+                    );
+                    total += 1;
+                }
+            }
+        }
         // `idle_down` es el reposo al que cae todo lo demás (`sim.rs`): si la
         // hoja no trajera `idle`, el personaje se quedaría sin sprite.
         if !poses.contains_key("idle_down") {

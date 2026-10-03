@@ -2969,6 +2969,7 @@ fn interactuar_animal(
     (mut bautizo, mut tirados): (ResMut<crate::bautizo::Bautizo>, ResMut<crate::tirados::Tirados>),
     player: Query<&Transform, (With<Player>, Without<Animal>)>,
     mut animals: Query<(&mut Animal, &mut Needs, Option<&Resident>)>,
+    mut pose: ResMut<crate::pose_jugador::AccionJugador>,
 ) {
     use crate::hud::inventory_ui::{consume_from_ui_slots, flush_slots_to_inventory};
     if target.kind != Some(ha_shared::InteractTargetKind::Animal) {
@@ -3088,6 +3089,7 @@ fn interactuar_animal(
         return;
     }
     // 5) El golpe.
+    pose.golpe(&item, Vec2::new(px, pz), Vec2::new(a.x, a.z));
     let dano = dano_de(&item);
     a.vida -= dano;
     a.herido_t = 0.35;

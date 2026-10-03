@@ -418,7 +418,7 @@ fn golpear(
     cam: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
     touch_layout: Res<TouchLayout>,
     blocks: Res<TouchBlockRects>,
-    equipped: Res<EquippedItem>,
+    (equipped, mut pose): (Res<EquippedItem>, ResMut<crate::pose_jugador::AccionJugador>),
     mut bajas: ResMut<Bajas>,
     mut chests: ResMut<crate::chests::ChestWorld>,
     ctx: Res<WorldContextRuntime>,
@@ -464,6 +464,7 @@ fn golpear(
     let Some((e, _)) = mejor else { return };
     acc.golpe = GOLPE_CD;
     let Ok((_, mut i, sprite, _)) = q.get_mut(e) else { return };
+    pose.golpe(&equipped.item_id, Vec2::new(px, pz), Vec2::new(i.x, i.z));
     herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, crate::fauna::dano_de(&equipped.item_id), Vec2::new(px, pz), 0.5);
 }
 

@@ -293,6 +293,16 @@ impl EstadoArmas {
     pub fn cargadas_de(&self, item: &str) -> Option<u32> {
         self.cargadas.get(item).copied()
     }
+
+    /// Retroceso visual (m): salta en cada disparo y decae. `pose_jugador` lee el salto como «disparó».
+    pub fn retroceso(&self) -> f32 {
+        self.kick
+    }
+
+    /// `true` mientras se recarga (el cuerpo hace el gesto de manipular el arma).
+    pub fn recargando(&self) -> bool {
+        self.recarga.is_some()
+    }
 }
 
 /// Segundos que quedan de «se oyó un tiro»: los infectados lo oyen desde más lejos.

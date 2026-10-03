@@ -10318,6 +10318,11 @@ pub fn game_slots() -> Vec<SlotDef> {
     // animado. `player/astronaut` queda como alias histórico.
     out.push(anim("player/character", "Jugador", "player"));
     out.push(anim("player/astronaut", "Jugador con traje espacial", "player"));
+    // Capas que van ENCIMA de la hoja del jugador mientras hace algo (`ha-game::pose_jugador`):
+    // lo que el pack no trae dibujado en el cuerpo. `scripts/dibujar-acciones-jugador.py`.
+    out.push(anim("player/en_mano", "Lo que el jugador come o bebe", "player"));
+    out.push(anim("player/libro", "Libro en la mano del jugador", "player"));
+    out.push(anim("player/ondas", "Ondas del jugador al nadar", "player"));
     // NPCs — mismo esquema de poses que el jugador (idle_down…). `npc/colonist`
     // se dibuja en la base lunar (uno por colono; ver world2d::sync_colonists).
     out.push(anim("npc/colonist", "Colono", "npc"));

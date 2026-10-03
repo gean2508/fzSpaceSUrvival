@@ -287,6 +287,12 @@ impl Plugin for AutoDrivePlugin {
         // teletransporta a nadie) y que el afuera se apaga en GRADIENTE, no de
         // golpe. HA_CUEVATEST=1.
         // **¿Se deja tocar todo?** HA_PROPTEST=1 — ver `prop_test_drive`.
+        // **Cada pose del jugador, fotografiada.** HA_POSETEST=1 — ver `pose_test_drive`.
+        if crate::flags::var("HA_POSETEST").is_ok() {
+            app.init_resource::<PoseTestState>();
+            app.add_systems(Update, pose_test_drive.before(crate::sim::FacePlayerSet));
+            return;
+        }
         // **La granja entera, de punta a punta.** HA_GRANJATEST=1 — ver
         // `granja_test_drive`.
         if crate::flags::var("HA_GRANJATEST").is_ok() {
@@ -7424,5 +7430,93 @@ fn volcar_sprites_cerca(world: &mut World, r: f32) {
             .map(|i| i.name().to_string().rsplit("::").next().unwrap_or("").to_string())
             .collect();
         eprintln!("ha-sprite: ({:.1},{:.1}) {:?} col ({:.2},{:.2},{:.2}) [{}]", t.x, -t.y, c, col.red, col.green, col.blue, nombres.join(","));
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_POSETEST — cada cosa que hace el jugador, con su animación
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct PoseTestState {
+    paso: usize,
+    desde: f32,
+    fotos: u8,
+}
+
+/// **El driver de las poses** (`pose_jugador.rs`). Con el jugador quieto, pide cada acción por la
+/// MISMA puerta que usan los sistemas del juego (`AccionJugador::hacer`) y adelanta el reloj del
+/// reposo para ver el celular, el libro y el piso. Dos capturas por pose, a 0,35 s y a 0,95 s: si
+/// salen iguales, la pose no está animando. Capturas en `HA_SHOTDIR` (`pose-<nombre>-<n>.png`).
+fn pose_test_drive(world: &mut World) {
+    use crate::pose_jugador::{AccionJugador, Reposo, COMER_S, REPOSO_ENTRETENERSE_S, REPOSO_SENTARSE_S};
+    // (nombre, acción, segundos quieto, turno del reposo)
+    const PASOS: &[(&str, Option<&str>, f32, u32)] = &[
+        ("respirar", None, 0.0, 0),
+        ("comer", Some("comer"), 0.0, 0),
+        ("beber", Some("beber"), 0.0, 0),
+        ("golpe", Some("hit"), 0.0, 0),
+        ("puno", Some("punch"), 0.0, 0),
+        ("juntar", Some("pick_up"), 0.0, 0),
+        ("levantar", Some("lift"), 0.0, 0),
+        ("disparo", Some("shoot"), 0.0, 0),
+        ("dano", Some("hurt"), 0.0, 0),
+        ("celular", None, REPOSO_ENTRETENERSE_S + 1.0, 0),
+        ("libro", None, REPOSO_ENTRETENERSE_S + 1.0, 1),
+        ("piso", None, REPOSO_SENTARSE_S + 1.0, 0),
+        // Mirando al OESTE: si el espejo se aplicara dos veces (escala −1 + pose `_left`) se vería al este.
+        ("oeste", None, 0.0, 0),
+        ("puno-oeste", Some("punch"), 0.0, 0),
+    ];
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 || !player_ready(world) {
+        return;
+    }
+    let (paso, desde, fotos) = {
+        let st = world.resource::<PoseTestState>();
+        (st.paso, st.desde, st.fotos)
+    };
+    let Some(&(nombre, accion, quieto, turno)) = PASOS.get(paso) else {
+        eprintln!("ha-posetest: OK {} poses", PASOS.len());
+        std::process::exit(0);
+    };
+    if desde == 0.0 {
+        world.resource_mut::<PoseTestState>().desde = now;
+        return;
+    }
+    let t = now - desde;
+    let oeste = nombre.ends_with("oeste");
+    {
+        let mut q = world.query_filtered::<&mut crate::sim::SimState, With<Player>>();
+        if let Ok(mut sim) = q.get_single_mut(world) {
+            sim.body.rot = if oeste { std::f32::consts::PI } else { 0.0 };
+        }
+    }
+    // Se sostiene la pose todo el paso: la acción se renueva, el reposo se fija.
+    if let Some(v) = accion {
+        let mut a = world.resource_mut::<AccionJugador>();
+        if oeste {
+            a.hacer_hacia(v, COMER_S, Vec2::ZERO, Vec2::new(-1.0, 0.0));
+        } else {
+            a.hacer(v, COMER_S);
+        }
+    }
+    {
+        let mut r = world.resource_mut::<Reposo>();
+        r.quieto_s = quieto + t;
+        r.turno = turno;
+    }
+    let momentos = [0.35f32, 0.95];
+    if (fotos as usize) < momentos.len() && t >= momentos[fotos as usize] {
+        shot(world, &format!("{}/pose-{nombre}-{fotos}.png", flytest_dir()));
+        world.resource_mut::<PoseTestState>().fotos += 1;
+    }
+    if t >= 1.4 {
+        let mut st = world.resource_mut::<PoseTestState>();
+        st.paso += 1;
+        st.desde = 0.0;
+        st.fotos = 0;
+        *world.resource_mut::<AccionJugador>() = AccionJugador::default();
     }
 }

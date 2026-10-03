@@ -5174,6 +5174,54 @@ andaban en el creador de personaje y en el juego no.
 `art2d::registrar_poses_de_personaje` deriva **1.491 poses** del mismo índice al
 cargar. No se inventa geometría: si mañana se rehornea la hoja, siguen calzando.
 
+### El jugador HACE lo que hace: acciones, reposo y lo que tiene en la mano — 3 oct 2026
+
+Pedido: *«del jugador cuando nada, o realiza actividades debería haber asset para esas cosas o animaciones»*.
+Las poses estaban registradas desde el 4 ago, pero `sim::face_player_sprite` sólo pedía tres verbos (respirar,
+caminar, nadar): el jugador talaba parado, comía sin mover un dedo y quieto respiraba para siempre. Sólo los
+aldeanos usaban sus filas.
+
+**`pose_jugador.rs` decide el verbo; `sim.rs` le pone la dirección.** Orden de mando (`verbo_del_cuerpo`):
+agua > acción > caminar > arma en la mano (`gun_idle`) > reposo > respirar.
+
+| qué hace | fila del pack | de dónde sale la señal |
+|---|---|---|
+| talar, picar roca/mena/bloque | `hit` (con herramienta) · `punch` (a mano) | `HoldInteractState` + blanco |
+| cosechar, juntar un prop, abrir cofre, agua | `pick_up` | ídem |
+| levantar lo que construiste | `lift` | ídem |
+| pegarle a un infectado o a un animal | `punch` / `stab` (cuchillo) / `hit` | `infectados::golpear`, `fauna::interactuar_animal` |
+| colocar (construir, plantar, mueble) | `pick_up` medio (agacharse) | `PlaySfxAt(Place/Stamp)` a ≤ 4 m |
+| recibir daño | `hurt` | delta de vida (como `audio::survival_sounds`) |
+| comer / beber | `hands_chest` + capa dibujada | delta de hambre / sed |
+| disparar / recargar | `shoot` / `grab_gun` | `EstadoArmas::retroceso()` / `recargando()` |
+| quieto 9 s | `phone_intro` → `phone`, o `read` + libro (alternan) | `Reposo` |
+| quieto 40 s | `sit_floor` | ídem |
+| nadar | `walk` cortado a 32×40 + ondas | `PlayerVisual::swimming` |
+
+Una acción con blanco mira AL BLANCO, no al último paso. Prioridades: el daño pisa al golpe, el golpe a juntar
+o comer (`AccionJugador::hacer`).
+
+**Lo que el pack no trae en el cuerpo va como capa hija**, en la MISMA celda de 32×64 y arrancando en el mismo
+cuadro: `player/libro` (la capa `Books/` del pack, fila 7 — importada, no dibujada), `player/en_mano` (pancito que
+pierde dos mordiscos, taza que se inclina: 12 cuadros a 8 fps = dos vueltas de `hands_chest`) y `player/ondas`
+(anillo en 3/4 con huecos que giran, 4 cuadros). Las tres salen de `scripts/dibujar-acciones-jugador.py`
+(`--ver <png>` deja la lámina sobre el cuerpo real). El celular NO es capa: viene dibujado en el cuerpo de la fila 6.
+
+Medidas que gobiernan el dibujo (escala 16, sobre `Bodies/Body_32x32_01.png`):
+- **El pack de 32 es arte de 16 escalado ×2**: cada píxel del cuerpo es un bloque de 2×2. Lo que se dibuje
+  para ir encima se pinta en 16 y se duplica; a 1 px de 32 se ve más fino que la mano que lo sostiene.
+- Manos cruzadas en el pecho en la fila 22; mentón en la 21; la cabeza sube 1 px en los cuadros 2, 3, 8 y 9 (las
+  manos no se mueven). Contorno (58,58,80), el del libro del pack.
+
+**Corrección del catálogo:** la fila 7 se llamaba «phone_intro / SACAR EL CELULAR» y era LEER (la guía del pack
+la marca con los libros). La fila 6 son tres tramos: saca 0-2, usa 3-8 («4-9 loop»), guarda 9-11; `CharAnim.first`
+permite tramos que no arrancan en 0. Lo clava `las_animaciones_caben_en_su_fila_y_respetan_la_guia_del_pack`.
+
+Lo que NO se hizo, y por qué: dormir y sentarse en muebles. Las filas existen (`sleep`, `sit`), pero el jugador no
+tiene todavía el verbo de usar una cama o un banco (`Interaccion::verbo` del manifest no lo ejecuta nadie); la
+fila de dormir del pack es la cabeza sobre la almohada y sin cama se ve una cabeza suelta. Va con esa feature.
+Skill: `.claude/skills/animacion-del-jugador/`.
+
 ### En la calzada no va un cajero automático — 4 ago 2026
 
 `pack_siembra::CALLE` se había generado con la misma regla que la vereda, así que
@@ -8554,7 +8602,8 @@ un cuadrado»* + *«lo que dibujaste parece hecho en Paint, no llega a los talon
   mira, globo del menú, extractores, taladro, hábitat y plataforma).
   ⚠ **Orden de scripts**: `dibujar-mundo.py`, `dibujar-items.py` y `dibujar-ui.py` todavía definen las versiones
   viejas de esas claves; correr SIEMPRE después `dibujar-minerales.py`, `dibujar-materias.py`, `dibujar-comida.py`,
-  `dibujar-granja.py`, `dibujar-mundo-v2.py` y `dibujar-ui-v2.py`. Sin rehacer (obsoletos o de relleno): las piezas de
+  `dibujar-granja.py`, `dibujar-mundo-v2.py` y `dibujar-ui-v2.py`. `dibujar-acciones-jugador.py` (capas del
+  jugador: comida, taza, ondas, libro) es independiente: sus claves no las define ningún otro script. Sin rehacer (obsoletos o de relleno): las piezas de
   nave, `items/hand|jetpack|probe`, cielos y estrellas, canchas, césped cortado, `room_large` y las guirnaldas.
 * Los animales de granja (`art/gen/fauna/*.png`) NO son dibujos míos: son las hojas animadas del pack.
 * **Descartado a conciencia**: aldeanos únicos por composición de capas. Cada hoja compuesta pesa ~2,7 MB de GPU

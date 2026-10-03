@@ -79,7 +79,7 @@ impl Plugin for SimPlugin {
             .insert_resource(WorldCollision(collision_obstacles(&world)))
             .add_systems(Startup, configure_game_clock)
             .add_systems(FixedUpdate, tick_sim)
-            .add_systems(Update, (interpolate_player_visual, face_player_sprite));
+            .add_systems(Update, (interpolate_player_visual, face_player_sprite.in_set(FacePlayerSet)));
     }
 }
 
@@ -322,6 +322,10 @@ pub(crate) fn escala_en_vuelo(de_altura: f32, live: f32, screen_f: f32) -> f32 {
     por_altura.min(tope)
 }
 
+/// Donde se elige la pose del jugador: `pose_jugador` decide antes.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FacePlayerSet;
+
 /// Clave del slot de arte del jugador (coincide con `art/player/character.png`
 /// hardcodeado en `spawn_player` — el editor escribe sus poses ahí mismo).
 const PLAYER_ART_KEY: &str = "player/character";
@@ -376,6 +380,9 @@ fn pose_directions(to_rot: f32) -> [&'static str; 2] {
 fn face_player_sprite(
     art: Res<crate::art2d::ArtLibrary>,
     mut commands: Commands,
+    accion: Res<crate::pose_jugador::AccionJugador>,
+    reposo: Res<crate::pose_jugador::Reposo>,
+    equipped: Res<crate::input::EquippedItem>,
     mut query: Query<(Entity, &PlayerVisual, &mut Sprite, &mut CurrentPose), With<Player>>,
 ) {
     let use_poses = art.has_poses(PLAYER_ART_KEY);
@@ -398,21 +405,24 @@ fn face_player_sprite(
         }
 
         let moving = (visual.to_x - visual.from_x).abs() > 1e-4 || (visual.to_z - visual.from_z).abs() > 1e-4;
-        // Nadando manda la pose de natación, se mueva o no (flotar es una pose).
-        // Si el pack no trae `swim_*`, la cadena de fallback de abajo cae sola a
-        // `walk_*`/`idle_*` y el personaje nunca se queda sin sprite.
-        let verb = if visual.swimming {
-            "swim"
-        } else if moving {
-            "walk"
-        } else {
-            "idle"
-        };
-        let [diag, card] = pose_directions(visual.to_rot);
+        // QUÉ hace lo decide `pose_jugador` (acción > caminar > arma > reposo; el agua manda sobre
+        // todo). Acá sólo se le pone la dirección. Una acción con blanco (talar, pegarle a un
+        // infectado) mira al blanco aunque el último paso haya sido hacia otro lado.
+        let en_curso = accion.actual();
+        let verb = crate::pose_jugador::verbo_del_cuerpo(
+            visual.swimming,
+            moving,
+            en_curso.map(|(v, _)| v),
+            crate::armas::es_arma(&equipped.item_id),
+            reposo.pose(),
+        );
+        let rumbo = en_curso.and_then(|(_, r)| r).unwrap_or(visual.to_rot);
+        let [diag, card] = pose_directions(rumbo);
 
         // Orden de preferencia: diagonal → cardinal → mismo verbo espejado →
-        // idle en esa dirección → idle_down. Lo que el usuario sliceó manda; lo
-        // que no sliceó nunca deja al personaje sin sprite.
+        // el mismo verbo de frente (las filas de UNA dirección del pack: celular,
+        // leer, dormir) → idle en esa dirección → idle_down. Nunca deja al
+        // personaje sin sprite.
         let mut flip = false;
         let mut wanted = format!("{verb}_{diag}");
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
@@ -434,6 +444,9 @@ fn face_player_sprite(
             }
         }
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
+            wanted = format!("{verb}_down");
+        }
+        if !art.has_pose(PLAYER_ART_KEY, &wanted) {
             wanted = format!("idle_{card}");
         }
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
@@ -446,6 +459,15 @@ fn face_player_sprite(
         }
         current.0 = state_key;
         sprite.flip_x = flip;
+        // Nadando, la pose es el cuerpo cortado en la cintura (`art2d`: celda de 32x40): el quad se
+        // achica en la misma proporción para no estirarlo, y el personaje queda hundido hasta la
+        // cintura con las ondas (`pose_jugador::OndasNado`) en el borde del corte.
+        let t = crate::scene::TAMANO_JUGADOR;
+        sprite.custom_size = Some(if wanted.starts_with("swim") {
+            Vec2::new(t.x, t.y * crate::pose_jugador::NADO_ALTO_PX as f32 / 64.0)
+        } else {
+            t
+        });
 
         // Personaje armado con VARIAS hojas (un PNG por dirección/estado): la
         // pose trae su propia imagen. Con una sola hoja esto devuelve la misma
