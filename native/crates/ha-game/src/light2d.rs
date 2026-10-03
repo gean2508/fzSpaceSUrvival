@@ -79,10 +79,15 @@ pub const VEIL_LIGHTS: usize = 40;
 /// Redmi (30 sep 2026), una ciudad de noche con las 40 luces llenas = ~60 ms de GPU por
 /// cuadro (`resto` en `ha-stages`), contra 2 ms sin luces. En el celu se usan menos (las
 /// más importantes, ver `light_priority`); `HA_LUCES=n` lo fuerza para medir.
+///
+/// **16 en el celu desde el 3 oct 2026**, por la grilla de baldosas ([`TILES_X`]):
+/// el shader ya no paga cada luz en cada píxel sino sólo donde su pozo llega, así
+/// que duplicar el tope cuesta lo que cuestan los charcos que se SOLAPAN, no 8
+/// pasadas más por la pantalla entera.
 pub fn presupuesto_de_luces() -> usize {
     static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
     *N.get_or_init(|| {
-        let por_defecto = if cfg!(target_os = "android") { 8 } else { VEIL_LIGHTS };
+        let por_defecto = if cfg!(target_os = "android") { 16 } else { VEIL_LIGHTS };
         crate::flags::var("HA_LUCES")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -90,6 +95,33 @@ pub fn presupuesto_de_luces() -> usize {
             .clamp(1, VEIL_LIGHTS)
     })
 }
+
+/// **Grilla de baldosas de luz** (3 oct 2026). Las dos pasadas a pantalla completa
+/// recorrían TODAS las luces en CADA píxel: el costo era píxeles × luces aunque el
+/// 90 % de las luces no llegara a ese píxel (medido en el Redmi, ~4 ms de GPU por
+/// luz — por eso el tope de 8 en Android). Rechazar una luz es barato en ALU, pero
+/// en una Mali cada vuelta del bucle es además una lectura del uniform con índice
+/// dinámico, y eso es lo que se pagaba.
+///
+/// Ahora la CPU parte el encuadre en `TILES_X × TILES_Y` baldosas y anota, por
+/// baldosa, una máscara de bits con las luces que la TOCAN (`tiles_lo` = luces
+/// 0..31, `tiles_hi` = 32..39). El shader lee UNA máscara y recorre sólo esos bits:
+/// el costo pasa a ser píxeles × (luces que se solapan ahí), que en una calle con
+/// faroles es 0, 1 o 2 — no 8 ni 40.
+///
+/// **Se ve EXACTAMENTE igual.** Una luz fuera de la máscara es una luz cuyo pozo no
+/// llega a ningún punto de la baldosa, o sea una que el bucle viejo descartaba con
+/// `continue` sin tocar nada; los bits se recorren de menor a mayor, el mismo orden
+/// del bucle viejo, así que hasta el redondeo del producto `cover` es el mismo. Un
+/// píxel que cae fuera de la grilla (la cámara se movió entre dos ticks de 20 Hz)
+/// usa la máscara completa: más lento, nunca distinto.
+pub const TILES_X: usize = 20;
+pub const TILES_Y: usize = 10;
+/// Baldosas empaquetadas de a cuatro por `UVec4` (el uniform alinea a 16 bytes).
+pub const TILE_VECS: usize = TILES_X * TILES_Y / 4;
+/// Margen de la grilla alrededor del encuadre (fracción por lado): cubre lo que la
+/// cámara recorre entre dos ticks sin caer en la máscara completa.
+const GRID_MARGIN: f32 = 0.12;
 
 /// Alcance del pozo de luz respecto al radio declarado del emisor. **Lo usan el
 /// velo y el tinte de sprites por igual**: si no coinciden, un sprite se aclara
@@ -264,6 +296,17 @@ pub struct NightVeilUniform {
     /// `rgb` = color de la luz i (LINEAL) · `w` = radio declarado del emisor, que
     /// es lo que le da tamaño al bulbo en la pasada aditiva.
     pub tints: [Vec4; VEIL_LIGHTS],
+    /// `rgb` = el color de la luz i ya SATURADO (`tint^1,6`, ver `fragment_add`).
+    /// Es una constante por luz: calcularla acá ahorra tres `pow` por luz y por
+    /// píxel en la pasada aditiva. `w` libre.
+    pub cols: [Vec4; VEIL_LIGHTS],
+    /// Grilla de baldosas (ver [`TILES_X`]): `xy` = esquina inferior izquierda en
+    /// metros, `zw` = 1/lado de baldosa. `zw = 0` = sin grilla (máscara completa).
+    pub grid: Vec4,
+    /// Máscara de luces 0..31 por baldosa (baldosa `k` = `tiles_lo[k/4][k%4]`).
+    pub tiles_lo: [UVec4; TILE_VECS],
+    /// Máscara de luces 32..39 por baldosa.
+    pub tiles_hi: [UVec4; TILE_VECS],
 }
 
 impl Default for NightVeilUniform {
@@ -278,6 +321,10 @@ impl Default for NightVeilUniform {
             _p2: 0,
             lights: [Vec4::ZERO; VEIL_LIGHTS],
             tints: [Vec4::ZERO; VEIL_LIGHTS],
+            cols: [Vec4::ZERO; VEIL_LIGHTS],
+            grid: Vec4::ZERO,
+            tiles_lo: [UVec4::ZERO; TILE_VECS],
+            tiles_hi: [UVec4::ZERO; TILE_VECS],
         }
     }
 }
@@ -729,6 +776,7 @@ fn tick_lights(
     // respira el charco entero.
     let mut uniform_lights = [Vec4::ZERO; VEIL_LIGHTS];
     let mut uniform_tints = [Vec4::ZERO; VEIL_LIGHTS];
+    let mut uniform_cols = [Vec4::ZERO; VEIL_LIGHTS];
     let mut count = 0u32;
     for &(_, e) in near.iter().take(presupuesto_de_luces()) {
         let Ok((_, light, gt)) = lights.get(e) else { continue };
@@ -766,20 +814,48 @@ fn tick_lights(
             0.0
         };
         uniform_tints[count as usize] = Vec4::new(c.red, c.green, c.blue, bulb_w);
+        uniform_cols[count as usize] = Vec4::new(
+            c.red.max(0.0).powf(1.6),
+            c.green.max(0.0).powf(1.6),
+            c.blue.max(0.0).powf(1.6),
+            0.0,
+        );
         count += 1;
     }
     let view_u = view_px.extend(0.0).extend(0.0);
+    // La grilla cubre el encuadre (más un margen) y se ancla a múltiplos de la
+    // baldosa: caminando despacio el uniform no cambia de un tick al otro y Bevy
+    // no tiene nada que volver a subir.
+    let (grid, tiles_lo, tiles_hi) = if view_px.x > 0.0 && view_px.y > 0.0 {
+        let alto = view_h * proj.scale.max(1e-3);
+        let ext = Vec2::new(alto * view_px.x / view_px.y, alto) * (1.0 + 2.0 * GRID_MARGIN);
+        // Una baldosa de holgura por eje: el `floor` del ancla corre la grilla
+        // hasta una baldosa, y sin ella el borde de la pantalla quedaría afuera.
+        let tile = ext / Vec2::new(TILES_X as f32 - 1.0, TILES_Y as f32 - 1.0);
+        let origin = ((cam - ext * 0.5) / tile).floor() * tile;
+        let (lo, hi) = light_tiles(&uniform_lights[..count as usize], origin, tile);
+        (Vec4::new(origin.x, origin.y, 1.0 / tile.x, 1.0 / tile.y), lo, hi)
+    } else {
+        (Vec4::ZERO, [UVec4::ZERO; TILE_VECS], [UVec4::ZERO; TILE_VECS])
+    };
     if let Some(vh) = veil_mat.as_ref() {
         let igual = veil_assets.get(&vh.0).is_some_and(|m| {
             m.uniform.count == count
                 && m.uniform.view == view_u
                 && m.uniform.lights == uniform_lights
                 && m.uniform.tints == uniform_tints
+                && m.uniform.grid == grid
+                && m.uniform.tiles_lo == tiles_lo
+                && m.uniform.tiles_hi == tiles_hi
         });
         if !igual {
             if let Some(mat) = veil_assets.get_mut(&vh.0) {
                 mat.uniform.lights = uniform_lights;
                 mat.uniform.tints = uniform_tints;
+                mat.uniform.cols = uniform_cols;
+                mat.uniform.grid = grid;
+                mat.uniform.tiles_lo = tiles_lo;
+                mat.uniform.tiles_hi = tiles_hi;
                 mat.uniform.count = count;
                 mat.uniform.view = view_u;
             }
@@ -800,6 +876,9 @@ fn tick_lights(
                 && color_velo.map_or(true, |c| m.uniform.color == c)
                 && m.uniform.lights == uniform_lights
                 && m.uniform.tints == uniform_tints
+                && m.uniform.grid == grid
+                && m.uniform.tiles_lo == tiles_lo
+                && m.uniform.tiles_hi == tiles_hi
         });
         if !igual {
             if let Some(mat) = add_assets.get_mut(&ah.0) {
@@ -808,6 +887,10 @@ fn tick_lights(
                 }
                 mat.uniform.lights = uniform_lights;
                 mat.uniform.tints = uniform_tints;
+                mat.uniform.cols = uniform_cols;
+                mat.uniform.grid = grid;
+                mat.uniform.tiles_lo = tiles_lo;
+                mat.uniform.tiles_hi = tiles_hi;
                 mat.uniform.count = count;
                 mat.uniform.view = view_u;
             }
@@ -830,6 +913,52 @@ fn tick_lights(
             }
         }
     }
+}
+
+/// Máscaras de luces por baldosa (ver [`TILES_X`]). `lights` es lo mismo que va al
+/// uniform: `xy` = centro, `z` = 1/alcance². El bit `i` de una baldosa se prende si
+/// el pozo de la luz `i` llega a ALGÚN punto de la baldosa (distancia del centro al
+/// rectángulo, no al centro de la baldosa).
+///
+/// Es conservador a propósito: el rectángulo se agranda un 2 % de baldosa y el
+/// alcance un 1 %, así un píxel justo en el borde entre dos baldosas —donde el
+/// `floor` del shader puede caer de cualquier lado por redondeo— nunca pierde una
+/// luz que el bucle completo le habría sumado.
+fn light_tiles(lights: &[Vec4], origin: Vec2, tile: Vec2) -> ([UVec4; TILE_VECS], [UVec4; TILE_VECS]) {
+    let mut lo = [UVec4::ZERO; TILE_VECS];
+    let mut hi = [UVec4::ZERO; TILE_VECS];
+    let pad = tile * 0.02;
+    for (i, l) in lights.iter().enumerate().take(VEIL_LIGHTS) {
+        if l.z <= 0.0 {
+            continue;
+        }
+        let reach = (1.0 / l.z).sqrt() * 1.01;
+        let c = l.truncate().truncate();
+        // Sólo las baldosas bajo la caja del pozo.
+        let a = ((c - reach - origin) / tile).floor();
+        let b = ((c + reach - origin) / tile).floor();
+        if b.x < 0.0 || b.y < 0.0 || a.x >= TILES_X as f32 || a.y >= TILES_Y as f32 {
+            continue;
+        }
+        let (x0, x1) = (a.x.max(0.0) as usize, (b.x as usize).min(TILES_X - 1));
+        let (y0, y1) = (a.y.max(0.0) as usize, (b.y as usize).min(TILES_Y - 1));
+        for ty in y0..=y1 {
+            for tx in x0..=x1 {
+                let min = origin + tile * Vec2::new(tx as f32, ty as f32) - pad;
+                let max = min + tile + pad * 2.0;
+                if c.clamp(min, max).distance_squared(c) > reach * reach {
+                    continue;
+                }
+                let k = ty * TILES_X + tx;
+                if i < 32 {
+                    lo[k / 4][k % 4] |= 1 << i;
+                } else {
+                    hi[k / 4][k % 4] |= 1 << (i - 32);
+                }
+            }
+        }
+    }
+    (lo, hi)
 }
 
 /// Apaga las dos pasadas cuando no aportan nada (ver [`LightPass`]): a pleno día
@@ -1349,6 +1478,8 @@ fn light_sprites(
         (Without<LitOverlay>, Without<crate::sim::UnlitSprite>),
     >,
     mut acc: Local<f32>,
+    // ¿Quedó algún sprite teñido del tick anterior? Ver la salida temprana abajo.
+    mut habia_luz: Local<bool>,
     time: Res<Time>,
     span: Res<crate::debug::CpuSpanStats>,
 ) {
@@ -1399,6 +1530,17 @@ fn light_sprites(
     active.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
     active.truncate(presupuesto_de_luces());
 
+    // **De día no hay nada que hacer** (3 oct 2026). Sin ninguna luz activa el
+    // bucle de abajo recorría igual TODOS los sprites del mundo 20 veces por
+    // segundo para concluir, sprite por sprite, que ninguno estaba en un pozo —
+    // o sea el día entero, que es cuando más cosas hay en cuadro. Sólo hace falta
+    // una vuelta más, la del atardecer al día, para devolverles su color a los que
+    // quedaron teñidos; después el sistema duerme hasta que se prenda una luz.
+    if active.is_empty() && !*habia_luz {
+        return;
+    }
+    *habia_luz = !active.is_empty();
+
     // El sprite se tiñe si está en el pozo, aunque la cámara esté lejos: cortar
     // por `cull_r` a secas dejaba props sin teñir en el borde de la pantalla al
     // alejar el zoom, con el charco ya dibujado debajo.
@@ -1406,7 +1548,10 @@ fn light_sprites(
 
     for (e, gt, mut sprite, base) in &mut sprites {
         let p = gt.translation();
-        if p.z > WORLD_Z_MAX || p.truncate().distance(cam) > cull_r + sprite_reach {
+        // En la vuelta de apagado (sin luces activas) no se corta por distancia: un
+        // sprite que quedó teñido lejos de la cámara tiene que volver a su color
+        // ahora, porque después el sistema se duerme y ya no lo vería.
+        if p.z > WORLD_Z_MAX || (!active.is_empty() && p.truncate().distance(cam) > cull_r + sprite_reach) {
             continue;
         }
         // **El arte PLANO no se tiñe acá.** Todo lo que está por debajo de
@@ -1600,4 +1745,62 @@ pub fn attach(
             Visibility::Hidden,
         ));
     });
+}
+
+#[cfg(test)]
+mod tests_baldosas {
+    use super::*;
+
+    /// Generador chico y determinista (no hace falta `rand` para esto).
+    fn lcg(s: &mut u64) -> f32 {
+        *s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (*s >> 40) as f32 / (1u64 << 24) as f32
+    }
+
+    /// **Ningún píxel pierde una luz.** Para puntos al azar de la grilla, toda luz
+    /// que el bucle viejo del shader le habría sumado (`dist² · z < 1`) tiene que
+    /// estar en la máscara de su baldosa — si no, la grilla cambiaría la imagen.
+    #[test]
+    fn la_mascara_nunca_pierde_una_luz_que_llega() {
+        for semilla in 1..=6u64 {
+            let mut s = semilla;
+            let origin = Vec2::new(lcg(&mut s) * 200.0 - 100.0, lcg(&mut s) * 200.0 - 100.0);
+            let tile = Vec2::new(1.0 + lcg(&mut s) * 4.0, 1.0 + lcg(&mut s) * 4.0);
+            let ext = tile * Vec2::new(TILES_X as f32, TILES_Y as f32);
+            let mut lights = [Vec4::ZERO; VEIL_LIGHTS];
+            for l in lights.iter_mut() {
+                let c = origin + Vec2::new(lcg(&mut s) * 1.4 - 0.2, lcg(&mut s) * 1.4 - 0.2) * ext;
+                let reach = 0.3 + lcg(&mut s) * 9.0;
+                *l = Vec4::new(c.x, c.y, 1.0 / (reach * reach), 1.0);
+            }
+            let (lo, hi) = light_tiles(&lights, origin, tile);
+            for _ in 0..4000 {
+                let p = origin + Vec2::new(lcg(&mut s), lcg(&mut s)) * ext;
+                let g = (p - origin) / tile;
+                let k = (g.y as usize).min(TILES_Y - 1) * TILES_X + (g.x as usize).min(TILES_X - 1);
+                for (i, l) in lights.iter().enumerate() {
+                    let dp = p - l.truncate().truncate();
+                    if dp.dot(dp) * l.z >= 1.0 {
+                        continue;
+                    }
+                    let bit = if i < 32 { lo[k / 4][k % 4] >> i } else { hi[k / 4][k % 4] >> (i - 32) };
+                    assert_eq!(bit & 1, 1, "semilla {semilla}: la luz {i} llega a {p:?} y su baldosa {k} no la tiene");
+                }
+            }
+        }
+    }
+
+    /// Y la grilla de verdad PODA: una luz chica no se anota en baldosas lejanas.
+    #[test]
+    fn una_luz_chica_solo_marca_sus_baldosas() {
+        let origin = Vec2::ZERO;
+        let tile = Vec2::splat(2.0);
+        let lights = [Vec4::new(5.0, 5.0, 1.0 / (1.5 * 1.5), 1.0)];
+        let (lo, hi) = light_tiles(&lights, origin, tile);
+        let marcadas: u32 = lo.iter().map(|v| v.to_array().iter().map(|b| b.count_ones()).sum::<u32>()).sum();
+        assert!((1..=9).contains(&marcadas), "marcó {marcadas} baldosas");
+        assert!(hi.iter().all(|v| *v == UVec4::ZERO));
+        let lejos = 9 * TILES_X + 19;
+        assert_eq!(lo[lejos / 4][lejos % 4], 0);
+    }
 }
