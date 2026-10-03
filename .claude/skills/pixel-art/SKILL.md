@@ -59,6 +59,41 @@ con `lib.pixel.publicar`; **un script nuevo se suma a la lista y al ⚠ de orden
 **El proceso de entrega no cambia** (§3-§4), pero ahora el paso de «mirarla» es obligatorio contra la lámina, y
 **la pieza vieja que se encuentre por debajo del listón se rehace, no se deja**.
 
+## 0.1 REEMPLAZAR un asset del pack: el juez (3 oct 2026)
+
+> Pedido: *«dibujar todos los assets para tener control total… pero solo si están a la altura o los superan»*.
+> Respaldo de la skill anterior: `.claude/respaldos/pixel-art-2026-10-03/` y el tag `respaldo/pixel-art-skill-2026-10-03`.
+
+Un asset comprado **sólo** se saca por uno nuestro que pase el juez:
+
+```sh
+python3 scripts/juez-arte.py nueva.png --contra pack1.png [pack2.png] --lamina /tmp/ciega.png
+```
+
+Mide **por celda de 32x32** (variedad, la celda más pobre p10, plano, bordes, tonos, salto de luz, colores,
+luz, huecos, escala) y da `SUPERA` / `A LA ALTURA` / `POR DEBAJO`. La lámina es **a ciegas**: mirala y adiviná
+cuál es la dibujada ANTES de abrir `.respuesta.json`; si se adivina, no reemplaza. Medido el 3 oct: los ítems de
+una celda ya están casi a la par (salto de luz 27,5 contra 30,4 del pack), pero usan menos colores (7 contra 9) y
+tonos (6 contra 7) → **subí a 7-9 colores**. El taxi dibujado quedó POR DEBAJO por escala (un cuarto de un auto del pack).
+
+## 0.2 Edificios: a la medida de la sim, con el pixel del pack (`scripts/lib/edificio.py`)
+
+Las casas «rotas» (interior que asoma, puerta dibujada fuera de la celda `Door`, fachada estirada ×1,4) vienen de
+que el pack dibuja cada casa de un tamaño fijo. Dibujar casas desde cero NO llega al nivel del pack (tejas,
+revestimiento, alféizares). Lo que sí llega: **re-componer el pixel del pack a la medida exacta**.
+
+- `redimensionar(im, ancho, proteger_x=aberturas(im))`: reparte el cambio entre tiras de columnas idénticas
+  (pesadas por largo²); puertas y ventanas (detectadas por el vidrio: g>r+14, b>g+5) no se tocan.
+- `fachada_a_medida(modulos, ancho_px)`: combina módulos del pack lado a lado (como las casas adosadas), cada uno
+  re-medido a lo sumo ×1,3, y **cada candidata pasa por el juez**; devuelve la primera A LA ALTURA o se planta.
+  Con `Terraced_House_Side_View_Base_1/2`: entran 8-11, 17-23 y 25-30 celdas; 7, 12-16 y 24 no.
+- `mover_franja`: lleva la puerta a la columna de la sim. `apilar(techo, fachada)`.
+- ⚠ Descartado: el camino óptimo por grafo de columnas (las bahías del pack coinciden al 77 % como mucho y el
+  camino repetía UNA columna; el juez lo aprobaba porque salteaba celdas vacías → ahora mide `huecos`).
+
+**Falta** (próximo paso): un importador que use `fachada_a_medida` con la huella de `city::edificado_de_lote`
+y la puerta de `city::puerta_del_frente`, y más familias de módulos para cubrir los anchos que hoy no entran.
+
 ## 0. Antes de dibujar: ¿de verdad falta?
 
 > ⚠ **EL ERROR MÁS CARO DE ESTA SKILL, Y YA PASÓ.** El 14 ago 2026 se dibujaron
