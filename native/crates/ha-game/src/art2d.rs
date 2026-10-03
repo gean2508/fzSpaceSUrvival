@@ -161,6 +161,7 @@ fn registrar_poses_de_personaje(art: &mut ArtLibrary) {
                                 fps: walk.fps * 0.6,
                             }),
                             layer: None,
+                            hoja: None,
                             image: None,
                         },
                     );
