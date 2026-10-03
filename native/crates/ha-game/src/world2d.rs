@@ -717,6 +717,39 @@ impl TileWorld {
         self.edits.insert((body as u8, z, tx, tz), kind);
         self.version = self.version.wrapping_add(1);
     }
+
+    /// Todas las celdas editadas (cuerpo, nivel, tx, tz) → tile. Lo lee el
+    /// multijugador para ver qué cambió desde la última vez (`mundo_compartido`).
+    pub fn ediciones(&self) -> &HashMap<(u8, i32, i64, i64), Tile> {
+        &self.edits
+    }
+
+    /// **Una celda que cambió en el mundo de OTRO jugador de la sala.** Pisa sin
+    /// condiciones (el otro ya validó contra su mundo, que es el mismo), se guarda
+    /// con la partida y refresca el arte de los vecinos. `None` = la celda vuelve
+    /// a lo que da la semilla. Si era una losa y deja de serlo, lo de arriba se
+    /// derrumba igual que si la hubieras picado vos.
+    pub fn aplicar_remoto(&mut self, key: (u8, i32, i64, i64), tile: Option<Tile>) {
+        let antes = self.edits.get(&key).copied();
+        if antes == tile {
+            return;
+        }
+        match tile {
+            Some(t) => {
+                self.edits.insert(key, t);
+            }
+            None => {
+                self.edits.remove(&key);
+            }
+        }
+        let era_losa = antes.is_some_and(ha_shared::build_grid::is_build_floor);
+        if era_losa && !tile.is_some_and(ha_shared::build_grid::is_build_floor) {
+            self.removed_floors.push(key);
+        }
+        self.version = self.version.wrapping_add(1);
+        self.dirty = true;
+        self.edit_log.push((key.2, key.3));
+    }
 }
 
 /// Celdas que el usuario AUTORÓ en el editor de mundo y en las que el juego no

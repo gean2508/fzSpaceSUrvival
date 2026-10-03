@@ -129,7 +129,7 @@ impl Multi {
         self.mensaje = format!("conectando a {destino}...");
         self.cliente = Some(Mutex::new(Cliente::conectar(
             destino,
-            Msg::Hola { nombre: nombre.to_string(), piel: piel.to_string(), semilla },
+            red::hola(nombre, piel, semilla, ""),
         )));
         self.tocar();
     }
@@ -260,7 +260,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                 }
             }
             Evento::Mensaje(m) => match m {
-                Msg::Id { id, semilla } => {
+                Msg::Id { id, semilla, .. } => {
                     multi.mi_id = Some(id);
                     multi.semilla_sala = semilla;
                     multi.estado = EstadoRed::Dentro;
@@ -306,7 +306,9 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                         multi.mensaje = format!("{} salió", r.nombre);
                     }
                 }
-                Msg::Hola { .. } => {}
+                Msg::Error { msg } => multi.mensaje = msg,
+                // Mundo compartido, árbitro y salas: los consume `mundo_compartido` (en curso).
+                _ => {}
             },
         }
     }
