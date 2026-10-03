@@ -125,7 +125,7 @@ export function recompensaPase(nivel: number): { gratis: Recompensa; premium: Re
   // El resto: monedas en la gratuita y gemas cada tres niveles en la premium
   // (el pase premium devuelve más gemas de las que cuesta si se completa).
   const gratis = `monedas:${100 + 20 * nivel}`;
-  const premium = nivel % 3 === 0 ? "gemas:100" : `monedas:${300 + 30 * nivel}`;
+  const premium = nivel % 3 === 0 ? "gemas:200" : `monedas:${300 + 30 * nivel}`;
   return { gratis, premium };
 }
 

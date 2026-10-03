@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-29T08:57:27.188Z",
+  "generatedAt": "2026-10-03T23:00:38.006Z",
   "modules": [
     {
       "id": "assets",
@@ -1546,6 +1546,686 @@
             "bgPalette": "night",
             "grid": 5,
             "cellCount": 16
+          }
+        }
+      ]
+    },
+    {
+      "id": "tienda",
+      "entries": [
+        {
+          "id": "aura:carmesi",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 0,
+            "monedas": 4000,
+            "da": "aura:carmesi"
+          }
+        },
+        {
+          "id": "aura:dios_azul",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 300,
+            "monedas": 0,
+            "da": "aura:dios_azul"
+          }
+        },
+        {
+          "id": "aura:ego",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "aura:ego"
+          }
+        },
+        {
+          "id": "aura:instinto",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 600,
+            "monedas": 0,
+            "da": "aura:instinto"
+          }
+        },
+        {
+          "id": "aura:legendario",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 0,
+            "monedas": 6000,
+            "da": "aura:legendario"
+          }
+        },
+        {
+          "id": "aura:rosado",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 300,
+            "monedas": 0,
+            "da": "aura:rosado"
+          }
+        },
+        {
+          "id": "aura:saiyan",
+          "fields": {
+            "tipo": "aura",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "aura:saiyan"
+          }
+        },
+        {
+          "id": "camo:ak:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:ak:dragon"
+          }
+        },
+        {
+          "id": "camo:ak:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:ak:hielo"
+          }
+        },
+        {
+          "id": "camo:ak:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:ak:neon"
+          }
+        },
+        {
+          "id": "camo:ak:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:ak:oro"
+          }
+        },
+        {
+          "id": "camo:escopeta:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:escopeta:dragon"
+          }
+        },
+        {
+          "id": "camo:escopeta:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:escopeta:hielo"
+          }
+        },
+        {
+          "id": "camo:escopeta:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:escopeta:neon"
+          }
+        },
+        {
+          "id": "camo:escopeta:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:escopeta:oro"
+          }
+        },
+        {
+          "id": "camo:mp40:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:mp40:dragon"
+          }
+        },
+        {
+          "id": "camo:mp40:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:mp40:hielo"
+          }
+        },
+        {
+          "id": "camo:mp40:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:mp40:neon"
+          }
+        },
+        {
+          "id": "camo:mp40:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:mp40:oro"
+          }
+        },
+        {
+          "id": "camo:pistola:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:pistola:dragon"
+          }
+        },
+        {
+          "id": "camo:pistola:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:pistola:hielo"
+          }
+        },
+        {
+          "id": "camo:pistola:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:pistola:neon"
+          }
+        },
+        {
+          "id": "camo:pistola:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:pistola:oro"
+          }
+        },
+        {
+          "id": "camo:pps43:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:pps43:dragon"
+          }
+        },
+        {
+          "id": "camo:pps43:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:pps43:hielo"
+          }
+        },
+        {
+          "id": "camo:pps43:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:pps43:neon"
+          }
+        },
+        {
+          "id": "camo:pps43:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:pps43:oro"
+          }
+        },
+        {
+          "id": "camo:ppsh:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:ppsh:dragon"
+          }
+        },
+        {
+          "id": "camo:ppsh:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:ppsh:hielo"
+          }
+        },
+        {
+          "id": "camo:ppsh:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:ppsh:neon"
+          }
+        },
+        {
+          "id": "camo:ppsh:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:ppsh:oro"
+          }
+        },
+        {
+          "id": "camo:raygun:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:raygun:dragon"
+          }
+        },
+        {
+          "id": "camo:raygun:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:raygun:hielo"
+          }
+        },
+        {
+          "id": "camo:raygun:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:raygun:neon"
+          }
+        },
+        {
+          "id": "camo:raygun:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:raygun:oro"
+          }
+        },
+        {
+          "id": "camo:suomi:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:suomi:dragon"
+          }
+        },
+        {
+          "id": "camo:suomi:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:suomi:hielo"
+          }
+        },
+        {
+          "id": "camo:suomi:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:suomi:neon"
+          }
+        },
+        {
+          "id": "camo:suomi:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:suomi:oro"
+          }
+        },
+        {
+          "id": "camo:thompson:dragon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 0,
+            "monedas": 0,
+            "da": "camo:thompson:dragon"
+          }
+        },
+        {
+          "id": "camo:thompson:hielo",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:thompson:hielo"
+          }
+        },
+        {
+          "id": "camo:thompson:neon",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 100,
+            "monedas": 0,
+            "da": "camo:thompson:neon"
+          }
+        },
+        {
+          "id": "camo:thompson:oro",
+          "fields": {
+            "tipo": "camo",
+            "gemas": 120,
+            "monedas": 0,
+            "da": "camo:thompson:oro"
+          }
+        },
+        {
+          "id": "nivel:01",
+          "fields": {
+            "gratis": "monedas:300",
+            "premium": "camo:pistola:dragon"
+          }
+        },
+        {
+          "id": "nivel:02",
+          "fields": {
+            "gratis": "monedas:140",
+            "premium": "monedas:360"
+          }
+        },
+        {
+          "id": "nivel:03",
+          "fields": {
+            "gratis": "monedas:160",
+            "premium": "gemas:200"
+          }
+        },
+        {
+          "id": "nivel:04",
+          "fields": {
+            "gratis": "monedas:180",
+            "premium": "monedas:420"
+          }
+        },
+        {
+          "id": "nivel:05",
+          "fields": {
+            "gratis": "monedas:600",
+            "premium": "camo:thompson:dragon"
+          }
+        },
+        {
+          "id": "nivel:06",
+          "fields": {
+            "gratis": "monedas:220",
+            "premium": "gemas:200"
+          }
+        },
+        {
+          "id": "nivel:07",
+          "fields": {
+            "gratis": "monedas:240",
+            "premium": "monedas:510"
+          }
+        },
+        {
+          "id": "nivel:08",
+          "fields": {
+            "gratis": "aura:carmesi",
+            "premium": "camo:mp40:dragon"
+          }
+        },
+        {
+          "id": "nivel:09",
+          "fields": {
+            "gratis": "monedas:280",
+            "premium": "gemas:200"
+          }
+        },
+        {
+          "id": "nivel:10",
+          "fields": {
+            "gratis": "gemas:50",
+            "premium": "camo:ak:dragon"
+          }
+        },
+        {
+          "id": "nivel:11",
+          "fields": {
+            "gratis": "monedas:320",
+            "premium": "monedas:630"
+          }
+        },
+        {
+          "id": "nivel:12",
+          "fields": {
+            "gratis": "monedas:800",
+            "premium": "camo:ppsh:dragon"
+          }
+        },
+        {
+          "id": "nivel:13",
+          "fields": {
+            "gratis": "monedas:360",
+            "premium": "monedas:690"
+          }
+        },
+        {
+          "id": "nivel:14",
+          "fields": {
+            "gratis": "monedas:380",
+            "premium": "monedas:720"
+          }
+        },
+        {
+          "id": "nivel:15",
+          "fields": {
+            "gratis": "monedas:1000",
+            "premium": "aura:ego"
+          }
+        },
+        {
+          "id": "nivel:16",
+          "fields": {
+            "gratis": "monedas:420",
+            "premium": "monedas:780"
+          }
+        },
+        {
+          "id": "nivel:17",
+          "fields": {
+            "gratis": "monedas:440",
+            "premium": "monedas:810"
+          }
+        },
+        {
+          "id": "nivel:18",
+          "fields": {
+            "gratis": "monedas:800",
+            "premium": "camo:suomi:dragon"
+          }
+        },
+        {
+          "id": "nivel:19",
+          "fields": {
+            "gratis": "monedas:480",
+            "premium": "monedas:870"
+          }
+        },
+        {
+          "id": "nivel:20",
+          "fields": {
+            "gratis": "gemas:50",
+            "premium": "camo:pps43:dragon"
+          }
+        },
+        {
+          "id": "nivel:21",
+          "fields": {
+            "gratis": "monedas:520",
+            "premium": "gemas:200"
+          }
+        },
+        {
+          "id": "nivel:22",
+          "fields": {
+            "gratis": "monedas:540",
+            "premium": "monedas:960"
+          }
+        },
+        {
+          "id": "nivel:23",
+          "fields": {
+            "gratis": "monedas:560",
+            "premium": "monedas:990"
+          }
+        },
+        {
+          "id": "nivel:24",
+          "fields": {
+            "gratis": "monedas:580",
+            "premium": "gemas:200"
+          }
+        },
+        {
+          "id": "nivel:25",
+          "fields": {
+            "gratis": "monedas:1500",
+            "premium": "camo:escopeta:dragon"
+          }
+        },
+        {
+          "id": "nivel:26",
+          "fields": {
+            "gratis": "monedas:620",
+            "premium": "monedas:1080"
+          }
+        },
+        {
+          "id": "nivel:27",
+          "fields": {
+            "gratis": "monedas:640",
+            "premium": "gemas:200"
+          }
+        },
+        {
+          "id": "nivel:28",
+          "fields": {
+            "gratis": "monedas:660",
+            "premium": "monedas:1140"
+          }
+        },
+        {
+          "id": "nivel:29",
+          "fields": {
+            "gratis": "monedas:680",
+            "premium": "monedas:1170"
+          }
+        },
+        {
+          "id": "nivel:30",
+          "fields": {
+            "gratis": "gemas:100",
+            "premium": "camo:raygun:dragon"
+          }
+        },
+        {
+          "id": "pack:hielo",
+          "fields": {
+            "tipo": "pack",
+            "gemas": 650,
+            "monedas": 0,
+            "da": "camo:pistola:hielo,camo:thompson:hielo,camo:ppsh:hielo,camo:mp40:hielo,camo:suomi:hielo,camo:pps43:hielo,camo:ak:hielo,camo:escopeta:hielo,camo:raygun:hielo"
+          }
+        },
+        {
+          "id": "pack:neon",
+          "fields": {
+            "tipo": "pack",
+            "gemas": 650,
+            "monedas": 0,
+            "da": "camo:pistola:neon,camo:thompson:neon,camo:ppsh:neon,camo:mp40:neon,camo:suomi:neon,camo:pps43:neon,camo:ak:neon,camo:escopeta:neon,camo:raygun:neon"
+          }
+        },
+        {
+          "id": "pack:oro",
+          "fields": {
+            "tipo": "pack",
+            "gemas": 780,
+            "monedas": 0,
+            "da": "camo:pistola:oro,camo:thompson:oro,camo:ppsh:oro,camo:mp40:oro,camo:suomi:oro,camo:pps43:oro,camo:ak:oro,camo:escopeta:oro,camo:raygun:oro"
+          }
+        },
+        {
+          "id": "paquete:gemas_100",
+          "fields": {
+            "gemas": 100,
+            "extra": 0,
+            "centavos": 99
+          }
+        },
+        {
+          "id": "paquete:gemas_1080",
+          "fields": {
+            "gemas": 1000,
+            "extra": 80,
+            "centavos": 999
+          }
+        },
+        {
+          "id": "paquete:gemas_2200",
+          "fields": {
+            "gemas": 2000,
+            "extra": 200,
+            "centavos": 1999
+          }
+        },
+        {
+          "id": "paquete:gemas_520",
+          "fields": {
+            "gemas": 500,
+            "extra": 20,
+            "centavos": 499
+          }
+        },
+        {
+          "id": "pase:t1",
+          "fields": {
+            "tipo": "pase",
+            "gemas": 950,
+            "monedas": 0,
+            "da": "pase:t1"
+          }
+        },
+        {
+          "id": "temporada:t1",
+          "fields": {
+            "niveles": 30,
+            "xpPorNivel": 1000,
+            "gemasPremium": 950,
+            "desde": "2026-10-01T00:00:00Z",
+            "hasta": "2027-01-01T00:00:00Z"
           }
         }
       ]
