@@ -276633,12 +276633,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo2.png",
+   "png": "art/gen/taxi.png",
    "rect": {
-    "col": 10,
-    "h": 1,
+    "col": 0,
     "row": 0,
-    "w": 1
+    "w": 3,
+    "h": 4
    }
   },
   "vehicle/telefono_publico_1": {

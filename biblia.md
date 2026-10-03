@@ -6476,6 +6476,36 @@ escalón de rampa del lado en sombra, +5 del lado a la luz). El script que lo hi
 se borró con el resto del 3D (§14); las páginas originales están en el commit
 `c531097`.
 
+### El juez del reemplazo y la casa a la medida (3 oct 2026)
+
+Pedido: *«dibujar todos los assets para tener control total… pero solo si los dibujos están a la altura de los
+assets o los superan»*. Lo que se construyó y lo que se midió:
+
+- **`scripts/juez-arte.py` + `scripts/lib/juez.py`**: decide si una pieza nuestra puede reemplazar a una del pack.
+  Mide por celda de 32x32 (variedad y su p10, plano, bordes, tonos, salto de luz, colores, luz, huecos, escala)
+  y arma una lámina A CIEGAS. Calibrado: una casa del pack contra sus hermanas da A LA ALTURA; el taxi dibujado
+  el 2 oct, POR DEBAJO (un cuarto del tamaño de un auto, salto de luz 11,8 contra 24,9).
+- **Ítems de una celda**: lo dibujado ya está casi a la par (salto de luz mediano 27,5 contra 30,4 en 500
+  singles del pack) pero usa menos colores (7 contra 9) y tonos (6 contra 7).
+- **`vehicle/taxi`** se rehízo DERIVANDO (`scripts/dibujar-taxi.py`): el auto amarillo del pack
+  (`auto_abajo_14`, la variante se elige midiendo) + cartel de techo. Juez: SUPERA. Hoja `art/gen/taxi.png`, 3x4.
+- **`scripts/lib/edificio.py`**: re-mide pixel del pack repitiendo/quitando líneas que ya son idénticas a su
+  vecina, con puertas/ventanas protegidas (vidrio: g>r+14, b>g+5), la sombra transparente y las diagonales de
+  los techos a dos aguas intocables; `fachada_a_medida` combina módulos lado a lado y pasa cada candidata por el
+  juez. `scripts/import-casas-a-medida.py` intenta llevar cada vivienda a la huella exacta de su programa.
+
+⚠ **Lo que dio la medición de las casas, y por qué NO se publicó nada.** Las huellas residenciales de
+`city.rs` son entre 1,5 y 4,1 veces el dibujo del pack (casa_chica 13x10 celdas → 18x15; villa 9x13 → 37x36,
+con `ESCALA_ARTE` = 0,95). Las 11 variantes quedan POR DEBAJO del juez o sin gemelas suficientes: crecer ×1,5
+convierte el techo en un paño liso o dienta la cumbrera. **Una casa entera del pack no se puede agrandar a esa
+huella sin bajar de calidad**, y achicar el lote está prohibido (ver «El lote CRECE»). Lo que queda es de
+DISEÑO, no de arte: componer la vivienda con varias piezas del pack (como `casa_hilera` con su kit
+`tramo`/`remate`, que sí mide exacto) y que la sim sepa dónde va cada puerta. Hasta entonces sigue el respaldo
+de hoy (×1,4 + azotea de respaldo). El importador queda: se niega solo, y publica en cuanto una variante pase.
+
+Orden: `import-casas-a-medida.py` va después de `import-completos.py` → `medir-puertas.py` →
+`import-puertas-edificios.py`.
+
 ## §9 Build, publicación y comandos
 
 **El atajo** — un solo comando, pensado para correrlo sin la IA:
