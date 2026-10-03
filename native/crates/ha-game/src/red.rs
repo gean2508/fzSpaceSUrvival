@@ -12,8 +12,17 @@
 //! * **Online**: `server/src/relay.ts` es el mismo hub en Node, siempre prendido.
 //!
 //! El hub NO simula nada: asigna ids, guarda el último estado de cada uno para
-//! el que llega tarde y reenvía. Una trampa (o un cliente roto) a lo sumo se ve
-//! mal a sí mismo; no toca el mundo de nadie.
+//! el que llega tarde y reenvía. Desde la v2 (3 oct 2026) además:
+//! * guarda el **estado del mundo** de la sala como un mapa clave → valor
+//!   (`Ed`): la última pared, losa, cofre o árbol talado de cada clave. El que
+//!   entra tarde lo recibe entero y después un `Listo`;
+//! * reparte **eventos** (`Ev`) a todos o a un id (`para`): golpes a un
+//!   infectado, la foto de los infectados, la hora, una puerta;
+//! * nombra **árbitro** al id más viejo de la sala (`Arb`): él decide lo que
+//!   no es determinista (aparición de infectados, la hora). Si se va, el
+//!   siguiente toma la posta — no hay un "servidor" del que dependa la partida;
+//! * rechaza clientes de otra versión del protocolo (`Error`) en vez de dejar
+//!   que se desincronicen en silencio.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -27,8 +36,14 @@ use std::time::{Duration, Instant};
 pub const PUERTO: u16 = 2568;
 pub const PUERTO_AVISO: u16 = 2569;
 pub const MAX_JUGADORES: usize = 8;
+/// Versión del protocolo. Sube cuando un mensaje cambia de forma: un cliente de
+/// otra versión recibe `Error` y no entra (biblia §15).
+pub const PROTOCOLO: u32 = 2;
 /// Una línea más larga que esto es basura o un ataque: se corta al que la manda.
-const MAX_LINEA: u64 = 2048;
+/// 8 KB: un cofre lleno con sus 24 pilas entra holgado.
+const MAX_LINEA: u64 = 8192;
+/// Tope de claves del mundo de una sala: un cliente roto no llena la memoria del hub.
+pub const MAX_CLAVES_MUNDO: usize = 200_000;
 const MAX_NOMBRE: usize = 24;
 const MAX_CHAT: usize = 140;
 
@@ -38,10 +53,56 @@ pub enum Msg {
     /// Cliente → hub, lo primero que dice. `semilla` 0 = "no tengo mundo, dame el
     /// de la sala".
     #[serde(rename = "hola")]
-    Hola { nombre: String, piel: String, semilla: u32 },
-    /// Hub → cliente: tu id y el mundo de la sala.
+    Hola {
+        nombre: String,
+        piel: String,
+        semilla: u32,
+        /// Versión del protocolo; 0 = cliente v1 (se rechaza).
+        #[serde(default)]
+        ver: u32,
+        /// Sala del relay online ("" = la pública). El hub de LAN la ignora.
+        #[serde(default)]
+        sala: String,
+    },
+    /// Hub → cliente: tu id, el mundo de la sala y quién arbitra.
     #[serde(rename = "id")]
-    Id { id: u32, semilla: u32 },
+    Id {
+        id: u32,
+        semilla: u32,
+        #[serde(default)]
+        arbitro: u32,
+    },
+    /// Cambió el árbitro (el anterior se fue).
+    #[serde(rename = "arb")]
+    Arb { id: u32 },
+    /// Estado del mundo: la clave `k` vale `v` (`null` = ya no existe). El hub
+    /// guarda el último de cada clave y se lo pasa al que llega tarde.
+    #[serde(rename = "ed")]
+    Ed { k: String, v: serde_json::Value },
+    /// Ya llegó todo el estado guardado de la sala.
+    #[serde(rename = "listo")]
+    Listo,
+    /// Evento pasajero (no se guarda). `para` 0 = todos los demás; si no, sólo a
+    /// ese id. `de` lo pone el hub.
+    #[serde(rename = "ev")]
+    Ev {
+        #[serde(default)]
+        de: u32,
+        #[serde(default)]
+        para: u32,
+        k: String,
+        #[serde(default)]
+        v: serde_json::Value,
+    },
+    /// El hub no te deja entrar (versión distinta, sala llena…).
+    #[serde(rename = "error")]
+    Error { msg: String },
+    /// Cliente → hub: ¿qué salas hay? (sin entrar).
+    #[serde(rename = "lista")]
+    Lista,
+    /// Hub → cliente: las salas abiertas.
+    #[serde(rename = "salas")]
+    Salas { salas: Vec<SalaInfo> },
     /// Alguien entró (hub → los demás, y los ya presentes → el recién llegado).
     #[serde(rename = "ent")]
     Ent { id: u32, nombre: String, piel: String },
@@ -72,6 +133,22 @@ pub enum Msg {
     Chau { id: u32 },
 }
 
+/// Una sala abierta, como la lista el relay online (o el hub de LAN, que tiene una).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SalaInfo {
+    pub sala: String,
+    pub semilla: u32,
+    pub jugadores: u32,
+    /// Nombre del árbitro (el que la abrió, mientras siga).
+    #[serde(default)]
+    pub anfitrion: String,
+}
+
+/// El saludo de un cliente de esta versión.
+pub fn hola(nombre: &str, piel: &str, semilla: u32, sala: &str) -> Msg {
+    Msg::Hola { nombre: nombre.to_string(), piel: piel.to_string(), semilla, ver: PROTOCOLO, sala: sala.to_string() }
+}
+
 fn limpiar(s: &str, max: usize) -> String {
     s.chars().filter(|c| !c.is_control()).take(max).collect()
 }
@@ -91,6 +168,9 @@ struct EstadoHub {
     siguiente: u32,
     semilla: u32,
     pares: HashMap<u32, Par>,
+    /// El estado del mundo de la sala (clave → último `Ed`).
+    mundo: HashMap<String, Msg>,
+    arbitro: u32,
 }
 
 pub struct Hub {
@@ -122,10 +202,34 @@ impl EstadoHub {
 
     fn quitar(&mut self, id: u32) {
         if self.pares.remove(&id).is_some() {
-            let caidos = self.difundir(&Msg::Chau { id }, None);
+            let mut caidos = self.difundir(&Msg::Chau { id }, None);
+            if self.arbitro == id {
+                // La posta pasa al más viejo que queda.
+                self.arbitro = self.pares.keys().min().copied().unwrap_or(0);
+                if self.arbitro != 0 {
+                    let arb = Msg::Arb { id: self.arbitro };
+                    caidos.extend(self.difundir(&arb, None));
+                }
+            }
             for c in caidos {
                 self.quitar(c);
             }
+        }
+    }
+
+    fn mandar_a(&mut self, id: u32, m: &Msg) -> bool {
+        match self.pares.get_mut(&id) {
+            Some(p) => enviar(&mut p.salida, m),
+            None => true,
+        }
+    }
+
+    fn info(&self) -> SalaInfo {
+        SalaInfo {
+            sala: String::new(),
+            semilla: self.semilla,
+            jugadores: self.pares.len() as u32,
+            anfitrion: self.pares.get(&self.arbitro).map(|p| p.nombre.clone()).unwrap_or_default(),
         }
     }
 }
@@ -137,7 +241,13 @@ impl Hub {
         l.set_nonblocking(true)?;
         let puerto = l.local_addr()?.port();
         let vivo = Arc::new(AtomicBool::new(true));
-        let estado = Arc::new(Mutex::new(EstadoHub { siguiente: 1, semilla, pares: HashMap::new() }));
+        let estado = Arc::new(Mutex::new(EstadoHub {
+            siguiente: 1,
+            semilla,
+            pares: HashMap::new(),
+            mundo: HashMap::new(),
+            arbitro: 0,
+        }));
         {
             let (vivo, estado) = (vivo.clone(), estado.clone());
             thread::spawn(move || {
@@ -157,6 +267,17 @@ impl Hub {
 
     pub fn jugadores(&self) -> usize {
         self.estado.lock().map(|e| e.pares.len()).unwrap_or(0)
+    }
+
+    /// Un contador compartido de jugadores, para el aviso de LAN.
+    pub fn contador(&self) -> impl Fn() -> usize + Send + 'static {
+        let e = self.estado.clone();
+        move || e.lock().map(|e| e.pares.len()).unwrap_or(0)
+    }
+
+    /// Cuántas claves del mundo guarda la sala (pruebas y consola).
+    pub fn claves_mundo(&self) -> usize {
+        self.estado.lock().map(|e| e.mundo.len()).unwrap_or(0)
     }
 }
 
@@ -201,16 +322,28 @@ fn atender(s: TcpStream, vivo: Arc<AtomicBool>, estado: Arc<Mutex<EstadoHub>>) {
         let Ok(m) = serde_json::from_str::<Msg>(linea.trim()) else { continue };
         let Ok(mut e) = estado.lock() else { break };
         match (m, mi_id) {
-            (Msg::Hola { nombre, piel, .. }, None) => {
+            (Msg::Lista, None) => {
+                let Ok(mut mia) = salida.try_clone() else { break };
+                enviar(&mut mia, &Msg::Salas { salas: vec![e.info()] });
+            }
+            (Msg::Hola { nombre, piel, ver, .. }, None) => {
+                let Ok(mut mia) = salida.try_clone() else { break };
+                if ver != PROTOCOLO {
+                    enviar(&mut mia, &Msg::Error { msg: format!("versión distinta (sala v{PROTOCOLO}, tu juego v{ver}): actualizá") });
+                    break;
+                }
                 if e.pares.len() >= MAX_JUGADORES {
+                    enviar(&mut mia, &Msg::Error { msg: format!("sala llena ({MAX_JUGADORES})") });
                     break;
                 }
                 let id = e.siguiente;
                 e.siguiente += 1;
+                if e.arbitro == 0 {
+                    e.arbitro = id;
+                }
                 let (nombre, piel) = (limpiar(&nombre, MAX_NOMBRE), limpiar(&piel, 40));
-                let Ok(mut mia) = salida.try_clone() else { break };
-                let semilla = e.semilla;
-                if !enviar(&mut mia, &Msg::Id { id, semilla }) {
+                let (semilla, arbitro) = (e.semilla, e.arbitro);
+                if !enviar(&mut mia, &Msg::Id { id, semilla, arbitro }) {
                     break;
                 }
                 // Los presentes se presentan al recién llegado, con su último estado.
@@ -220,6 +353,13 @@ fn atender(s: TcpStream, vivo: Arc<AtomicBool>, estado: Arc<Mutex<EstadoHub>>) {
                         enviar(&mut mia, u);
                     }
                 }
+                // El mundo de la sala tal como quedó, y la marca de que terminó.
+                for m in e.mundo.values() {
+                    if !enviar(&mut mia, m) {
+                        break;
+                    }
+                }
+                enviar(&mut mia, &Msg::Listo);
                 let ent = Msg::Ent { id, nombre: nombre.clone(), piel: piel.clone() };
                 let caidos = e.difundir(&ent, None);
                 e.pares.insert(id, Par { salida: mia, nombre, piel, ultimo: None });
@@ -244,6 +384,33 @@ fn atender(s: TcpStream, vivo: Arc<AtomicBool>, estado: Arc<Mutex<EstadoHub>>) {
             (Msg::Chat { msg, .. }, Some(id)) => {
                 let m = Msg::Chat { id, msg: limpiar(&msg, MAX_CHAT) };
                 let caidos = e.difundir(&m, None);
+                for c in caidos {
+                    e.quitar(c);
+                }
+            }
+            (Msg::Ed { k, v }, Some(id)) => {
+                if k.is_empty() || k.len() > 96 {
+                    continue;
+                }
+                if !e.mundo.contains_key(&k) && e.mundo.len() >= MAX_CLAVES_MUNDO {
+                    continue;
+                }
+                let m = Msg::Ed { k: k.clone(), v };
+                e.mundo.insert(k, m.clone());
+                let caidos = e.difundir(&m, Some(id));
+                for c in caidos {
+                    e.quitar(c);
+                }
+            }
+            (Msg::Ev { para, k, v, .. }, Some(id)) => {
+                let m = Msg::Ev { de: id, para, k: limpiar(&k, 24), v };
+                let caidos = if para == 0 {
+                    e.difundir(&m, Some(id))
+                } else if e.mandar_a(para, &m) {
+                    Vec::new()
+                } else {
+                    vec![para]
+                };
                 for c in caidos {
                     e.quitar(c);
                 }
@@ -489,12 +656,12 @@ mod tests {
     fn dos_clientes_se_ven_y_se_hablan_por_el_hub() {
         let hub = Hub::levantar(0, 4242).expect("hub");
         let dir = format!("127.0.0.1:{}", hub.puerto);
-        let a = Cliente::conectar(dir.clone(), Msg::Hola { nombre: "Ana".into(), piel: "p1".into(), semilla: 0 });
-        let id_a = esperar(&a.rx, |m| if let Msg::Id { id, semilla } = m { assert_eq!(*semilla, 4242); Some(*id) } else { None });
+        let a = Cliente::conectar(dir.clone(), hola("Ana", "p1", 0, ""));
+        let id_a = esperar(&a.rx, |m| if let Msg::Id { id, semilla, arbitro } = m { assert_eq!(*semilla, 4242); assert_eq!(*arbitro, *id); Some(*id) } else { None });
         a.enviar(Msg::Est { id: 0, x: 3.0, z: 4.0, cuerpo: 0, rumbo: 1.0, vuelo: false, pts: 0, baj: 0 });
         std::thread::sleep(Duration::from_millis(150));
 
-        let b = Cliente::conectar(dir, Msg::Hola { nombre: "Beto\n".into(), piel: "p2".into(), semilla: 4242 });
+        let b = Cliente::conectar(dir, hola("Beto\n", "p2", 4242, ""));
         let id_b = esperar(&b.rx, |m| if let Msg::Id { id, .. } = m { Some(*id) } else { None });
         assert_ne!(id_a, id_b);
         // Beto recibe a Ana y su último estado, aunque llegó tarde.
@@ -530,6 +697,74 @@ mod tests {
         s.write_all(&vec![b'a'; 5000]).unwrap();
         s.write_all(b"\n").unwrap();
         std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(hub.jugadores(), 0);
+    }
+
+    #[test]
+    fn un_cliente_de_otra_version_no_entra_y_se_entera() {
+        let hub = Hub::levantar(0, 5).expect("hub");
+        let viejo = Cliente::conectar(
+            format!("127.0.0.1:{}", hub.puerto),
+            Msg::Hola { nombre: "Viejo".into(), piel: "p".into(), semilla: 0, ver: 1, sala: String::new() },
+        );
+        esperar(&viejo.rx, |m| matches!(m, Msg::Error { msg } if msg.contains("versión")).then_some(()));
+        assert_eq!(hub.jugadores(), 0);
+    }
+
+    #[test]
+    fn el_que_llega_tarde_recibe_el_mundo_y_los_eventos_van_a_quien_deben() {
+        let hub = Hub::levantar(0, 9).expect("hub");
+        let dir = format!("127.0.0.1:{}", hub.puerto);
+        let a = Cliente::conectar(dir.clone(), hola("Ana", "p", 9, ""));
+        let id_a = esperar(&a.rx, |m| if let Msg::Id { id, .. } = m { Some(*id) } else { None });
+        // Ana edita: una pared puesta, una losa puesta y después sacada (la última gana).
+        a.enviar(Msg::Ed { k: "w|0|0|1|2|0".into(), v: serde_json::json!(3) });
+        a.enviar(Msg::Ed { k: "t|0|0|5|5".into(), v: serde_json::json!("Stone") });
+        a.enviar(Msg::Ed { k: "t|0|0|5|5".into(), v: serde_json::Value::Null });
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(hub.claves_mundo(), 2);
+
+        let b = Cliente::conectar(dir.clone(), hola("Beto", "p", 9, ""));
+        let (id_b, arb) = esperar(&b.rx, |m| if let Msg::Id { id, arbitro, .. } = m { Some((*id, *arbitro)) } else { None });
+        assert_eq!(arb, id_a, "el más viejo arbitra");
+        let mut visto = HashMap::new();
+        esperar(&b.rx, |m| match m {
+            Msg::Ed { k, v } => {
+                visto.insert(k.clone(), v.clone());
+                None
+            }
+            Msg::Listo => Some(()),
+            _ => None,
+        });
+        assert_eq!(visto.get("w|0|0|1|2|0"), Some(&serde_json::json!(3)));
+        assert_eq!(visto.get("t|0|0|5|5"), Some(&serde_json::Value::Null));
+
+        // Un evento dirigido sólo le llega a su destinatario, con el remitente que pone el hub.
+        let c = Cliente::conectar(dir, hola("Caro", "p", 9, ""));
+        let id_c = esperar(&c.rx, |m| if let Msg::Id { id, .. } = m { Some(*id) } else { None });
+        b.enviar(Msg::Ev { de: 777, para: id_a, k: "golpe".into(), v: serde_json::json!({"n": 4}) });
+        esperar(&a.rx, |m| matches!(m, Msg::Ev { de, k, .. } if *de == id_b && k == "golpe").then_some(()));
+        let fin = Instant::now() + Duration::from_millis(400);
+        while Instant::now() < fin {
+            if let Ok(Evento::Mensaje(Msg::Ev { .. })) = c.rx.recv_timeout(Duration::from_millis(50)) {
+                panic!("Caro recibió un evento que no era para ella");
+            }
+        }
+
+        // Ana se va: arbitra el que sigue en antigüedad.
+        drop(a);
+        let nuevo = esperar(&c.rx, |m| if let Msg::Arb { id } = m { Some(*id) } else { None });
+        assert_eq!(nuevo, id_b);
+        assert!(id_c > id_b);
+    }
+
+    #[test]
+    fn el_hub_de_lan_dice_su_sala_sin_entrar() {
+        let hub = Hub::levantar(0, 31).expect("hub");
+        let c = Cliente::conectar(format!("127.0.0.1:{}", hub.puerto), Msg::Lista);
+        let salas = esperar(&c.rx, |m| if let Msg::Salas { salas } = m { Some(salas.clone()) } else { None });
+        assert_eq!(salas.len(), 1);
+        assert_eq!(salas[0].semilla, 31);
         assert_eq!(hub.jugadores(), 0);
     }
 }
