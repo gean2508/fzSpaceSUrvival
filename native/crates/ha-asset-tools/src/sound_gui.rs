@@ -279,6 +279,7 @@ impl SoundApp {
                         pad: Some(PadSpec::default()),
                         melody: MelodySpec::default(),
                         effects: vec![Effect::FadeOut { secs: 3.0 }],
+                        compose: None,
                     });
                     self.sel = Sel::Track(n);
                     self.dirty = true;

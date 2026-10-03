@@ -32,10 +32,14 @@ pub enum Wave {
     Pluck,
     /// Campana/cristal: parciales inarmónicos que decaen a distinta velocidad.
     Bell,
+    /// Piano de fieltro (el de C418): seis parciales que mueren a distinta velocidad, martillo de fieltro y dos cuerdas.
+    Piano,
+    /// Guitarra de cuerdas de nylon/acero (fingerstyle de Zomboid): Karplus-Strong con caja de resonancia y púa.
+    Guitar,
 }
 
 impl Wave {
-    pub const ALL: [Wave; 9] = [Wave::Sine, Wave::Square, Wave::Triangle, Wave::Saw, Wave::Noise, Wave::Pink, Wave::Brown, Wave::Pluck, Wave::Bell];
+    pub const ALL: [Wave; 11] = [Wave::Sine, Wave::Square, Wave::Triangle, Wave::Saw, Wave::Noise, Wave::Pink, Wave::Brown, Wave::Pluck, Wave::Bell, Wave::Piano, Wave::Guitar];
     pub fn label(self) -> &'static str {
         match self {
             Wave::Sine => "seno",
@@ -47,6 +51,8 @@ impl Wave {
             Wave::Brown => "ruido marron",
             Wave::Pluck => "cuerda",
             Wave::Bell => "campana",
+            Wave::Piano => "piano",
+            Wave::Guitar => "guitarra",
         }
     }
     pub fn es_ruido(self) -> bool {
@@ -280,6 +286,9 @@ pub struct TrackSpec {
     pub melody: MelodySpec,
     #[serde(default)]
     pub effects: Vec<Effect>,
+    /// Si está, la pista se COMPONE (progresión, bajo, arpegio, motivo, colchón) en vez de tirar notas al azar.
+    #[serde(default)]
+    pub compose: Option<ComposeSpec>,
 }
 
 /// Tiempos del director de música (silencios entre pistas, en s).
@@ -435,11 +444,13 @@ impl Synth {
         let mut fase = [0.0f32; 3];
         let mut ruido = RuidoColor::default();
         let mut filtro = Svf::default();
+        let mut piano_amp = [0.0f32; 6];
+        let mut piano_decay = [0.0f32; 6];
         let usa_filtro = op.cutoff0 > 0.0 || op.cutoff1 > 0.0;
         // Karplus-Strong: línea de retardo con la longitud del período inicial.
         let mut cuerda: Vec<f32> = Vec::new();
         let mut ci = 0usize;
-        if op.wave == Wave::Pluck {
+        if matches!(op.wave, Wave::Pluck | Wave::Guitar) {
             let largo = ((rate / op.f0.max(20.0)) as usize).clamp(2, 4096);
             cuerda = (0..largo).map(|_| self.rng.f32() * 2.0 - 1.0).collect();
         }
@@ -481,14 +492,62 @@ impl Synth {
                     ci = sig;
                     s = y;
                 }
+                Wave::Guitar => {
+                    // Karplus-Strong más largo y más suave + caja: la cuerda dura y se apaga en graves antes que en agudos
+                    let largo = cuerda.len();
+                    let sig = (ci + 1) % largo;
+                    let y = cuerda[ci];
+                    cuerda[ci] = (0.62 * cuerda[ci] + 0.38 * cuerda[sig]) * 0.9985;
+                    ci = sig;
+                    // la púa: un chasquido corto al principio
+                    let pua = if tiempo < 0.006 { (self.rng.f32() * 2.0 - 1.0) * (1.0 - tiempo / 0.006) * 0.35 } else { 0.0 };
+                    s = y * 1.3 + pua;
+                }
+                Wave::Piano => {
+                    // dos cuerdas ligeramente desafinadas; cada una = seis parciales con caída propia (los agudos mueren antes).
+                    // Los armónicos salen de una recurrencia de Chebyshev (1 seno + 1 coseno por cuerda en vez de 6 senos) y las
+                    // caídas se multiplican por un factor por muestra (sin `exp` en el lazo): la pista de 2 minutos tarda 10× menos.
+                    let vida_base = 2.6 * (261.6 / f_base.max(60.0)).clamp(0.35, 2.2);
+                    if tiempo > vida_base * 7.0 {
+                        break; // ya no se oye nada: no seguir gastando muestras
+                    }
+                    if i == 0 {
+                        piano_amp = [1.0, 0.62, 0.38, 0.2, 0.12, 0.07];
+                        for (k, d) in piano_decay.iter_mut().enumerate() {
+                            let tau = vida_base / (1.0 + 0.9 * k as f32);
+                            *d = (-1.0 / (tau * rate)).exp();
+                        }
+                    }
+                    let mut y = 0.0f32;
+                    for v in 0..2usize {
+                        let det = if voces > 1 { desafinacion[v] } else { [0.9993f32, 1.0007, 1.0][v] };
+                        fase[v] = (fase[v] + f * det / rate).fract();
+                        let th = std::f32::consts::TAU * fase[v];
+                        let (s1, c1) = th.sin_cos();
+                        let (mut sk_1, mut sk) = (0.0f32, s1);
+                        for k in 0..6 {
+                            y += sk * piano_amp[k];
+                            let sig = 2.0 * c1 * sk - sk_1;
+                            sk_1 = sk;
+                            sk = sig;
+                        }
+                    }
+                    for k in 0..6 {
+                        piano_amp[k] *= piano_decay[k];
+                    }
+                    // el martillo de fieltro: 8 ms de ruido grave
+                    if tiempo < 0.008 {
+                        y += (self.rng.f32() * 2.0 - 1.0) * (1.0 - tiempo / 0.008) * 0.5;
+                    }
+                    s = y * 0.3;
+                }
                 Wave::Bell => {
                     for v in 0..voces {
                         fase[v] += f * desafinacion[v] / rate;
                     }
                     // parciales inarmónicos de una campana; los agudos mueren antes
                     let x = fase[1.min(voces - 1)];
-                    for (k, (r, amp, vida)) in [(1.0f32, 1.0f32, 0.0f32), (2.76, 0.55, 1.2), (5.40, 0.32, 2.4), (8.93, 0.18, 3.6)].iter().enumerate() {
-                        let _ = k;
+                    for (r, amp, vida) in [(1.0f32, 1.0f32, 0.0f32), (2.76, 0.55, 1.2), (5.40, 0.32, 2.4), (8.93, 0.18, 3.6)] {
                         s += (std::f32::consts::TAU * x * r).sin() * amp * (-vida * t * 3.0).exp();
                     }
                     s *= 0.55;
@@ -694,7 +753,7 @@ pub fn apply_effect(buf: &mut Vec<f32>, rate: u32, fx: &Effect) {
 }
 
 /// Quita la continua y los clicks de los bordes del buffer ya mezclado.
-fn pulir(buf: &mut [f32], rate: u32) {
+pub(crate) fn pulir(buf: &mut [f32], rate: u32) {
     let n = buf.len();
     if n < 8 {
         return;
@@ -735,6 +794,9 @@ pub fn render_sfx(spec: &SfxSpec) -> Vec<f32> {
 
 /// Sintetiza una pista musical generativa → buffer f32.
 pub fn render_track(t: &TrackSpec) -> Vec<f32> {
+    if let Some(c) = &t.compose {
+        return compose::render_composition(t, c);
+    }
     let mut s = Synth::new(t.rate, t.dur.max(1.0));
     let mut rng = Lcg(t.seed);
     let m = &t.melody;
@@ -848,7 +910,9 @@ pub fn wav_bytes(rate: u32, buf: &[f32]) -> Vec<u8> {
     b
 }
 
+mod compose;
 mod defaults;
+pub use compose::{ComposeSpec, Voice};
 
 
 // ---------------------------------------------------------------------------
@@ -966,5 +1030,43 @@ mod tests {
         assert_eq!(t.curve, 1.6);
         assert_eq!(t.detune, 0.0);
         assert!(render_sfx(&spec.sfx["click"]).iter().any(|x| x.abs() > 0.01));
+    }
+
+    /// Cada timbre suena (un arreglo mal pegado dejó mudas a las campanas y nadie se enteró).
+    #[test]
+    fn cada_timbre_suena() {
+        for w in Wave::ALL {
+            let mut s = Synth::new(22_050, 0.5);
+            s.tone(&ToneOp { wave: w, dur: 0.5, f0: 330.0, f1: 330.0, amp: 0.5, attack: 0.02, ..ToneOp::default() });
+            let r = (s.buf.iter().map(|x| x * x).sum::<f32>() / s.buf.len() as f32).sqrt();
+            assert!(r > 0.003 && s.buf.iter().all(|x| x.is_finite()), "{w:?} no suena (RMS {r})");
+        }
+    }
+
+    /// Las piezas compuestas son deterministas, suenan y tienen aire (silencio entre frases).
+    #[test]
+    fn las_piezas_compuestas_son_deterministas_y_tienen_aire() {
+        let spec = AudioSpec::default_spec();
+        let t = spec.tracks.iter().find(|t| t.name == "pradera-1").unwrap();
+        let mut corta = t.clone();
+        corta.dur = 30.0;
+        let a = render_track(&corta);
+        let b = render_track(&corta);
+        assert!(a.iter().zip(&b).all(|(x, y)| x == y), "no determinista");
+        let r = rms_activo(&a);
+        assert!(r > 0.02, "pieza muda: {r}");
+        // aire: al menos el 10 % de las ventanas de 0,25 s son casi silencio respecto del RMS
+        let v = (0.25 * corta.rate as f32) as usize;
+        let calladas = a.chunks(v).filter(|c| (c.iter().map(|x| x * x).sum::<f32>() / c.len() as f32).sqrt() < r * 0.15).count();
+        assert!(calladas as f32 / (a.len() / v) as f32 > 0.05, "no tiene silencios: {calladas}");
+    }
+
+    /// Todas las piezas del juego traen su contexto, y existen las que el director necesita.
+    #[test]
+    fn el_director_tiene_musica_para_cada_contexto() {
+        let spec = AudioSpec::default_spec();
+        for mood in ["surface", "night", "underground", "cristal", "space", "tension", "menu"] {
+            assert!(spec.tracks.iter().any(|t| t.mood == mood), "falta música de {mood}");
+        }
     }
 }

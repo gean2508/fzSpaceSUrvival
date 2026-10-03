@@ -296,65 +296,115 @@ impl AudioSpec {
             effects: vec![Effect::LoopCrossfade { secs: 0.05 }, nivel(0.12)],
         };
 
-        // ── música: cada pista con su timbre y su aire ───────────────────────────────────────────
-        let pradera = |name: &str, seed: u32, wave: Wave, fm: f32| TrackSpec {
-            name: name.to_string(),
-            mood: "surface".to_string(),
-            seed,
-            dur: 56.0,
-            base: 220.0,
-            scale: vec![0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 14.0],
-            rate: MUSIC_RATE,
-            pad: Some(PadSpec { wave: Saw, freq_mult: 0.5, amp: 0.035, attack: 0.35, vibrato: 0.25, detune: 14.0, cutoff0: 380.0, cutoff1: 900.0, fifth: 0.6 }),
-            melody: MelodySpec {
-                wave,
-                amp: 0.2,
-                attack: 0.01,
-                vibrato: 0.15,
-                note_min: 2.0,
-                note_max: 3.4,
-                gap_min: 1.1,
-                gap_max: 2.6,
-                rest_prob: 0.3,
-                curve: 2.2,
-                fm_ratio: if fm > 0.0 { 2.0 } else { 0.0 },
-                fm_index: fm,
-                chord_prob: 0.25,
-                harmony_prob: 0.25,
-                harmony_wave: Sine,
-                harmony_amp: 0.07,
-                ..MelodySpec::default()
-            },
-            effects: vec![Effect::Chorus { depth: 0.002, rate: 0.35, mix: 0.25 }, Effect::Reverb { size: 0.75, mix: 0.4 }, Effect::Compress { threshold: 0.35, ratio: 3.0 }, Effect::NormalizeRms { rms: 0.09, peak: 0.85 }, Effect::FadeOut { secs: 4.0 }],
+        // ── música: piezas COMPUESTAS (progresión + bajo + arpegio + motivo + colchón), no notas al azar ───────────
+        // Referencias de oficio (no de melodía): C418/Lena Raine (piano de fieltro, modos, silencio) y Zach Beever (piano,
+        // cuerdas y guitarra melancólicos, colchones oscuros). Cada pista dice abajo qué recurso toma.
+        let piano = |amp: f32, octave: i32, beats: f32| Voice { wave: Piano, amp, octave, beats, ..Voice::default() };
+        let cuerdas = |amp: f32, octave: i32, cutoff: f32, detune: f32| Voice {
+            wave: Saw, amp, octave, attack: 0.45, curve: 1.0, detune, cutoff, res: 0.9, beats: 1.0, ..Voice::default()
         };
+        let campana = |amp: f32, octave: i32, beats: f32| Voice { wave: Bell, amp, octave, attack: 0.004, curve: 1.8, beats, ..Voice::default() };
+        let rhodes = |amp: f32, octave: i32| Voice { wave: Sine, amp, octave, attack: 0.01, curve: 1.7, fm_ratio: 1.0, fm_index: 1.7, beats: 2.0, ..Voice::default() };
+        let guitarra = |amp: f32, octave: i32, beats: f32| Voice { wave: Guitar, amp, octave, attack: 0.003, curve: 1.3, beats, ..Voice::default() };
+        let sub = |amp: f32, octave: i32, beats: f32| Voice { wave: Sine, amp, octave, attack: 0.25, curve: 1.2, beats, ..Voice::default() };
+        let cadena = |reverb: f32, mezcla: f32, rms: f32| {
+            vec![
+                Effect::Highpass { alpha: 0.008 },
+                Effect::Chorus { depth: 0.0015, rate: 0.22, mix: 0.16 },
+                Effect::Reverb { size: reverb, mix: mezcla },
+                Effect::Compress { threshold: 0.3, ratio: 3.0 },
+                Effect::NormalizeRms { rms, peak: 0.85 },
+                Effect::FadeOut { secs: 4.0 },
+            ]
+        };
+        let pieza = |name: &str, mood: &str, seed: u32, dur: f32, base: f32, compose: ComposeSpec, effects: Vec<Effect>| TrackSpec {
+            name: name.to_string(),
+            mood: mood.to_string(),
+            seed,
+            dur,
+            base,
+            scale: vec![0.0],
+            rate: MUSIC_RATE,
+            pad: None,
+            melody: MelodySpec::default(),
+            effects,
+            compose: Some(compose),
+        };
+        let jonico = vec![0.0, 2.0, 4.0, 5.0, 7.0, 9.0, 11.0];
+        let dorico = vec![0.0, 2.0, 3.0, 5.0, 7.0, 9.0, 10.0];
+        let lidio = vec![0.0, 2.0, 4.0, 6.0, 7.0, 9.0, 11.0];
+        let eolico = vec![0.0, 2.0, 3.0, 5.0, 7.0, 8.0, 10.0];
+        let frigio = vec![0.0, 1.0, 3.0, 5.0, 7.0, 8.0, 10.0];
+        let locrio = vec![0.0, 1.0, 3.0, 5.0, 6.0, 8.0, 10.0];
+        let mixolidio = vec![0.0, 2.0, 4.0, 5.0, 7.0, 9.0, 10.0];
         let tracks = vec![
-            pradera("pradera-1", 0xAA01, Pluck, 0.0),
-            pradera("pradera-2", 0xAA02, Bell, 0.0),
-            pradera("pradera-3", 0xAA03, Sine, 3.0),
-            TrackSpec {
-                name: "vacio-estelar".to_string(),
-                mood: "space".to_string(),
-                seed: 0xBB01,
-                dur: 64.0,
-                base: 138.6,
-                scale: vec![0.0, 3.0, 5.0, 7.0, 10.0, 12.0],
-                rate: MUSIC_RATE,
-                pad: Some(PadSpec { wave: Saw, freq_mult: 0.5, amp: 0.04, attack: 0.5, vibrato: 0.2, detune: 18.0, cutoff0: 260.0, cutoff1: 1200.0, fifth: 0.8 }),
-                melody: MelodySpec { wave: Bell, amp: 0.18, attack: 0.01, vibrato: 0.0, note_min: 3.0, note_max: 5.0, gap_min: 2.5, gap_max: 5.0, rest_prob: 0.45, curve: 2.0, chord_prob: 0.4, harmony_prob: 0.0, ..MelodySpec::default() },
-                effects: vec![Effect::Chorus { depth: 0.003, rate: 0.2, mix: 0.3 }, Effect::Reverb { size: 0.95, mix: 0.55 }, Effect::NormalizeRms { rms: 0.085, peak: 0.85 }, Effect::FadeOut { secs: 5.0 }],
-            },
-            TrackSpec {
-                name: "subsuelo".to_string(),
-                mood: "underground".to_string(),
-                seed: 0xCC01,
-                dur: 60.0,
-                base: 82.4,
-                scale: vec![0.0, 3.0, 5.0, 8.0, 10.0],
-                rate: MUSIC_RATE,
-                pad: Some(PadSpec { wave: Saw, freq_mult: 1.0, amp: 0.045, attack: 0.5, vibrato: 0.3, detune: 24.0, cutoff0: 160.0, cutoff1: 520.0, fifth: 0.5 }),
-                melody: MelodySpec { wave: Pluck, amp: 0.24, attack: 0.01, note_min: 2.5, note_max: 4.0, gap_min: 3.0, gap_max: 6.0, rest_prob: 0.5, curve: 2.4, harmony_prob: 0.0, chord_prob: 0.0, ..MelodySpec::default() },
-                effects: vec![Effect::Reverb { size: 0.95, mix: 0.6 }, Effect::Compress { threshold: 0.3, ratio: 3.0 }, Effect::NormalizeRms { rms: 0.08, peak: 0.85 }, Effect::FadeOut { secs: 4.0 }],
-            },
+            // C418 «Sweden»/«Dry Hands»: piano de fieltro, jónico, arpegios sueltos, un motivo que vuelve, mucho aire.
+            pieza("pradera-1", "surface", 0xAA01, 130.0, 261.63, ComposeSpec {
+                tempo: 64.0, mode: jonico.clone(), progression: vec![0, 5, 3, 4], bars_per_chord: 2, add9: 0.4,
+                bass: Some(piano(0.3, -2, 7.5)), arp: Some(piano(0.16, -1, 3.0)), arp_density: 0.5, arp_pattern: vec![0, 1, 2, 1, 3, 2, 1, 2],
+                lead: Some(piano(0.24, 0, 2.5)), lead_phrase: 0.65, motif_len: 4, motif_repeat: 0.55, ..ComposeSpec::default()
+            }, cadena(0.8, 0.42, 0.085)),
+            // «Subwoofer Lullaby»/«Living Mice»: dórico, piano eléctrico (FM) con colchón de cuerdas.
+            pieza("pradera-2", "surface", 0xAA02, 130.0, 293.66, ComposeSpec {
+                tempo: 58.0, mode: dorico.clone(), progression: vec![0, 3, 0, 4], bars_per_chord: 2, seventh: 0.5, add9: 0.2,
+                bass: Some(piano(0.28, -2, 7.5)), arp: Some(rhodes(0.15, -1)), arp_density: 0.6, arp_pattern: vec![0, 2, 1, 3],
+                pad: Some(cuerdas(0.03, -1, 650.0, 14.0)), lead: Some(piano(0.2, 0, 2.5)), lead_phrase: 0.5, motif_len: 4, motif_repeat: 0.6, ..ComposeSpec::default()
+            }, cadena(0.85, 0.46, 0.082)),
+            // «Wet Hands»: lidio, la mano izquierda de dos notas repetida y una campana lejana.
+            pieza("pradera-3", "surface", 0xAA03, 130.0, 349.23, ComposeSpec {
+                tempo: 52.0, mode: lidio.clone(), progression: vec![0, 1, 0, 4], bars_per_chord: 2,
+                bass: Some(piano(0.26, -2, 7.0)), arp: Some(piano(0.17, -1, 2.0)), arp_density: 0.85, arp_pattern: vec![0, 2], steps_per_beat: 1,
+                lead: Some(campana(0.1, 1, 2.0)), lead_phrase: 0.5, motif_len: 3, motif_repeat: 0.5, ..ComposeSpec::default()
+            }, cadena(0.88, 0.5, 0.08)),
+            // Zomboid «hogar»: guitarra de dedos en la menor (la–fa–do–sol), piano suelto y cuerdas bajas.
+            pieza("hogar", "surface", 0xAA04, 130.0, 220.0, ComposeSpec {
+                tempo: 76.0, mode: eolico.clone(), progression: vec![0, 5, 2, 6], bars_per_chord: 2, sus: 0.2, add9: 0.2,
+                bass: Some(guitarra(0.3, -1, 3.8)), arp: Some(guitarra(0.28, 0, 2.5)), arp_density: 0.82, arp_pattern: vec![0, 1, 2, 3, 2, 1],
+                pad: Some(cuerdas(0.025, -1, 600.0, 12.0)), lead: Some(piano(0.16, 1, 2.5)), lead_phrase: 0.4, motif_len: 3, motif_repeat: 0.6, ..ComposeSpec::default()
+            }, cadena(0.65, 0.3, 0.09)),
+            // NOCHE (Zomboid): menor, lento, piano grave con séptimas y sus, colchón de cuerdas oscuro.
+            pieza("noche-1", "night", 0xAB01, 120.0, 110.0, ComposeSpec {
+                tempo: 50.0, mode: eolico.clone(), progression: vec![0, 5, 3, 6], bars_per_chord: 2, seventh: 0.5, sus: 0.3, add9: 0.2,
+                bass: Some(piano(0.3, 0, 7.5)), arp: Some(piano(0.15, 1, 3.0)), arp_density: 0.3, arp_pattern: vec![0, 2, 1],
+                pad: Some(cuerdas(0.04, 1, 450.0, 18.0)), lead: Some(piano(0.2, 2, 3.0)), lead_phrase: 0.55, motif_len: 3, motif_repeat: 0.6, ..ComposeSpec::default()
+            }, cadena(0.9, 0.5, 0.078)),
+            // NOCHE cerrada: frigio, sin arpegio; un sub, cuerdas y una campana que aparece de vez en cuando.
+            pieza("noche-2", "night", 0xAB02, 120.0, 164.81, ComposeSpec {
+                tempo: 44.0, mode: frigio, progression: vec![0, 1, 0, 6], bars_per_chord: 2, seventh: 0.6, sus: 0.5,
+                bass: Some(sub(0.34, -2, 15.0)), arp: None, pad: Some(cuerdas(0.05, 0, 380.0, 22.0)),
+                lead: Some(campana(0.12, 1, 3.0)), lead_phrase: 0.35, motif_len: 2, motif_repeat: 0.5, ..ComposeSpec::default()
+            }, cadena(0.95, 0.58, 0.075)),
+            // TENSIÓN (infectados cerca): pulso grave, cluster disonante, locrio. Es lo que Zomboid hace con el miedo.
+            pieza("tension", "tension", 0xAC01, 80.0, 146.83, ComposeSpec {
+                tempo: 84.0, mode: locrio, progression: vec![0, 1, 0, 4], bars_per_chord: 1, seventh: 0.7, sus: 0.6,
+                bass: Some(Voice { wave: Saw, amp: 0.26, octave: -2, attack: 0.1, curve: 1.2, detune: 20.0, cutoff: 240.0, res: 1.6, beats: 3.8, ..Voice::default() }),
+                arp: Some(piano(0.2, -2, 1.0)), arp_density: 0.6, arp_pattern: vec![0], steps_per_beat: 2,
+                pad: Some(cuerdas(0.05, 0, 900.0, 32.0)), lead: Some(campana(0.1, 1, 2.0)), lead_phrase: 0.5, motif_len: 2, motif_repeat: 0.5, intro_bars: 0, ..ComposeSpec::default()
+            }, cadena(0.7, 0.35, 0.095)),
+            // SUBSUELO (Lena Raine «Stal»/«Echo»): piano grave a lo lejos, campanas, reverb enorme.
+            pieza("subsuelo", "underground", 0xCC01, 130.0, 164.81, ComposeSpec {
+                tempo: 46.0, mode: dorico, progression: vec![0, 4, 0, 3], bars_per_chord: 2, seventh: 0.4,
+                bass: Some(piano(0.3, -1, 7.5)), arp: Some(piano(0.14, 0, 3.0)), arp_density: 0.25, arp_pattern: vec![0, 2, 3],
+                pad: Some(cuerdas(0.035, 0, 380.0, 20.0)), lead: Some(campana(0.12, 1, 3.0)), lead_phrase: 0.5, motif_len: 3, motif_repeat: 0.55, ..ComposeSpec::default()
+            }, cadena(0.96, 0.6, 0.075)),
+            // CRISTAL (bioma): lidio, arpegios de campana altos, brillo helado.
+            pieza("cristal", "cristal", 0xCC02, 120.0, 392.0, ComposeSpec {
+                tempo: 60.0, mode: lidio, progression: vec![0, 4, 5, 3], bars_per_chord: 2, add9: 0.5,
+                bass: Some(piano(0.24, -2, 7.5)), arp: Some(campana(0.12, 1, 2.0)), arp_density: 0.5, arp_pattern: vec![0, 1, 2, 3],
+                lead: Some(campana(0.1, 2, 2.0)), lead_phrase: 0.6, motif_len: 4, motif_repeat: 0.5, ..ComposeSpec::default()
+            }, cadena(0.95, 0.55, 0.07)),
+            // ESPACIO: mixolidio, colchón enorme, una campana cada tanto.
+            pieza("vacio-estelar", "space", 0xBB01, 130.0, 146.83, ComposeSpec {
+                tempo: 48.0, mode: mixolidio, progression: vec![0, 6, 3, 0], bars_per_chord: 2, add9: 0.5,
+                bass: Some(sub(0.3, -2, 15.0)), arp: None, pad: Some(cuerdas(0.045, 0, 600.0, 18.0)),
+                lead: Some(campana(0.12, 1, 3.0)), lead_phrase: 0.45, motif_len: 3, motif_repeat: 0.6, ..ComposeSpec::default()
+            }, cadena(0.97, 0.6, 0.075)),
+            // MENÚ: la pieza más cálida y reconocible, motivo claro y repetido.
+            pieza("menu", "menu", 0xDD01, 110.0, 261.63, ComposeSpec {
+                tempo: 60.0, mode: jonico, progression: vec![0, 4, 5, 3], bars_per_chord: 2, add9: 0.5,
+                bass: Some(piano(0.3, -2, 7.5)), arp: Some(piano(0.17, -1, 3.0)), arp_density: 0.6, arp_pattern: vec![0, 1, 2, 1, 3, 2],
+                pad: Some(cuerdas(0.025, -1, 700.0, 12.0)), lead: Some(piano(0.26, 0, 2.5)), lead_phrase: 0.85, motif_len: 5, motif_repeat: 0.7, intro_bars: 0, ..ComposeSpec::default()
+            }, cadena(0.8, 0.4, 0.088)),
         ];
 
         AudioSpec {

@@ -8589,6 +8589,27 @@ Pedido: *«mejorá la ventana Splash… y los sonidos de todo el juego… y deja
   sintetiza (`splash_logo`: ocho «plops» por la pentatónica y un acorde con cola) y reemplaza al WAV viejo. Driver
   `HA_SPLASHSHOT=<ruta> [HA_SPLASHSHOT_T=<s>]` (Xvfb) captura la splash.
 
+### Música compuesta y planetas pintados (2 oct 2026, 5.ª tanda)
+Pedido: *«absolutamente todo el arte, incluso los planetas… y la música del juego: buscá la banda sonora de Minecraft y de
+Project Zomboid y hacé eso»*.
+* **Música (motor v3)**: ya no son notas al azar sobre un colchón. `ha-audio/compose.rs` COMPONE cada pieza —progresión de
+  acordes con séptimas/novenas/suspendidos, bajo, arpegio, motivo de melodía que vuelve transportado, colchón de cuerdas y
+  silencios a propósito— con timbres nuevos (`Piano` de fieltro, `Guitar` de dedos, FM, campanas). Referencias de oficio:
+  C418/Lena Raine (modos, piano, aire) y Zach Beever (piano/cuerdas/guitarra melancólicos, oscuridad, disonancia suave).
+  11 piezas ORIGINALES: 4 de día (`pradera-1..3`, `hogar`), 2 de noche, `tension`, `subsuelo`, `cristal`, `vacio-estelar`, `menu`.
+* **El director** (`audio::music_director`): día/noche/subsuelo/cristal/espacio; **los infectados a menos de 28 celdas cortan la
+  música (fundido de 1,8 s) y ponen `tension`** (150 s de enfriamiento); el menú tiene su propia pieza en bucle
+  (`musica_menu`). Silencios de 90-240 s entre piezas, como Minecraft.
+* **No se sintetiza en el boot**: una pieza de 2 min tarda ~2 s en la laptop (el celu, bastante más). `MusicBank` compone UNA a
+  la vez en un hilo y deja el WAV en `<datos>/musica/` (caché por hash de la partitura + `MUSICA_VERSION`).
+* **Planetas** (`planet_art.rs`): cada cuerpo nace con su pintura —Tierra con continentes, nubes y casquetes; Luna, Mercurio y
+  las lunas con cráteres; Marte rojo con casquete; Venus y Titán con nubes en bandas; Ío con volcanes; Europa con grietas; Urano y
+  Neptuno con bandas (y la Mancha Oscura)— sobre una esfera de 96×96 con limbo oscurecido y once niveles por canal. Antes era un
+  círculo de UN color hasta que se acercaba y se horneaba el terreno. El horneado real sigue reemplazándolo al acercarte.
+* **Dicho con honestidad, qué NO se rehízo**: cielos y estrellas (`backgrounds/*`), canchas, césped cortado, la habitación grande,
+  las guirnaldas, `items/hand|jetpack|probe|part_*` (obsoletos de la época de naves) y `ui/build_chip`/`ui/icon_*` (sin uso
+  o de relleno). La auditoría `scripts/auditar-arte.py` lista lo que sigue por debajo del listón.
+
 ### Falta (honesto)
 * Los NPC no se «siguen» ni te siguen por amistad (la regla «nada de séquito» manda); sí se conversa y se aprende.
 * Un NPC no estudia cuando vos no estás cerca: lo que pasa lejos sigue siendo el cuaderno por pueblo.

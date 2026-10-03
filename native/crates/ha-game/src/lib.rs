@@ -49,6 +49,7 @@ pub mod materias;
 pub mod experimentos;
 pub mod casas_npc;
 pub mod saber_vivo;
+pub mod planet_art;
 pub mod barrio;
 pub mod multijugador;
 mod ambient;

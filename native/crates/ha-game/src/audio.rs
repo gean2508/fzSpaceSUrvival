@@ -26,7 +26,7 @@
 //! los agudos, no el volumen. Sin paredes en medio el sonido es seco y sólo
 //! cae por distancia.
 
-use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialListener, Volume};
+use bevy::audio::{AudioPlayer, AudioSink, AudioSource, PlaybackSettings, SpatialListener, Volume};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -221,19 +221,65 @@ pub struct SfxBank {
 #[derive(Component)]
 struct AudioEars;
 
-/// Contexto musical — decide qué pista puede sonar.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum MusicMood {
-    Surface,
-    Space,
-    Underground,
-}
+/// Versión del motor de música: sube cuando cambia CÓMO suena una pista, para invalidar el caché de disco.
+const MUSICA_VERSION: u32 = 1;
 
+/// **Las pistas se componen cuando hacen falta, no al arrancar.** Una pieza de dos minutos tarda ~2 s en la laptop y
+/// bastante más en el Redmi: sintetizar once en el boot lo dejaría minutos con la pantalla trabada. Ahora el banco
+/// guarda las PARTITURAS (`TrackSpec`), compone una a la vez en un hilo aparte y deja el WAV en disco
+/// (`<datos>/musica/`), así la segunda vez que suena es instantánea.
 #[derive(Resource, Default)]
 pub struct MusicBank {
-    surface: Vec<Handle<AudioSource>>,
-    space: Vec<Handle<AudioSource>>,
-    underground: Vec<Handle<AudioSource>>,
+    /// Partituras por contexto (`TrackSpec::mood`): surface, night, underground, cristal, space, tension, menu.
+    specs: HashMap<String, Vec<ha_audio::TrackSpec>>,
+    /// Pistas ya compuestas (nombre → audio).
+    listas: HashMap<String, Handle<AudioSource>>,
+    /// La que se está componiendo ahora (una sola a la vez).
+    en_curso: Option<(String, bevy::tasks::Task<Vec<u8>>)>,
+}
+
+impl MusicBank {
+    /// Pide componer `t` en segundo plano si no está lista ni hay otra en curso.
+    fn pedir(&mut self, t: &ha_audio::TrackSpec) {
+        if self.listas.contains_key(&t.name) || self.en_curso.is_some() {
+            return;
+        }
+        let spec = t.clone();
+        let pool = bevy::tasks::AsyncComputeTaskPool::get_or_init(bevy::tasks::TaskPool::default);
+        self.en_curso = Some((t.name.clone(), pool.spawn(async move { wav_de_pista(&spec) })));
+    }
+
+    fn primera(&self, mood: &str) -> Option<&ha_audio::TrackSpec> {
+        self.specs.get(mood).and_then(|v| v.first())
+    }
+}
+
+/// El WAV de una pista: del caché de disco si ya se compuso con esta versión y esta partitura; si no, se compone.
+fn wav_de_pista(t: &ha_audio::TrackSpec) -> Vec<u8> {
+    let json = serde_json::to_string(t).unwrap_or_default();
+    let mut h: u32 = 0x811c_9dc5 ^ MUSICA_VERSION;
+    for b in json.bytes() {
+        h = (h ^ b as u32).wrapping_mul(0x0100_0193);
+    }
+    let dir = crate::inventory_persist::base_dir().join("musica");
+    let ruta = dir.join(format!("{}-{:08x}.wav", t.name, h));
+    if let Ok(b) = std::fs::read(&ruta) {
+        return b;
+    }
+    let wav = wav_bytes(t.rate, &render_track(t));
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(&ruta, &wav);
+    wav
+}
+
+/// Recoge la pista que terminó de componerse y la deja lista para sonar.
+fn terminar_composicion(mut bank: ResMut<MusicBank>, mut assets: ResMut<Assets<AudioSource>>) {
+    let Some((nombre, tarea)) = bank.en_curso.as_mut() else { return };
+    let Some(bytes) = bevy::tasks::block_on(bevy::tasks::futures_lite::future::poll_once(tarea)) else { return };
+    let nombre = nombre.clone();
+    bank.en_curso = None;
+    let handle = assets.add(AudioSource { bytes: bytes.into() });
+    bank.listas.insert(nombre, handle);
 }
 
 /// Director: cuenta el silencio y elige la próxima pista del contexto activo.
@@ -245,17 +291,33 @@ struct MusicDirector {
     silence_min: f32,
     silence_max: f32,
     rng: Lcg,
+    /// Segundos hasta que otra pista de TENSIÓN (infectados cerca) pueda interrumpir.
+    tension_cd: f32,
+    /// Lo que se pidió y todavía se está componiendo (no se cuenta el silencio mientras se espera).
+    esperando: Option<String>,
 }
 
 impl Default for MusicDirector {
     fn default() -> Self {
         // Primer tema a los ~25 s de juego (entrada amable, no inmediata).
-        Self { silence: 25.0, silence_min: 90.0, silence_max: 240.0, rng: Lcg(0xC418_2026) }
+        Self { silence: 25.0, silence_min: 90.0, silence_max: 240.0, rng: Lcg(0xC418_2026), tension_cd: 0.0, esperando: None }
     }
 }
 
 #[derive(Component)]
 struct MusicTrack;
+
+/// La pista se está apagando (se baja el volumen y se borra).
+#[derive(Component)]
+struct Fundir(f32);
+
+/// La música del menú (se repite mientras estés en el menú).
+#[derive(Component)]
+struct MusicaMenu;
+
+/// La pista de tensión (infectados cerca).
+#[derive(Component)]
+struct MusicaTension;
 
 #[derive(Component)]
 struct ThrustLoop;
@@ -271,6 +333,7 @@ impl Plugin for GameAudioPlugin {
             .add_event::<PlaySfx>()
             .add_event::<PlaySfxAt>()
             .add_systems(Startup, build_audio_banks)
+            .add_systems(Update, (terminar_composicion, musica_menu, fundir_musica))
             .add_systems(
                 Update,
                 (
@@ -343,18 +406,16 @@ fn build_audio_banks(
     bank.thrust = Some(audio_assets.add(AudioSource { bytes: thrust_wav.into() }));
 
     for track in &spec.tracks {
-        let wav = wav_bytes(track.rate, &render_track(track));
-        let handle = audio_assets.add(AudioSource { bytes: wav.into() });
-        match track.mood.as_str() {
-            "space" => music.space.push(handle),
-            "underground" => music.underground.push(handle),
-            _ => music.surface.push(handle),
-        }
+        music.specs.entry(track.mood.clone()).or_default().push(track.clone());
+    }
+    // La música del menú se compone YA (en un hilo aparte): es lo primero que se oye.
+    if let Some(t) = music.primera("menu").cloned() {
+        music.pedir(&t);
     }
     eprintln!(
-        "ha-audio: {} SFX + {} pistas sintetizadas en memoria (audio.json)",
+        "ha-audio: {} SFX sintetizados + {} partituras de música (se componen al hacer falta, con caché en disco)",
         bank.sounds.len(),
-        music.surface.len() + music.space.len() + music.underground.len()
+        spec.tracks.len()
     );
 }
 
@@ -795,48 +856,147 @@ fn flight_sounds(
     }
 }
 
-/// Director de música: pista por contexto, con MINUTOS de silencio entre
-/// pistas (filosofía Minecraft — la música como acontecimiento, no wallpaper).
+/// Director de música: pista por contexto, con MINUTOS de silencio entre pistas (filosofía Minecraft — la música como
+/// acontecimiento, no wallpaper) y, como Project Zomboid, una pieza de TENSIÓN que corta cuando se acercan los infectados.
+///
+/// Contextos: espacio · subsuelo (y, en el bioma de cristal, su pieza propia) · noche · día. De noche suena otra música
+/// que de día; los infectados a menos de 28 celdas apagan lo que suene y ponen `tension` (con 150 s de enfriamiento).
+#[allow(clippy::too_many_arguments)]
 fn music_director(
     mut commands: Commands,
     time: Res<Time>,
+    phase: Res<State<crate::game_phase::GamePhase>>,
     region: Res<RegionRuntime>,
     tiles: Res<TileWorld>,
-    music: Res<MusicBank>,
+    day: Res<crate::sky2d::DayClock>,
+    ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
+    mut bank: ResMut<MusicBank>,
     settings: Res<AudioSettings>,
     mut director: ResMut<MusicDirector>,
-    playing: Query<Entity, With<MusicTrack>>,
+    playing: Query<(Entity, Option<&MusicaTension>), (With<MusicTrack>, Without<Fundir>, Without<MusicaMenu>)>,
+    infectados: Query<&crate::infectados::Infectado>,
+    player: Query<&Transform, With<Player>>,
 ) {
-    // Mientras suena una pista, no contar silencio (la entidad se auto-despawnea
-    // al terminar por PlaybackSettings::DESPAWN).
-    if !playing.is_empty() {
+    if !crate::game_phase::world_active(phase) {
         return;
     }
-    director.silence -= time.delta_secs();
-    if director.silence > 0.0 {
+    director.tension_cd = (director.tension_cd - time.delta_secs()).max(0.0);
+    // ¿Hay infectados cerca? Entonces la tensión corta lo que suene.
+    let cerca = player.get_single().ok().map(|t| (t.translation.x, -t.translation.y)).map_or(false, |(px, pz)| {
+        infectados.iter().any(|i| ((i.x - px).powi(2) + (i.z - pz).powi(2)) < 28.0 * 28.0)
+    });
+    let sonando_tension = playing.iter().any(|(_, t)| t.is_some());
+    let quiere_tension = cerca && director.tension_cd <= 0.0 && !sonando_tension && region.active != RegionId::Space && tiles.z >= 0;
+    if quiere_tension {
+        for (e, _) in &playing {
+            commands.entity(e).insert(Fundir(0.0));
+        }
+        director.silence = 0.0;
+        director.esperando = Some("tension".to_string());
+        director.tension_cd = 150.0;
+    }
+    // Mientras suena una pista (no apagándose), no contar silencio.
+    if !playing.is_empty() && !quiere_tension {
         return;
     }
-    let mood = match region.active {
-        RegionId::Space => MusicMood::Space,
-        _ if tiles.z < 0 => MusicMood::Underground,
-        _ => MusicMood::Surface,
+    if director.esperando.is_none() {
+        director.silence -= time.delta_secs();
+        if director.silence > 0.0 {
+            return;
+        }
+    }
+    let mood = if let Some(m) = director.esperando.clone() {
+        m
+    } else if region.active == RegionId::Space {
+        "space".to_string()
+    } else if tiles.z < 0 {
+        let body = crate::world2d::active_surface_body(&ctx, &planet);
+        let bioma = player
+            .get_single()
+            .ok()
+            .map(|t| ha_shared::subsuelo::bioma_en(body, (t.translation.x / TILE_M).floor() as i64, (-t.translation.y / TILE_M).floor() as i64));
+        if bioma == Some(ha_shared::subsuelo::Bioma::Cristal) && director.rng.f32() < 0.55 {
+            "cristal".to_string()
+        } else {
+            "underground".to_string()
+        }
+    } else if day.daylight() < 0.25 {
+        "night".to_string()
+    } else {
+        "surface".to_string()
     };
-    let pool = match mood {
-        MusicMood::Surface => &music.surface,
-        MusicMood::Space => &music.space,
-        MusicMood::Underground => &music.underground,
-    };
-    if pool.is_empty() {
+    let n = bank.specs.get(&mood).map_or(0, |v| v.len());
+    if n == 0 {
+        director.esperando = None;
         director.silence = 30.0;
         return;
     }
-    let pick = (director.rng.next() as usize) % pool.len();
-    commands.spawn((
+    let pick = (director.rng.next() as usize) % n;
+    let spec = bank.specs[&mood][pick].clone();
+    let Some(handle) = bank.listas.get(&spec.name).cloned() else {
+        // Todavía no está compuesta: se pide y se espera (sin gastar el silencio).
+        bank.pedir(&spec);
+        director.esperando = Some(mood);
+        return;
+    };
+    director.esperando = None;
+    let mut ent = commands.spawn((
         MusicTrack,
-        AudioPlayer::new(pool[pick].clone()),
+        AudioPlayer::new(handle),
         PlaybackSettings::DESPAWN.with_volume(Volume::new(settings.music)),
     ));
+    if mood == "tension" {
+        ent.insert(MusicaTension);
+    }
     // Próximo tema: silencio (rango del spec) después de que éste termine.
     let (lo, hi) = (director.silence_min, director.silence_max);
     director.silence = director.rng.range(lo, hi);
+}
+
+/// La música del MENÚ: suena (en bucle) mientras estés en el menú o creando el personaje, y se apaga al jugar.
+fn musica_menu(
+    mut commands: Commands,
+    phase: Res<State<crate::game_phase::GamePhase>>,
+    mut bank: ResMut<MusicBank>,
+    settings: Res<AudioSettings>,
+    sonando: Query<Entity, (With<MusicaMenu>, Without<Fundir>)>,
+) {
+    use crate::game_phase::GamePhase;
+    let en_menu = matches!(*phase.get(), GamePhase::MainMenu | GamePhase::CharacterCreate);
+    if !en_menu {
+        for e in &sonando {
+            commands.entity(e).insert(Fundir(0.0));
+        }
+        return;
+    }
+    if !sonando.is_empty() {
+        return;
+    }
+    let Some(spec) = bank.primera("menu").cloned() else { return };
+    match bank.listas.get(&spec.name).cloned() {
+        Some(h) => {
+            commands.spawn((
+                MusicTrack,
+                MusicaMenu,
+                AudioPlayer::new(h),
+                PlaybackSettings::LOOP.with_volume(Volume::new(settings.music * 0.8)),
+            ));
+        }
+        None => bank.pedir(&spec),
+    }
+}
+
+/// Baja el volumen de lo que se está apagando (1,8 s) y lo borra.
+fn fundir_musica(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Fundir, Option<&AudioSink>)>, settings: Res<AudioSettings>) {
+    for (e, mut f, sink) in &mut q {
+        f.0 += time.delta_secs();
+        let k = (1.0 - f.0 / 1.8).clamp(0.0, 1.0);
+        if let Some(s) = sink {
+            s.set_volume(settings.music * k);
+        }
+        if k <= 0.0 {
+            commands.entity(e).despawn_recursive();
+        }
+    }
 }

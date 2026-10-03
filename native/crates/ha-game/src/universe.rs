@@ -558,6 +558,7 @@ fn spawn_universe(
     sol: Res<SunTexture>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     existing: Query<(), With<BodyDisc>>,
 ) {
     // Corre al entrar a `Playing`; si algún día se puede volver al menú y jugar
@@ -588,7 +589,9 @@ fn spawn_universe(
             MeshMaterial2d(materials.add(if body == CelestialBody::Sun {
                 ColorMaterial { color: Color::WHITE, texture: Some(sol.0.clone()), ..default() }
             } else {
-                ColorMaterial::from_color(disc_color)
+                // El planeta lleva su propia pintura (continentes, nubes, cráteres, bandas…) desde el primer cuadro;
+                // el horneado del terreno real lo reemplaza cuando te acercás (`bake_body_textures`).
+                ColorMaterial { color: Color::WHITE, texture: Some(images.add(crate::planet_art::textura_de_cuerpo(body))), ..default() }
             })),
             // Detrás de todo el suelo (tiles finos z≈0, satelital z=-1).
             Transform::from_xyz(0.0, 0.0, -20.0 + dz),

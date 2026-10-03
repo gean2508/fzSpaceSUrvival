@@ -21,7 +21,9 @@ fn main() {
     std::fs::write(format!("{out}/sfx__thrust.wav"), wav_bytes(spec.thrust.rate, &thrust)).unwrap();
     let t_sfx = t0.elapsed();
     for t in &spec.tracks {
+        let t1 = std::time::Instant::now();
         let buf = render_track(t);
+        eprintln!("  pista {:16} {:6.2}s ({:.0}s de audio)", t.name, t1.elapsed().as_secs_f32(), t.dur);
         std::fs::write(format!("{out}/mus_{}.wav", t.name), wav_bytes(t.rate, &buf)).unwrap();
     }
     eprintln!("render_all: {} SFX en {:.2}s, {} pistas en {:.2}s (total {:.2}s)", spec.sfx.len() + 1, t_sfx.as_secs_f32(), spec.tracks.len(), (t0.elapsed() - t_sfx).as_secs_f32(), t0.elapsed().as_secs_f32());
