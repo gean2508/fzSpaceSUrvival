@@ -3890,6 +3890,8 @@ Mali cada vuelta es además una lectura del uniform con índice dinámico.
 - `pow(color, 1.6)` de la aditiva se precalcula por luz (`cols`): tres `pow` menos por luz y píxel.
 - **De día `light_sprites` duerme**: sin luces activas ya no recorre todos los sprites del mundo
   20 veces por segundo (una vuelta final devuelve el color a los teñidos, sin corte por distancia).
+- `VEIL_LIGHTS` (tope de uniform, PC) pasó de 40 a **64**: ya no es el cuello de botella. La máscara de la baldosa
+  son dos `u32` (0..31 y 32..63); `mascara()` del shader cubre n=64 aparte porque `1u << 32` no existe en WGSL.
 - Con eso `presupuesto_de_luces()` en Android pasó de **8 a 16**. Medir en el celu con
   `HA_LUCES=n` (8/16/24) en la ciudad de noche; si `resto` no baja, volver a 8 es un número.
 
