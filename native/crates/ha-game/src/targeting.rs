@@ -227,6 +227,11 @@ fn update_look_target(
     if current.locked {
         return;
     }
+    // Con un arma de fuego en la mano el mundo no se talla ni se cosecha: se apunta y se dispara (`armas.rs`).
+    if crate::armas::es_arma(&equipped.item_id) {
+        *current = LookTarget::default();
+        return;
+    }
     // **Una acción en curso CONGELA su objetivo.** El dedo tiembla, y el árbol
     // que empezaste a talar tiene que seguir siendo ése hasta que termines o
     // sueltes (soltar lo cancela desde el gesto). Sin esto, un temblor de dos

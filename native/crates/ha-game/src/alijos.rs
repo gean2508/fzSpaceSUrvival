@@ -76,6 +76,13 @@ pub fn botin_alijo(n: u32) -> Vec<(&'static str, u32)> {
     if azar(100) < 40 {
         v.push((["torch", "lantern", "potion_green", "potion_blue"][azar(4) as usize], 1 + azar(2)));
     }
+    // Un alijo es lo que alguien escondió para el fin del mundo: munición casi siempre y, a veces, un arma.
+    if azar(100) < 70 {
+        v.push(crate::armas::municion_al_azar(azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0));
+    }
+    if azar(100) < 15 {
+        v.push((crate::armas::arma_al_azar(azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0), 1));
+    }
     v
 }
 

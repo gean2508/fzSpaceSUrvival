@@ -107,6 +107,10 @@ fn shows_in_hand(item_id: &str) -> bool {
     if item_id.is_empty() || item_id == "hand" {
         return false;
     }
+    // Las armas de fuego las dibuja `armas.rs`: giran hacia donde apuntás.
+    if crate::armas::es_arma(item_id) {
+        return false;
+    }
     true
 }
 

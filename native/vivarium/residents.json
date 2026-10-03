@@ -1,1 +1,1 @@
-{"residents":[],"next_uid":1}
+{"residents":[{"uid":2,"body":0,"x":25.30941,"z":31.787073,"heading":-4.027109,"species":0,"hunger":0.2793915,"thirst":0.55692685,"energy":0.50333285,"edad":1.0,"cria_cd":0.0,"granja":true,"vida":10.0,"domado":false,"sentado":false,"nombre":null},{"uid":1,"body":0,"x":48.39561,"z":49.836693,"heading":0.9632552,"species":0,"hunger":0.27689216,"thirst":0.55692685,"energy":0.50333285,"edad":1.0,"cria_cd":0.0,"granja":true,"vida":10.0,"domado":false,"sentado":false,"nombre":null}],"next_uid":3}

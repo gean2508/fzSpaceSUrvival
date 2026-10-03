@@ -884,7 +884,8 @@ impl Plugin for SocietyPlugin {
                 Update,
                 (update_society_overlay, update_npc_sightings, luces_de_casas)
                     .run_if(crate::game_phase::world_active),
-            );
+            )
+            .add_systems(Update, balas_a_aldeanos.in_set(crate::armas::ArmasSet::Impactos).after(crate::armas::ArmasSet::Mover).run_if(crate::game_phase::world_active));
     }
 }
 
@@ -2289,25 +2290,44 @@ fn harm_events(
         return;
     }
     *cooldown = 0.5; // un golpe por medio segundo
+    herir_aldeano(&mut commands, &mut civ, &mut soc, &mut npcs, &mut speech, &mut sfx, crate::audio::Sfx::Dig, e, family, uid, vx, vz, ATTACK_DAMAGE);
+}
+
+/// **Lo que le pasa a un aldeano cuando lo hieren** (a golpes o a balazos): pierde vida, su familia lo recuerda y los
+/// testigos de otras familias también. Si muere: herencia, guardado y baja del censo. `dano` en la escala de la vida del
+/// aldeano (1.0 = entero).
+#[allow(clippy::too_many_arguments)]
+fn herir_aldeano(
+    commands: &mut Commands,
+    civ: &mut crate::civilizacion::Civ,
+    soc: &mut Society,
+    npcs: &mut Query<(Entity, &mut Npc)>,
+    speech: &mut crate::dialog::SpeechQueue,
+    sfx: &mut EventWriter<crate::audio::PlaySfxAt>,
+    sonido: crate::audio::Sfx,
+    e: Entity,
+    family: u32,
+    uid: u64,
+    vx: f32,
+    vz: f32,
+    dano: f32,
+) {
     let Ok((_, mut npc)) = npcs.get_mut(e) else {
         return;
     };
-    npc.health = (npc.health - ATTACK_DAMAGE).max(0.0);
+    npc.health = (npc.health - dano).max(0.0);
     let dead = npc.health <= 0.0;
     let brain_id = npc.brain;
     let herencia = (npc.uid, npc.pareja, npc.vivienda);
     drop(npc);
-    sfx.send(crate::audio::PlaySfxAt(
-        crate::audio::Sfx::Dig,
-        crate::world2d::render_xy(vx, vz),
-    ));
+    sfx.send(crate::audio::PlaySfxAt(sonido, crate::world2d::render_xy(vx, vz)));
     let body = soc.active_body.unwrap_or(0);
     if !dead {
         // Herido y no muerto: agresión atenuada (no el rencor completo de una muerte) y
         // huye — la reconciliación (curar) queda para cuando exista sanación real.
         soc.adjust(family, REP_KILL_FAMILY * 0.35);
         soc.nudge_body_rep(body, REP_KILL_FAMILY * 0.1); // S4/B3: mancha leve el planeta
-        crate::dialog::say_from(&mut speech, e, vx, vz, "Ay!", Color::srgb(1.0, 0.7, 0.6), true);
+        crate::dialog::say_from(speech, e, vx, vz, "Ay!", Color::srgb(1.0, 0.7, 0.6), true);
         return;
     }
     // Rencor de la familia de la víctima + testigos cercanos (OTRAS familias lo recuerdan;
@@ -2337,6 +2357,50 @@ fn harm_events(
     // Un solo camino de escritura: pedir flush inmediato al próximo tick del guardado
     // periódico, que sí junta `live`.
     soc.dirty = true;
+}
+
+/// Las balas en vuelo contra los aldeanos. Un balazo cuenta como un golpe: la familia lo recuerda y los testigos también
+/// (`herir_aldeano`). La vida de un aldeano es 1.0; un infectado tiene 12 y una bala de pistola pega 6.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn balas_a_aldeanos(
+    mut commands: Commands,
+    mut civ: ResMut<crate::civilizacion::Civ>,
+    mut soc: ResMut<Society>,
+    mut npcs: Query<(Entity, &mut Npc)>,
+    mut speech: ResMut<crate::dialog::SpeechQueue>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+    mut balas: Query<&mut crate::armas::Bala>,
+) {
+    const RADIO_BLANCO: f32 = 0.5;
+    for mut b in &mut balas {
+        if !b.viva {
+            continue;
+        }
+        let mut hits: Vec<(Entity, u32, u64, f32, f32)> = Vec::new();
+        for (e, n) in npcs.iter() {
+            if b.ya_golpeo(e) || n.health <= 0.0 {
+                continue;
+            }
+            if crate::armas::distancia_a_segmento(Vec2::new(n.x, n.z), b.prev, b.pos) <= RADIO_BLANCO {
+                hits.push((e, n.family, n.uid, n.x, n.z));
+            }
+        }
+        // El más cercano al origen primero (la bala los va atravesando en orden).
+        hits.sort_by(|a, c| {
+            let da = Vec2::new(a.3, a.4).distance_squared(b.origen);
+            let dc = Vec2::new(c.3, c.4).distance_squared(b.origen);
+            da.total_cmp(&dc)
+        });
+        for (e, family, uid, vx, vz) in hits {
+            if !b.viva {
+                break;
+            }
+            let dano = b.dano_ahora() / 12.0;
+            crate::armas::chispa_de_impacto(&mut commands, Vec2::new(vx, vz), if b.rayo { Color::srgb(0.4, 1.0, 0.6) } else { Color::srgb(0.75, 0.15, 0.12) });
+            herir_aldeano(&mut commands, &mut civ, &mut soc, &mut npcs, &mut speech, &mut sfx, b.impacto, e, family, uid, vx, vz, dano);
+            b.registrar(e);
+        }
+    }
 }
 
 /// **Herencia de la casa.** Cuando muere alguien con casa, la toma su pareja o, si no hay, un

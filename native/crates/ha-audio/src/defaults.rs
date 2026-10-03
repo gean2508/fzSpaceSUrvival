@@ -262,6 +262,77 @@ impl AudioSpec {
             ToneOp { curve: 3.0, ..op(Sine, 0.1, 0.1, 190.0, 80.0, 0.35) },
         ], vec![nivel(RMS_IMPACTO)]));
 
+
+        // ── armas (3 oct 2026) ──────────────────────────────────────────────────────────────────
+        // Un disparo = chasquido de ruido blanco (la onda de choque) + «thump» grave que cae + cola de ruido marrón
+        // con reverb (el eco entre casas). Cada clase cambia el peso: la pistola es seca, el subfusil nasal y corto,
+        // el fusil ancho, la escopeta enorme y grave.
+        put("shot_pistol", sfx(0.55, vec![
+            ToneOp { curve: 5.0, attack: 0.02, cutoff0: 9000.0, cutoff1: 2400.0, ..op(Noise, 0.0, 0.05, 0.0, 0.0, 0.85) },
+            ToneOp { curve: 3.5, ..op(Sine, 0.0, 0.14, 210.0, 62.0, 0.8) },
+            ToneOp { curve: 2.2, attack: 0.03, cutoff0: 2600.0, cutoff1: 380.0, ..op(Brown, 0.01, 0.4, 0.0, 0.0, 0.55) },
+        ], vec![Effect::Saturate { drive: 2.6 }, Effect::Reverb { size: 0.5, mix: 0.22 }, nivel(RMS_IMPACTO)]));
+        put("shot_smg", sfx(0.36, vec![
+            ToneOp { curve: 5.5, attack: 0.02, cutoff0: 8000.0, cutoff1: 2800.0, ..op(Noise, 0.0, 0.04, 0.0, 0.0, 0.8) },
+            ToneOp { curve: 4.0, ..op(Sine, 0.0, 0.1, 260.0, 90.0, 0.7) },
+            ToneOp { curve: 2.6, attack: 0.03, cutoff0: 3000.0, cutoff1: 500.0, ..op(Brown, 0.01, 0.25, 0.0, 0.0, 0.45) },
+        ], vec![Effect::Saturate { drive: 3.0 }, Effect::Reverb { size: 0.4, mix: 0.16 }, nivel(RMS_IMPACTO)]));
+        put("shot_rifle", sfx(0.8, vec![
+            ToneOp { curve: 5.0, attack: 0.02, cutoff0: 10000.0, cutoff1: 2000.0, ..op(Noise, 0.0, 0.07, 0.0, 0.0, 0.9) },
+            ToneOp { curve: 3.0, ..op(Sine, 0.0, 0.2, 170.0, 48.0, 0.9) },
+            ToneOp { curve: 2.0, attack: 0.03, cutoff0: 2200.0, cutoff1: 260.0, ..op(Brown, 0.01, 0.6, 0.0, 0.0, 0.7) },
+            ToneOp { curve: 4.0, ..op(Saw, 0.0, 0.05, 900.0, 300.0, 0.25) },
+        ], vec![Effect::Saturate { drive: 3.2 }, Effect::Reverb { size: 0.7, mix: 0.3 }, nivel(RMS_IMPACTO)]));
+        put("shot_shotgun", sfx(1.0, vec![
+            ToneOp { curve: 4.0, attack: 0.02, cutoff0: 7000.0, cutoff1: 1200.0, ..op(Noise, 0.0, 0.1, 0.0, 0.0, 1.0) },
+            ToneOp { curve: 2.6, ..op(Sine, 0.0, 0.3, 130.0, 34.0, 1.0) },
+            ToneOp { curve: 1.8, attack: 0.03, cutoff0: 1800.0, cutoff1: 160.0, ..op(Brown, 0.01, 0.8, 0.0, 0.0, 0.85) },
+        ], vec![Effect::Saturate { drive: 3.6 }, Effect::Reverb { size: 0.8, mix: 0.34 }, nivel(RMS_IMPACTO)]));
+        // El rayo: un «pew» que cae con FM brillante, un zumbido de energía y un destello cristalino al final.
+        put("shot_ray", sfx(0.7, vec![
+            ToneOp { curve: 2.0, attack: 0.02, fm_ratio: 2.01, fm_index: 6.0, ..op(Sine, 0.0, 0.45, 1900.0, 260.0, 0.6) },
+            ToneOp { curve: 2.5, detune: 24.0, ..op(Saw, 0.0, 0.3, 700.0, 120.0, 0.35) },
+            ToneOp { curve: 3.0, attack: 0.05, ..op(Bell, 0.02, 0.5, 2349.0, 2349.0, 0.3) },
+            ToneOp { curve: 4.0, ..op(Noise, 0.0, 0.03, 0.0, 0.0, 0.3) },
+        ], vec![Effect::Chorus { depth: 0.004, rate: 1.7, mix: 0.35 }, Effect::Reverb { size: 0.5, mix: 0.22 }, nivel(RMS_IMPACTO)]));
+        // Recargar: sacar el cargador (clac de resorte), meterlo (golpe metálico) y montar el cerrojo (dos clacs).
+        put("reload_out", sfx(0.22, vec![
+            ToneOp { curve: 4.5, ..op(Pluck, 0.0, 0.1, 520.0, 520.0, 0.55) },
+            ToneOp { curve: 4.0, attack: 0.05, cutoff0: 5200.0, cutoff1: 1400.0, ..op(Pink, 0.0, 0.06, 0.0, 0.0, 0.5) },
+            ToneOp { curve: 3.0, ..op(Bell, 0.03, 0.16, 3300.0, 3300.0, 0.14) },
+        ], vec![nivel(RMS_MUNDO)]));
+        put("reload_in", sfx(0.26, vec![
+            ToneOp { curve: 4.0, ..op(Pluck, 0.0, 0.12, 330.0, 330.0, 0.7) },
+            ToneOp { curve: 3.5, ..op(Sine, 0.0, 0.08, 180.0, 90.0, 0.5) },
+            ToneOp { curve: 3.0, attack: 0.04, cutoff0: 4800.0, cutoff1: 1600.0, ..op(Pink, 0.0, 0.07, 0.0, 0.0, 0.5) },
+            ToneOp { curve: 3.0, ..op(Bell, 0.05, 0.2, 2800.0, 2800.0, 0.12) },
+        ], vec![nivel(RMS_MUNDO)]));
+        put("reload_bolt", sfx(0.34, vec![
+            ToneOp { curve: 4.5, ..op(Pluck, 0.0, 0.1, 440.0, 440.0, 0.6) },
+            ToneOp { curve: 4.0, attack: 0.05, cutoff0: 6000.0, cutoff1: 1800.0, ..op(Pink, 0.0, 0.05, 0.0, 0.0, 0.5) },
+            ToneOp { curve: 4.5, ..op(Pluck, 0.14, 0.12, 300.0, 300.0, 0.75) },
+            ToneOp { curve: 3.0, ..op(Bell, 0.15, 0.16, 3000.0, 3000.0, 0.1) },
+        ], vec![nivel(RMS_MUNDO)]));
+        put("dry_fire", sfx(0.12, vec![
+            ToneOp { curve: 5.0, ..op(Pluck, 0.0, 0.07, 1250.0, 1250.0, 0.5) },
+            ToneOp { curve: 4.0, ..op(Sine, 0.0, 0.03, 2100.0, 1400.0, 0.2) },
+        ], vec![Effect::Highpass { alpha: 0.05 }, nivel(RMS_UI)]));
+        // Impactos: carne (golpe sordo húmedo), pared (rebote metálico agudo) y rayo (chisporroteo).
+        put("bullet_hit", sfx(0.2, vec![
+            ToneOp { curve: 4.0, attack: 0.04, cutoff0: 2400.0, cutoff1: 500.0, ..op(Brown, 0.0, 0.12, 0.0, 0.0, 0.7) },
+            ToneOp { curve: 3.5, ..op(Sine, 0.0, 0.1, 160.0, 70.0, 0.55) },
+        ], vec![nivel(RMS_IMPACTO)]));
+        put("bullet_wall", sfx(0.3, vec![
+            ToneOp { curve: 4.0, ..op(Noise, 0.0, 0.025, 0.0, 0.0, 0.45) },
+            ToneOp { curve: 2.6, fm_ratio: 3.1, fm_index: 4.0, ..op(Sine, 0.01, 0.22, 2400.0, 1700.0, 0.35) },
+            ToneOp { curve: 2.4, attack: 0.04, ..op(Bell, 0.02, 0.26, 3100.0, 3100.0, 0.18) },
+        ], vec![Effect::Reverb { size: 0.3, mix: 0.12 }, nivel(RMS_MUNDO)]));
+        put("ray_hit", sfx(0.45, vec![
+            ToneOp { curve: 2.6, fm_ratio: 1.7, fm_index: 5.0, ..op(Sine, 0.0, 0.3, 1500.0, 500.0, 0.5) },
+            ToneOp { curve: 3.0, attack: 0.05, cutoff0: 8000.0, cutoff1: 2000.0, ..op(Noise, 0.0, 0.2, 0.0, 0.0, 0.35) },
+            ToneOp { curve: 2.4, ..op(Bell, 0.04, 0.35, 1760.0, 1760.0, 0.25) },
+        ], vec![Effect::Chorus { depth: 0.003, rate: 2.3, mix: 0.3 }, nivel(RMS_IMPACTO)]));
+
         // ── la marca de FZ STUDIOS (la splash) ──────────────────────────────────────────────────────
         // Ocho «plops» de pintura que suben por la pentatónica, uno por mancha (cada `0,135 s` desde `0,06 s`, como
         // pide `boot_ui::RETARDO_AUDIO`), y un acorde con cola larga cuando cae el logo. NO es un efecto del juego:

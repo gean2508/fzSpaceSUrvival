@@ -166,6 +166,10 @@ pub fn usar_objeto_con_boton(
     if fly.flying() || flight.active || uso_del_objeto(&equipped.item_id, &inv).is_none() {
         return;
     }
+    // RECARGAR no es un «mantener»: lo lee `armas.rs` en el flanco de la pulsación.
+    if crate::armas::es_arma(&equipped.item_id) {
+        return;
+    }
     if touch_state.use_pointer.is_some() {
         if !hold.active && !hold.completed {
             *hold = HoldInteractState {

@@ -1086,3 +1086,38 @@ pub fn hash_pista(t: &TrackSpec) -> u32 {
     }
     h
 }
+
+
+/// Corte del filtro paso-bajos de cada nivel de sordina (Hz) y cuántas veces se aplica: un polo suena a manta, tres a
+/// «pared de ladrillo». Nivel 0 = seco. Compartido entre el juego y el pre-render (`render_all`).
+pub const MUFFLE_CUTOFF_HZ: [f32; 3] = [0.0, 1600.0, 520.0];
+pub const MUFFLE_PASSES: [u32; 3] = [0, 2, 3];
+
+/// Paso-bajos de un polo aplicado `passes` veces sobre el PCM ya renderizado: la «pared» hecha filtro.
+pub fn lowpass(buf: &[f32], rate: u32, cutoff_hz: f32, passes: u32) -> Vec<f32> {
+    let mut out = buf.to_vec();
+    if cutoff_hz <= 0.0 || rate == 0 {
+        return out;
+    }
+    let dt = 1.0 / rate as f32;
+    let rc = 1.0 / (std::f32::consts::TAU * cutoff_hz);
+    let alpha = dt / (rc + dt);
+    for _ in 0..passes {
+        let mut y = 0.0f32;
+        for s in out.iter_mut() {
+            y += alpha * (*s - y);
+            *s = y;
+        }
+    }
+    out
+}
+
+/// Huella de un efecto + la versión del motor: dice si el WAV pre-renderizado del APK corresponde a este diseño.
+pub fn hash_sfx(s: &SfxSpec) -> u32 {
+    let json = serde_json::to_string(s).unwrap_or_default();
+    let mut h: u32 = 0x811c_9dc5 ^ MUSICA_VERSION.wrapping_mul(0x9E37_79B1);
+    for b in json.bytes() {
+        h = (h ^ b as u32).wrapping_mul(0x0100_0193);
+    }
+    h
+}

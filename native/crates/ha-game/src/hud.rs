@@ -1740,6 +1740,7 @@ fn item_label(id: &str) -> &str {
         "orange" => "Naranja",
         "grape" => "Uvas",
         "map_small" => "Mapa",
+        _ if crate::armas::etiqueta_estatica(id).is_some() => crate::armas::etiqueta_estatica(id).unwrap_or(id),
         _ => ha_assets::slots::slot_label(&format!("items/{id}")).unwrap_or(id),
     }
 }

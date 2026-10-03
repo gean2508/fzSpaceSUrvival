@@ -3,17 +3,17 @@
     {
       "id": "PlayerShip",
       "label": "PLAYER SHIP",
-      "mode": "ActiveFlight",
+      "mode": "Inactive",
       "body": "Earth",
-      "orbit_phase": 5.94301,
+      "orbit_phase": 0.0,
       "surface_tz": 0.0,
-      "orbit_alt_m": 50.0,
+      "orbit_alt_m": 420.0,
       "fuel_pct": 100.0,
       "power": {
         "generation_w": 0.0,
-        "load_w": 18.0,
+        "load_w": 0.0,
         "storage_wh": 0.0,
-        "storage_max_wh": 500.0,
+        "storage_max_wh": 0.0,
         "solar_efficiency": 0.0
       },
       "connectivity": {
@@ -27,7 +27,7 @@
       "label": "ORBITAL STATION",
       "mode": "ParkedOrbit",
       "body": "Earth",
-      "orbit_phase": 0.058177643,
+      "orbit_phase": 0.11635528,
       "surface_tz": 0.0,
       "orbit_alt_m": 600.0,
       "fuel_pct": 100.0,

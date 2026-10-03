@@ -33435,6 +33435,210 @@
      "label": "Helicóptero 2"
     }
    ]
+  },
+  "items/gun_pistola": {
+   "label": "Pistola M1911"
+  },
+  "items/gun_pistola__115": {
+   "label": "Pistola M1911 · Weaponized 115"
+  },
+  "items/gun_pistola__singularidad": {
+   "label": "Pistola M1911 · Singularidad"
+  },
+  "items/gun_pistola__grafiti": {
+   "label": "Pistola M1911 · Grafiti"
+  },
+  "items/gun_pistola__bacon": {
+   "label": "Pistola M1911 · Bacon"
+  },
+  "items/gun_pistola__ciclon": {
+   "label": "Pistola M1911 · Ciclón"
+  },
+  "items/gun_pistola__oscura": {
+   "label": "Pistola M1911 · Materia oscura"
+  },
+  "items/gun_thompson": {
+   "label": "Thompson M1A1"
+  },
+  "items/gun_thompson__115": {
+   "label": "Thompson M1A1 · Weaponized 115"
+  },
+  "items/gun_thompson__singularidad": {
+   "label": "Thompson M1A1 · Singularidad"
+  },
+  "items/gun_thompson__grafiti": {
+   "label": "Thompson M1A1 · Grafiti"
+  },
+  "items/gun_thompson__bacon": {
+   "label": "Thompson M1A1 · Bacon"
+  },
+  "items/gun_thompson__ciclon": {
+   "label": "Thompson M1A1 · Ciclón"
+  },
+  "items/gun_thompson__oscura": {
+   "label": "Thompson M1A1 · Materia oscura"
+  },
+  "items/gun_ppsh": {
+   "label": "PPSh-41"
+  },
+  "items/gun_ppsh__115": {
+   "label": "PPSh-41 · Weaponized 115"
+  },
+  "items/gun_ppsh__singularidad": {
+   "label": "PPSh-41 · Singularidad"
+  },
+  "items/gun_ppsh__grafiti": {
+   "label": "PPSh-41 · Grafiti"
+  },
+  "items/gun_ppsh__bacon": {
+   "label": "PPSh-41 · Bacon"
+  },
+  "items/gun_ppsh__ciclon": {
+   "label": "PPSh-41 · Ciclón"
+  },
+  "items/gun_ppsh__oscura": {
+   "label": "PPSh-41 · Materia oscura"
+  },
+  "items/gun_mp40": {
+   "label": "MP40"
+  },
+  "items/gun_mp40__115": {
+   "label": "MP40 · Weaponized 115"
+  },
+  "items/gun_mp40__singularidad": {
+   "label": "MP40 · Singularidad"
+  },
+  "items/gun_mp40__grafiti": {
+   "label": "MP40 · Grafiti"
+  },
+  "items/gun_mp40__bacon": {
+   "label": "MP40 · Bacon"
+  },
+  "items/gun_mp40__ciclon": {
+   "label": "MP40 · Ciclón"
+  },
+  "items/gun_mp40__oscura": {
+   "label": "MP40 · Materia oscura"
+  },
+  "items/gun_suomi": {
+   "label": "Suomi KP/-31"
+  },
+  "items/gun_suomi__115": {
+   "label": "Suomi KP/-31 · Weaponized 115"
+  },
+  "items/gun_suomi__singularidad": {
+   "label": "Suomi KP/-31 · Singularidad"
+  },
+  "items/gun_suomi__grafiti": {
+   "label": "Suomi KP/-31 · Grafiti"
+  },
+  "items/gun_suomi__bacon": {
+   "label": "Suomi KP/-31 · Bacon"
+  },
+  "items/gun_suomi__ciclon": {
+   "label": "Suomi KP/-31 · Ciclón"
+  },
+  "items/gun_suomi__oscura": {
+   "label": "Suomi KP/-31 · Materia oscura"
+  },
+  "items/gun_pps43": {
+   "label": "PPS-43"
+  },
+  "items/gun_pps43__115": {
+   "label": "PPS-43 · Weaponized 115"
+  },
+  "items/gun_pps43__singularidad": {
+   "label": "PPS-43 · Singularidad"
+  },
+  "items/gun_pps43__grafiti": {
+   "label": "PPS-43 · Grafiti"
+  },
+  "items/gun_pps43__bacon": {
+   "label": "PPS-43 · Bacon"
+  },
+  "items/gun_pps43__ciclon": {
+   "label": "PPS-43 · Ciclón"
+  },
+  "items/gun_pps43__oscura": {
+   "label": "PPS-43 · Materia oscura"
+  },
+  "items/gun_ak": {
+   "label": "Fusil de asalto AK"
+  },
+  "items/gun_ak__115": {
+   "label": "Fusil de asalto AK · Weaponized 115"
+  },
+  "items/gun_ak__singularidad": {
+   "label": "Fusil de asalto AK · Singularidad"
+  },
+  "items/gun_ak__grafiti": {
+   "label": "Fusil de asalto AK · Grafiti"
+  },
+  "items/gun_ak__bacon": {
+   "label": "Fusil de asalto AK · Bacon"
+  },
+  "items/gun_ak__ciclon": {
+   "label": "Fusil de asalto AK · Ciclón"
+  },
+  "items/gun_ak__oscura": {
+   "label": "Fusil de asalto AK · Materia oscura"
+  },
+  "items/gun_escopeta": {
+   "label": "Escopeta de ánima lisa"
+  },
+  "items/gun_escopeta__115": {
+   "label": "Escopeta de ánima lisa · Weaponized 115"
+  },
+  "items/gun_escopeta__singularidad": {
+   "label": "Escopeta de ánima lisa · Singularidad"
+  },
+  "items/gun_escopeta__grafiti": {
+   "label": "Escopeta de ánima lisa · Grafiti"
+  },
+  "items/gun_escopeta__bacon": {
+   "label": "Escopeta de ánima lisa · Bacon"
+  },
+  "items/gun_escopeta__ciclon": {
+   "label": "Escopeta de ánima lisa · Ciclón"
+  },
+  "items/gun_escopeta__oscura": {
+   "label": "Escopeta de ánima lisa · Materia oscura"
+  },
+  "items/gun_raygun": {
+   "label": "Pistola de rayos"
+  },
+  "items/gun_raygun__115": {
+   "label": "Pistola de rayos · Weaponized 115"
+  },
+  "items/gun_raygun__singularidad": {
+   "label": "Pistola de rayos · Singularidad"
+  },
+  "items/gun_raygun__grafiti": {
+   "label": "Pistola de rayos · Grafiti"
+  },
+  "items/gun_raygun__bacon": {
+   "label": "Pistola de rayos · Bacon"
+  },
+  "items/gun_raygun__ciclon": {
+   "label": "Pistola de rayos · Ciclón"
+  },
+  "items/gun_raygun__oscura": {
+   "label": "Pistola de rayos · Materia oscura"
+  },
+  "items/ammo_45": {
+   "label": "Balas .45"
+  },
+  "items/ammo_9mm": {
+   "label": "Balas 9 mm"
+  },
+  "items/ammo_762": {
+   "label": "Balas 7,62"
+  },
+  "items/ammo_cartucho": {
+   "label": "Cartuchos"
+  },
+  "items/ammo_energia": {
+   "label": "Celdas de energía"
   }
  },
  "origen": {
@@ -277824,6 +278028,890 @@
     "h": 1,
     "row": 18,
     "w": 1
+   }
+  },
+  "items/gun_pistola": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pistola__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pistola__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pistola__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pistola__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pistola__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pistola__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_thompson__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ppsh__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "row": 2,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_mp40__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_suomi__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_pps43__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "row": 4,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_ak__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 10,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 12,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 14,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 16,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 18,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 20,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 22,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_escopeta__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 24,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 26,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun__115": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 28,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun__singularidad": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 30,
+    "row": 6,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun__grafiti": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "row": 8,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun__bacon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "row": 8,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun__ciclon": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "row": 8,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/gun_raygun__oscura": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "row": 8,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/ammo_45": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 0,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/ammo_9mm": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 2,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/ammo_762": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 4,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/ammo_cartucho": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 6,
+    "row": 0,
+    "w": 2,
+    "h": 2
+   }
+  },
+  "items/ammo_energia": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/armas.png",
+   "rect": {
+    "col": 8,
+    "row": 0,
+    "w": 2,
+    "h": 2
    }
   }
  }
