@@ -91,8 +91,14 @@ revestimiento, alféizares). Lo que sí llega: **re-componer el pixel del pack a
 - ⚠ Descartado: el camino óptimo por grafo de columnas (las bahías del pack coinciden al 77 % como mucho y el
   camino repetía UNA columna; el juez lo aprobaba porque salteaba celdas vacías → ahora mide `huecos`).
 
-**Falta** (próximo paso): un importador que use `fachada_a_medida` con la huella de `city::edificado_de_lote`
-y la puerta de `city::puerta_del_frente`, y más familias de módulos para cubrir los anchos que hoy no entran.
+- `_intocables`: nunca se repiten las columnas casi transparentes (la sombra del costado: la casa «crecía» con
+  un hueco) ni las que cruza una diagonal (el faldón a 2:1 son pasos de 2 px; repetir uno dienta la cumbrera).
+- `scripts/import-casas-a-medida.py` lleva cada vivienda a la huella exacta de `city.rs` y la juzga. **Medido el
+  3 oct: las 11 quedan POR DEBAJO** — las huellas son ×1,5 a ×4,1 del dibujo. Una casa entera NO se agranda tanto
+  sin perder oficio: hace falta componerla con varias piezas (biblia §8, «El juez del reemplazo»).
+
+**Derivar antes que dibujar sigue siendo el camino más corto al listón**: el taxi derivado de un auto del pack
+(`scripts/dibujar-taxi.py`) da SUPERA; el dibujado a mano daba POR DEBAJO.
 
 ## 0. Antes de dibujar: ¿de verdad falta?
 

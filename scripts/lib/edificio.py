@@ -62,7 +62,40 @@ def _tiras(a: np.ndarray, eje: int, prohibido: np.ndarray) -> list[tuple[int, in
     return tiras
 
 
-def _cambiar(a: np.ndarray, objetivo: int, eje: int, proteger) -> np.ndarray:
+def _intocables(a: np.ndarray, eje: int) -> np.ndarray:
+    """Líneas que NO se repiten ni se quitan aunque sean gemelas. Las dos las cazó la lámina, no un número:
+
+    * **las casi transparentes** (el filo, la sombra al costado): `casa_chica#2` llevada de 12 a 18 celdas
+      «creció» repitiendo su columna de sombra y quedó del mismo ancho con un hueco al lado;
+    * **las que cruza una diagonal** (el faldón de un techo a dos aguas): una línea a 2:1 del pack son pasos de 2
+      px, o sea columnas gemelas; repetir una deja un paso de 3 y la cumbrera sale dentada
+      (`casa_mediana#1`). Se detecta porque la línea vecina es la misma corrida un píxel arriba o abajo."""
+    b = (a if eje == 1 else a.transpose(1, 0, 2)).astype(np.int32)
+    H, W = b.shape[:2]
+    opac = (b[..., 3] > 200).mean(0)
+    lim = 0.6 * float(np.median(opac[opac > 0])) if (opac > 0).any() else 1.0
+    out = opac < lim
+    clave = (b[..., 0] << 24) | (b[..., 1] << 16) | (b[..., 2] << 8) | b[..., 3]
+    distinto = np.zeros(W, bool)
+    corrido = np.zeros(W, int)
+    for x in range(1, W):
+        c, v = clave[:, x], clave[:, x - 1]
+        dif = (c != v) & (b[:, x, 3] > 200)
+        arriba = np.zeros(H, bool)
+        abajo = np.zeros(H, bool)
+        arriba[1:] = c[1:] == v[:-1]
+        abajo[:-1] = c[:-1] == v[1:]
+        corrido[x] = int((dif & (arriba | abajo)).sum())
+        distinto[x] = dif.any()
+    # una tira gemela queda intocable si en sus bordes la diagonal sigue (≥ 3 píxeles corridos)
+    diag = corrido >= 3
+    for x in range(W):
+        if diag[x]:
+            out[max(0, x - 2) : min(W, x + 2)] = True
+    return out
+
+
+def _cambiar(a: np.ndarray, objetivo: int, eje: int, proteger, indices: bool = False):
     """Lleva el eje a `objetivo` repartiendo el cambio entre las tiras de líneas iguales, **en proporción a su
     largo** (al cuadrado): una tabla de 9 px absorbe más que el filo de 2 px de un marco, que es lo que mira el ojo.
 
@@ -71,10 +104,11 @@ def _cambiar(a: np.ndarray, objetivo: int, eje: int, proteger) -> np.ndarray:
     largo = a.shape[eje]
     delta = objetivo - largo
     if delta == 0:
-        return a
+        return (a, np.arange(largo)) if indices else a
     prohibido = np.zeros(largo, bool)
     for x0, x1 in proteger:
         prohibido[max(0, x0) : min(largo, x1)] = True
+    prohibido |= _intocables(a, eje)
     tiras = _tiras(a, eje, prohibido)
     if not tiras:
         raise SystemExit("edificio: la pieza no tiene líneas gemelas fuera de lo protegido — no se puede re-medir sin inventar pixel")
@@ -97,26 +131,41 @@ def _cambiar(a: np.ndarray, objetivo: int, eje: int, proteger) -> np.ndarray:
             n[t] += 1
             resto -= 1
         k += 1
-    trozos, cursor = [], 0
+    # `orden`: de qué línea del original sale cada línea de la salida (para llevar offsets, p.ej. la puerta)
+    orden, cursor = [], 0
     for (ini, l), cambio in zip(tiras, n):
-        trozos.append(np.take(a, range(cursor, ini), axis=eje))
-        tira = np.take(a, range(ini, ini + l), axis=eje)
+        orden.extend(range(cursor, ini))
         nuevo = l + cambio if delta > 0 else l - cambio
         # la tira es de líneas iguales: re-medirla es repetir su primera línea
-        trozos.append(np.repeat(np.take(tira, [0], axis=eje), nuevo, axis=eje))
+        orden.extend([ini] * nuevo)
         cursor = ini + l
-    trozos.append(np.take(a, range(cursor, largo), axis=eje))
-    return np.concatenate(trozos, axis=eje)
+    orden.extend(range(cursor, largo))
+    orden = np.array(orden)
+    out = np.take(a, orden, axis=eje)
+    return (out, orden) if indices else out
 
 
-def redimensionar(im, ancho: int | None = None, alto: int | None = None, proteger_x=(), proteger_y=()) -> np.ndarray:
-    """La pieza a `ancho` x `alto` px duplicando/quitando líneas gemelas. Lo protegido no se toca."""
+def redimensionar(im, ancho: int | None = None, alto: int | None = None, proteger_x=(), proteger_y=(), mapas: bool = False):
+    """La pieza a `ancho` x `alto` px duplicando/quitando líneas gemelas. Lo protegido no se toca.
+
+    Con `mapas=True` devuelve `(imagen, cols, filas)`: `cols[x]` es la columna del original de la que sale la
+    columna x de la salida (ídem filas). Sirve para llevar un offset medido —la puerta en el sprite— a la pieza
+    re-medida: ver `nueva_posicion`."""
     a = _arr(im)
+    cols, filas = np.arange(a.shape[1]), np.arange(a.shape[0])
     if ancho is not None and ancho != a.shape[1]:
-        a = _cambiar(a, ancho, 1, proteger_x)
+        a, cols = _cambiar(a, ancho, 1, proteger_x, indices=True)
     if alto is not None and alto != a.shape[0]:
-        a = _cambiar(a, alto, 0, proteger_y)
-    return a
+        a, filas = _cambiar(a, alto, 0, proteger_y, indices=True)
+    return (a, cols, filas) if mapas else a
+
+
+def nueva_posicion(mapa: np.ndarray, x: int) -> int:
+    """Dónde quedó la línea `x` del original en la pieza re-medida (la primera copia)."""
+    donde = np.nonzero(mapa == x)[0]
+    if len(donde) == 0:
+        raise SystemExit(f"edificio: la línea {x} se quitó al re-medir — tenía que estar protegida")
+    return int(donde[0])
 
 
 def mover_franja(im, x0: int, x1: int, destino: int, proteger=()) -> np.ndarray:
@@ -207,6 +256,7 @@ def ancho_minimo(im, proteger=()) -> int:
     pro = np.zeros(a.shape[1], bool)
     for p0, p1 in proteger:
         pro[max(0, p0) : min(a.shape[1], p1)] = True
+    pro |= _intocables(a, 1)
     # una tira de k líneas iguales se puede bajar a 1
     return a.shape[1] - sum(l - 1 for _, l in _tiras(a, 1, pro))
 
