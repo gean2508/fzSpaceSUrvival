@@ -6,6 +6,7 @@ import { ASSET_CATALOG } from "../content/assets/catalog.js";
 import { ITEM_CATALOG } from "../content/items/catalog.js";
 import { MACHINE_CATALOG } from "../content/machines/catalog.js";
 import { UI_ICON_CATALOG } from "../content/ui/icons.js";
+import { PASE_TEMPORADA, TIENDA_CATALOGO, TIENDA_GEMAS, recompensaPase } from "../tienda.js";
 
 export type ParityEntry = {
   id: string;
@@ -62,6 +63,35 @@ export const CATALOG_PARITY_MODULES: ParityModuleSpec[] = [
           cellCount: i.cells.length,
         },
       })).sort((a, b) => a.id.localeCompare(b.id)),
+  },
+  {
+    // La tienda: precios, paquetes de gemas y las recompensas del pase. Si el
+    // juego muestra un precio distinto del que cobra el servidor, esto lo caza.
+    id: "tienda",
+    getEntries: () => {
+      const out: ParityEntry[] = TIENDA_CATALOGO.map((i) => ({
+        id: i.id,
+        fields: { tipo: i.tipo, gemas: i.gemas, monedas: i.monedas, da: i.da.join(",") },
+      }));
+      for (const g of TIENDA_GEMAS) {
+        out.push({ id: `paquete:${g.id}`, fields: { gemas: g.gemas, extra: g.extra, centavos: g.centavos } });
+      }
+      for (let n = 1; n <= PASE_TEMPORADA.niveles; n++) {
+        const r = recompensaPase(n);
+        out.push({ id: `nivel:${String(n).padStart(2, "0")}`, fields: { gratis: r.gratis, premium: r.premium } });
+      }
+      out.push({
+        id: `temporada:${PASE_TEMPORADA.id}`,
+        fields: {
+          niveles: PASE_TEMPORADA.niveles,
+          xpPorNivel: PASE_TEMPORADA.xpPorNivel,
+          gemasPremium: PASE_TEMPORADA.gemasPremium,
+          desde: PASE_TEMPORADA.desde,
+          hasta: PASE_TEMPORADA.hasta,
+        },
+      });
+      return out.sort((a, b) => a.id.localeCompare(b.id));
+    },
   },
 ];
 

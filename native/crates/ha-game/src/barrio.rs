@@ -57,6 +57,10 @@ pub struct Lecciones {
     pub gotean: u16,
     pub defendidas: u16,
     pub remendadas: u16,
+    /// Infectados que mató el JUGADOR delante de los vecinos de este pueblo (biblia §20: los
+    /// vecinos te recuerdan por lo que hiciste).
+    #[serde(default)]
+    pub por_vos: u16,
 }
 
 impl Lecciones {
@@ -88,6 +92,9 @@ pub fn noticias(l: &Lecciones) -> Option<String> {
     }
     if l.defendidas > 0 {
         v.push(format!("entre todos acabamos con {} infectado{}", l.defendidas, if l.defendidas == 1 { "" } else { "s" }));
+    }
+    if l.por_vos > 0 {
+        v.push(format!("vos solo acabaste con {} acá, y eso no se olvida", l.por_vos));
     }
     if l.gotean > 0 {
         v.push(if l.remendadas >= l.gotean { "aprendimos a techar mejor después de las goteras".to_string() } else { "algunas casas gotean cuando llueve fuerte".to_string() });
@@ -130,6 +137,7 @@ impl Memoria {
             gotean: a.gotean + b.gotean,
             defendidas: a.defendidas + b.defendidas,
             remendadas: a.remendadas + b.remendadas,
+            por_vos: a.por_vos + b.por_vos,
         })
     }
 }
@@ -162,7 +170,7 @@ impl Plugin for BarrioPlugin {
             .add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), crate::salir::reiniciar::<Memoria>)
             .add_systems(
                 Update,
-                (cargar_y_guardar, morder_vecinos, vecinos_reaccionan, goteras, gemidos).run_if(crate::game_phase::world_active),
+                (cargar_y_guardar, morder_vecinos, vecinos_reaccionan, goteras, gemidos, el_barrio_te_ve, te_reconocen).run_if(crate::game_phase::world_active),
             );
     }
 }
@@ -233,6 +241,94 @@ fn morder_vecinos(
             }
         }
     }
+}
+
+/// Testigos de lo que hiciste: cada infectado que matás con vecinos cerca queda en la memoria de SU pueblo,
+/// en la historia de cada testigo y en la fama de su familia (biblia §20, ítem 2).
+fn el_barrio_te_ve(
+    mut bajas: ResMut<crate::infectados::Bajas>,
+    mut npcs: Query<(Entity, &mut Npc)>,
+    mut soc: ResMut<Society>,
+    mut memoria: ResMut<Memoria>,
+    mut speech: ResMut<SpeechQueue>,
+) {
+    if bajas.recientes.is_empty() {
+        return;
+    }
+    for (x, z) in std::mem::take(&mut bajas.recientes) {
+        let mut pueblo: Option<(f32, f32)> = None;
+        let mut grito: Option<(Entity, f32, f32)> = None;
+        for (e, mut n) in &mut npcs {
+            if (n.x - x).powi(2) + (n.z - z).powi(2) >= TESTIGOS * TESTIGOS {
+                continue;
+            }
+            pueblo.get_or_insert((n.town_x, n.town_z));
+            push_history(&mut n.history, "El forastero mató a un infectado delante mío.");
+            soc.adjust_capped(n.family, TE_VEN_REP, TE_VEN_TOPE);
+            grito.get_or_insert((e, n.x, n.z));
+        }
+        let Some((tx, tz)) = pueblo else { continue };
+        let l = memoria.tocar(tx, tz);
+        l.por_vos = l.por_vos.saturating_add(1);
+        let n = l.por_vos;
+        if let Some((e, nx, nz)) = grito {
+            // Lo celebran la primera vez y en los números redondos, no a cada golpe.
+            if let Some(t) = festejo(n) {
+                say_from(&mut speech, e, nx, nz, t, Color::srgb(0.75, 1.0, 0.7), false);
+            }
+        }
+        crate::causal::registrar("testigos", format!("el barrio de ({tx:.0},{tz:.0}) te vio matar al infectado n.º {n}"));
+    }
+}
+
+const TE_VEN_REP: f32 = 0.04;
+const TE_VEN_TOPE: f32 = 0.6;
+
+/// Qué grita un testigo cuando el forastero lleva `n` infectados muertos en su barrio.
+pub fn festejo(n: u16) -> Option<String> {
+    match n {
+        1 => Some("¡Bien ahí, forastero!".into()),
+        5 => Some("¡Ya van cinco! ¡Ése está de nuestro lado!".into()),
+        n if n >= 10 && n % 10 == 0 => Some(format!("¡{n}! ¡El forastero es una leyenda!")),
+        _ => None,
+    }
+}
+
+/// Lo que un vecino te dice al abrir su menú si su barrio te vio pelear por él. Una vez por vecino y partida.
+pub fn reconocimiento(por_vos: u16, uid: u64) -> Option<String> {
+    let v = [
+        format!("¡Vos sos el que mató {por_vos} infectados en el barrio! Acá siempre vas a tener un plato."),
+        format!("Te vi pelear. {por_vos} menos que nos muerdan de noche. Gracias."),
+        format!("Mi familia habla de vos: {por_vos} infectados, dicen. ¿Es cierto?"),
+    ];
+    match por_vos {
+        0 => None,
+        1 | 2 => Some("Me contaron que nos diste una mano con los infectados. Gracias, forastero.".into()),
+        _ => Some(v[(uid % 3) as usize].clone()),
+    }
+}
+
+fn te_reconocen(
+    menu: Res<crate::npc_menu::NpcMenu>,
+    mut npcs: Query<(Entity, &mut Npc)>,
+    memoria: Res<Memoria>,
+    mut speech: ResMut<SpeechQueue>,
+    mut ultimo: Local<Option<u64>>,
+    mut ya: Local<HashSet<u64>>,
+) {
+    if menu.open_uid == *ultimo {
+        return;
+    }
+    *ultimo = menu.open_uid;
+    let Some(uid) = menu.open_uid else { return };
+    if ya.contains(&uid) {
+        return;
+    }
+    let Some((e, mut n)) = npcs.iter_mut().find(|(_, n)| n.uid == uid) else { return };
+    let Some(t) = reconocimiento(memoria.de(n.town_x, n.town_z).por_vos, uid) else { return };
+    ya.insert(uid);
+    push_history(&mut n.history, &t);
+    say_from(&mut speech, e, n.x, n.z, t, Color::srgb(0.75, 1.0, 0.7), true);
 }
 
 /// Los infectados gimen: cada tanto, el más cercano a vos (a menos de 30 celdas) suelta un gemido en su lugar.
@@ -461,6 +557,20 @@ mod tests {
         assert_eq!(noticias(&Lecciones::default()), None);
         let t = noticias(&Lecciones { muertes: 2, defendidas: 1, gotean: 1, ..Default::default() }).unwrap();
         assert!(t.contains("2 vecinos") && t.contains("1 infectado") && t.contains("gotean"), "{t}");
+    }
+
+    #[test]
+    fn el_barrio_te_recuerda_y_no_repite_el_festejo() {
+        assert!(festejo(1).is_some());
+        assert!(festejo(2).is_none() && festejo(7).is_none());
+        assert!(festejo(5).is_some() && festejo(30).is_some());
+        assert_eq!(reconocimiento(0, 1), None);
+        assert!(reconocimiento(4, 9).unwrap().contains('4'));
+        let t = noticias(&Lecciones { por_vos: 3, ..Default::default() }).unwrap();
+        assert!(t.contains("vos solo acabaste con 3"));
+        // Las partidas viejas (sin `por_vos` en barrio.json) siguen cargando.
+        let l: Lecciones = serde_json::from_str(r#"{"ataques":1,"muertes":0,"gotean":0,"defendidas":0,"remendadas":0}"#).unwrap();
+        assert_eq!(l.por_vos, 0);
     }
 
     #[test]

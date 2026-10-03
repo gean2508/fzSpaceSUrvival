@@ -2,6 +2,7 @@
 //! + Terraria-style diggable surfaces (rewrite-2d).
 
 mod art2d;
+mod manos;
 mod flags;
 mod fuente;
 mod prueba_overlay;
@@ -44,6 +45,9 @@ pub mod habilidades;
 pub mod infectados;
 pub mod armas;
 pub mod vehiculos;
+mod pose_jugador;
+mod descanso;
+pub mod jugo;
 pub mod estados;
 pub mod alijos;
 pub mod causal;
@@ -56,6 +60,7 @@ pub mod barrio;
 pub mod multijugador;
 mod ambient;
 mod consola;
+mod qwerty;
 mod marca;
 mod light2d;
 mod game_menu;
@@ -101,6 +106,9 @@ mod survival_stats;
 mod targeting;
 pub mod map_item;
 pub mod torches;
+/// Apuntado asistido (puro): a quién le tirás y hacia dónde sale la bala. Lo usa `armas`; receta en la skill
+/// `disparo-y-apuntado`.
+pub mod apuntado;
 mod transition;
 mod ui_editor;
 mod ui_pack;
@@ -376,6 +384,7 @@ fn run_app_inner() {
         // está en el tope de 16 que admite `Plugins` (el mismo motivo por el que
         // el parallax de los menús está aparte).
         .add_plugins(render::fireworks::FireworksPlugin)
+        .add_plugins(jugo::JugoPlugin)
         // **Herramientas de la compu, no del teléfono** (reporte del 29 sep 2026:
         // "las pruebas que hagas, que se queden para la compu"). La sonda de
         // etapas mete siete schedules extra en CADA frame; la ablación y el
@@ -393,6 +402,7 @@ fn run_app_inner() {
         .add_plugins(textos_mundo::TextosMundoPlugin)
         .add_plugins(armas::ArmasPlugin)
         .add_plugins(vehiculos::VehiculosPlugin)
+        .add_plugins((pose_jugador::PoseJugadorPlugin, descanso::DescansoPlugin))
         .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, frutales::FrutalesPlugin, i18n::IdiomaPlugin, multijugador::MultijugadorPlugin, metas::MetasPlugin, habilidades::HabilidadesPlugin, infectados::InfectadosPlugin, estados::EstadosPlugin, alijos::AlijosPlugin, causal::CausalPlugin, equipo::EquipoPlugin, fps_tope::FpsTopePlugin))
         .add_plugins((experimentos::ExperimentosPlugin, casas_npc::CasasNpcPlugin, saber_vivo::SaberVivoPlugin, barrio::BarrioPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
@@ -416,6 +426,7 @@ fn run_app_inner() {
             held_item::HeldItemPlugin,
             chests::ChestsPlugin,
         ))
+        .add_plugins(manos::ManosPlugin)
         .add_plugins(civ_vida::CivVidaPlugin)
         .add_systems(Startup, apply_android_frame_cap)
         .run();

@@ -43,7 +43,8 @@ use crate::sim::{Player, PlayerVisual, SimState};
 use crate::solar_system_clock::SolarSystemClock;
 use crate::transition::{mode_for, FlightTransition};
 use crate::universe::{
-    body_offset, climb_rate, lateral_speed, nearest_landable, space_alt, UniverseFrame, MAX_ALT,
+    body_offset, climb_rate, cruise_speed, flight_view_h, nearest_landable, space_alt,
+    UniverseFrame, MAX_ALT,
 };
 use crate::world2d::ActivePlanet;
 
@@ -85,6 +86,10 @@ pub struct CreativeFlight {
     /// Componente vertical que controla el jugador (m sobre la superficie). El
     /// mando; `alt` es lo que resulta de combinarlo con la distancia al cuerpo.
     pub vert: f32,
+    /// Encuadre automático del vuelo en este frame (`universe::flight_view_h`):
+    /// continuo al rebasar el marco. 0 = todavía no se calculó (la cámara cae a
+    /// `view_h_for_alt`).
+    pub view_h: f32,
 }
 
 impl CreativeFlight {
@@ -99,7 +104,7 @@ impl CreativeFlight {
 
 /// Mantener SALTO este tiempo en el suelo antes de despegar. Por debajo, un
 /// SALTO es un salto normal.
-const TAKEOFF_HOLD: f32 = 0.4;
+pub const TAKEOFF_HOLD: f32 = 0.4;
 /// Bajada al quedarse SIN Ki. No es "gravedad": es el aterrizaje forzoso, y es
 /// suave a propósito para que se pueda elegir dónde caer.
 ///
@@ -208,6 +213,8 @@ fn creative_fly_step(
 ) {
     if !fly.flying() {
         approach.lead = Vec2::ZERO;
+        approach.dir = Vec2::ZERO;
+        fly.view_h = 0.0;
         return;
     }
     // Un frame largo (carga de assets, cambio de app) NO debe catapultarte: la
@@ -272,19 +279,36 @@ fn creative_fly_step(
     let gap = (dist - body_walk_radius(near_body)).max(0.0);
     fly.alt = (fly.vert * fly.vert + gap * gap).sqrt().min(MAX_ALT);
 
-    // Encuadre de aproximación: la cámara se adelanta hacia el cuerpo al que
-    // vas, proporcional a lo lejos que estás de su superficie. Cerca (gap≈0) no
-    // se adelanta nada y quedás centrado para aterrizar.
-    let to_body = body_offset(near_body, frame.ref_body, t) - here;
-    approach.lead = to_body.normalize_or_zero() * gap * 0.35;
+    // Encuadre de aproximación: la cámara se adelanta HACIA DONDE VAS,
+    // proporcional a lo lejos que estás de una superficie. Cerca (gap≈0) no se
+    // adelanta nada y quedás centrado para aterrizar.
+    //
+    // Antes apuntaba siempre al cuerpo MÁS CERCANO. Yendo a la Luna, la primera
+    // mitad del viaje el más cercano es la Tierra —la que dejás atrás—, así que la
+    // cámara se te corría para atrás y, al cruzar la mitad, giraba de golpe 180°
+    // hacia la Luna: la otra mitad del "corte" de ir de un cuerpo al otro. Ahora
+    // manda el rumbo del stick (y se recuerda al soltarlo); sólo si todavía no te
+    // moviste en este vuelo se mira al cuerpo más cercano.
+    let lat = Vec2::new(intent.move_x, intent.move_z);
+    if lat.length() > 0.01 {
+        // Mundo (x, z) → render (x, −z).
+        approach.dir = Vec2::new(lat.x, -lat.y).normalize_or_zero();
+    }
+    let toward = if approach.dir != Vec2::ZERO {
+        approach.dir
+    } else {
+        (body_offset(near_body, frame.ref_body, t) - here).normalize_or_zero()
+    };
+    approach.lead = toward * gap * 0.35;
 
     // ── LATERAL: velocidad atada a la ALTURA, no al encuadre ────────────────
     // Atarla al encuadre hacía que el pellizco del usuario cambiara la velocidad
-    // de vuelo — hacer zoom no puede acelerarte. La altura sí es física.
-    let lat = Vec2::new(intent.move_x, intent.move_z);
+    // de vuelo — hacer zoom no puede acelerarte. La altura sí es física, y en el
+    // vacío también el hueco hasta la superficie más cercana (`cruise_speed`): así
+    // se viaja de un cuerpo a otro con el stick, sin tener que apretar SUBIR.
     if let Ok((mut sim, mut visual)) = player.get_single_mut() {
         if lat.length() > 0.01 {
-            let mut spd = lateral_speed(fly.alt);
+            let mut spd = cruise_speed(fly.alt, gap);
             if intent.sprint {
                 spd *= 1.8;
             }
@@ -299,6 +323,27 @@ fn creative_fly_step(
             sim.body.x += d.x;
             sim.body.z += d.y;
             sim.body.rot = d.y.atan2(d.x);
+        }
+        // **En el vacío, BAJAR es bajar HACIA el cuerpo más cercano** (3 oct 2026).
+        // La altura efectiva es la hipotenusa entre `vert` y el hueco lateral, así
+        // que entre la Tierra y la Luna el hueco manda y bajar `vert` no hacía nada
+        // que se viera: el botón quedaba muerto, y "abajo" seguía queriendo decir
+        // "hacia la Tierra" aunque estuvieras al lado de la Luna. Ahora el mismo
+        // empuje que baja `vert` cierra también el hueco, al ritmo del crucero: de
+        // un toque sostenido te posás en el cuerpo más cercano, como en SFS. Sobre
+        // el disco el hueco es cero y esto no hace nada. Sin Ki pasa lo mismo, más
+        // lento: el aterrizaje forzoso te lleva a tierra en vez de dejarte varado.
+        let down = (-fly.thrust).max(0.0);
+        if down > 0.0 && gap > 0.0 {
+            let to_body = body_offset(near_body, frame.ref_body, t) - here;
+            let step = (cruise_speed(fly.alt, gap) * down * dt).min(gap);
+            let d = to_body.normalize_or_zero() * step;
+            // Render (x, y) → mundo (x, −z).
+            sim.body.x += d.x;
+            sim.body.z -= d.y;
+            if lat.length() <= 0.01 {
+                sim.body.rot = (-d.y).atan2(d.x);
+            }
         }
         sim.body.vx = 0.0;
         sim.body.vz = 0.0;
@@ -388,10 +433,16 @@ fn creative_fly_step(
         fly.vy = 0.0;
         fly.thrust = 0.0;
         fly.charging = false;
+        fly.view_h = 0.0;
         trans.clear();
         eprintln!("ha-ki: contacto en {:?}", fly.body);
         return;
     }
+
+    // Encuadre continuo: se evalúa DESPUÉS del rebase, en las coordenadas que van
+    // a usar la cámara y el render este frame.
+    let here_now = Vec2::new(fly.pos.x, -fly.pos.z);
+    fly.view_h = flight_view_h(frame.ref_body, here_now, fly.vert, t);
 
     fly.phase = if fly.alt >= space_alt(frame.ref_body) {
         Phase::Orbit

@@ -81,6 +81,8 @@ pub struct Tecleando {
     /// `None` = el teclado está cerrado.
     pub destino: Option<Destino>,
     pub texto: String,
+    /// MAYÚS apretada: invierte el caso de la próxima letra (`qwerty.rs`).
+    pub mayus: bool,
 }
 
 /// A dónde va lo que se escribe.
@@ -129,6 +131,8 @@ pub enum AccionLista {
     EscribirNombre,
     /// Una tecla del teclado en pantalla.
     Tecla(char),
+    /// Invertir el caso de la próxima letra.
+    Mayus,
     /// Borrar el último carácter.
     Retroceso,
     /// Cerrar el teclado y quedarse con lo escrito.
@@ -289,7 +293,7 @@ fn redibujar(
                 Pantalla::Multijugador => dibujar_multijugador(l, &ctx, &multi),
             }
             if escribiendo {
-                dibujar_teclado(l, &ctx, &tecleando.texto);
+                dibujar_teclado(l, &ctx, &tecleando.texto, tecleando.mayus);
             }
         });
     });
@@ -658,13 +662,15 @@ fn dibujar_nueva(l: &mut ChildBuilder, ctx: &Ctx, b: &BorradorPartida) {
               AccionLista::Cerrar, k);
 }
 
-/// **El teclado en pantalla.** Es el mismo gesto que el de la consola, con el
-/// marco del pack: filas de teclas, retroceso y LISTO. Sin él, el campo NOMBRE
-/// de la imagen de referencia sería un adorno.
-fn dibujar_teclado(l: &mut ChildBuilder, ctx: &Ctx, texto: &str) {
+/// **El teclado en pantalla.** QWERTY (`qwerty.rs`) con el marco del pack:
+/// números, letras con eñe y tildes, MAYÚS, retroceso y LISTO. Sin él, el campo
+/// NOMBRE de la imagen de referencia sería un adorno. Se redibuja en cada tecla,
+/// así que las letras salen rotuladas en el caso que van a escribir.
+fn dibujar_teclado(l: &mut ChildBuilder, ctx: &Ctx, texto: &str, mayus: bool) {
     use crate::ui_pack::{self as up, Ancla, Pack};
     let k = ctx.k;
-    const FILAS: [&str; 4] = ["ABCDEFGHIJKLM", "NÑOPQRSTUVWXYZ", "abcdefghijklm", "nñopqrstuvwxyz"];
+    let filas = crate::qwerty::filas_castellano();
+    let mayuscula = crate::qwerty::va_mayuscula(texto, mayus);
 
     // El velo: acá sí tapa, porque el teclado se abre ENCIMA de la pantalla.
     l.spawn((
@@ -683,22 +689,25 @@ fn dibujar_teclado(l: &mut ChildBuilder, ctx: &Ctx, texto: &str) {
     let ancho_t = 118.0_f32;
     let alto_t = 84.0_f32;
     let sep = 8.0_f32;
-    for (f, fila) in FILAS.iter().enumerate() {
+    for (f, fila) in filas.iter().enumerate() {
         let n = fila.chars().count() as f32;
         let total = n * ancho_t + (n - 1.0) * sep;
         let x0 = pxu + (pw - total) / 2.0;
         let y = pyu + 180.0 + f as f32 * (alto_t + sep);
         for (i, c) in fila.chars().enumerate() {
+            let rotulo = crate::qwerty::en_caso(c, mayuscula).to_string();
             up::boton(
                 l, ctx.art, x0 + i as f32 * (ancho_t + sep), y, ancho_t, alto_t,
-                Some(&c.to_string()), None, false, 34.0, AccionLista::Tecla(c), k,
+                Some(&rotulo), None, false, 34.0, AccionLista::Tecla(c), k,
             );
         }
     }
-    let y = pyu + 180.0 + 4.0 * (alto_t + sep);
-    up::boton(l, ctx.art, pxu + 66.0, y, 300.0, alto_t, Some("ESPACIO"), None, false, 30.0,
+    let y = pyu + 180.0 + filas.len() as f32 * (alto_t + sep);
+    up::boton(l, ctx.art, pxu + 66.0, y, 240.0, alto_t, Some("MAYÚS"), None, mayus, 30.0,
+              AccionLista::Mayus, k);
+    up::boton(l, ctx.art, pxu + 340.0, y, 420.0, alto_t, Some("ESPACIO"), None, false, 30.0,
               AccionLista::Tecla(' '), k);
-    up::boton(l, ctx.art, pxu + 400.0, y, 260.0, alto_t, Some("BORRAR"), None, false, 30.0,
+    up::boton(l, ctx.art, pxu + 794.0, y, 260.0, alto_t, Some("BORRAR"), None, false, 30.0,
               AccionLista::Retroceso, k);
     up::boton(l, ctx.art, pxu + pw - 66.0 - 300.0, y, 300.0, alto_t, Some("LISTO"), None, true,
               32.0, AccionLista::Listo, k);
@@ -864,17 +873,26 @@ fn tocar(
                     .unwrap_or_default();
                 tecleando.texto = actual;
                 tecleando.destino = Some(Destino::Partida(id.clone()));
+                tecleando.mayus = false;
                 pantalla.set_changed();
             }
             AccionLista::EscribirNombre => {
                 tecleando.texto = borrador.nombre.clone();
                 tecleando.destino = Some(Destino::NombreNuevo);
+                tecleando.mayus = false;
                 pantalla.set_changed();
             }
             AccionLista::Tecla(c) => {
                 if tecleando.texto.chars().count() < 22 {
-                    tecleando.texto.push(*c);
+                    let mayuscula = crate::qwerty::va_mayuscula(&tecleando.texto, tecleando.mayus);
+                    let c = crate::qwerty::en_caso(*c, mayuscula);
+                    tecleando.texto.push(c);
                 }
+                tecleando.mayus = false;
+                pantalla.set_changed();
+            }
+            AccionLista::Mayus => {
+                tecleando.mayus = !tecleando.mayus;
                 pantalla.set_changed();
             }
             AccionLista::Retroceso => {

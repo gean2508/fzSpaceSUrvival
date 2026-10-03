@@ -113,7 +113,7 @@ impl Contenedor {
                 ("torch", 1, 3), ("lantern", 1, 1),
             ],
             Contenedor::Comoda => &[
-                ("torch", 1, 2), ("sticks", 1, 4), ("map_small", 1, 1), ("name_tag", 1, 1),
+                ("torch", 1, 2), ("sticks", 1, 4), ("map_small", 1, 1), ("mapa_tesoro", 1, 1), ("name_tag", 1, 1),
                 ("iron_ingot", 1, 2), ("gold_ingot", 1, 1), ("gem_blue", 1, 1), ("bone", 1, 2),
             ],
             Contenedor::Botiquin => &[

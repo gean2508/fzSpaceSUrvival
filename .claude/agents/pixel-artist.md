@@ -33,6 +33,8 @@ al lado de un asset de LimeZu sin que se note cuál es cuál. Antes de empezar l
    *variedad*, la pieza está lisa o vacía: agregá textura/juntas/remaches, partí los planos
    grandes; si dice MAL en colores, reducí. Después **mirá la lámina**: si se distingue cuál es la
    tuya a primera vista, no está lista aunque las medidas pasen.
+5b. **Si reemplaza un asset del pack**: `python3 scripts/juez-arte.py nueva.png --contra <asset> --lamina /tmp/c.png`
+   tiene que dar A LA ALTURA o SUPERA y no adivinarse en la lámina a ciegas (skill §0.1). Edificios: `lib/edificio.py` (§0.2).
 6. **Entregá**: PNG en `native/crates/ha-game/assets/art/gen/<categoría>/`, clave al manifest por
    el importador (nunca rects a ojo), slot con `label` en `ha-assets/src/slots.rs`, y una línea
    en biblia §8 si es una categoría nueva. Decí qué vecinos del pack usaste de referencia y el

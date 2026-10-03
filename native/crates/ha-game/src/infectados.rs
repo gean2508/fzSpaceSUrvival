@@ -102,6 +102,9 @@ const VIDA_PARED_MADERA: f32 = 3.0;
 #[derive(Resource, Default)]
 pub struct Bajas {
     pub total: u32,
+    /// Dónde (x, z) cayeron los que mataste desde la última pasada del barrio (`barrio::el_barrio_te_ve`
+    /// las vacía). Tope 32: si nadie las lee (ningún pueblo cargado), no crecen sin fin.
+    pub recientes: Vec<(f32, f32)>,
 }
 
 #[derive(Resource, Default)]
@@ -140,6 +143,10 @@ pub fn botin_de(n: u32) -> Vec<(&'static str, u32)> {
     }
     if azar(100) < 5 {
         v.push((crate::armas::arma_al_azar(azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0, azar(1000) as f32 / 1000.0), 1));
+    }
+    // El mapa de un alijo: sin él no hay guía hasta el tesoro (`alijos.rs`).
+    if azar(100) < 6 {
+        v.push((crate::alijos::MAPA_TESORO, 1));
     }
     if v.is_empty() {
         v.push(("apple", 1));
@@ -418,9 +425,8 @@ fn golpear(
     cam: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
     touch_layout: Res<TouchLayout>,
     blocks: Res<TouchBlockRects>,
-    equipped: Res<EquippedItem>,
-    mut bajas: ResMut<Bajas>,
-    mut chests: ResMut<crate::chests::ChestWorld>,
+    (equipped, mut pose): (Res<EquippedItem>, ResMut<crate::pose_jugador::AccionJugador>),
+    (mut bajas, mut chests, mut golpes): (ResMut<Bajas>, ResMut<crate::chests::ChestWorld>, EventWriter<crate::jugo::Golpe>),
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     player: Query<&Transform, (With<Player>, Without<Infectado>)>,
@@ -464,7 +470,10 @@ fn golpear(
     let Some((e, _)) = mejor else { return };
     acc.golpe = GOLPE_CD;
     let Ok((_, mut i, sprite, _)) = q.get_mut(e) else { return };
-    herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, crate::fauna::dano_de(&equipped.item_id), Vec2::new(px, pz), 0.5);
+    pose.golpe(&equipped.item_id, Vec2::new(px, pz), Vec2::new(i.x, i.z));
+    let dano = crate::fauna::dano_de(&equipped.item_id);
+    golpes.send(crate::jugo::Golpe { en: Vec2::new(i.x, i.z), dano, letal: i.vida - dano <= 0.0, color: Color::srgb(0.55, 0.7, 0.35) });
+    herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, dano, Vec2::new(px, pz), 0.5);
 }
 
 /// **Un golpe (de lo que sea) a un infectado**: le baja la vida, lo empuja y, si cae, deja el cuerpo con TODO lo que
@@ -493,6 +502,9 @@ fn herir(
     if i.vida <= 0.0 {
         let (x, z) = (i.x, i.z);
         bajas.total += 1;
+        if bajas.recientes.len() < 32 {
+            bajas.recientes.push((x, z));
+        }
         crate::causal::registrar("baja", format!("infectado abatido en ({x:.0},{z:.0}), botín {}", i.botin.len()));
         // El cuerpo queda en el suelo con TODO lo que llevaba: se abre como un cofre.
         let body = active_surface_body(ctx, planet);
@@ -554,11 +566,15 @@ pub(crate) fn balas_a_infectados(
 
 /// Un toque sobre un cadáver a mano abre su inventario (el panel del cofre). Los cuerpos se
 /// descomponen a los `VIDA_CADAVER` segundos; si lo estás revisando, esperan.
+///
+/// **Con un arma de fuego en la mano no se abre**: los cuerpos quedan justo donde estás tirando, y un toque que
+/// quería ser un disparo abría el botín en medio de la horda (skill `disparo-y-apuntado` §2). Se saquea enfundando.
 #[allow(clippy::too_many_arguments)]
 fn cadaveres(
     mut commands: Commands,
     time: Res<Time>,
     acc: Res<Acumulado>,
+    equipped: Res<EquippedItem>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut touches: EventReader<TouchInput>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -595,8 +611,8 @@ fn cadaveres(
     else {
         return;
     };
-    // El golpe que lo mató no lo abre.
-    if acc.golpe > 0.0 || panel.is_open() {
+    // El golpe que lo mató no lo abre; con un arma en la mano, el toque es un disparo.
+    if acc.golpe > 0.0 || panel.is_open() || crate::armas::es_arma(&equipped.item_id) {
         return;
     }
     let Some(mundo) = crate::render::scale::window_to_world_2d(camera, cam_tf, win, screen) else { return };

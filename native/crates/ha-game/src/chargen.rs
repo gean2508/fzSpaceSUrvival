@@ -419,7 +419,31 @@ fn compose(job: &Job, images: &Assets<Image>) -> Option<Vec<u8>> {
         }
         any = true;
     }
+    if any && job.size == UVec2::new(CELL_W * STRIP_COLS, CELL_H * STRIP_ROWS) {
+        empalmar_walk_gun(&mut out, w);
+    }
     any.then_some(out)
+}
+
+const CELL_W: u32 = ha_assets::chargen_index::CELL[0];
+const CELL_H: u32 = ha_assets::chargen_index::CELL[1];
+use ha_assets::chargen_index::{STRIP_COLS, STRIP_ROWS, WALK_GUN_COL0, WALK_GUN_CORTE};
+
+/// **Caminar con el arma.** El pack trae «apuntar» pero no «caminar apuntando»: se arma con SU arte, el torso de
+/// `gun_idle` (fila 17) sobre las piernas de `walk` (fila 2), en las celdas libres de la fila 17. La cabeza y el
+/// torso de las dos filas coinciden; las piernas empiezan siempre en `WALK_GUN_CORTE`.
+fn empalmar_walk_gun(px: &mut [u8], ancho: usize) {
+    let (cw, ch) = (CELL_W as usize, CELL_H as usize);
+    let corte = WALK_GUN_CORTE as usize;
+    for celda in 0..24usize {
+        let (arma_x, destino_x) = (celda * cw, (WALK_GUN_COL0 as usize + celda) * cw);
+        for y in 0..ch {
+            let fila_origen = if y < corte { 17 * ch + y } else { 2 * ch + y };
+            let (src, dst) = ((fila_origen * ancho + arma_x) * 4, ((17 * ch + y) * ancho + destino_x) * 4);
+            let trozo: Vec<u8> = px[src..src + cw * 4].to_vec();
+            px[dst..dst + cw * 4].copy_from_slice(&trozo);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -516,5 +540,23 @@ mod tests {
             EXPR.len(),
             "la tira exportada no trae todas las caras del catalogo"
         );
+    }
+
+    #[test]
+    fn caminar_con_el_arma_es_el_torso_de_apuntar_sobre_las_piernas_de_caminar() {
+        let (w, h) = ((CELL_W * STRIP_COLS) as usize, (CELL_H * STRIP_ROWS) as usize);
+        let mut px = vec![0u8; w * h * 4];
+        let (cw, ch) = (CELL_W as usize, CELL_H as usize);
+        let poner = |px: &mut Vec<u8>, x: usize, y: usize, v: u8| px[(y * w + x) * 4..(y * w + x) * 4 + 4].copy_from_slice(&[v, v, v, 255]);
+        // Torso de gun_idle (fila 17, celda 3) y piernas de walk (fila 2, celda 3).
+        poner(&mut px, 3 * cw + 5, 17 * ch + 10, 11);
+        poner(&mut px, 3 * cw + 5, 17 * ch + 60, 99); // piernas de gun_idle: NO deben pasar
+        poner(&mut px, 3 * cw + 5, 2 * ch + 60, 22);
+        poner(&mut px, 3 * cw + 5, 2 * ch + 10, 88); // torso de walk: NO debe pasar
+        empalmar_walk_gun(&mut px, w);
+        let dx = (WALK_GUN_COL0 as usize + 3) * cw + 5;
+        assert_eq!(px[((17 * ch + 10) * w + dx) * 4], 11, "el torso es el de apuntar");
+        assert_eq!(px[((17 * ch + 60) * w + dx) * 4], 22, "las piernas son las de caminar");
+        assert_eq!(px[((17 * ch + 20) * w + dx) * 4 + 3], 0, "lo demás queda transparente");
     }
 }

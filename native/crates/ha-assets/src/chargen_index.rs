@@ -71,9 +71,13 @@ pub struct CharAnim {
     pub fps: f32,
     /// `false` = se reproduce una vez y se queda en el último cuadro.
     pub looping: bool,
+    /// Primer cuadro dentro del bloque de la dirección. Casi siempre 0; lo usan los tramos de una
+    /// fila que el pack marca aparte («4-9 loop» del celular: se saca una vez y después se repite
+    /// sólo el tramo del medio).
+    pub first: u32,
 }
 
-/// Las 20 filas del pack, medidas celda por celda (ver la tabla del scratchpad).
+/// Las 20 filas del pack (21 animaciones: la del celular son dos tramos), medidas celda por celda (ver la tabla del scratchpad).
 /// Las columnas que sobran en cada fila son **props** (la cama de `sleep`, el
 /// celular de `phone_intro`, la caja de `gift`, el fogonazo de `shoot`): no son
 /// cuadros del personaje y por eso no entran en `frames`.
@@ -84,8 +88,19 @@ pub const CHAR_ANIMS: &[CharAnim] = &[
     a("sleep", "DORMIR", 3, 6, AnimDirs::Single, 4.0, true),
     a("sit", "SENTARSE", 4, 6, AnimDirs::RightLeft, 6.0, true),
     a("sit_floor", "SENTARSE EN EL PISO", 5, 6, AnimDirs::RightLeft, 6.0, true),
-    a("phone", "USAR EL CELULAR", 6, 12, AnimDirs::Single, 8.0, true),
-    a("phone_intro", "SACAR EL CELULAR", 7, 12, AnimDirs::Single, 8.0, false),
+    // Fila 6, según la guía del pack (`Spritesheet_animations_GUIDE.png`): cuadros 0-2 lo saca,
+    // 3-8 lo usa («4-9 loop», contado desde 1), 9-11 lo guarda. El celular viene DIBUJADO en el
+    // cuerpo, así que sale con cualquier personaje del chargen.
+    sub("phone_intro", "SACAR EL CELULAR", 6, 0, 3, 8.0, false),
+    sub("phone", "USAR EL CELULAR", 6, 3, 6, 8.0, true),
+    // Fila 7: LEER. Hasta el 3 oct 2026 se llamaba «phone_intro / SACAR EL CELULAR» y era falso —
+    // la guía la marca con los libros y la capa `Books/` del pack sólo tiene esta fila. El cuerpo
+    // trae las manos en el pecho; el libro lo pone encima `player/libro`. 0-5 lee, 6-11 da vuelta
+    // la página.
+    a("read", "LEER UN LIBRO", 7, 12, AnimDirs::Single, 6.0, true),
+    // Las manos en el pecho (los 6 primeros cuadros de LEER, sin libro) a 8 fps: el cuerpo de comer y
+    // beber. Lo que se lleva a la boca lo dibuja `player/en_mano`, 12 cuadros = dos vueltas de éstos.
+    sub("hands_chest", "MANOS EN EL PECHO", 7, 0, 6, 8.0, true),
     a("push_cart", "EMPUJAR CARRITO", 8, 12, AnimDirs::Four, 10.0, true),
     a("pick_up", "AGACHARSE A JUNTAR", 9, 12, AnimDirs::Four, 10.0, false),
     a("gift", "DAR UN REGALO", 10, 10, AnimDirs::Four, 10.0, false),
@@ -98,7 +113,16 @@ pub const CHAR_ANIMS: &[CharAnim] = &[
     a("gun_idle", "APUNTAR", 17, 6, AnimDirs::Four, 6.0, true),
     a("shoot", "DISPARAR", 18, 3, AnimDirs::Four, 14.0, false),
     a("hurt", "RECIBIR DANO", 19, 3, AnimDirs::Four, 10.0, false),
+    // No es del pack: el torso de `gun_idle` sobre las piernas de `walk`, empalmado en las celdas libres de la
+    // fila 17 (cols 24..47: vacías en las 432 capas, lo verifica `scripts/medir-manos.py`). Lo arma
+    // `chargen::empalmar_walk_gun` al componer la hoja y el script en la hoja por defecto.
+    CharAnim { first: WALK_GUN_COL0, ..a("walk_gun", "CAMINAR CON EL ARMA", 17, 6, AnimDirs::Four, 10.0, true) },
 ];
+
+/// Columna de la fila 17 donde empieza `walk_gun`.
+pub const WALK_GUN_COL0: u32 = 24;
+/// Desde esta altura (px de celda) las piernas de `walk_gun` son las de `walk`; arriba, las de `gun_idle`.
+pub const WALK_GUN_CORTE: u32 = 56;
 
 const fn a(
     key: &'static str,
@@ -109,7 +133,12 @@ const fn a(
     fps: f32,
     looping: bool,
 ) -> CharAnim {
-    CharAnim { key, label, row, frames, dirs, fps, looping }
+    CharAnim { key, label, row, frames, dirs, fps, looping, first: 0 }
+}
+
+/// Un tramo de una fila de UNA sola dirección que arranca en el cuadro `first`.
+const fn sub(key: &'static str, label: &'static str, row: u32, first: u32, frames: u32, fps: f32, looping: bool) -> CharAnim {
+    CharAnim { key, label, row, frames, dirs: AnimDirs::Single, fps, looping, first }
 }
 
 /// **Las filas que usan los aldeanos** (`society::tick_society`: respirar, caminar, dormir, rezar
@@ -146,7 +175,7 @@ pub fn char_cell(anim: &CharAnim, dir: u32, frame: u32) -> u32 {
         AnimDirs::RightLeft => u32::from(matches!(dir, 2 | 3)),
         AnimDirs::Single => 0,
     };
-    let col = slot * anim.frames + frame % anim.frames.max(1);
+    let col = slot * anim.frames + anim.first + frame % anim.frames.max(1);
     anim.row * STRIP_COLS + col
 }
 
@@ -406,5 +435,22 @@ mod tests {
         }
         assert!(npc_cell(char_anim("hurt").unwrap(), 0, 0).is_none());
     }
-}
 
+    #[test]
+    fn las_animaciones_caben_en_su_fila_y_respetan_la_guia_del_pack() {
+        for a in CHAR_ANIMS {
+            let ultimo = char_cell(a, 3, a.frames - 1);
+            assert_eq!(ultimo / STRIP_COLS, a.row, "{} se sale de su fila", a.key);
+            assert!(ultimo % STRIP_COLS < STRIP_COLS);
+        }
+        // Celular: lo saca en 0-2 y repite 3-8 («4-9 loop» de la guía, contado desde 1).
+        let intro = char_anim("phone_intro").unwrap();
+        let uso = char_anim("phone").unwrap();
+        assert_eq!(char_cell(intro, 0, 0) % STRIP_COLS, 0);
+        assert_eq!(char_cell(uso, 0, 0) % STRIP_COLS, intro.frames);
+        assert_eq!(char_cell(uso, 0, uso.frames - 1) % STRIP_COLS, 8);
+        // La fila 7 es LEER (la capa `Books/` del pack sólo tiene esa fila), no el celular.
+        assert_eq!(char_anim("read").unwrap().row, 7);
+        assert!(CHAR_ANIMS.iter().all(|a| a.key != "phone_intro" || a.row == 6));
+    }
+}

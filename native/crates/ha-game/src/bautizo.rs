@@ -6,9 +6,8 @@
 //! el nombre queda flotando sobre el animal, persiste con él y lo vuelve TUYO para
 //! siempre. CANCELAR no gasta la etiqueta.
 //!
-//! El teclado es una copia del de la consola (`consola.rs`), por la misma razón
-//! que la consola tiene el suyo: cada uno necesita teclas distintas (acá acentos y
-//! eñe, allá la barra y los dígitos) y compartirlo tocaba pantallas que andan.
+//! El teclado es QWERTY (`qwerty.rs`), con eñe y vocales con tilde, y pone la
+//! mayúscula sola al empezar cada palabra; MAYÚS invierte la letra que viene.
 
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -17,13 +16,13 @@ use bevy::ui::FocusPolicy;
 /// Largo máximo del nombre (entra encima de una vaca sin tapar a la de al lado).
 pub const MAX_NOMBRE: usize = 16;
 
-const FILAS: [&str; 4] = ["ABCDEFGHIJKLMN", "ÑOPQRSTUVWXYZ", "abcdefghijklmn", "ñopqrstuvwxyzá"];
-
 /// El panel abierto: a quién se bautiza y lo escrito.
 #[derive(Resource, Default)]
 pub struct Bautizo {
     pub objetivo: Option<Entity>,
     pub texto: String,
+    /// MAYÚS apretada: invierte el caso de la próxima letra.
+    pub mayus: bool,
 }
 
 impl Bautizo {
@@ -34,12 +33,25 @@ impl Bautizo {
     pub fn abrir(&mut self, animal: Entity, actual: Option<&str>) {
         self.objetivo = Some(animal);
         self.texto = actual.unwrap_or("").to_string();
+        self.mayus = false;
     }
 
     fn escribir(&mut self, c: char) {
         if self.texto.chars().count() < MAX_NOMBRE {
             self.texto.push(c);
         }
+    }
+
+    /// Una tecla de letra del teclado en pantalla: sale en el caso que toca y
+    /// MAYÚS se suelta, como en el celular.
+    fn teclear(&mut self, c: char) {
+        let c = crate::qwerty::en_caso(c, self.mayuscula_siguiente());
+        self.escribir(c);
+        self.mayus = false;
+    }
+
+    fn mayuscula_siguiente(&self) -> bool {
+        crate::qwerty::va_mayuscula(&self.texto, self.mayus)
     }
 }
 
@@ -67,6 +79,7 @@ struct BautizoLinea;
 #[derive(Component, Clone, PartialEq)]
 enum Tecla {
     Char(char),
+    Mayus,
     Borrar,
     Listo,
     Cancelar,
@@ -79,7 +92,7 @@ impl Plugin for BautizoPlugin {
         app.add_systems(bevy::prelude::OnExit(crate::game_phase::GamePhase::Playing), (crate::salir::reiniciar::<Bautizo>,));
         app.init_resource::<Bautizo>()
             .add_event::<NombreElegido>()
-            .add_systems(Update, (sincronizar_panel, teclas, teclado_fisico, refrescar).chain());
+            .add_systems(Update, (sincronizar_panel, teclas, teclado_fisico, refrescar, rotular).chain());
     }
 }
 
@@ -149,7 +162,8 @@ fn sincronizar_panel(
                 );
                 let ty0 = py + ph + 30.0;
                 let (ancho_t, alto_t, sep) = (104.0_f32, 74.0_f32, 6.0_f32);
-                for (f, fila) in FILAS.iter().enumerate() {
+                let filas = crate::qwerty::filas_castellano();
+                for (f, fila) in filas.iter().enumerate() {
                     let n = fila.chars().count() as f32;
                     let total = n * ancho_t + (n - 1.0) * sep;
                     let x0 = (up::ANCHO - total) / 2.0;
@@ -161,14 +175,15 @@ fn sincronizar_panel(
                         );
                     }
                 }
-                let y = ty0 + FILAS.len() as f32 * (alto_t + sep);
+                let y = ty0 + filas.len() as f32 * (alto_t + sep);
                 let fila = [
-                    ("ESPACIO", Tecla::Char(' '), 300.0_f32, false),
+                    ("MAYÚS", Tecla::Mayus, 240.0_f32, false),
+                    ("ESPACIO", Tecla::Char(' '), 420.0, false),
                     ("BORRAR", Tecla::Borrar, 260.0, false),
                     ("CANCELAR", Tecla::Cancelar, 300.0, false),
                     ("LISTO", Tecla::Listo, 260.0, true),
                 ];
-                let total: f32 = fila.iter().map(|a| a.2).sum::<f32>() + sep * 3.0;
+                let total: f32 = fila.iter().map(|a| a.2).sum::<f32>() + sep * 4.0;
                 let mut x = (up::ANCHO - total) / 2.0;
                 for (et, accion, w, fuerte) in fila {
                     up::boton(l, &art, x, y, w, alto_t, Some(et), None, fuerte, 28.0, accion, k);
@@ -196,7 +211,8 @@ fn teclas(
             continue;
         }
         match tecla {
-            Tecla::Char(c) => bautizo.escribir(*c),
+            Tecla::Char(c) => bautizo.teclear(*c),
+            Tecla::Mayus => bautizo.mayus = !bautizo.mayus,
             Tecla::Borrar => {
                 bautizo.texto.pop();
             }
@@ -255,6 +271,25 @@ fn refrescar(bautizo: Res<Bautizo>, mut linea: Query<&mut Text, With<BautizoLine
     }
 }
 
+/// Las teclas de letra muestran el caso que van a escribir. Corre después de
+/// `sincronizar_panel` para rotular también el panel recién armado.
+fn rotular(
+    bautizo: Res<Bautizo>,
+    nuevas: Query<(), Added<Tecla>>,
+    teclas: Query<(&Tecla, &Children)>,
+    hijos: Query<&Children>,
+    mut textos: Query<&mut Text>,
+) {
+    if !bautizo.abierto() || (!bautizo.is_changed() && nuevas.is_empty()) {
+        return;
+    }
+    let letra = |t: &Tecla| match t {
+        Tecla::Char(c) => Some(*c),
+        _ => None,
+    };
+    crate::qwerty::rotular(&teclas, &hijos, &mut textos, letra, bautizo.mayuscula_siguiente());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,7 +306,12 @@ mod tests {
     /// Todo lo que el teclado ofrece lo dibuja la fuente del juego (regla 6).
     #[test]
     fn el_teclado_escribe_castellano() {
-        let todas: String = FILAS.concat();
-        assert!(todas.contains('Ñ') && todas.contains('ñ') && todas.contains('á'));
+        let todas: String = crate::qwerty::filas_castellano().concat();
+        assert!(todas.contains('Ñ') && todas.contains('Á'));
+        let mut b = Bautizo::default();
+        for c in "DOÑA ROSA".chars() {
+            b.teclear(c);
+        }
+        assert_eq!(b.texto, "Doña Rosa", "mayúscula sola al empezar cada palabra");
     }
 }

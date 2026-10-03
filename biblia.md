@@ -270,6 +270,9 @@ están **acoplados**; lo verifica el test
 lateral libre. Aura dorada procedural (`fx/aura_saiyan`). El Ki reemplaza al
 combustible. **Salvo cuando el botón dice TREPAR** —hay un borde delante bajo
 tierra—: ahí no carga nada, porque el botón hace lo que dice (§5).
+**En el vacío** el stick viaja solo (`cruise_speed`: el hueco a la superficie más
+cercana suma velocidad, la Luna queda a ~medio minuto sin tocar SUBIR) y **BAJAR
+baja hacia el cuerpo más cercano**, no hacia la Tierra: mantenerlo te posa en él.
 
 **Espacio vivo** (`space_fx.rs`): halo radial translúcido (la misma pieza sirve para
 atmósfera, corona solar y cabeza de cometa), terminador por cuerpo girando con su
@@ -302,6 +305,42 @@ corrimiento —0.09 radios, poco a propósito— es lo que rompe la lectura de "
 aire brilla del lado iluminado y se apaga hacia el terminador, como en un planeta de
 verdad. Con más desplazamiento el halo se despega del disco por el lado oscuro y se
 ve el truco.
+
+#### Sombra, encuadre y controles entre cuerpos (3 oct 2026)
+
+Reporte: "al salir de la Tierra y volver a entrar, la sombra reemplaza al dibujo de
+la Tierra", "hay un corte al ir a la Luna" y "en el espacio tengo que seguirle dando
+a subir para ir a la Luna". Cinco causas, todas en `universe.rs` / `creative_fly.rs`:
+
+1. **La noche era un sprite oscuro de 2,2 radios corrido 0,78 radios**, sin recorte:
+   se salía del planeta. Y para el cuerpo propio se centraba en el JUGADOR (por la
+   hora) sólo a menos de 1,6 radios; al volver, cruzar ese radio la teletransportaba
+   encima tuyo y de noche tapaba el planeta en un frame. Ahora es una **máscara
+   sobre la misma malla del disco** (`BodyNightSide`, 128 px como el disco pixelado,
+   tres bandas de `n·L`): no puede salirse, y la luz se **funde** entre la de la hora
+   y la de la órbita con la distancia (`night_light_dir`, giro con cuaternión). Su z
+   va pegada a su disco (`−20 + dz + 0.005`): con −19,5 fijo la noche de la Tierra
+   oscurecía a la Luna cuando pasaba por delante. Tests: `la_noche_nunca_se_sale_del_disco`,
+   `la_sombra_no_salta_al_volver_al_planeta`, `de_dia_el_jugador_queda_al_sol_y_de_noche_a_la_sombra`.
+2. **La malla satelital del cuerpo anterior seguía viva tras el rebase** hasta que
+   terminaba la nueva (segundos en el celu), con coordenadas del otro cuerpo: el
+   suelo de la Luna pintado sobre el centro de la Tierra. `sync_terrain_lod` la tira
+   en cuanto cambia el `ref_body`.
+3. **El encuadre saltaba ×1,79 al rebasar**: `view_h_for_alt` depende del radio del
+   cuerpo. En vuelo la cámara usa `flight_view_h` = el mínimo, entre los cuerpos
+   aterrizables, del encuadre que daría cada uno (continuo; sobre tu mundo es la
+   misma curva). Test: `el_encuadre_no_salta_al_pasar_de_la_tierra_a_la_luna`.
+4. **El adelanto de cámara apuntaba al cuerpo más cercano**: la primera mitad del
+   viaje miraba para atrás (a la Tierra) y a mitad de camino giraba 180°. Ahora
+   sigue el rumbo del stick (`ApproachFraming::dir`, se recuerda al soltarlo).
+5. **Ir de lado por el vacío era eterno** (la velocidad sólo crecía con la altura,
+   ×2 cada ~20 s) y el atajo era SUBIR. `cruise_speed` suma `SPACE_CRUISE_RATE` por
+   metro de hueco: se acelera al irte y se frena solo al llegar, como en SFS. Sobre
+   el disco el hueco es cero y nada cambia. Y **BAJAR en el vacío cierra el hueco
+   hacia el cuerpo más cercano** — antes bajaba `vert`, que entre cuerpos no movía
+   nada visible (el botón estaba muerto). Sin Ki pasa igual, más lento: el
+   aterrizaje forzoso te lleva a tierra. Tests: `a_la_luna_con_el_stick_sin_tener_que_subir`,
+   `el_crucero_del_vacio_no_toca_el_vuelo_sobre_el_planeta`.
 
 ---
 
@@ -3873,6 +3912,28 @@ El presupuesto subió de 24 a 40 luces y el costo BAJÓ. Tres cambios:
 | con 40 luces + rechazo al cuadrado | 1.219 |
 | \+ sin teñir el arte plano | **503** |
 
+##### Luces por baldosas (3 oct 2026) — el costo deja de ser píxeles × luces
+
+Medido en el Redmi: cada luz costaba ~4 ms de GPU (por eso el tope de 8 en Android), porque
+las dos pasadas recorrían TODAS las luces en CADA píxel, aunque casi ninguna llegara. En una
+Mali cada vuelta es además una lectura del uniform con índice dinámico.
+
+- **Grilla de baldosas** (`light2d::TILES_X × TILES_Y` = 20 × 10 sobre el encuadre + margen,
+  anclada a múltiplos de baldosa). La CPU (`light_tiles`, 20 Hz) anota por baldosa una máscara
+  de bits con las luces cuyo pozo la toca (`tiles_lo` = 0..31, `tiles_hi` = 32..39). El shader
+  lee una máscara y recorre sólo los bits prendidos (`firstTrailingBit`), así que el costo pasa
+  a ser píxeles × luces que se SOLAPAN ahí.
+- **Se ve idéntico**: una luz fuera de la máscara es una que el bucle viejo saltaba con
+  `continue`; los bits se recorren en el mismo orden (el producto `cover` redondea igual); fuera
+  de la grilla va la máscara completa. Lo clava el test `la_mascara_nunca_pierde_una_luz_que_llega`.
+- `pow(color, 1.6)` de la aditiva se precalcula por luz (`cols`): tres `pow` menos por luz y píxel.
+- **De día `light_sprites` duerme**: sin luces activas ya no recorre todos los sprites del mundo
+  20 veces por segundo (una vuelta final devuelve el color a los teñidos, sin corte por distancia).
+- `VEIL_LIGHTS` (tope de uniform, PC) pasó de 40 a **64**: ya no es el cuello de botella. La máscara de la baldosa
+  son dos `u32` (0..31 y 32..63); `mascara()` del shader cubre n=64 aparte porque `1u << 32` no existe en WGSL.
+- Con eso `presupuesto_de_luces()` en Android pasó de **8 a 16**. Medir en el celu con
+  `HA_LUCES=n` (8/16/24) en la ciudad de noche; si `resto` no baja, volver a 8 es un número.
+
 #### FUEGOS ARTIFICIALES (`render/fireworks.rs`, 28 ago 2026)
 
 La pieza que le faltaba a la noche: con los faroles encendidos el pueblo ya se lee,
@@ -3965,6 +4026,16 @@ pedirle el teclado del sistema a Android (`show_soft_input`): tapa media pantall
 y depende de que el IME entregue teclas, que en `android-activity` no es seguro.
 `el_teclado_cubre_lo_que_el_nombre_acepta` clava que las teclas dibujadas y lo que
 `name_input` acepta no se separen.
+
+**Los cuatro teclados en pantalla son QWERTY** (3 oct 2026, `qwerty.rs`): el del
+nombre, el del nombre del mundo (`menu_listas`), el bautizo de animales y la
+consola. Iban en orden alfabético y buscar cada letra en un orden que nadie usa
+era lento. Las letras salen de `qwerty::LETRAS` (con la Ñ donde va en el teclado
+español) y los números van arriba; cada panel suma sus extras (tildes, `/`, `-`).
+Los que escriben nombres en castellano no duplican las filas en mayúscula y
+minúscula: la primera letra de cada palabra sale en mayúscula sola, como en el
+teclado del celular, y **MAYÚS** invierte la letra que viene. Las teclas muestran
+la letra en el caso que van a escribir.
 
 **Y el nombre SOBREVIVE al menú**: `society::npc_line` lo recibe y el saludo neutro
 te nombra ("Buen dia, <vos>."). Antes `SelectedCharacter.name` se guardaba en el
@@ -5174,6 +5245,113 @@ andaban en el creador de personaje y en el juego no.
 `art2d::registrar_poses_de_personaje` deriva **1.491 poses** del mismo índice al
 cargar. No se inventa geometría: si mañana se rehornea la hoja, siguen calzando.
 
+### Las manos AGARRAN lo que llevan (jugador y aldeanos) — 3 oct 2026
+
+Pedido: *«se ve horrible que el jugador dispare y su mano no se vea agarrando el arma u otros objetos, así con todo»* y
+*«la ropa no tiene que ir sobre la mano, sino verse puesta»*. Antes el ítem flotaba a un offset fijo del cuerpo y el arma
+a 0,62 m del pecho; una prenda seleccionada se dibujaba en la mano como un icono doblado.
+
+**`manos.rs` + `scripts/medir-manos.py` (todo MEDIDO, nada a ojo).**
+- *Dónde está la mano:* las capas del Character Generator comparten esqueleto; la piel que NINGUNA de las 132 ropas
+  tapa (< 15 %) por debajo del mentón es mano. Sale en las 9 pieles con la misma posición (el script corta si no).
+  `art/chargen/manos.json` guarda, por `animación:columna`, el agarre (`ancla`, px de la celda 32×64) y si las manos
+  quedan detrás (mirando arriba). `art/chargen/manos/NNN.png` es una lámina por piel con SÓLO los píxeles de las
+  manos (+ contorno) en las filas `filas` del json.
+- *Con qué se agarra cada objeto:* `objetos["items/<id>"].agarre` (px de su recorte): armas = la empuñadura de su
+  diseño (`lib/armas_diseno.py`); largos (hacha, pico, antorcha) = el mango, a 18 % del extremo; chicos = desde abajo
+  al centro; el farol = la manija (sobre el cuerpo opaco, su halo pintado no cuenta).
+- *Cómo se ve agarrado:* el objeto es un hijo del personaje con `Sprite.anchor` en su agarre, puesto en la mano del
+  cuadro ACTUAL (pose de `CurrentPose`/`NpcPose` + índice del atlas → `char_cell`); encima, la lámina de manos
+  recortada en ese cuadro con el mismo tinte: los dedos tapan el mango. Mirando arriba el objeto va detrás y no hay
+  dedos. Z: cuerpo ± `DZ` (1e-5 < un escalón de Y-sort). Escala `M_POR_PX` = 0,02 m/px (un arma de 56 px ≈ 1,1 m).
+- *Armas:* `armas::visual_del_arma` ya no la pone a 0,62 m: gira alrededor de la mano (`ManoDelJugador`) por su
+  empuñadura, con el retroceso; sin mano a la vista (nadando, comiendo) no se dibuja. De perfil se empuña con la mano
+  de atrás; de frente, el punto medio de las dos.
+- *Caminar con el arma (`walk_gun`):* el pack no trae «caminar apuntando». Se empalma con SU arte: torso de `gun_idle`
+  (y < 56) sobre las piernas de `walk`, en las celdas libres de la fila 17 (cols 24..47, vacías en las 432 capas: lo
+  verifica el script). `chargen::empalmar_walk_gun` lo hace al componer la hoja del jugador; el script, en la hoja por
+  defecto. `CHAR_ANIMS` lo declara (`first = WALK_GUN_COL0`) y `verbo_del_cuerpo` lo pide con arma en la mano y andando.
+- *Aldeanos:* llevan la herramienta de su oficio (`society::herramienta_de`: granjero balde, minero pico, constructor
+  martillo); los niños (hoja infantil, sin lámina de manos) y los sin oficio van con las manos libres.
+- *La ropa se VISTE, no se empuña:* `held_item::shows_in_hand` excluye toda prenda (`armadura::prenda`). Equiparla
+  (VESTIR) recompone la hoja con ese conjunto en lugar del que traía (`equipo::look_con_ropa`: `ropa_NN` = el
+  estilo `ROPA NN` del creador, y el sombrero por la capa de accesorio). Las botas sólo protegen.
+
+Regenerar: `python3 scripts/medir-manos.py [--vista]` (vista: `/tmp/claude-1000/manos.png` y `agarres.png`). Hay que
+volver a correrlo si cambia el pack, un arma (`lib/armas_diseno.py`) o los ítems del manifest.
+
+### El jugador HACE lo que hace: acciones, reposo y lo que tiene en la mano — 3 oct 2026
+
+Pedido: *«del jugador cuando nada, o realiza actividades debería haber asset para esas cosas o animaciones»*.
+Las poses estaban registradas desde el 4 ago, pero `sim::face_player_sprite` sólo pedía tres verbos (respirar,
+caminar, nadar): el jugador talaba parado, comía sin mover un dedo y quieto respiraba para siempre. Sólo los
+aldeanos usaban sus filas.
+
+**`pose_jugador.rs` decide el verbo; `sim.rs` le pone la dirección.** Orden de mando (`verbo_del_cuerpo`):
+agua > acción > caminar > arma en la mano (`gun_idle`) > reposo > respirar.
+
+| qué hace | fila del pack | de dónde sale la señal |
+|---|---|---|
+| talar, picar roca/mena/bloque | `hit` (con herramienta) · `punch` (a mano) | `HoldInteractState` + blanco |
+| cosechar, juntar un prop, abrir cofre, agua | `pick_up` | ídem |
+| levantar lo que construiste | `lift` | ídem |
+| pegarle a un infectado o a un animal | `punch` / `stab` (cuchillo) / `hit` | `infectados::golpear`, `fauna::interactuar_animal` |
+| colocar (construir, plantar, mueble) | `pick_up` medio (agacharse) | `PlaySfxAt(Place/Stamp)` a ≤ 4 m |
+| recibir daño | `hurt` | delta de vida (como `audio::survival_sounds`) |
+| comer / beber | `hands_chest` + capa dibujada | delta de hambre / sed |
+| disparar / recargar | `shoot` / `grab_gun` | `EstadoArmas::retroceso()` / `recargando()` |
+| quieto 9 s | `phone_intro` → `phone`, o `read` + libro (alternan) | `Reposo` |
+| quieto 40 s | `sit_floor` | ídem |
+| nadar | `walk` cortado a 32×40 + ondas | `PlayerVisual::swimming` |
+
+Una acción con blanco mira AL BLANCO, no al último paso. Prioridades: el daño pisa al golpe, el golpe a juntar
+o comer (`AccionJugador::hacer`).
+
+**Lo que el pack no trae en el cuerpo va como capa hija**, en la MISMA celda de 32×64 y arrancando en el mismo
+cuadro: `player/libro` (la capa `Books/` del pack, fila 7 — importada, no dibujada), `player/en_mano` (pancito que
+pierde dos mordiscos, taza que se inclina: 12 cuadros a 8 fps = dos vueltas de `hands_chest`) y `player/ondas`
+(anillo en 3/4 con huecos que giran, 4 cuadros). Las tres salen de `scripts/dibujar-acciones-jugador.py`
+(`--ver <png>` deja la lámina sobre el cuerpo real). El celular NO es capa: viene dibujado en el cuerpo de la fila 6.
+
+Medidas que gobiernan el dibujo (escala 16, sobre `Bodies/Body_32x32_01.png`):
+- **El pack de 32 es arte de 16 escalado ×2**: cada píxel del cuerpo es un bloque de 2×2. Lo que se dibuje
+  para ir encima se pinta en 16 y se duplica; a 1 px de 32 se ve más fino que la mano que lo sostiene.
+- Manos cruzadas en el pecho en la fila 22; mentón en la 21; la cabeza sube 1 px en los cuadros 2, 3, 8 y 9 (las
+  manos no se mueven). Contorno (58,58,80), el del libro del pack.
+
+**Corrección del catálogo:** la fila 7 se llamaba «phone_intro / SACAR EL CELULAR» y era LEER (la guía del pack
+la marca con los libros). La fila 6 son tres tramos: saca 0-2, usa 3-8 («4-9 loop»), guarda 9-11; `CharAnim.first`
+permite tramos que no arrancan en 0. Lo clava `las_animaciones_caben_en_su_fila_y_respetan_la_guia_del_pack`.
+
+**Bug de paso: el jugador caminaba al oeste mirando al este.** `sim::interpolate_player_visual` ponía
+`scale.x = −1` al ir al oeste, de cuando la hoja tenía un solo perfil; con las poses `_left` del pack el espejo se
+aplicaba dos veces y se cancelaba (también al ítem en la mano, que ya calcula su lado). Lo cazó `HA_POSETEST`
+imprimiendo `pose=idle_left escala_x=-1`. Ahora la escala queda en 1 y la dirección la pone sólo la pose.
+
+**Prueba en la compu:** `HA_POSETEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./ha-game` recorre 14 poses (dos capturas
+cada una a 0,35 y 0,95 s, más el oeste) e imprime `ha-posetest: <nombre> pose=… escala_x=… rot=…`.
+
+### Sentarse y dormir en muebles — 3 oct 2026
+
+`descanso.rs`. El catálogo de slots ya sabe qué es una cama y qué es un asiento (por su etiqueta en castellano:
+`Cama…`, `Colchón…`, `Silla…`, `Sillón`, `Sofá`, `Banco…`, `Banqueta`, `Puf`, `Reposera`; NO `Silla de ruedas`,
+`Banco de trabajo`, `Banqueta de piano` ni `Colchoneta`), pero nadie ejecutaba `Interaccion::verbo`. Ahora:
+
+- **Un TOQUE** sobre el mueble te sienta (`sit`, de perfil) o te acuesta (`sleep`, la cabeza sobre la almohada).
+  Mantener sigue levantándolo, como todo lo demás. Funciona con el mueble sembrado, el del editor de mundo y el que
+  colocaste vos (`MuebleDeUso` se agrega en los tres sitios donde nace: `world2d.rs` ×2, `structures.rs`).
+- Lejos (> 3,6 m), volando o nadando: suena «no se puede» y no pasa nada.
+- Te levantás con cualquier movimiento, saltando, si te lastiman o si te ponés a volar.
+- **Cura**: sentado 2 vida/s, dormido 3 vida/s. NO adelanta el reloj del día (sería otra feature; un nombre que
+  prometa más de lo que hace es justo lo que el checklist §2 prohíbe).
+- **Dibujo:** el jugador se ordena como EL MUEBLE (`Descanso::orden_z`), no por su propia z, o el respaldo y la cama
+  —cuyo pie está más al sur— lo taparían. Dormido se baja `11/64 × 1,9 m`: la figura de `sleep` mide 34 de los 64 px de
+  la celda y está 11 px por encima del centro (bbox y 4..38 medido sobre `art/player/character.png`).
+- Driver: `HA_DESCANSOTEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./ha-game` planta una cama y una silla, las toca por la
+  misma puerta que el juego y comprueba pose, posición, orden, cura y «lejos no hace nada».
+
+Skill: `.claude/skills/animacion-del-jugador/`.
+
 ### En la calzada no va un cajero automático — 4 ago 2026
 
 `pack_siembra::CALLE` se había generado con la misma regla que la vereda, así que
@@ -6298,6 +6476,36 @@ escalón de rampa del lado en sombra, +5 del lado a la luz). El script que lo hi
 se borró con el resto del 3D (§14); las páginas originales están en el commit
 `c531097`.
 
+### El juez del reemplazo y la casa a la medida (3 oct 2026)
+
+Pedido: *«dibujar todos los assets para tener control total… pero solo si los dibujos están a la altura de los
+assets o los superan»*. Lo que se construyó y lo que se midió:
+
+- **`scripts/juez-arte.py` + `scripts/lib/juez.py`**: decide si una pieza nuestra puede reemplazar a una del pack.
+  Mide por celda de 32x32 (variedad y su p10, plano, bordes, tonos, salto de luz, colores, luz, huecos, escala)
+  y arma una lámina A CIEGAS. Calibrado: una casa del pack contra sus hermanas da A LA ALTURA; el taxi dibujado
+  el 2 oct, POR DEBAJO (un cuarto del tamaño de un auto, salto de luz 11,8 contra 24,9).
+- **Ítems de una celda**: lo dibujado ya está casi a la par (salto de luz mediano 27,5 contra 30,4 en 500
+  singles del pack) pero usa menos colores (7 contra 9) y tonos (6 contra 7).
+- **`vehicle/taxi`** se rehízo DERIVANDO (`scripts/dibujar-taxi.py`): el auto amarillo del pack
+  (`auto_abajo_14`, la variante se elige midiendo) + cartel de techo. Juez: SUPERA. Hoja `art/gen/taxi.png`, 3x4.
+- **`scripts/lib/edificio.py`**: re-mide pixel del pack repitiendo/quitando líneas que ya son idénticas a su
+  vecina, con puertas/ventanas protegidas (vidrio: g>r+14, b>g+5), la sombra transparente y las diagonales de
+  los techos a dos aguas intocables; `fachada_a_medida` combina módulos lado a lado y pasa cada candidata por el
+  juez. `scripts/import-casas-a-medida.py` intenta llevar cada vivienda a la huella exacta de su programa.
+
+⚠ **Lo que dio la medición de las casas, y por qué NO se publicó nada.** Las huellas residenciales de
+`city.rs` son entre 1,5 y 4,1 veces el dibujo del pack (casa_chica 13x10 celdas → 18x15; villa 9x13 → 37x36,
+con `ESCALA_ARTE` = 0,95). Las 11 variantes quedan POR DEBAJO del juez o sin gemelas suficientes: crecer ×1,5
+convierte el techo en un paño liso o dienta la cumbrera. **Una casa entera del pack no se puede agrandar a esa
+huella sin bajar de calidad**, y achicar el lote está prohibido (ver «El lote CRECE»). Lo que queda es de
+DISEÑO, no de arte: componer la vivienda con varias piezas del pack (como `casa_hilera` con su kit
+`tramo`/`remate`, que sí mide exacto) y que la sim sepa dónde va cada puerta. Hasta entonces sigue el respaldo
+de hoy (×1,4 + azotea de respaldo). El importador queda: se niega solo, y publica en cuanto una variante pase.
+
+Orden: `import-casas-a-medida.py` va después de `import-completos.py` → `medir-puertas.py` →
+`import-puertas-edificios.py`.
+
 ## §9 Build, publicación y comandos
 
 **El atajo** — un solo comando, pensado para correrlo sin la IA:
@@ -6969,7 +7177,7 @@ con el celu enchufado** (lo desconectaba) y nunca mandarle toques si el usuario 
 | parado en el pasto | 23-28 fps, `fx_tick_sim` 12-15 ms | ~30 (tope), `fx_tick_sim` 0,0 | colisión del jugador aun quieto: ahora no consulta el mundo (`topdown.rs::quieto`) |
 | caminando | 28 fps, `ob_decor` 9,2 ms | 29,9 parejo, p95 40 ms | `surface_decor_at` memoizado por celda (`worldgen.rs`) + `topdown_tile` memoizado (`topdown.rs`) |
 | ciudad a pie (vecinos) | `tick_society` 56 ms | 0,8-1,6 ms | `decor_hits_box` escaneaba ~300 celdas por pregunta (alcance de la casa autorada más grande); ahora el alcance es el de árboles/rocas y lo autorado va por lista |
-| ciudad al amanecer/noche | 9 fps (`resto` 55-74 ms) | 26-29 fps con 6-8 luces | el velo y la aditiva recorren TODAS las luces por píxel: cada luz ~4 ms de GPU. `light2d::presupuesto_de_luces()` = 8 en Android (`HA_LUCES=n` para medir) |
+| ciudad al amanecer/noche | 9 fps (`resto` 55-74 ms) | 26-29 fps con 6-8 luces | el velo y la aditiva recorren TODAS las luces por píxel: cada luz ~4 ms de GPU. `light2d::presupuesto_de_luces()` = 8 en Android (`HA_LUCES=n` para medir). **3 oct: luces por baldosas (§7 Luz y cielo), tope 16 — sin medir todavía en el Redmi** |
 | vuelo Ki (a mano, mantener SALTAR) | 8,7 fps, `sync_terrain_lod` 82-88 ms | **23,5 fps parejos** (p50 42,5 ms, hilo principal 7 ms) | el horneado de la malla lejana y del disco del planeta pasó a un hilo de fondo (`AsyncComputeTaskPool`, copia liviana de las ediciones: `TileWorld::copia_para_lod`). Lo que queda es GPU (`resto` ~22 ms): la malla de 37 000 quads + sprites |
 
 Notas: el mundo arranca a las 06:47 (amanecer), o sea que **todas las partidas nuevas empiezan
@@ -7530,6 +7738,32 @@ marco rompió la Luna por no ver que la cámara asumía el marco estático.
   ⚠ Al agregar arte: si un slot animado no declara `grid`, se sigue guardando en RAM. En
   una hoja grande eso es caro. `setup_art_atlases` avisa por `warn!` si alguna vez cae un
   sprite sólo-GPU sin grilla.
+
+  **Reincidencia (3 oct 2026): las hojas propias de las POSES.** El Redmi volvió a
+  matar a Tailscale con el juego en 527 MB de PSS. `HA_RAMART` (que ahora lista las
+  15 imágenes más pesadas con su ruta y su `asset_usage`) dio **273 MB de CPU en 117
+  imágenes**: `completos_0/1`, `edificios_puertas_0/1`, `military_base_*`,
+  `additional_houses_*`… todas páginas con `grid`. La fuga era `load_art_manifest`:
+  las poses con `png` propio (375 puertas animadas, completos, bases) se cargaban
+  **en el arranque** y con `load` pelado. Como Bevy deduplica por RUTA, ese primer
+  `load` con copia de CPU además anulaba el sólo-GPU de todas las claves de la misma
+  página. Ahora `PoseInfo` guarda la ruta (`hoja`) y `pose_image` la pide tarde y
+  sólo-GPU (`hoja_de_pose`):
+
+  ```
+  antes:   117 imagenes = 273.3 MB de CPU   RSS escritorio 867 MB
+  después:  62 imagenes =  27.7 MB de CPU   RSS escritorio 480 MB
+  ```
+
+  ⚠ Regla: **todo `load` de una página del pack pasa por `cargar_png`**. Un solo
+  `asset_server.load(png)` suelto sobre una hoja compartida le devuelve la copia de
+  CPU a todas las claves de esa hoja.
+
+  ⚠ Ojo con el `target` compartido entre worktrees: cargo les da el mismo hash a
+  los crates de dos worktrees con el mismo layout, y un build ajeno puede dejarte
+  un `ha-assets` compilado con OTRA fuente (el 3 oct dio slots fantasma
+  `player/en_mano`). Si un test falla por algo que tu fuente no tiene, `touch` el
+  archivo y recompilá antes de creerle.
 
   *Sospecha investigada y NO confirmada — no volver a darla por hecha sin medir.*
   En Bevy 0.15, `commands.entity(e).insert(...)` y `with_children(...)` sobre una
@@ -8282,6 +8516,7 @@ escasez, heridas, amenazas nocturnas, fortificar la base, habilidades por uso, s
 Investigación de diseño (sandbox/survival): el bucle que engancha es *recolectar → fabricar →
 herramienta mejor → recolectar más profundo*, con metas visibles que enseñan el circuito,
 peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los busque.
+Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§20**.
 
 **Hecho**
 * `metas.rs`: cadena de 13 metas (madera → pico → piedra → antorcha → cuero → ropa → hierro →
@@ -8330,6 +8565,12 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
 * **Alijos** (`alijos.rs`): un tesoro escondido por sector de 200 m (determinista por semilla), con
   cofre de botín rico y 2-3 guardias infectados que no se queman de día; brújula `ALIJO a 120 m · NE`
   y metas "Abrí un alijo" / "Cinco alijos". Es la versión caminable de los dungeons del OASIS.
+  **La brújula sólo sale con el mapa** (3 oct 2026, pedido del usuario): el ítem `mapa_tesoro`
+  (infectados 6 %, cómodas, y un alijo de cada tres trae el del siguiente) marca, al entrar a la
+  mochila, un sector a 2-4 sectores (400-900 m). Los mapas son un contador: llevar `n` guía a los
+  primeros `n` marcados (`Alijos::mapas`, guardados en `alijos.json`); si lo soltás la guía se apaga
+  y vuelve al mismo alijo al recuperarlo; abrir el alijo gasta su mapa. Sin mapa, un alijo se
+  encuentra igual de casualidad, pero sin guía. Ícono dibujado en `lib/restantes.py::mapa_tesoro`.
 * **Economía** (`npc_menu.rs`): VENDER cambia comida/material/cuero por lingotes de oro
   (`unidades_por_oro`), COMPRAR gasta 2 lingotes en una prenda al azar. Cierra el bucle
   saquear → vender → vestirse.
@@ -8351,6 +8592,29 @@ peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los 
   de fauna con agua+amenaza (reentrenar `FAUNA.adn`), cada uno toca render o
   entrenamiento largo y se valida con ojo (el origen flotante se midió: no hace falta, ver §17).
 * **Nada de esto está probado en el celu**: por orden del usuario (2 oct) se prueba AL FINAL.
+
+### Disparar como en BO2 Zombies — apuntado asistido (3 oct 2026)
+Pedido: «sentirme como matando zombies en Tranzit: no luchaba apuntando ni había interferencia entre controles».
+Receta completa, números y fuentes: **skill `disparo-y-apuntado`** (obligatoria antes de tocar armas, mira o impactos).
+* **El jugador elige a quién, el juego garantiza que la bala llegue.** `apuntado.rs` (puro, con tests): cono de ±15°
+  medido en metros laterales (tope 1,6 m), el dedo a < 1 m de un infectado lo elige sin discusión, histéresis 1,35
+  para que la ráfaga no salte entre dos pegados, la bala se dobla hasta 9° hacia la intercepción, primera bala al
+  25 % de la dispersión (la escopeta conserva su abanico). Sólo infectados vivos y a la vista: **nunca aldeanos** —
+  la ayuda no puede volver crimen un tiro errado.
+* **La mira va ENCIMA del blanco, no bajo el dedo** (el dedo tapa ~1,5 m a pie): roja si la bala pega de lleno.
+* **Con arma en la mano tocar el mundo sólo dispara**: ya no talla/cosecha (`targeting`), no golpea (`infectados`) y
+  desde el 3 oct tampoco abre el botín de un cadáver; se saquea enfundando.
+* Pendiente de la receta (§4-5 de la skill): flash blanco antes del rojo, «+10» por impacto, hitstop corto sólo en la
+  baja, patada de cámara, casquillos con cupo, botón de fuego estilo *Brawl Stars* (toque = mejor blanco, arrastre =
+  a mano). Protocolo en el celu: ≥ 70 % de acierto con pistola a 8-20 m sin esfuerzo, cero toques que hagan otra cosa.
+
+### Una skill por sistema (3 oct 2026)
+Decisión del usuario: cada sistema del juego que funcione bien queda escrito como **skill** (`.claude/skills/<sistema>/`)
+para poder replicarlo a largo plazo y en otros proyectos: el *porqué*, los números medidos, el código que lo hace y
+cómo se prueba. Hechas: `pixel-art`, `audio-sfx`, `swarm-sim`, `graphify-first`, `disparo-y-apuntado`. Faltan, en
+orden de uso: vuelo Ki + cámara (§4, memoria del flip-flop), infectados/horda, fauna IAFZ, sociedad/NPCs (Sims +
+credos), construcción, granja, luz 2D, controles táctiles (zonas de stick, `TouchBlockRects`), mundo/streaming
+(perf §10), multijugador/relay. Al cerrar un frente, su skill se escribe o se actualiza en el mismo commit.
 
 ### Arte con IA (idea, 1 oct 2026 — en cola)
 Entrenar en la laptop no es viable (Intel HD 520; la 940M está apagada y tiene 2 GB). Camino:
@@ -8554,7 +8818,8 @@ un cuadrado»* + *«lo que dibujaste parece hecho en Paint, no llega a los talon
   mira, globo del menú, extractores, taladro, hábitat y plataforma).
   ⚠ **Orden de scripts**: `dibujar-mundo.py`, `dibujar-items.py` y `dibujar-ui.py` todavía definen las versiones
   viejas de esas claves; correr SIEMPRE después `dibujar-minerales.py`, `dibujar-materias.py`, `dibujar-comida.py`,
-  `dibujar-granja.py`, `dibujar-mundo-v2.py` y `dibujar-ui-v2.py`. Sin rehacer (obsoletos o de relleno): las piezas de
+  `dibujar-granja.py`, `dibujar-mundo-v2.py` y `dibujar-ui-v2.py`. `dibujar-acciones-jugador.py` (capas del
+  jugador: comida, taza, ondas, libro) es independiente: sus claves no las define ningún otro script. Sin rehacer (obsoletos o de relleno): las piezas de
   nave, `items/hand|jetpack|probe`, cielos y estrellas, canchas, césped cortado, `room_large` y las guirnaldas.
 * Los animales de granja (`art/gen/fauna/*.png`) NO son dibujos míos: son las hojas animadas del pack.
 * **Descartado a conciencia**: aldeanos únicos por composición de capas. Cada hoja compuesta pesa ~2,7 MB de GPU
@@ -8725,3 +8990,230 @@ terraza, puente donde cruza agua, circunvalación donde desemboca en un casco, y
 **Probar**: `cargo test -p ha-shared vehiculos`, `cargo test -p ha-shared tests_conectividad`, `cargo test -p ha-game vehiculos`.
 **Falta (honesto)**: semáforos que el tránsito respete, policía que persiga el robo, estaciones de servicio / combustible, lanchas en
 el tránsito (hoy sólo existe la clase), multijugador (el vehículo es local), prueba en el Redmi.
+
+---
+
+## §20 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)
+
+Pedido del usuario: *«buscar en internet los juegos desde el 2000 hasta la actualidad y armar una
+lluvia de ideas de lo que los hizo divertidos, un boom, aceptados por la gente; llevarlo a mi juego
+para que sea divertido, tenga sentido, haya cosas que hacer y la gente prefiera estar en mi juego
+que en la vida real — el OASIS de Ready Player One, a ese nivel»*. Complementa los pilares de §16
+(OASIS + Project Zomboid). Nada de esto está hecho: es la **cantera** de donde salen las próximas
+features. Antes de tomar cualquiera, pasá el checklist de §2 y la regla 2 (60 fps del Redmi).
+
+**Juegos revisados**: Minecraft, Roblox, Fortnite, WoW, Second Life, Habbo/Club Penguin, VRChat,
+EVE Online, GTA V RP (NoPixel), Stardew Valley, Animal Crossing NH, RimWorld, Dwarf Fortress,
+Zelda BotW/TotK, Elden Ring, Death Stranding, Among Us, Lethal Company, Palworld, Valheim,
+Terraria, Rust/DayZ, Hades, Vampire Survivors, Balatro, Wordle, Pokémon GO. Más la psicología que
+los explica: **teoría de la autodeterminación** (autonomía, competencia, vínculo — las tres
+predicen disfrute y ganas de volver, Ryan/Rigby/Przybylski) y el **modelo de Quantic Foundry**
+(12 motivaciones en 6 grupos: acción, social, maestría, logro, inmersión, creatividad; >1,75 M
+encuestados).
+
+### A. Los 16 motores que se repiten
+
+Cada uno: **qué juegos**, **por qué funciona**, **qué tiene Ki hoy** → **qué falta**.
+
+1. **Tres escalas de recompensa a la vez** — Hades, Vampire Survivors, Minecraft. Segundos (el
+   golpe), minutos (la sala, el botín), horas (desbloqueos, historia). Es lo que produce «una más».
+   Ki: golpe/talar · metas y alijos · civilización y la Luna. **Falta el jugo del segundo**: el
+   golpe no «cruje» (Balatro vive de sonidos crocantes y números que saltan).
+2. **Un lienzo, no un camino** — Minecraft, Roblox, Terraria. Gráficos simples que dejan imaginar,
+   herramientas en vez de historia. Ki: construir, planos, cavar. Falta: que lo construido **se
+   comparta** (ver 15).
+3. **Diseño multiplicativo (química)** — Zelda BotW: objetos que se afectan entre sí (fuego, agua,
+   viento, metal, temperatura); el jugador inventa soluciones que nadie previó. Ki ya tiene una
+   química más profunda que casi cualquier juego (`civ/materia.rs`: 7 propiedades ocultas, 8 leyes)
+   **pero vive en un menú**. Falta que toque el mundo.
+4. **Historias que nadie escribió** — RimWorld, Dwarf Fortress, EVE, NoPixel. El juego no narra:
+   da sistemas comprensibles que chocan y el jugador cuenta lo que pasó. Clave de RimWorld: la sim
+   no es demasiado compleja *para que se entienda la causa*. Ki tiene civ, Sims, barrio y rastro
+   causal (`/causal`). **Falta un narrador que lo muestre**: hoy la historia pasa en números.
+5. **Identidad y autoexpresión** — Habbo, VRChat, Animal Crossing, skins de Fortnite. La gente se
+   queda donde *es alguien*. Ki: creador, 43 prendas, casa. Falta la firma del juego: **el aura de
+   Ki** como seña personal.
+6. **Vínculo y pertenencia** — WoW (gremios), Valheim (roles naturales: constructor, explorador,
+   luchador), Stardew (corazones con cada vecino). El 20 % de los jugadores de MMO dice que el mundo
+   virtual es *su residencia principal*: lo que los ata son personas. Ki: amistad, familia, sectas,
+   multijugador con presencia y chat. Falta grupo de jugadores con casa común y vecinos que te
+   recuerden por nombre.
+7. **Consecuencia permanente** — EVE: «lo que pasa queda en la historia para siempre», guerras de
+   miles de jugadores. Ki: guardado por partida, crónica de la civ. **Falta el mundo compartido
+   persistente** (§15: hoy hay presencia y chat, no mundo común). Es la base del OASIS.
+8. **Rituales y estaciones** — Animal Crossing (reloj real), Stardew (festivales), Wordle (un
+   desafío por día, igual para todos, se comparte sin arruinarlo). Hábito sin culpa.
+9. **Eventos en vivo, una sola vez** — Fortnite (concierto de Travis Scott: 12 M a la vez),
+   Destiny. «Yo estuve ahí». Ki: hordas cada 3.ª noche (§16). Falta lo único e irrepetible.
+10. **Momentos para mostrar** — Among Us, Lethal Company, NoPixel: el caos social y gracioso se
+    vuelve clip y el clip trae jugadores. Barato de entrar, mejor con amigos.
+11. **Coleccionar y completar** — Pokémon GO, Palworld (criaturas que trabajan en tu base), museo
+    de Animal Crossing. Ki: fauna con IA evolutiva, doma (§6). Falta el catálogo y el trabajo.
+12. **Maestría con techo alto** — Elden Ring, Souls, Hades. Difícil pero justo; el progreso es
+    *tuyo*. Ki: vuelo y combate básico. Falta lo que DBZ promete: técnicas, entrenar, rivales.
+13. **Ayuda entre desconocidos (asincrónica)** — Death Stranding (puentes y carteles de otros en tu
+    mundo), Elden Ring (mensajes, manchas de sangre, fantasmas). Compañía sin tener que coordinar.
+14. **Economía de jugadores** — EVE (casi todo lo fabrican los jugadores), Albion. El comercio da
+    oficio y sentido a especializarse. Ki: vender/comprar a NPC (§16), recetas descubiertas (§18).
+15. **Creación de los jugadores** — Roblox, mods de Minecraft, Mario Maker: el contenido infinito lo
+    hace la comunidad. Ki: HA Studio existe, pero es del desarrollador.
+16. **Refugio y contraste** — lo cozy (Stardew, Animal Crossing) pega más fuerte después del miedo
+    (Zomboid, Valheim): volver a casa tras la horda es alivio. Ki tiene los dos lados; falta que la
+    casa *se sienta* hogar.
+
+### B. Lluvia de ideas para Ki (agrupadas por motor)
+
+**El segundo (1)**
+* Golpe con jugo: parada de 2-3 frames al pegar, astillas/chispas del material, número de daño que
+  salta, sonido en capas por material (skill `audio-sfx`). Barato y se nota en todo.
+* La carga de Ki se *siente*: zumbido que sube, piedritas que levitan, cámara que tiembla apenas.
+
+**La química al mundo (3)** — reusar `materia.rs`, cero reglas nuevas
+* El fuego se propaga por lo combustible (pasto seco, paredes de madera, muebles); el agua y la
+  lluvia lo apagan. Defender con piedra ya importa (§16): que el fuego también lo enseñe.
+* Ráfaga de Ki contra roca = la parte según dureza; contra metal conductor bajo la lluvia, arco.
+* Alijos con más de una solución: quemar la puerta, cavar por debajo, volar por arriba, romper con Ki.
+
+**El narrador (4)** — la sim ya existe, falta *contarla*
+* **El diario del pueblo**: una hoja por día con 3-5 titulares sacados del rastro causal («Murió
+  la herrera Ana; su hijo heredó la fragua», «El forastero nos enseñó a hacer vidrio»).
+* **Narrador tipo RimWorld** que dosifica: después de una racha tranquila, un evento; después de una
+  tragedia, respiro. Sólo elige *cuándo*, nunca inventa causas (verdad en un lugar, §2).
+* Vecinos que te recuerdan: «vos sos el que nos salvó en la horda del día 8». Lápidas con epitafio.
+* **Leyendas**: lo que un jugador hizo de grande queda como estatua o canción que los NPC cantan.
+
+**Identidad (5)**
+* **Aura de Ki personal**: color, forma (llama, rayos, chispas), estela de vuelo. La firma del juego
+  y lo primero que ven los demás.
+* Títulos ganados (de las llaves y metas de §16) visibles sobre el nombre.
+* Modo foto con poses y marco que guarda el PNG para compartir.
+
+**Vínculo (6)**
+* **Clan**: grupo de jugadores con casa común, bandera y cofre compartido; roles que salen solos.
+* Corazones con vecinos: regalos que les gustan (de su credo y oficio), eventos a cierto nivel,
+  pareja e hijos con NPC (los hijos ya existen, §6).
+* Maestro de Ki NPC que te entrena si le ganás la confianza (y te reta si no).
+
+**Persistencia (7)**
+* **Mundo compartido en el servidor** (Colyseus ya es autoritativo, §2 regla 4): un planeta común
+  donde lo construido queda. El resto de los planetas siguen privados. Es *el* salto al OASIS.
+* Monumentos: lo que construye un clan aparece en el mapa de todos.
+
+**Rituales (8)** — sin castigo por faltar
+* **Alijo del día**: misma semilla para todos, se comparte el tiempo y las bajas sin revelar dónde.
+* Festivales de los pueblos por estación: cosecha, solsticio, día de la fundación de su credo.
+* Visitante errante raro (mercader de otro planeta) que aparece algunos días.
+
+**Eventos únicos (9)**
+* **Torneo de las Artes Marciales** cada N días en la ciudad grande: inscripción, rivales NPC con
+  técnica propia, público que alienta; en multijugador, jugadores contra jugadores.
+* Cae un meteoro: cráter con materia que no existía en ese mundo (nuevas reacciones de §18).
+* Eclipse: noche larga con horda grande y algo raro para el que la sobreviva.
+
+**Momentos (10)**
+* **El mordido encubierto** (Among Us + Zomboid): en una expedición de grupo, a uno lo muerden y
+  se transforma a la noche si no lo descubren/curan. Sólo en multijugador, opcional.
+* **Expedición con cuota** (Lethal Company): bajar al subsuelo en grupo a juntar lo que pide el
+  pueblo antes de un plazo; botín y peligro crecen con la distancia a la boca.
+
+**Colección (11)**
+* **Bestiario** que se llena al observar/domar: cada especie con su conducta *aprendida* (la IA
+  evolutiva de §6 hace que dos mundos tengan fauna distinta: el bestiario es único).
+* Fauna domada que trabaja (acarrea, cuida la huerta, avisa de infectados) y pelea con vos.
+* Museo del pueblo que se llena con lo que donás (gemas, materias, fósiles del subsuelo).
+
+**Maestría (12)**
+* **Técnicas de Ki** que se aprenden entrenando, no comprando: ráfaga cargada, esquiva corta,
+  teletransporte de unos metros, escudo. Combinables con la química (ráfaga + fuego).
+* **Jefes de mundo**: el alfa de una especie que evolucionó demasiado, el titán de infectados de la
+  horda grande. Con patrón legible y aprendible.
+* Entrenar con gravedad alta en otro planeta (la cámara de gravedad de DBZ) para subir más rápido.
+
+**Ayuda asincrónica (13)**
+* Carteles que deja un jugador y aparecen en el mundo de otros («ojo: horda al norte», «agua acá»),
+  con votos de «útil».
+* La mancha donde murió alguien: tocarla muestra sus últimos 5 segundos (en fantasma).
+* El puente o camino que construye uno aparece, gastado, en el mundo de otros.
+
+**Economía (14)**
+* Mercado entre jugadores; **una receta descubierta es un bien** (venderla o enseñarla).
+* Escasez por planeta/región que hace valer el viaje con Ki (lo que abunda allá falta acá).
+
+**Creación (15)**
+* Planos de casa exportables como texto corto para compartir y construir el de otro.
+* A largo plazo: un planeta propio donde el jugador arma su minijuego con las piezas del juego.
+
+**Refugio (16)**
+* La casa como hogar: mascota que espera en la puerta, ruido de lluvia en el techo, fuego que
+  calienta (ya hay frío, §16), música tranquila adentro, cama que guarda la partida.
+
+**Primera sesión** (lo que hacen bien Roblox, Among Us y Pokémon GO: entrar es gratis y rápido)
+* El primer vuelo de Ki en los primeros 5 minutos: es la promesa del juego y lo que nadie más tiene.
+
+### C. El OASIS, y la línea que no se cruza
+
+El OASIS gana porque es **el lugar donde sos alguien, con gente que te importa, y donde lo que
+hacés queda**. Eso es lo que hay que construir: autonomía, maestría y vínculo de verdad (los tres
+predictores de la teoría de la autodeterminación). Y vale recordar el final de la película:
+Halliday dice que la realidad es lo único real, y Wade cierra el OASIS dos días por semana.
+
+La investigación sobre «patrones oscuros» es clara: retención por ansiedad (rachas que castigan,
+FOMO pagado, cajas de botín, esperas que se cobran) funciona un tiempo y quema a la gente, sobre
+todo a la más vulnerable. **Regla de Ki**: la gente vuelve porque quiere, no porque teme perder algo.
+* Nada de cajas de botín ni nada que se pague por azar.
+* Los rituales premian venir, nunca castigan faltar (no se pierde la racha, no se pudre la casa).
+* Lo único irrepetible (eventos de 9) deja recuerdo y título, no ventaja de poder.
+* El juego avisa la hora real con cariño en sesiones largas (una línea, sin bloquear: regla 9).
+
+### D. Prioridad (impacto ÷ costo, respetando el Redmi)
+
+1. ✅ **Jugo del golpe y de la carga de Ki** — hecho el 3 oct 2026 (`ha-game/src/jugo.rs`). Quien pega
+   cuerpo a cuerpo (`infectados::golpear`, `fauna::interactuar_animal`) manda un `jugo::Golpe` y el módulo
+   responde con parada de golpe (el tiempo virtual a ×0,06 durante 45 ms, 75 ms si mata, tope 120 ms,
+   contado en tiempo REAL), chispas del color del blanco, número de daño que salta (dorado si mata, coma
+   decimal), sonido de impacto en el lugar (`BulletHit`) y sacudida que crece con el daño y satura. Las
+   balas no paran el tiempo (una ráfaga tartamudearía). La carga de Ki en tierra levanta polvo y
+   piedritas de los pies (6 → 30 por segundo según la carga), tiembla cada vez más y el aura se prende
+   con la carga (`light2d::ki_aura`); al despegar, anillo de polvo y sacudida. Cupo: 48 partículas vivas
+   del módulo en total. Tests: `jugo::tests`. Sin probar en el celu todavía.
+2. ✅ **Vecinos que recuerdan + rumor del pueblo** (3 oct 2026, primera parte; falta la hoja diaria de
+   titulares). `barrio::el_barrio_te_ve`: cada infectado que matás con vecinos a ≤25 celdas queda en
+   `Lecciones::por_vos` de SU pueblo (`barrio.json`, `#[serde(default)]`), en la historia de cada testigo,
+   en la fama de su familia (+0,04, tope 0,6), en el rastro causal (`testigos`) y un testigo lo festeja
+   (1.º, 5.º y cada 10.º). Al abrir el menú de un vecino (`te_reconocen`, una vez por vecino) te
+   reconoce; PREGUNTAR suma «vos solo acabaste con N acá» a las noticias y **el último hecho de la
+   crónica de su pueblo** (`SaberNpc::rumor`). Tests: `barrio::tests::el_barrio_te_recuerda_…`.
+3. **Técnicas de Ki + aura personal** — la identidad del juego; nadie más la tiene.
+4. **Torneo de las Artes Marciales** — evento recurrente con rivales, público y premio.
+5. **Fuego que se propaga** (química al mundo, reusa `materia.rs`).
+6. **Fauna domada que trabaja + bestiario**.
+7. **Festivales + alijo del día**.
+8. **Carteles y fantasmas asincrónicos** (necesita el servidor, no el mundo compartido).
+9. **Jefes de mundo + expedición con cuota**.
+10. **Mundo compartido persistente + clanes** — el más caro y el que más acerca al OASIS; arrancar
+    el diseño de red apenas 1-3 estén.
+
+Cada una, cuando se tome: costo medido, cupo por frame, verdad en un solo lugar, consola de texto,
+prueba multi-semilla (§2) y arte del pack o dibujado con la skill `pixel-art` antes de que cueste.
+
+**Fuentes**: [Minecraft/Roblox/Fortnite](https://thenextweb.com/news/minecraft-roblox-popularity-surge-fortnite) ·
+[comparación de los tres](https://blog.usro.net/2025/05/roblox-vs-fortnite-vs-minecraft-full-comparison/) ·
+[juegos cozy](https://soulbound.game/blog/20-games-like-stardew-valley-for-cozy-farming-adventures/) ·
+[Among Us](https://sowhatgaming.substack.com/p/can-among-us-be-more-than-a-party) ·
+[Lethal Company](https://gamedevreports.substack.com/p/editorial-lethal-company-the-indie) ·
+[virales](https://www.denofgeek.com/tv/15-games-that-took-over-the-internet-overnight/) ·
+[psicología de mundos virtuales (Stanford)](https://cs.stanford.edu/people/eroberts/cs181/projects/virtual-worlds/psychology.html) ·
+[RimWorld y Dwarf Fortress](https://gamedeveloper.com/design/how-i-rimworld-i-fleshes-out-the-i-dwarf-fortress-i-formula) ·
+[EVE Online](https://mezha.ua/en/articles/istoriya-ta-osoblivosti-gri-eve-online-312793/) ·
+[NoPixel](https://shockbyte.com/blog/what-is-nopixel-v) ·
+[multijugador ambiental](https://www.theringer.com/2024/06/21/video-games/ambient-multiplayer-video-games-elden-ring-dragons-dogma-journey) ·
+[autodeterminación (Rochester)](https://www.rochester.edu/warner/lida/wp-content/uploads/2022/11/02bfe513dd59366750000000.pdf) ·
+[Quantic Foundry](https://quanticfoundry.com/) ·
+[Zelda BotW](https://en.wikipedia.org/wiki/The_Legend_of_Zelda:_Breath_of_the_Wild) ·
+[química de BotW](https://gamesbeat.com/the-legend-of-zelda-breath-of-the-wild-makes-chemistry-just-as-important-as-physics/) ·
+[espacios sociales](https://mastersofmedia.hum.uva.nl/2019/10/the-game-of-life-a-case-study-of-video-games-as-social-platforms) ·
+[concierto de Fortnite](https://videogameschronicle.com/news/fortnites-latest-live-event-attracted-a-record-12-million-players) ·
+[Valheim](https://gameinformer.com/2021/02/15/what-is-valheim-and-why-is-everyone-playing-it) ·
+[Vampire Survivors](https://jmduke.com/posts/vampire-survivors.html) ·
+[Wordle](https://www.newswise.com/articles/the-word-on-wordle) ·
+[patrones oscuros](https://deceptive.design/articles/level-up-or-game-over-exploring-how-dark-patterns-shape-mobile-games).

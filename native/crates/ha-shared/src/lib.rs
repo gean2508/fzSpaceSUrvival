@@ -4,6 +4,7 @@
 pub mod assets;
 pub mod blocks;
 pub mod catalog_parity;
+pub mod tienda;
 pub mod celestial_bodies;
 pub mod classes;
 pub mod constants;

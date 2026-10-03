@@ -25242,6 +25242,9 @@
   "items/limestone": {
    "label": "Caliza"
   },
+  "items/mapa_tesoro": {
+   "label": "Mapa del tesoro"
+  },
   "items/mat_aglutinante": {
    "label": "Aglutinante"
   },
@@ -29350,6 +29353,15 @@
   },
   "player/astronaut": {
    "label": "Jugador con traje espacial"
+  },
+  "player/en_mano": {
+   "label": "Lo que el jugador come o bebe"
+  },
+  "player/libro": {
+   "label": "Libro en la mano del jugador"
+  },
+  "player/ondas": {
+   "label": "Ondas del jugador al nadar"
   },
   "prop/aire_acondicionado_modulo_1": {
    "label": "Aire acondicionado"
@@ -207460,6 +207472,19 @@
     "w": 1
    }
   },
+  "items/mapa_tesoro": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/restantes.png",
+   "rect": {
+    "col": 27,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
   "items/mat_aglutinante": {
    "grid": [
     32,
@@ -238216,6 +238241,103 @@
     64
    ],
    "png": "art/player/character.png",
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "player/en_mano": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/gen/jugador/en_mano.png",
+   "poses": {
+    "beber": {
+     "anim": {
+      "fps": 8.0,
+      "frames": 12
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 1,
+      "w": 1
+     }
+    },
+    "comer": {
+     "anim": {
+      "fps": 8.0,
+      "frames": 12
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 0,
+      "w": 1
+     }
+    }
+   },
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "player/libro": {
+   "grid": [
+    32,
+    64
+   ],
+   "png": "art/pack/jugador_libro.png",
+   "poses": {
+    "leer": {
+     "anim": {
+      "fps": 6.0,
+      "frames": 12
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 0,
+      "w": 1
+     }
+    }
+   },
+   "rect": {
+    "col": 0,
+    "h": 1,
+    "row": 0,
+    "w": 1
+   }
+  },
+  "player/ondas": {
+   "grid": [
+    48,
+    16
+   ],
+   "png": "art/gen/jugador/ondas.png",
+   "poses": {
+    "nadar": {
+     "anim": {
+      "fps": 6.0,
+      "frames": 4
+     },
+     "dir": "Right",
+     "rect": {
+      "col": 0,
+      "h": 1,
+      "row": 0,
+      "w": 1
+     }
+    }
+   },
    "rect": {
     "col": 0,
     "h": 1,
@@ -276741,12 +276863,12 @@
     32,
     32
    ],
-   "png": "art/gen/mundo2.png",
+   "png": "art/gen/taxi.png",
    "rect": {
-    "col": 10,
-    "h": 1,
+    "col": 0,
     "row": 0,
-    "w": 1
+    "w": 3,
+    "h": 4
    }
   },
   "vehicle/telefono_publico_1": {

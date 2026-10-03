@@ -287,6 +287,18 @@ impl Plugin for AutoDrivePlugin {
         // teletransporta a nadie) y que el afuera se apaga en GRADIENTE, no de
         // golpe. HA_CUEVATEST=1.
         // **¿Se deja tocar todo?** HA_PROPTEST=1 — ver `prop_test_drive`.
+        // **Sentarse y dormir en muebles.** HA_DESCANSOTEST=1 — ver `descanso_test_drive`.
+        if crate::flags::var("HA_DESCANSOTEST").is_ok() {
+            app.init_resource::<DescansoTestState>();
+            app.add_systems(Update, descanso_test_drive.before(crate::descanso::DescansoSet));
+            return;
+        }
+        // **Cada pose del jugador, fotografiada.** HA_POSETEST=1 — ver `pose_test_drive`.
+        if crate::flags::var("HA_POSETEST").is_ok() {
+            app.init_resource::<PoseTestState>();
+            app.add_systems(Update, pose_test_drive.before(crate::sim::FacePlayerSet));
+            return;
+        }
         // **La granja entera, de punta a punta.** HA_GRANJATEST=1 — ver
         // `granja_test_drive`.
         if crate::flags::var("HA_GRANJATEST").is_ok() {
@@ -7424,5 +7436,298 @@ fn volcar_sprites_cerca(world: &mut World, r: f32) {
             .map(|i| i.name().to_string().rsplit("::").next().unwrap_or("").to_string())
             .collect();
         eprintln!("ha-sprite: ({:.1},{:.1}) {:?} col ({:.2},{:.2},{:.2}) [{}]", t.x, -t.y, c, col.red, col.green, col.blue, nombres.join(","));
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_POSETEST — cada cosa que hace el jugador, con su animación
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct PoseTestState {
+    paso: usize,
+    desde: f32,
+    fotos: u8,
+}
+
+/// **El driver de las poses** (`pose_jugador.rs`). Con el jugador quieto, pide cada acción por la
+/// MISMA puerta que usan los sistemas del juego (`AccionJugador::hacer`) y adelanta el reloj del
+/// reposo para ver el celular, el libro y el piso. Dos capturas por pose, a 0,35 s y a 0,95 s: si
+/// salen iguales, la pose no está animando. Capturas en `HA_SHOTDIR` (`pose-<nombre>-<n>.png`).
+fn pose_test_drive(world: &mut World) {
+    use crate::pose_jugador::{AccionJugador, Reposo, COMER_S, REPOSO_ENTRETENERSE_S, REPOSO_SENTARSE_S};
+    // (nombre, acción, segundos quieto, turno del reposo)
+    const PASOS: &[(&str, Option<&str>, f32, u32)] = &[
+        ("respirar", None, 0.0, 0),
+        ("comer", Some("comer"), 0.0, 0),
+        ("beber", Some("beber"), 0.0, 0),
+        ("golpe", Some("hit"), 0.0, 0),
+        ("puno", Some("punch"), 0.0, 0),
+        ("juntar", Some("pick_up"), 0.0, 0),
+        ("levantar", Some("lift"), 0.0, 0),
+        ("disparo", Some("shoot"), 0.0, 0),
+        ("dano", Some("hurt"), 0.0, 0),
+        ("celular", None, REPOSO_ENTRETENERSE_S + 1.0, 0),
+        ("libro", None, REPOSO_ENTRETENERSE_S + 1.0, 1),
+        ("piso", None, REPOSO_SENTARSE_S + 1.0, 0),
+        // Mirando al OESTE: si el espejo se aplicara dos veces (escala −1 + pose `_left`) se vería al este.
+        ("oeste", None, 0.0, 0),
+        ("puno-oeste", Some("punch"), 0.0, 0),
+    ];
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 || !player_ready(world) {
+        return;
+    }
+    let (paso, desde, fotos) = {
+        let st = world.resource::<PoseTestState>();
+        (st.paso, st.desde, st.fotos)
+    };
+    let Some(&(nombre, accion, quieto, turno)) = PASOS.get(paso) else {
+        eprintln!("ha-posetest: OK {} poses", PASOS.len());
+        std::process::exit(0);
+    };
+    if desde == 0.0 {
+        world.resource_mut::<PoseTestState>().desde = now;
+        return;
+    }
+    let t = now - desde;
+    let oeste = nombre.ends_with("oeste");
+    {
+        let mut q = world.query_filtered::<&mut crate::sim::SimState, With<Player>>();
+        if let Ok(mut sim) = q.get_single_mut(world) {
+            sim.body.rot = if oeste { std::f32::consts::PI } else { 0.0 };
+        }
+    }
+    // Se sostiene la pose todo el paso: la acción se renueva, el reposo se fija.
+    if let Some(v) = accion {
+        let mut a = world.resource_mut::<AccionJugador>();
+        if oeste {
+            a.hacer_hacia(v, COMER_S, Vec2::ZERO, Vec2::new(-1.0, 0.0));
+        } else {
+            a.hacer(v, COMER_S);
+        }
+    }
+    {
+        let mut r = world.resource_mut::<Reposo>();
+        r.quieto_s = quieto + t;
+        r.turno = turno;
+    }
+    let momentos = [0.35f32, 0.95];
+    if (fotos as usize) < momentos.len() && t >= momentos[fotos as usize] {
+        {
+            let mut q = world.query_filtered::<(&crate::sim::CurrentPose, &Transform, &SimState), With<Player>>();
+            if let Ok((pose, tf, sim)) = q.get_single(world) {
+                eprintln!(
+                    "ha-posetest: {nombre} pose={} escala_x={} rot={:.2}",
+                    pose.nombre(),
+                    tf.scale.x,
+                    sim.body.rot
+                );
+            }
+        }
+        shot(world, &format!("{}/pose-{nombre}-{fotos}.png", flytest_dir()));
+        world.resource_mut::<PoseTestState>().fotos += 1;
+    }
+    if t >= 1.4 {
+        let mut st = world.resource_mut::<PoseTestState>();
+        st.paso += 1;
+        st.desde = 0.0;
+        st.fotos = 0;
+        *world.resource_mut::<AccionJugador>() = AccionJugador::default();
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_DESCANSOTEST — sentarse y dormir en muebles (descanso.rs)
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct DescansoTestState {
+    paso: u32,
+    desde: f32,
+    mueble: Option<Entity>,
+    hp0: f32,
+    fotos: u8,
+}
+
+/// **El driver del descanso.** Planta una cama y una silla a un paso del jugador (con el arte real del
+/// catálogo y los MISMOS componentes que les pone el sembrado), las "toca" por la puerta del juego
+/// (`LookTarget` + `HoldInteractState::tapped`) y comprueba: pose (`sleep`/`sit`), que el cuerpo queda sobre
+/// el mueble, que se ordena encima de él, que cura, y que lejos del mueble no hace nada.
+/// Capturas en `HA_SHOTDIR` (`descanso-cama-N.png`, `descanso-silla-N.png`).
+fn descanso_test_drive(world: &mut World) {
+    use crate::descanso::{Descanso, MuebleDeUso};
+    use ha_shared::InteractTargetKind;
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 || !player_ready(world) {
+        return;
+    }
+    let paso = world.resource::<DescansoTestState>().paso;
+    let desde = world.resource::<DescansoTestState>().desde;
+    let (px, pz, hp) = {
+        let mut q = world.query_filtered::<&SimState, With<Player>>();
+        let sim = q.single(world);
+        (sim.body.x, sim.body.z, sim.hp)
+    };
+    let falla = |w: &mut World, que: &str| {
+        report_bug("descanso", que, "");
+        eprintln!("ha-descansotest: FALLA {que}");
+        std::process::exit(1);
+    };
+    match paso {
+        // 0 — plantar la cama (1,6 m al este) y tocarla desde lejos... no: desde cerca.
+        0 => {
+            let (key, size) = ("furniture/cama", Vec2::new(2.0, 3.0));
+            let art = world.resource::<crate::art2d::ArtLibrary>();
+            let Some((sprite, _)) = art.world_sprite(key, size) else { return falla(world, "no hay arte para la cama") };
+            let (cx, pie) = (px + 2.2, pz + 1.6);
+            let r = crate::world2d::render_xy(cx, pie);
+            let mueble = MuebleDeUso::nuevo(key, cx, pie, size.y).expect("la cama tiene que ser mueble de uso");
+            let e = world
+                .spawn((
+                    sprite,
+                    Transform::from_xyz(r.x, r.y + size.y * 0.5 - 0.5, crate::layers::depth(None, pie)),
+                    mueble,
+                    crate::targeting::InteractTarget { kind: InteractTargetKind::Prop, id: 777 },
+                ))
+                .id();
+            let mut st = world.resource_mut::<DescansoTestState>();
+            st.mueble = Some(e);
+            st.hp0 = hp;
+            st.paso = 1;
+            st.desde = now;
+        }
+        // 1 — esperar un instante y tocar la cama
+        1 if now - desde > 0.6 => {
+            let Some(e) = world.resource::<DescansoTestState>().mueble else { return };
+            {
+                let mut q = world.query_filtered::<&mut SimState, With<Player>>();
+                q.single_mut(world).hp = 50.0;
+            }
+            {
+                let mut t = world.resource_mut::<LookTarget>();
+                t.entity = Some(e);
+                t.kind = Some(InteractTargetKind::Prop);
+                t.locked = true;
+            }
+            world.resource_mut::<HoldInteractState>().tapped = true;
+            let mut st = world.resource_mut::<DescansoTestState>();
+            st.paso = 2;
+            st.desde = now;
+            st.fotos = 0;
+        }
+        // 2 — acostado: pose, posición, orden y cura; dos capturas
+        2 => {
+            let t = now - desde;
+            let d = world.resource::<Descanso>();
+            let (pose, orden) = (d.pose(), d.orden_z());
+            if t > 0.3 && pose != Some("sleep") {
+                return falla(world, "tocar la cama no la acuesta");
+            }
+            if t > 0.3 {
+                let mueble_pie = {
+                    let e = world.resource::<DescansoTestState>().mueble.unwrap();
+                    world.get::<MuebleDeUso>(e).unwrap().pie
+                };
+                if orden != Some(mueble_pie) {
+                    return falla(world, "acostado no se ordena como la cama");
+                }
+                if (px - (world.resource::<DescansoTestState>().mueble.and_then(|e| world.get::<MuebleDeUso>(e)).unwrap().x)).abs() > 0.05 {
+                    return falla(world, "el cuerpo no quedó sobre la cama");
+                }
+            }
+            let fotos = world.resource::<DescansoTestState>().fotos;
+            if (fotos == 0 && t > 1.0) || (fotos == 1 && t > 1.6) {
+                shot(world, &format!("{}/descanso-cama-{fotos}.png", flytest_dir()));
+                world.resource_mut::<DescansoTestState>().fotos += 1;
+            }
+            if t > 2.0 {
+                let hp0 = world.resource::<DescansoTestState>().hp0;
+                let _ = hp0;
+                if hp < 50.0 + crate::descanso::CURA_DORMIDO {
+                    return falla(world, "dormir no cura");
+                }
+                world.resource_mut::<Descanso>().levantar();
+                world.resource_mut::<HoldInteractState>().tapped = false;
+                let mut st = world.resource_mut::<DescansoTestState>();
+                st.paso = 3;
+                st.desde = now;
+            }
+        }
+        // 3 — plantar la silla y tocarla
+        3 if now - desde > 0.4 => {
+            let (key, size) = ("furniture/silla", Vec2::new(1.0, 1.5));
+            let art = world.resource::<crate::art2d::ArtLibrary>();
+            let Some((sprite, _)) = art.world_sprite(key, size) else { return falla(world, "no hay arte para la silla") };
+            let (cx, pie) = (px - 1.8, pz + 0.9);
+            let r = crate::world2d::render_xy(cx, pie);
+            let mueble = MuebleDeUso::nuevo(key, cx, pie, size.y).expect("la silla tiene que ser mueble de uso");
+            let e = world
+                .spawn((
+                    sprite,
+                    Transform::from_xyz(r.x, r.y + size.y * 0.5 - 0.5, crate::layers::depth(None, pie)),
+                    mueble,
+                    crate::targeting::InteractTarget { kind: InteractTargetKind::Prop, id: 778 },
+                ))
+                .id();
+            {
+                let mut t = world.resource_mut::<LookTarget>();
+                t.entity = Some(e);
+                t.kind = Some(InteractTargetKind::Prop);
+                t.locked = true;
+            }
+            world.resource_mut::<HoldInteractState>().tapped = true;
+            let mut st = world.resource_mut::<DescansoTestState>();
+            st.mueble = Some(e);
+            st.paso = 4;
+            st.desde = now;
+            st.fotos = 0;
+        }
+        // 4 — sentado: pose y capturas
+        4 => {
+            let t = now - desde;
+            if t > 0.3 && world.resource::<Descanso>().pose() != Some("sit") {
+                return falla(world, "tocar la silla no te sienta");
+            }
+            let fotos = world.resource::<DescansoTestState>().fotos;
+            if (fotos == 0 && t > 4.0) || (fotos == 1 && t > 4.8) {
+                let mut q = world.query_filtered::<(&Transform, &crate::sim::CurrentPose, &Sprite), With<Player>>();
+                if let Ok((tf, pose, sp)) = q.get_single(world) {
+                    let silla = world.resource::<DescansoTestState>().mueble.and_then(|e| world.get::<Transform>(e)).map(|t| t.translation);
+                    eprintln!(
+                        "ha-descansotest: silla jugador={:?} z={:.5} silla={:?} pose={} flip={}",
+                        tf.translation.truncate(),
+                        tf.translation.z,
+                        silla.map(|v| (v.x, v.y, v.z)),
+                        pose.nombre(),
+                        sp.flip_x
+                    );
+                }
+                shot(world, &format!("{}/descanso-silla-{fotos}.png", flytest_dir()));
+                world.resource_mut::<DescansoTestState>().fotos += 1;
+            }
+            if t > 5.4 {
+                // Lejos del mueble no hace nada: se corre al jugador y se vuelve a tocar.
+                world.resource_mut::<Descanso>().levantar();
+                {
+                    let mut q = world.query_filtered::<&mut SimState, With<Player>>();
+                    q.single_mut(world).body.x += 30.0;
+                }
+                world.resource_mut::<HoldInteractState>().tapped = true;
+                let mut st = world.resource_mut::<DescansoTestState>();
+                st.paso = 5;
+                st.desde = now;
+            }
+        }
+        5 if now - desde > 0.3 => {
+            if world.resource::<Descanso>().descansando() {
+                return falla(world, "se sentó estando a 30 m de la silla");
+            }
+            eprintln!("ha-descansotest: OK cama + silla + lejos");
+            std::process::exit(0);
+        }
+        _ => {}
     }
 }

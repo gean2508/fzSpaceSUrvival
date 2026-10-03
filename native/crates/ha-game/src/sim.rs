@@ -79,7 +79,7 @@ impl Plugin for SimPlugin {
             .insert_resource(WorldCollision(collision_obstacles(&world)))
             .add_systems(Startup, configure_game_clock)
             .add_systems(FixedUpdate, tick_sim)
-            .add_systems(Update, (interpolate_player_visual, face_player_sprite));
+            .add_systems(Update, (interpolate_player_visual, face_player_sprite.in_set(FacePlayerSet)));
     }
 }
 
@@ -230,6 +230,7 @@ fn interpolate_player_visual(
     zoom: Res<crate::camera::CameraZoom>,
     bob: Res<crate::vault::VaultBob>,
     subida: Res<crate::escaleras::Subida>,
+    descanso: Res<crate::descanso::Descanso>,
     mut query: Query<(&PlayerVisual, &mut Transform, &mut Visibility), With<Player>>,
 ) {
     // Volando: el personaje NUNCA cambia de sitio (marco único — `universe.rs`),
@@ -305,11 +306,19 @@ fn interpolate_player_visual(
         // cancela EXACTAMENTE el que da el mundo. Por eso subir se ve continuo
         // sin necesidad de fundir nada (`escaleras.rs`).
         transform.translation =
-            Vec3::new(r.x, r.y + bob.y + subida.y, sort_z(z) + crate::layers::HAIR);
-        // Facing: flip horizontally when moving west (left half of the circle).
-        let facing_left = visual.to_rot.abs() > std::f32::consts::FRAC_PI_2;
+            Vec3::new(
+                r.x,
+                r.y + bob.y + subida.y - descanso.bajar_m(),
+                // Acostado/sentado en un mueble se ordena como EL MUEBLE (+ un pelo): si no, el
+                // respaldo o la cama (cuyo pie está más al sur) te taparían entero.
+                sort_z(descanso.orden_z().unwrap_or(z)) + crate::layers::HAIR,
+            );
+        // SIN espejo por escala. La dirección la dibuja la POSE (`walk_left` ya mira al oeste) y, si una
+        // hoja sólo trae un lado, `face_player_sprite` espeja con `flip_x`. Acá había además un
+        // `scale.x = -1` al ir al oeste: los dos espejos se cancelaban y el jugador caminaba al oeste
+        // MIRANDO AL ESTE (lo cazó `HA_POSETEST` el 3 oct 2026: `idle_left` con escala −1).
         transform.rotation = Quat::IDENTITY;
-        transform.scale = Vec3::new(if facing_left { -1.0 } else { 1.0 }, 1.0, 1.0);
+        transform.scale = Vec3::ONE;
     }
 }
 
@@ -328,6 +337,10 @@ pub(crate) fn escala_en_vuelo(de_altura: f32, live: f32, screen_f: f32) -> f32 {
     por_altura.min(tope)
 }
 
+/// Donde se elige la pose del jugador: `pose_jugador` decide antes.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FacePlayerSet;
+
 /// Clave del slot de arte del jugador (coincide con `art/player/character.png`
 /// hardcodeado en `spawn_player` — el editor escribe sus poses ahí mismo).
 const PLAYER_ART_KEY: &str = "player/character";
@@ -336,6 +349,14 @@ const PLAYER_ART_KEY: &str = "player/character";
 /// no cambió). Vacía en el spawn.
 #[derive(Component, Default)]
 pub struct CurrentPose(String);
+
+
+impl CurrentPose {
+    /// `"<pose>#<flip>"` de la última pose aplicada (lo leen los drivers de QA).
+    pub fn nombre(&self) -> &str {
+        &self.0
+    }
+}
 
 fn pose_direction(to_rot: f32) -> &'static str {
     let (dx, dz) = (to_rot.cos(), to_rot.sin());
@@ -379,9 +400,13 @@ fn pose_directions(to_rot: f32) -> [&'static str; 2] {
 /// las usa (con mirror left↔right si sólo se sliceó un lado). Si no hay poses
 /// definidas, cae al atlas LimeZu de 3 frames hardcodeado (row-0: 0=down,
 /// 1=up, 2=side+flip) — comportamiento previo intacto.
-fn face_player_sprite(
+pub(crate) fn face_player_sprite(
     art: Res<crate::art2d::ArtLibrary>,
     mut commands: Commands,
+    accion: Res<crate::pose_jugador::AccionJugador>,
+    reposo: Res<crate::pose_jugador::Reposo>,
+    descanso: Res<crate::descanso::Descanso>,
+    equipped: Res<crate::input::EquippedItem>,
     mut query: Query<(Entity, &PlayerVisual, &mut Sprite, &mut CurrentPose), With<Player>>,
 ) {
     let use_poses = art.has_poses(PLAYER_ART_KEY);
@@ -404,21 +429,25 @@ fn face_player_sprite(
         }
 
         let moving = (visual.to_x - visual.from_x).abs() > 1e-4 || (visual.to_z - visual.from_z).abs() > 1e-4;
-        // Nadando manda la pose de natación, se mueva o no (flotar es una pose).
-        // Si el pack no trae `swim_*`, la cadena de fallback de abajo cae sola a
-        // `walk_*`/`idle_*` y el personaje nunca se queda sin sprite.
-        let verb = if visual.swimming {
-            "swim"
-        } else if moving {
-            "walk"
-        } else {
-            "idle"
-        };
-        let [diag, card] = pose_directions(visual.to_rot);
+        // QUÉ hace lo decide `pose_jugador` (acción > caminar > arma > reposo; el agua manda sobre
+        // todo). Acá sólo se le pone la dirección. Una acción con blanco (talar, pegarle a un
+        // infectado) mira al blanco aunque el último paso haya sido hacia otro lado.
+        let en_curso = accion.actual();
+        let verb = crate::pose_jugador::verbo_del_cuerpo(
+            visual.swimming,
+            moving,
+            en_curso.map(|(v, _)| v),
+            crate::armas::es_arma(&equipped.item_id),
+            reposo.pose(),
+            descanso.pose(),
+        );
+        let rumbo = en_curso.and_then(|(_, r)| r).unwrap_or(visual.to_rot);
+        let [diag, card] = pose_directions(rumbo);
 
         // Orden de preferencia: diagonal → cardinal → mismo verbo espejado →
-        // idle en esa dirección → idle_down. Lo que el usuario sliceó manda; lo
-        // que no sliceó nunca deja al personaje sin sprite.
+        // el mismo verbo de frente (las filas de UNA dirección del pack: celular,
+        // leer, dormir) → idle en esa dirección → idle_down. Nunca deja al
+        // personaje sin sprite.
         let mut flip = false;
         let mut wanted = format!("{verb}_{diag}");
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
@@ -440,6 +469,9 @@ fn face_player_sprite(
             }
         }
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
+            wanted = format!("{verb}_down");
+        }
+        if !art.has_pose(PLAYER_ART_KEY, &wanted) {
             wanted = format!("idle_{card}");
         }
         if !art.has_pose(PLAYER_ART_KEY, &wanted) {
@@ -452,6 +484,15 @@ fn face_player_sprite(
         }
         current.0 = state_key;
         sprite.flip_x = flip;
+        // Nadando, la pose es el cuerpo cortado en la cintura (`art2d`: celda de 32x40): el quad se
+        // achica en la misma proporción para no estirarlo, y el personaje queda hundido hasta la
+        // cintura con las ondas (`pose_jugador::OndasNado`) en el borde del corte.
+        let t = crate::scene::TAMANO_JUGADOR;
+        sprite.custom_size = Some(if wanted.starts_with("swim") {
+            Vec2::new(t.x, t.y * crate::pose_jugador::NADO_ALTO_PX as f32 / 64.0)
+        } else {
+            t
+        });
 
         // Personaje armado con VARIAS hojas (un PNG por dirección/estado): la
         // pose trae su propia imagen. Con una sola hoja esto devuelve la misma
