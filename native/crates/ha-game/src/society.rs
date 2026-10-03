@@ -98,6 +98,25 @@ pub(crate) fn skin_de(uid: u64, edad: f32, padre: u64, madre: u64) -> String {
         format!("npc/char_{}", (uid % NUM_SKINS) + 1)
     }
 }
+/// Índice (0..NUM_SKINS) de la hoja ADULTA del aldeano en `npc_looks`, o `None` si es un niño (hoja infantil).
+pub(crate) fn skin_n(n: &Npc) -> Option<usize> {
+    if matches!(linaje::etapa(n.age, n.padre != 0 || n.madre != 0), linaje::Etapa::Nino) {
+        None
+    } else {
+        Some((n.uid % NUM_SKINS) as usize)
+    }
+}
+
+/// **La herramienta que lleva cada oficio** (`items/<id>`): se ve en su mano (`manos.rs`).
+pub(crate) fn herramienta_de(role: Role) -> &'static str {
+    match role {
+        Role::Wanderer => "",
+        Role::Farmer => "bucket",
+        Role::Miner => "pickaxe",
+        Role::Builder => "hammer",
+    }
+}
+
 /// Tamaño en mundo del aldeano: el MISMO que el jugador (`scene.rs`), porque
 /// ahora comparten hoja y frame (16×32 = 1:2). Un humano de ~1,9 m.
 const NPC_SIZE: Vec2 = Vec2::new(0.95, 1.9);
@@ -506,6 +525,13 @@ pub(crate) fn forzar_constructor(world: &mut World) {
 pub(crate) struct NpcPose {
     pedida: String,
     aplicada: String,
+}
+
+impl NpcPose {
+    /// El estado de render aplicado (`"walk_right#false"`), para pegarle el objeto a la mano.
+    pub(crate) fn aplicada(&self) -> &str {
+        &self.aplicada
+    }
 }
 
 /// La luz encendida de una casa donde hay alguien despierto de noche.

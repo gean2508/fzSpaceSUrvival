@@ -344,6 +344,7 @@ const PLAYER_ART_KEY: &str = "player/character";
 #[derive(Component, Default)]
 pub struct CurrentPose(String);
 
+
 impl CurrentPose {
     /// `"<pose>#<flip>"` de la última pose aplicada (lo leen los drivers de QA).
     pub fn nombre(&self) -> &str {
@@ -393,7 +394,7 @@ fn pose_directions(to_rot: f32) -> [&'static str; 2] {
 /// las usa (con mirror left↔right si sólo se sliceó un lado). Si no hay poses
 /// definidas, cae al atlas LimeZu de 3 frames hardcodeado (row-0: 0=down,
 /// 1=up, 2=side+flip) — comportamiento previo intacto.
-fn face_player_sprite(
+pub(crate) fn face_player_sprite(
     art: Res<crate::art2d::ArtLibrary>,
     mut commands: Commands,
     accion: Res<crate::pose_jugador::AccionJugador>,

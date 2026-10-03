@@ -1,58 +1,40 @@
 //! El ítem equipado, EN LA MANO del personaje (biblia: la hotbar no es sólo un
 //! menú — lo que seleccionás se ve).
 //!
-//! Un único hijo del jugador ([`HeldItemVisual`]) lleva el sprite del ítem
-//! seleccionado en la hotbar. Se coloca según hacia dónde mira el personaje
-//! (delante en down/left/right, detrás en up) y, si el ítem emite luz (antorcha,
-//! linterna), se le cuelga un [`Light2d`] real: ilumina el mundo, agujerea el
-//! velo de noche y tiñe los sprites cercanos como cualquier otra antorcha.
+//! Desde el 3 oct 2026 el objeto no flota al costado: lo AGARRA la mano que dibuja la hoja
+//! (`manos.rs`: punto de agarre medido por objeto, mano medida por cuadro, y los dedos encima).
+//! Acá sólo se decide QUÉ lleva el jugador (`Sostiene`) y, si el ítem emite luz (antorcha,
+//! linterna), qué `Light2d` real se le cuelga: ilumina el mundo, agujerea el velo de noche y tiñe
+//! los sprites cercanos como cualquier otra antorcha.
 //!
-//! El visual se re-crea (despawn + spawn) sólo cuando cambia el ítem equipado:
-//! así el `Light2d` y sus quads de halo nacen y mueren juntos (quitar el
-//! componente dejaría los quads huérfanos encendidos).
+//! **La ropa NO se lleva en la mano**: una prenda se viste (`equipo.rs`) y reemplaza la ropa que
+//! trae el personaje; seleccionarla en la hotbar no dibuja nada en la mano.
+//!
+//! El objeto se re-crea (despawn + spawn) sólo cuando cambia el ítem o el interruptor de la luz:
+//! así el `Light2d` y sus quads de halo nacen y mueren juntos (quitar el componente dejaría
+//! los quads huérfanos encendidos).
 
 use bevy::prelude::*;
 
-use crate::art2d::ArtLibrary;
-use crate::hud::item_icons::ItemIconCache;
 use crate::input::EquippedItem;
 use crate::light2d::Light2d;
-use crate::sim::{Player, PlayerVisual};
+use crate::manos::Sostiene;
+use crate::sim::Player;
 use crate::sky2d::PlayerLanternControl;
-
-/// Tamaño del ítem en la mano (metros). El personaje mide 1.9 m.
-const HELD_SIZE: f32 = 0.62;
 
 pub struct HeldItemPlugin;
 
 impl Plugin for HeldItemPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<HeldItemVisualState>().add_systems(
+        app.add_systems(
             Update,
             (
-                sync_held_item_visual,
-                place_held_item_in_hand.after(sync_held_item_visual),
-                sync_light_item_equipped.before(sync_held_item_visual),
+                sync_light_item_equipped.before(sync_held_item),
+                sync_held_item,
+                herramienta_de_aldeanos,
             ),
         );
     }
-}
-
-/// Sprite del ítem que el personaje sostiene (hijo del jugador).
-#[derive(Component)]
-pub struct HeldItemVisual;
-
-/// Qué ítem está representado ahora mismo — evita re-crear el visual por frame.
-#[derive(Resource, Default)]
-struct HeldItemVisualState {
-    item_id: String,
-    /// El visual existe; si el jugador se despawnea (cambio de escena) hay que
-    /// volver a crearlo aunque el ítem no haya cambiado.
-    spawned: bool,
-    /// Estado del interruptor LAMP con el que se construyó el visual: apagar la
-    /// antorcha re-crea la entidad SIN `Light2d` (quitar el componente dejaría
-    /// los quads de halo huérfanos, encendidos para siempre).
-    lit: bool,
 }
 
 /// Luz que emite un ítem al llevarlo en la mano. `None` = no ilumina.
@@ -101,14 +83,13 @@ pub fn item_light(item_id: &str) -> Option<Light2d> {
     }
 }
 
-/// ¿El ítem se muestra en la mano? "hand" (puño) y los materiales sueltos
-/// (madera, piedra…) no: sólo herramientas, armas, luces y colocables.
+/// ¿El ítem se muestra en la mano? "hand" (puño), los materiales sueltos (madera, piedra…) y la ROPA no:
+/// sólo herramientas, armas, luces y colocables. La ropa se viste, no se empuña.
 fn shows_in_hand(item_id: &str) -> bool {
     if item_id.is_empty() || item_id == "hand" {
         return false;
     }
-    // Las armas de fuego las dibuja `armas.rs`: giran hacia donde apuntás.
-    if crate::armas::es_arma(item_id) {
+    if ha_shared::armadura::prenda(item_id).is_some() {
         return false;
     }
     true
@@ -132,94 +113,41 @@ fn sync_light_item_equipped(
     ctrl.lit = emits;
 }
 
-fn sync_held_item_visual(
+/// Lo que sostiene el jugador: el ítem seleccionado (si se empuña) y la piel de sus manos.
+fn sync_held_item(
     mut commands: Commands,
     equipped: Res<EquippedItem>,
-    art: Res<ArtLibrary>,
-    mut icons: ResMut<ItemIconCache>,
-    mut images: ResMut<Assets<Image>>,
-    mut state: ResMut<HeldItemVisualState>,
     lantern: Res<PlayerLanternControl>,
-    player: Query<Entity, With<Player>>,
-    existing: Query<Entity, With<HeldItemVisual>>,
+    selected: Res<crate::game_phase::SelectedCharacter>,
+    player: Query<(Entity, Option<&Sostiene>), With<Player>>,
 ) {
-    let Ok(player_e) = player.get_single() else {
-        state.spawned = false;
-        return;
+    let Ok((e, actual)) = player.get_single() else { return };
+    let want = if shows_in_hand(&equipped.item_id) { equipped.item_id.as_str() } else { "" };
+    let nuevo = Sostiene {
+        item: want.to_string(),
+        piel: selected.look.map(|l| l.body),
+        // Apagar la antorcha re-crea el objeto SIN `Light2d`.
+        luz: lantern.lit,
     };
-    let want = if shows_in_hand(&equipped.item_id) {
-        equipped.item_id.as_str()
-    } else {
-        ""
-    };
-    if state.spawned && state.item_id == want && state.lit == lantern.lit && !existing.is_empty() {
-        return;
+    if actual != Some(&nuevo) {
+        commands.entity(e).insert(nuevo);
     }
-    for e in &existing {
-        commands.entity(e).despawn_recursive();
-    }
-    state.item_id = want.to_string();
-    state.spawned = true;
-    state.lit = lantern.lit;
-    if want.is_empty() {
-        return;
-    }
-
-    // Arte del pack primero (`assets/art/items/<id>.png`, ya transparente); si
-    // no hay, el icono procedural SIN el cuadrado de fondo.
-    let size = Vec2::splat(HELD_SIZE);
-    // **La animación viaja con el sprite.** Un slot con tira (el farol encendido)
-    // no lleva recorte propio: el recorte lo pone `ArtAnimated` cuadro a cuadro.
-    // Tirarla acá no dejaba el ítem quieto, dejaba la TIRA ENTERA metida en el
-    // cuadrito de la mano — todos los cuadros a la vez.
-    let (mut sprite, anim) = art
-        .world_sprite(&format!("items/{want}"), size)
-        .unwrap_or_else(|| (icons.hand_icon(want, &mut images).sprite(size), None));
-    sprite.custom_size = Some(size);
-
-    let mut entity = commands.spawn((
-        HeldItemVisual,
-        sprite,
-        Transform::from_xyz(0.0, 0.0, 0.02),
-        Name::new(format!("HeldItem_{want}")),
-    ));
-    if let Some(a) = anim {
-        entity.insert(a);
-    }
-    if let Some(light) = item_light(want) {
-        entity.insert(light);
-    }
-    let held = entity.id();
-    commands.entity(player_e).add_child(held);
 }
 
-/// Coloca el ítem en la mano correcta según el rumbo: a la derecha mirando
-/// down/right, a la izquierda mirando left (con el sprite espejado) y DETRÁS
-/// del personaje mirando up — que es donde queda la mano desde esa cámara.
-fn place_held_item_in_hand(
-    player: Query<&PlayerVisual, With<Player>>,
-    mut held: Query<(&mut Transform, &mut Sprite), With<HeldItemVisual>>,
+/// Qué herramienta lleva cada aldeano según su oficio: el granjero el balde, el minero el pico, el constructor el
+/// martillo. Los niños y los sin oficio van con las manos libres.
+fn herramienta_de_aldeanos(
+    mut commands: Commands,
+    cg: Res<crate::chargen::Chargen>,
+    aldeanos: Query<(Entity, &crate::society::Npc, Option<&Sostiene>)>,
 ) {
-    let Ok(visual) = player.get_single() else {
-        return;
-    };
-    let (dx, dz) = (visual.to_rot.cos(), visual.to_rot.sin());
-    // Mismo criterio de cuadrante que `sim::pose_direction`.
-    let (offset, flip, front) = if dz.abs() >= dx.abs() {
-        if dz > 0.0 {
-            (Vec2::new(0.34, -0.30), false, true) // de frente: mano derecha
-        } else {
-            (Vec2::new(-0.34, -0.30), true, false) // de espaldas: detrás
+    for (e, n, actual) in &aldeanos {
+        let item = crate::society::herramienta_de(n.role);
+        let piel = crate::society::skin_n(n).and_then(|i| cg.index.npc_looks.get(i)).map(|l| l.body);
+        // Sin lámina de manos (niños) no hay agarre: mejor sin objeto que flotando.
+        let nuevo = Sostiene { item: if piel.is_some() { item.to_string() } else { String::new() }, piel, luz: true };
+        if actual != Some(&nuevo) {
+            commands.entity(e).insert(nuevo);
         }
-    } else if dx < 0.0 {
-        (Vec2::new(-0.42, -0.26), true, true)
-    } else {
-        (Vec2::new(0.42, -0.26), false, true)
-    };
-    for (mut tf, mut sprite) in &mut held {
-        tf.translation.x = offset.x;
-        tf.translation.y = offset.y;
-        tf.translation.z = if front { 0.02 } else { -0.02 };
-        sprite.flip_x = flip;
     }
 }

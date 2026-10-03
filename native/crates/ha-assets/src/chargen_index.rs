@@ -113,7 +113,16 @@ pub const CHAR_ANIMS: &[CharAnim] = &[
     a("gun_idle", "APUNTAR", 17, 6, AnimDirs::Four, 6.0, true),
     a("shoot", "DISPARAR", 18, 3, AnimDirs::Four, 14.0, false),
     a("hurt", "RECIBIR DANO", 19, 3, AnimDirs::Four, 10.0, false),
+    // No es del pack: el torso de `gun_idle` sobre las piernas de `walk`, empalmado en las celdas libres de la
+    // fila 17 (cols 24..47: vacías en las 432 capas, lo verifica `scripts/medir-manos.py`). Lo arma
+    // `chargen::empalmar_walk_gun` al componer la hoja y el script en la hoja por defecto.
+    CharAnim { first: WALK_GUN_COL0, ..a("walk_gun", "CAMINAR CON EL ARMA", 17, 6, AnimDirs::Four, 10.0, true) },
 ];
+
+/// Columna de la fila 17 donde empieza `walk_gun`.
+pub const WALK_GUN_COL0: u32 = 24;
+/// Desde esta altura (px de celda) las piernas de `walk_gun` son las de `walk`; arriba, las de `gun_idle`.
+pub const WALK_GUN_CORTE: u32 = 56;
 
 const fn a(
     key: &'static str,
