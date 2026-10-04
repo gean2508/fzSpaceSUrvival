@@ -9019,6 +9019,36 @@ renderizados en el APK** (`assets/audio/musica/*.wav`, `assets/audio/sfx/<clave>
 huella `musica.json` y `sfx.json`). Regenerar todo: `bash scripts/regenerar-audio.sh` (exporta `audio.json`, renderiza, audita con
 `sfx-lab.py`). Si un diseño se edita en el estudio y su huella ya no coincide, ese efecto/pista cae al camino viejo (sintetizar).
 
+### §21 Vehículos terrestres (3 oct 2026)
+
+Pedido: *«carros, motos, buses… como en GTA: que los NPC manejen y se los pueda robar; las carreteras con sentido, sin quedar
+cortadas; y que se pueda manejar fuera de la calle como en San Andreas»*.
+
+**Arte** (`scripts/import-vehiculos.py`, medido): 38 modelos del pack con CUATRO poses de rumbo cada uno (`abajo/arriba/izquierda/
+derecha`; la ambulancia suma `*_luz` con la sirena): 26 autos (`vehicle/coche_1..26`, cuatro carrocerías; el 11 es el taxi; NO `auto_N`: esas claves ya existían del importador masivo y son otra cosa), 6 colectivos, casa rodante,
+ambulancia, lancha, camión de reparto (`Delivery_Truck`), de basura y autobomba. Moto y bici no vienen en el pack: las dibuja
+`scripts/dibujar-vehiculos.py`. Todo en `art/pack/vehiculos.png`, slots `VEHICULO_KEYS` en `slots.rs`.
+⚠ el `vehicle/camion_*` del importador masivo es una autobomba sin escalera, no un camión.
+**Sim** (`ha-shared/vehiculos.rs`, puro, con tests): catálogo (`Clase`, `ficha`, `MODELOS`), física arcade (`paso`) y conductor
+(`conducir`). El **suelo manda** (`Suelo::tope/agarre`): asfalto 100 %, pasto ~62 %, arena ~42 %, hielo resbala, el agua honda no se entra
+(salvo la lancha, que sólo anda en agua); la moto rinde +15 % en el campo. Se choca contra lo mismo que frena a quien camina (relieve:
+las rampas se suben, un acantilado es pared). El stick apunta el rumbo (`mando_desde_stick`); apuntar atrás frena y da marcha atrás.
+**Conductor**: sigue la mano de la calle con la MISMA regla que pinta la línea divisoria (`roads::carril_con`, extraída de `lane_at`),
+en un cruce sigue derecho o dobla a la derecha (`roads::cruce_con`), da la vuelta en una calle sin salida, mantiene distancia y frena
+ante autos y peatones. Multi-semilla y multi-mano en `el_vecino_maneja_bien_con_cualquier_semilla_y_desde_cualquier_mano`.
+**Cliente** (`ha-game/vehiculos.rs`): tránsito con cupo (`CUPO_TRANSITO` = 10, un intento de siembra por cuadro, fuera de cámara, sólo en
+calles de 5+ tiles; uno de cada cinco nace estacionado contra el cordón). Subir/bajar con **G** (o tocar el vehículo); si lo maneja un
+vecino, **se lo robás**: se baja corriendo y es tuyo. Mientras manejás, el `SimState` del jugador sigue al vehículo (cámara, chunks y
+todo lo demás lo siguen sin saberlo); a pie los vehículos frenan (`frena_a_pie`); despegar volando te baja. **Atropello**: el
+paragolpes deja tres `Bala` invisibles por paso, así vecinos, fauna e infectados reciben el golpe con sus testigos y su muerte sin código
+nuevo. Choque a más de 4 m/s abolla; a 0 queda chatarra.
+**Carreteras** — qué garantiza el mundo: sin acantilados sobre la calzada (`no_road_is_ever_blocked_by_a_cliff`), rampa donde cruza una
+terraza, puente donde cruza agua, circunvalación donde desemboca en un casco, y ahora **`de_cada_nucleo_se_llega_en_auto_al_vecino`**
+(inundación desde un núcleo hasta el siguiente por celdas transitables). Un callejón (3 tiles) no lleva tránsito.
+**Probar**: `cargo test -p ha-shared vehiculos`, `cargo test -p ha-shared tests_conectividad`, `cargo test -p ha-game vehiculos`.
+**Falta (honesto)**: semáforos que el tránsito respete, policía que persiga el robo, estaciones de servicio / combustible, lanchas en
+el tránsito (hoy sólo existe la clase), multijugador (el vehículo es local), prueba en el Redmi.
+
 ---
 
 ## §20 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)

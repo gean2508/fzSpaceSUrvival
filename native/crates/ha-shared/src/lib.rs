@@ -87,6 +87,7 @@ pub mod world_map;
 /// Red vial: jerarquía de vías con anchos reales, puertos de montaña y carriles.
 pub mod cercas;
 pub mod roads;
+pub mod vehiculos;
 /// Barrios: distritos, parcelas de tamaño real y el programa de cada lote.
 pub mod city;
 pub mod minor_bodies;
