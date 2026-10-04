@@ -4275,7 +4275,8 @@ fn spawn_chunk_tile_art(
                 Some(l) => crate::layers::depth(Some(l), wz),
                 // La rampa TAMBIÉN cuelga sobre la terraza de abajo, así que
                 // también Y-sortea: es la misma pared del acantilado, abierta.
-                None if tile.upright() || relieve => crate::layers::ysort(wz),
+                None if relieve => crate::layers::relieve(wz),
+                None if tile.upright() => crate::layers::ysort(wz),
                 None => crate::layers::FLOOR,
             };
             // **Una pared crece hacia arriba; un ACANTILADO cuelga hacia abajo.**
@@ -4641,7 +4642,7 @@ fn pared_apilada(
     // El Y-sort es el de la celda del CANTO para TODAS las filas: la pared es un
     // solo objeto y tiene que ordenarse como uno, o el que camina por la terraza
     // de abajo se mete entre dos de sus filas.
-    let orden = crate::layers::ysort(tz as f32 * TILE_M + 0.5);
+    let orden = crate::layers::relieve(tz as f32 * TILE_M + 0.5);
     // **Y SE CORTA CONTRA EL CANTO DE MÁS ABAJO.** En una ladera escarpada la
     // terraza siguiente empieza antes de que el muro termine de caer; si el
     // dibujo siguiera, taparía la meseta de abajo con roca por la que se camina.
@@ -5205,7 +5206,7 @@ fn spawn_chunk_hombros_de_garganta(
             let medida = Vec2::splat(TILE_M);
             // Un hombro es UN objeto: todas sus filas se ordenan por el canto, o
             // el que camina por la terraza de abajo se mete entre dos de ellas.
-            let orden = crate::layers::ysort(fila as f32 * TILE_M + 0.5);
+            let orden = crate::layers::relieve(fila as f32 * TILE_M + 0.5);
             let mut poner = |pose: &'static str, f: i64| {
                 let r = render_xy(tx as f32 * TILE_M + 0.5, f as f32 * TILE_M + 0.5);
                 if let Some((sprite, anim)) = art.tile_sprite(key, pose, medida) {

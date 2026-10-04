@@ -1145,7 +1145,7 @@ fn attach_ground_shadows(
         if sprite.texture_atlas.is_none() && !animado {
             let rig = commands
                 .spawn((
-                    Transform::from_xyz(0.0, -size.y * 0.5 + size.y * SOLAPE_DEL_PIE, -0.02)
+                    Transform::from_xyz(0.0, -size.y * 0.5 + size.y * SOLAPE_DEL_PIE, -crate::layers::HAIR)
                         .with_scale(Vec3::new(1.0, ESCORZO_DEL_SUELO, 1.0)),
                     Visibility::default(),
                 ))
@@ -1195,8 +1195,12 @@ fn attach_ground_shadows(
                     ..default()
                 },
                 // Un pelo por detrás, para que el propio sprite la pise en vez de
-                // quedar la mancha encima de los zapatos.
-                Transform::from_xyz(0.0, foot, -0.02),
+                // quedar la mancha encima de los zapatos. **Un pelo de la banda
+                // Y-sort (`HAIR`, ¼ de metro), no `0.02`**: en esa banda 0.02 son
+                // 400 m de mundo, y la sombra quedaba detrás de TODO lo parado en
+                // 400 m a la redonda — el canto de una terraza la cortaba en seco
+                // (captura del usuario, 3 oct 2026).
+                Transform::from_xyz(0.0, foot, -crate::layers::HAIR),
             ))
             .id();
         crate::render::try_add_child(&mut commands, entity, shadow);
