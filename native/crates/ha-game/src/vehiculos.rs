@@ -190,6 +190,8 @@ pub enum Quien {
     Policia(ha_shared::vehiculos::Persecucion),
     /// Una lancha del tránsito marítimo: navega por agua libre y esquiva la costa.
     Navegante(ha_shared::vehiculos::Navegante),
+    /// Una autobomba que va a un incendio (`incendios.rs`): persigue ese punto, no al jugador.
+    Bombero(ha_shared::vehiculos::Persecucion, (f32, f32)),
 }
 
 #[derive(Component)]
@@ -333,6 +335,7 @@ fn fisica_vehiculos(
                 Some(o) => veh::perseguir(&v.estado, &v.ficha, p, o, dt),
                 None => Mando::default(),
             },
+            Quien::Bombero(p, objetivo) => veh::perseguir(&v.estado, &v.ficha, p, *objetivo, dt),
             Quien::Vecino(c) => {
                 let mut c2 = *c;
                 let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
@@ -499,7 +502,7 @@ fn manejar_transito(
         let tope = if v.usado { LEJOS_USADO } else { LEJOS_TRANSITO };
         if Some(e) != manejando.auto && (d > tope || (!en_superficie && !v.usado)) {
             commands.entity(e).despawn_recursive();
-        } else if !v.usado && !matches!(v.quien, Quien::Policia(_) | Quien::Navegante(_)) {
+        } else if !v.usado && !matches!(v.quien, Quien::Policia(_) | Quien::Navegante(_) | Quien::Bombero(..)) {
             vivos += 1;
         }
     }
