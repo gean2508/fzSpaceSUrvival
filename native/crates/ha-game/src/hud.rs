@@ -2592,6 +2592,9 @@ fn spawn_bag_panel(
                     let gy = hy + INV_HEAD_H + 6.0;
                     let mut vista = up::caja(u(gx), u(gy), u(grid_w), u(alto_grilla), k);
                     vista.overflow = Overflow::scroll_y();
+                    // Columna, no fila: en fila el contenido (alto automático) se ESTIRA al alto del
+                    // marco y `content_h == view_h`, o sea tope de scroll 0 — la lista no se mueve.
+                    vista.flex_direction = FlexDirection::Column;
                     // `BagScrollView` es lo que hace que el arrastre del dedo
                     // scrollee esta lista (`scroll_craft_list`) y que el pulgar
                     // de la canaleta la siga.
@@ -2603,6 +2606,7 @@ fn spawn_bag_panel(
                                 flex_wrap: FlexWrap::Wrap,
                                 column_gap: Val::Px(u(INV_GAP) * k),
                                 row_gap: Val::Px(u(INV_GAP) * k),
+                                flex_shrink: 0.0,
                                 ..default()
                             },
                             ScrollContent,
@@ -3515,7 +3519,9 @@ fn pintar_personaje_mochila(
     assets: Res<AssetServer>,
     selected: Res<crate::game_phase::SelectedCharacter>,
 ) {
-    let Some(look) = selected.look else { return };
+    // Partida continuada sin personaje elegido en esta sesión: el primero guardado.
+    let guardado = || crate::personajes::listar().first().and_then(|p| p.look);
+    let Some(look) = selected.look.or_else(guardado) else { return };
     for e in &huecos {
         commands.entity(e).with_children(|pila| {
             for capa in [

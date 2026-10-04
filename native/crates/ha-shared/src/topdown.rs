@@ -895,6 +895,18 @@ fn topdown_tile_calc(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
             return t;
         }
         let nat = surface_tile(body, tx, tz);
+        // **BLINDAJE DE LA CALZADA CONTRA EL ACANTILADO.** La cara de un acantilado dibuja su borde
+        // superior una celda hacia el norte: si la celda de arriba es calzada o acera, el pedazo de
+        // roca le cae encima y la carretera queda cortada por un muro (pasó en varias carreteras al
+        // pie de una terraza, 4 oct 2026). Donde una obra civil queda al norte, el canto se vuelve
+        // rampa: la carretera sube o baja por ahí, y el asfalto queda limpio.
+        if nat == Tile::Cliff
+            && [(-1, -1), (0, -1), (1, -1)]
+                .iter()
+                .any(|&(dx, dz)| matches!(crate::geography::civil_at(body, tx + dx, tz + dz), Some(_)))
+        {
+            return Tile::Slope;
+        }
         // **EL INTERIOR DE LA MANZANA ES PARCELA, no el bioma** (27 sep 2026). Sin
         // lote ni obra civil, la celda caía al terreno natural: manzanas enteras de
         // arena naranja entre veredas. Adentro de un casco el suelo suelto es

@@ -9337,3 +9337,24 @@ prueba multi-semilla (§2) y arte del pack o dibujado con la skill `pixel-art` a
 [Vampire Survivors](https://jmduke.com/posts/vampire-survivors.html) ·
 [Wordle](https://www.newswise.com/articles/the-word-on-wordle) ·
 [patrones oscuros](https://deceptive.design/articles/level-up-or-game-over-exploring-how-dark-patterns-shape-mobile-games).
+
+## §21 Oleadas de zombis, inspiradas en Call of Duty: Black Ops 2 (3 oct 2026)
+
+Código: `native/crates/ha-game/src/oleadas.rs` (reglas puras y HUD) + `infectados.rs`
+(`ronda_de_horda`, `crear_infectado`, `Bajas.puntos/ronda`). Rust-only, como los infectados.
+
+* **Partida = noche de horda** (`infectados::es_horda`, cada tercera noche, de noche).
+  Fuera de la superficie o al amanecer la partida se reinicia; los puntos no se guardan.
+* **Rondas:** la ronda N trae `6 + 4·(N−1)` infectados (tope 60). Salen en hordas de 2 a 5
+  desde un mismo rumbo del anillo de aparición, cada `2,2 − 0,12·N` s (piso 0,7 s).
+* **Clases:** común; corredor desde la ronda 2 (30 %, vel ×1,6, vida ×0,7); tanque desde la
+  ronda 5 (10 %, vel ×0,7, vida ×2,2, más grande). Se leen de lejos por el color.
+* **Puntos:** común 50, corredor 70, tanque 120, +10 por ronda después de la primera (tope +200).
+* **Pausa entre rondas:** 12 s con el aviso «RONDA N COMPLETA»; luego «RONDA N+1».
+  Una ronda se da por limpia cuando no queda nadie vivo de la ronda (los guardias de alijo no cuentan).
+* **HUD:** texto arriba a la derecha con ronda, zombis vivos, quedan, puntos y la cuenta de
+  la pausa; aviso grande centrado al empezar/limpiar cada ronda.
+* **Lo que se suma a BO2:** las hordas entran como grupo desde un mismo rumbo (se las ve venir
+  y se puede esperar en una puerta), y la clase que sale se sortea con la ronda, no con el día.
+* Pruebas: `cargo test -p ha-game --lib oleadas` (7). Pendiente: verificar en el Redmi
+  (fps con 60 infectados + luces), y decidir si el tanque rompe paredes de madera (hoy no).

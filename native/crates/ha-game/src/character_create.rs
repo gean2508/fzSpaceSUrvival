@@ -635,6 +635,8 @@ fn spawn_screen(
                     + (FILAS_GRID as f32 - 1.0) * SEP_GRID;
                 let mut vista = up::caja(ix, gy, grid_w, grid_h, k);
                 vista.overflow = Overflow::scroll_y();
+                // Columna: en fila el contenido se estira al alto del marco y no queda qué scrollear.
+                vista.flex_direction = FlexDirection::Column;
                 l.spawn((vista, CcScroll, Name::new("CcVista"))).with_children(|v| {
                     v.spawn((
                         Node {

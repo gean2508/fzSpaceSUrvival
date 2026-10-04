@@ -108,8 +108,11 @@ pub fn cuadro_de(estado: &str, frame: u32) -> Option<(Cuadro, bool)> {
     let (clave, col_manos) = if verbo == "walk_gun" { ("gun_idle", col - WALK_GUN_COL0) } else { (anim.key, col) };
     let fila_manos = *d.filas.get(clave)?;
     let m = d.manos.get(&format!("{clave}:{col_manos}"))?;
+    // Mirando hacia arriba el personaje da la espalda: la mano y el objeto van SIEMPRE detrás.
+    // Antes se leía `m.detras` de cada cuadro y en la caminata algunos cuadros lo daban por
+    // delante: el arma saltaba de la mano a la espalda al andar (pedido del 4 oct 2026).
     Some((
-        Cuadro { fila_manos, col: col_manos, ancla: Vec2::new(m.ancla[0], m.ancla[1]), detras: m.detras },
+        Cuadro { fila_manos, col: col_manos, ancla: Vec2::new(m.ancla[0], m.ancla[1]), detras: dir == 1 },
         flip,
     ))
 }

@@ -156,21 +156,48 @@ impl Plugin for FollowCameraPlugin {
             .add_systems(
                 Update,
                 (absorb_shake_events, camera_zoom_input, follow_player_camera).chain(),
-            );
+            )
+            // Antes de que ningún sistema lea el toque del cuadro: así el primer dedo de un
+            // pellizco nunca llega a cavar, apuntar ni disparar (ver `filtrar_inicio_de_pellizco`).
+            .add_systems(PreUpdate, filtrar_inicio_de_pellizco.after(bevy::input::InputSystem));
     }
 }
 
-/// **Una sola cámara cuando no hay blit** (todo Android: ahí la escala de render está descartada).
+/// **Una sola cámara sólo si se pide** (`HA_UNA_CAMARA=1`, Android).
 ///
-/// Con la cámara de mundo + la de blit/UI sobre la MISMA ventana, el Redmi mostraba cada ~6 s un
-/// cuadro de pantalla SIN ningún sprite (ni jugador, ni árboles, ni velo nocturno: sólo suelo y
-/// UI) — el "el mundo parpadea y a veces la UI también" del 1 oct 2026. Aislado grabando la
-/// pantalla (ffmpeg, cuadro a cuadro) y descartando, una por una: luces, velo, visibilidad,
-/// fases de render, pipelines, modo de presentación, render en paralelo y tope de FPS. Con una
-/// sola cámara: 0 destellos en 15 s y sin tirones de >50 ms. La UI cuelga de la cámara del mundo.
-/// `HA_DOS_CAMARAS=1` devuelve las dos (para investigar).
+/// El 1 oct 2026 se pasó todo Android a una cámara porque, con la de mundo + la de blit/UI,
+/// el Redmi mostraba cada ~6 s un cuadro SIN sprites. Medido el 3 oct 2026 en el Redmi
+/// (grabando la pantalla y contando cuadros anómalos en 14 s): con UNA cámara, ~16 % de los
+/// cuadros salen SIN la interfaz y con otra capa de copas encima ("la UI titila, los árboles
+/// se ponen sobre la UI") — 67-80 cuadros; con las DOS, 1. El cuadro sin sprites ya no se
+/// reproduce en esta versión, así que el default vuelve a dos cámaras. `HA_UNA_CAMARA=1`
+/// deja la vieja para investigar.
 pub fn una_sola_camara() -> bool {
-    cfg!(target_os = "android") && crate::flags::var("HA_DOS_CAMARAS").is_err()
+    cfg!(target_os = "android") && crate::flags::var("HA_UNA_CAMARA").is_ok()
+}
+
+/// **Un pellizco no empieza nada en el mundo.** Cuando hay dos dedos libres (ni sobre un botón de
+/// acción ni en la zona del stick), se descartan los INICIOS de toque de esos dedos antes de que
+/// los lean cavar, apuntar, puertas, vehículos o menús. Los demás eventos (mover, soltar, stick,
+/// botones) se dejan pasar: un dedo de stick nunca queda trabado por esto.
+fn filtrar_inicio_de_pellizco(
+    mut eventos: ResMut<Events<bevy::input::touch::TouchInput>>,
+    todos: Res<Touches>,
+    layout: Res<crate::input::TouchLayout>,
+    botones: Res<crate::input::actions::ActionButtonRects>,
+) {
+    let libre = |p: Vec2| !crate::input::actions::touch_hits_action_button(p, &botones) && !crate::input::layout::touch_in_move_zone(p, &layout);
+    let libres = todos.iter().filter(|t| libre(t.position())).count();
+    if libres < 2 {
+        return;
+    }
+    let quedan: Vec<_> = eventos
+        .drain()
+        .filter(|e| e.phase != bevy::input::touch::TouchPhase::Started || !libre(e.position))
+        .collect();
+    for e in quedan {
+        eventos.send(e);
+    }
 }
 
 fn spawn_camera(mut commands: Commands) {

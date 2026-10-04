@@ -276,7 +276,8 @@ fn panel_personaje(p: &mut ChildBuilder, ins: &Insumos, cuerpo: Option<Celestial
 
     up::halo(p, &ins.halo, cx, 500.0, 250.0, k);
     up::sombra(p, cx, 664.0, 92.0, 15.0, k);
-    if let (Some(cg), Some(look)) = (ins.cg.as_deref(), ins.pj.look.as_ref()) {
+    let look_guardado = ins.pj.look.or_else(|| crate::personajes::listar().first().and_then(|p| p.look));
+    if let (Some(cg), Some(look)) = (ins.cg.as_deref(), look_guardado.as_ref()) {
         if cg.available() {
             let escala = 5.0;
             let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * escala;

@@ -220,8 +220,10 @@ pub enum UiEditorCommand {
 
 const EDITOR_PANEL_W: f32 = 116.0;
 const EDITOR_PANEL_H: f32 = 436.0;
-const SETTINGS_PANEL_W: f32 = 220.0;
-const SETTINGS_PANEL_H: f32 = 308.0;
+/// Dos columnas de calibración: con una sola el panel medía ~400 px y en el Redmi (393 de alto
+/// lógico) se salía por arriba y por abajo, tapado por la banda META (3 oct 2026).
+const SETTINGS_PANEL_W: f32 = 400.0;
+const SETTINGS_PANEL_H: f32 = 236.0;
 /// Ancho útil adentro del panel (menos el relleno de 8 px por lado y el borde).
 const SETTINGS_INNER_W: f32 = SETTINGS_PANEL_W - 20.0;
 
@@ -242,6 +244,8 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                 BorderColor(ui_theme::accent_ink()),
                 BackgroundColor(ui_theme::panel_bg(0.88)),
                 SettingsPanel,
+                // Por encima del HUD (META, reloj, hotbar): si no, la cabecera queda tapada.
+                GlobalZIndex(920),
                 Name::new("SettingsPanel"),
             ))
             .with_children(|panel| {
@@ -281,12 +285,29 @@ fn spawn_settings_panel(commands: &mut Commands, root: Entity) -> Entity {
                     10.0,
                     ui_theme::accent_ink(),
                 );
-                spawn_cal_row(panel, "Cámara", CalAdjust::CamSensDown, CalAdjust::CamSensUp);
-                spawn_cal_row(panel, "Mover", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp);
-                spawn_cal_row(panel, "Curva", CalAdjust::CurveDown, CalAdjust::CurveUp);
-                spawn_cal_row(panel, "Detalle", CalAdjust::RenderDown, CalAdjust::RenderUp);
-                spawn_cal_row(panel, "FPS", CalAdjust::FpsDown, CalAdjust::FpsUp);
-                spawn_cal_row(panel, "Idioma", CalAdjust::IdiomaDown, CalAdjust::IdiomaUp);
+                panel
+                    .spawn(Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        flex_wrap: FlexWrap::Wrap,
+                        column_gap: Val::Px(8.0),
+                        row_gap: Val::Px(4.0),
+                        ..default()
+                    })
+                    .with_children(|rows| {
+                        let filas = [
+                            ("Cámara", CalAdjust::CamSensDown, CalAdjust::CamSensUp),
+                            ("Mover", CalAdjust::MoveSensDown, CalAdjust::MoveSensUp),
+                            ("Curva", CalAdjust::CurveDown, CalAdjust::CurveUp),
+                            ("Detalle", CalAdjust::RenderDown, CalAdjust::RenderUp),
+                            ("FPS", CalAdjust::FpsDown, CalAdjust::FpsUp),
+                            ("Idioma", CalAdjust::IdiomaDown, CalAdjust::IdiomaUp),
+                        ];
+                        for (titulo, abajo, arriba) in filas {
+                            rows.spawn(Node { width: Val::Percent(48.5), ..default() })
+                                .with_children(|celda| spawn_cal_row(celda, titulo, abajo, arriba));
+                        }
+                    });
             })
             .id();
     });
@@ -800,6 +821,8 @@ fn update_editor_overlay(
     }
     if let Ok(mut node) = settings.get_single_mut() {
         apply_center(&mut node, &layout, SETTINGS_PANEL_W, SETTINGS_PANEL_H);
+        // El alto lo manda el contenido: uno fijo cortaba lo que no entraba.
+        node.height = Val::Auto;
     }
     if let Ok(mut text) = label.get_single_mut() {
         text.0 = format!(

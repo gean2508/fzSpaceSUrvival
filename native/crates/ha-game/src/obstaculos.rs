@@ -21,6 +21,7 @@ pub struct Obstaculos<'w, 's> {
     walls: Res<'w, crate::walls::BuiltWalls>,
     fachadas: Query<'w, 's, &'static crate::building::SolidoDeFachada>,
     puertas: crate::puertas::PuertasQueFrenan<'w, 's>,
+    autos: Res<'w, crate::vehiculos::AutosCaja>,
 }
 
 impl Obstaculos<'_, '_> {
@@ -51,6 +52,11 @@ impl Obstaculos<'_, '_> {
 
     /// Lo que frena por metros: paredes de borde, decoración, fachada, puertas cerradas, cercas.
     pub fn caja_frena(&self, body: CelestialBody, x: f32, z: f32, r: f32) -> bool {
+        // Un auto es una pared con ruedas: los peatones no lo atraviesan (el jugador ya lo tenía).
+        let choca_auto = self.autos.0.iter().any(|&(px, pz, rv)| (px - x).powi(2) + (pz - z).powi(2) < (rv + r).powi(2));
+        if choca_auto {
+            return true;
+        }
         let caja = [x - r, z - r, x + r, z + r];
         let a = {
             let _p = crate::debug::probe("ob_paredes");

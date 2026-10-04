@@ -280,6 +280,9 @@ struct Recarga {
 
 #[derive(Resource, Default)]
 pub struct EstadoArmas {
+    /// Modo creativo: munición infinita (ni la reserva se gasta ni la recarga la consume). Lo copia
+    /// `sync_creativo` del `UiEditorState` cada cuadro, así los sistemas de arma no piden otro recurso.
+    pub creativo: bool,
     /// Balas en el arma, por ítem.
     cargadas: HashMap<String, u32>,
     cd: f32,
@@ -406,6 +409,7 @@ impl Plugin for ArmasPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EstadoArmas>()
             .init_resource::<RuidoDeArma>()
+            .add_systems(Update, sync_creativo.run_if(in_state(GamePhase::Playing)).before(apuntar_y_disparar))
             .add_systems(Update, (apuntar_y_disparar, recargar, mover_balas.in_set(ArmasSet::Mover)).chain().run_if(in_state(GamePhase::Playing)))
             .add_systems(
                 Update,
@@ -570,7 +574,7 @@ fn apuntar_y_disparar(
         if flanco || def.auto {
             sfx_ui.send(PlaySfx(Sfx::DryFire));
         }
-        if inv.qty(def.calibre.item()) > 0 {
+        if estado.creativo || inv.qty(def.calibre.item()) > 0 {
             iniciar_recarga(&mut estado, def, &equipped.item_id, &inv);
         } else {
             estado.aviso = Some((format!("SIN {}", def.calibre.etiqueta().to_uppercase()), 1.6));
@@ -650,7 +654,7 @@ fn iniciar_recarga(estado: &mut EstadoArmas, def: &ArmaDef, item: &str, inv: &Pl
     if dentro >= def.cargador {
         return;
     }
-    if inv.qty(def.calibre.item()) == 0 {
+    if !estado.creativo && inv.qty(def.calibre.item()) == 0 {
         estado.aviso = Some((format!("SIN {}", def.calibre.etiqueta().to_uppercase()), 1.6));
         return;
     }
@@ -704,11 +708,18 @@ fn recargar(
     let item = r.item.clone();
     let ammo = def.calibre.item();
     let dentro = estado.cargadas.get(&item).copied().unwrap_or(0);
-    let pasan = (def.cargador - dentro.min(def.cargador)).min(inv.qty(ammo));
+    // En creativo la reserva es infinita: se llena el cargador sin gastar nada de la mochila.
+    let pasan = if estado.creativo {
+        def.cargador - dentro.min(def.cargador)
+    } else {
+        (def.cargador - dentro.min(def.cargador)).min(inv.qty(ammo))
+    };
     if pasan > 0 {
-        crate::hud::inventory_ui::remove_from_slots(&mut inv_ui, ammo, pasan);
-        crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
-        persist.mark_dirty();
+        if !estado.creativo {
+            crate::hud::inventory_ui::remove_from_slots(&mut inv_ui, ammo, pasan);
+            crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+            persist.mark_dirty();
+        }
         estado.cargadas.insert(item, dentro + pasan);
     }
     estado.recarga = None;
@@ -993,7 +1004,7 @@ fn hud_armas(
         return;
     };
     let dentro = estado.cargadas_de(&equipped.item_id).unwrap_or(def.cargador);
-    let reserva = inv.qty(def.calibre.item());
+    let reserva = if estado.creativo { "∞".to_string() } else { inv.qty(def.calibre.item()).to_string() };
     let texto = if let Some(r) = &estado.recarga {
         format!("{} · RECARGANDO {}%", def.nombre, ((r.t / r.total.max(0.01)) * 100.0).min(100.0) as u32)
     } else if let Some((m, _)) = &estado.aviso {
@@ -1107,5 +1118,12 @@ mod tests {
         assert!((distancia_a_segmento(Vec2::new(5.0, 3.0), a, b) - 3.0).abs() < 1e-4);
         assert!((distancia_a_segmento(Vec2::new(-4.0, 3.0), a, b) - 5.0).abs() < 1e-4);
         assert!((distancia_a_segmento(Vec2::new(1.0, 1.0), a, a) - 2f32.sqrt()).abs() < 1e-4);
+    }
+}
+
+/// Copia el modo creativo del editor al estado de armas (ver `EstadoArmas::creativo`).
+fn sync_creativo(editor: Res<crate::ui_editor::UiEditorState>, mut estado: ResMut<EstadoArmas>) {
+    if estado.creativo != editor.creative {
+        estado.creativo = editor.creative;
     }
 }

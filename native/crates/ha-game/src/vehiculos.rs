@@ -54,16 +54,34 @@ const TAM_VECINO: Vec2 = Vec2::new(0.95, 1.9);
 
 pub struct VehiculosPlugin;
 
+/// Las cajas de los autos (círculos `(x, z, r)`) del cuadro de física, para que los PEATONES también
+/// los esquiven (`obstaculos::Obstaculos::caja_frena`). Es un recurso y no una consulta a `Vehiculo`:
+/// esa consulta pelearía con los sistemas que escriben los autos y Bevy no arrancaría.
+#[derive(Resource, Default)]
+pub struct AutosCaja(pub Vec<(f32, f32, f32)>);
+
+fn publicar_autos(autos: Query<&Vehiculo>, mut caja: ResMut<AutosCaja>) {
+    caja.0.clear();
+    for v in &autos {
+        let (ps, n, rv) = v.estado.probes(v.estado.x, v.estado.z, v.estado.rumbo);
+        for &(px, pz) in ps.iter().take(n) {
+            caja.0.push((px, pz, rv));
+        }
+    }
+}
+
 impl Plugin for VehiculosPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Manejando>()
+        app.init_resource::<AutosCaja>()
+            .init_resource::<Manejando>()
             .init_resource::<CacheSuelo>()
             .init_resource::<Transito>()
             .init_resource::<Reabastecimiento>()
             .init_resource::<Pedidos>()
             .add_systems(
                 FixedUpdate,
-                fisica_vehiculos.after(crate::sim::tick_sim).run_if(in_state(GamePhase::Playing)),
+                (fisica_vehiculos.after(crate::sim::tick_sim), publicar_autos.after(fisica_vehiculos))
+                    .run_if(in_state(GamePhase::Playing)),
             )
             .add_systems(
                 Update,
@@ -153,7 +171,15 @@ pub struct Reabastecimiento {
     pista: f32,
     pub destino: Option<(f32, f32, f32)>,
     avisado_lleno: bool,
+    /// Nivel de tanque ya pagado en esta carga (cada cuarto cuesta un lingote de oro).
+    pagado_hasta: f32,
+    /// Se cortó la carga porque no hay oro en la mochila: el tanque no se llena gratis.
+    pub sin_oro: bool,
 }
+
+/// Un cuarto de tanque = un lingote de oro (`gold_ingot`). El oro se gasta: es un sumidero, no un
+/// activo, así que no aparece dinero de la nada al repostar (regla de contabilidad conservada).
+pub const PRECIO_CUARTO_TANQUE: f32 = 0.25;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Quien {
@@ -769,6 +795,8 @@ fn repostar(
     mut rep: ResMut<Reabastecimiento>,
     manejando: Res<Manejando>,
     mut autos: Query<&mut Vehiculo>,
+    mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
+    mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
     mut sfx: EventWriter<PlaySfxAt>,
 ) {
     let dt = time.delta_secs().min(0.1);
@@ -798,9 +826,28 @@ fn repostar(
         rep.destino = None;
     }
     let parado = v.estado.vel.abs() < 3.5;
-    rep.cargando = rep.en_surtidor && parado && v.estado.comb < 1.0;
+    let quiere = rep.en_surtidor && parado && v.estado.comb < 1.0;
+    if quiere && !rep.cargando {
+        // Arranca una carga: lo ya lleno está pagado; lo que sigue se paga de a cuartos.
+        rep.pagado_hasta = (v.estado.comb / PRECIO_CUARTO_TANQUE).floor() * PRECIO_CUARTO_TANQUE;
+    }
+    rep.cargando = quiere;
+    rep.sin_oro = false;
     if rep.cargando {
-        v.estado.comb = (v.estado.comb + RITMO_REPOSTAJE * dt).min(1.0);
+        let nuevo = (v.estado.comb + RITMO_REPOSTAJE * dt).min(1.0);
+        if nuevo > rep.pagado_hasta + 1e-4 {
+            if inv.qty("gold_ingot") > 0 {
+                inv.remove("gold_ingot", 1);
+                persist.mark_dirty();
+                rep.pagado_hasta = (rep.pagado_hasta + PRECIO_CUARTO_TANQUE).min(1.0);
+            } else {
+                rep.cargando = false;
+                rep.sin_oro = true;
+            }
+        }
+    }
+    if rep.cargando {
+        v.estado.comb = nuevo_nivel(v.estado.comb, rep.pagado_hasta, dt);
         rep.avisado_lleno = false;
         if (time.elapsed_secs() * 2.0) as u32 % 2 == 0 && (time.elapsed_secs() * 2.0).fract() < dt * 2.0 {
             sfx.send(PlaySfxAt(Sfx::Drip, render_xy(v.estado.x, v.estado.z)));
@@ -809,6 +856,11 @@ fn repostar(
         rep.avisado_lleno = true;
         sfx.send(PlaySfxAt(Sfx::Pickup, render_xy(v.estado.x, v.estado.z)));
     }
+}
+
+/// Sube el tanque sin pasar de lo pagado.
+fn nuevo_nivel(comb: f32, pagado: f32, dt: f32) -> f32 {
+    (comb + RITMO_REPOSTAJE * dt).min(pagado).min(1.0)
 }
 
 // ---------------------------------------------------------------------------

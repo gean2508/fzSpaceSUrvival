@@ -931,6 +931,26 @@ mod tests {
     /// terrazas, una carretera podía toparse de frente con una pared de 2.5 m y
     /// quedarse ahí. `relief::in_pass_band` abre rampa donde hay calzada, y esto lo
     /// comprueba sobre medio planeta, celda a celda.
+    /// Blindaje (4 oct 2026): el canto de un acantilado no le cae encima a una calzada ni a una
+    /// acera de la celda de arriba. Ver `topdown_tile`: ahí el canto se vuelve rampa.
+    #[test]
+    fn ningun_acantilado_tapa_una_calzada_de_arriba() {
+        use crate::topdown::{topdown_tile, Tile};
+        let body = CelestialBody::Earth;
+        // Ventana de 800 × 800 alrededor del origen: cubre ciudades y rutas sin recorrer toda la Tierra.
+        let r = 400i64;
+        let mut malos = Vec::new();
+        for tz in (-r..r).step_by(2) {
+            for tx in (-r..r).step_by(2) {
+                let arriba = crate::geography::civil_at(body, tx, tz - 1);
+                if matches!(arriba, Some(_)) && topdown_tile(body, 0, tx, tz) == Tile::Cliff {
+                    malos.push((tx, tz));
+                }
+            }
+        }
+        assert!(malos.is_empty(), "acantilados bajo una calzada/acera en {:?}", &malos[..malos.len().min(8)]);
+    }
+
     #[test]
     fn no_road_is_ever_blocked_by_a_cliff() {
         use crate::topdown::{topdown_tile, Tile};

@@ -530,7 +530,13 @@ impl Plugin for UiPackPlugin {
         app.init_resource::<HojaPj>()
             .init_resource::<HaloTex>()
             .add_systems(Startup, preparar_halo)
-            .add_systems(Update, (preparar_hoja, rehacer_pantalla_si_cambia_k))
+            .add_systems(Update, preparar_hoja)
+            // En PreUpdate, no en Update: `OnEnter` arma la pantalla antes de cualquier Update,
+            // con el layout que hubiera entonces. Si este sistema corriera después del sync
+            // del layout, vería la escala YA corregida, la guardaría como "la de siempre" y
+            // nunca reharía la splash — el celu la dejaba armada con la escala de 1280×720
+            // (logo 45 % más grande y corrido hacia abajo, 3 oct 2026).
+            .add_systems(PreUpdate, rehacer_pantalla_si_cambia_k)
             .add_systems(Update, (enmarcar_paneles, realce_botones))
             .add_systems(PostUpdate, escala_de_los_marcos.before(bevy::ui::UiSystem::Layout));
     }

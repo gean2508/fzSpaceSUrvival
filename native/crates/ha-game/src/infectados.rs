@@ -81,6 +81,8 @@ pub struct Infectado {
     botin: Vec<(&'static str, u32)>,
     /// Custodia un alijo: no se quema de día.
     pub guardia: bool,
+    /// Clase de la oleada (`oleadas::Clase`): define velocidad, vida y lo que vale.
+    pub(crate) clase: crate::oleadas::Clase,
 }
 
 /// El cuerpo que queda: se abre como un cofre (`chests.rs`) y se descompone solo.
@@ -102,6 +104,10 @@ const VIDA_PARED_MADERA: f32 = 3.0;
 #[derive(Resource, Default)]
 pub struct Bajas {
     pub total: u32,
+    /// Puntos de la partida por rondas (`oleadas`): se suman en cada baja según la clase.
+    pub puntos: u32,
+    /// Ronda en curso, copiada de `oleadas::Oleadas` cada cuadro para valorar la baja.
+    pub ronda: u32,
     /// Dónde (x, z) cayeron los que mataste desde la última pasada del barrio (`barrio::el_barrio_te_ve`
     /// las vacía). Tope 32: si nadie las lee (ningún pueblo cargado), no crecen sin fin.
     pub recientes: Vec<(f32, f32)>,
@@ -177,6 +183,7 @@ pub fn spawn_guardia(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x:
             bloqueado: 0.0,
             botin: botin_de(n.wrapping_mul(2654435761)),
             guardia: true,
+            clase: crate::oleadas::Clase::Comun,
         },
         Name::new("Guardia"),
     ));
@@ -196,7 +203,7 @@ impl Plugin for InfectadosPlugin {
             .init_resource::<Acumulado>()
             .add_systems(
                 Update,
-                (aparecer, mover_y_morder, romper_paredes, golpear, cadaveres, amanecer).chain().run_if(in_state(GamePhase::Playing)),
+                (aparecer, ronda_de_horda, mover_y_morder, romper_paredes, golpear, cadaveres, amanecer).chain().run_if(in_state(GamePhase::Playing)),
             )
             .add_systems(Update, balas_a_infectados.in_set(crate::armas::ArmasSet::Impactos).after(crate::armas::ArmasSet::Mover).run_if(in_state(GamePhase::Playing)))
             .add_systems(OnExit(GamePhase::Playing), limpiar);
@@ -229,7 +236,12 @@ fn aparecer(
     obst: Obstaculos,
     player: Query<&Transform, With<Player>>,
     existentes: Query<(), With<Infectado>>,
+    oleadas: Res<crate::oleadas::Oleadas>,
 ) {
+    // Con una partida por rondas en curso, la que sale es la horda (`ronda_de_horda`).
+    if oleadas.activa {
+        return;
+    }
     let horda_ahora = es_horda(day.day_index()) && day.daylight() <= NOCHE_MAX_LUZ;
     acc.spawn += time.delta_secs();
     if acc.spawn < if horda_ahora { SPAWN_CADA * 0.4 } else { SPAWN_CADA } {
@@ -261,15 +273,95 @@ fn aparecer(
     if obst.caja_frena(body, x, z, RADIO_CUERPO) || obst.solido(body, x.floor() as i64, z.floor() as i64) {
         return;
     }
-    let skin = format!("npc/char_{}", 1 + (h(3) * 20.0) as u32 % 20);
+    crear_infectado(&mut commands, &art, x, z, crate::oleadas::Clase::Comun, (h(3), h(4), h(5)));
+}
+
+/// Un infectado de la oleada en `(x, z)`, de una clase dada. `sorteos` = tres números en [0, 1).
+fn crear_infectado(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, clase: crate::oleadas::Clase, sorteos: (f32, f32, f32)) {
+    let (a, b, c) = sorteos;
+    let skin = format!("npc/char_{}", 1 + (a * 20.0) as u32 % 20);
     let mut sprite = art.sprite_or_color(&skin, Color::srgb(0.5, 0.7, 0.5), TAMANO);
-    sprite.color = Color::srgb(0.55, 0.78, 0.55);
+    sprite.color = match clase {
+        crate::oleadas::Clase::Comun => Color::srgb(0.55, 0.78, 0.55),
+        // El corredor se ve más pálido y el tanque más oscuro, para leerlos de lejos.
+        crate::oleadas::Clase::Corredor => Color::srgb(0.85, 0.95, 0.70),
+        crate::oleadas::Clase::Tanque => Color::srgb(0.40, 0.55, 0.42),
+    };
+    let mut escala = TAMANO;
+    if clase == crate::oleadas::Clase::Tanque {
+        escala *= 1.15;
+    }
+    sprite.custom_size = Some(escala);
     commands.spawn((
         sprite,
         Transform::from_xyz(x, -z, sort_z(z)),
-        Infectado { x, z, vida: VIDA, ataque_cd: 0.0, destello: 0.0, desvio: (h(4) - 0.5) * 0.9, bloqueado: 0.0, botin: botin_de((h(5) * 1.0e6) as u32), guardia: false },
+        Infectado {
+            x,
+            z,
+            vida: VIDA * clase.vida(),
+            ataque_cd: 0.0,
+            destello: 0.0,
+            desvio: (b - 0.5) * 0.9,
+            bloqueado: 0.0,
+            botin: botin_de((c * 1.0e6) as u32),
+            guardia: false,
+            clase,
+        },
         Name::new("Infectado"),
     ));
+}
+
+/// **La horda de la ronda.** Mientras hay una partida por rondas (`oleadas`), sale en grupos
+/// desde un mismo rumbo del anillo de aparición, en vez de caer uno a uno al azar.
+#[allow(clippy::too_many_arguments)]
+fn ronda_de_horda(
+    mut commands: Commands,
+    time: Res<Time>,
+    day: Res<DayClock>,
+    art: Res<crate::art2d::ArtLibrary>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    obst: Obstaculos,
+    player: Query<&Transform, With<Player>>,
+    existentes: Query<&Infectado>,
+    mut ol: ResMut<crate::oleadas::Oleadas>,
+    mut bajas: ResMut<Bajas>,
+) {
+    let de_noche = es_horda(day.day_index()) && day.daylight() <= NOCHE_MAX_LUZ && en_superficie(&ctx);
+    let vivos = existentes.iter().filter(|i| !i.guardia).count() as u32;
+    let s = time.elapsed().as_micros() as u64;
+    let h = |k: u64| {
+        let mut x = s ^ k.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        x ^= x >> 31;
+        x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        ((x >> 40) as f32) / (1u64 << 24) as f32
+    };
+    let paso = ol.paso(time.delta_secs(), de_noche, vivos, h(7));
+    bajas.ronda = ol.ronda;
+    ol.puntos = bajas.puntos;
+    let crate::oleadas::Paso::Horda(n) = paso else { return };
+    let Ok(pt) = player.get_single() else {
+        ol.por_salir += n;
+        return;
+    };
+    let body = active_surface_body(&ctx, &planet);
+    let (px, pz) = (pt.translation.x, -pt.translation.y);
+    // Rumbo común de la horda; cada integrante entra apenas desplazado, como un grupo.
+    let rumbo = h(1) * std::f32::consts::TAU;
+    let mut hechos = 0;
+    for k in 0..n {
+        let ang = rumbo + (k as f32 - (n as f32 - 1.0) / 2.0) * 0.18;
+        let dist = ANILLO_MIN + h(10 + k as u64) * (ANILLO_MAX - ANILLO_MIN);
+        let (x, z) = (px + ang.cos() * dist, pz + ang.sin() * dist);
+        if obst.caja_frena(body, x, z, RADIO_CUERPO) || obst.solido(body, x.floor() as i64, z.floor() as i64) {
+            continue;
+        }
+        let clase = crate::oleadas::clase_de(ol.ronda, h(20 + k as u64));
+        crear_infectado(&mut commands, &art, x, z, clase, (h(30 + k as u64), h(40 + k as u64), h(50 + k as u64)));
+        hechos += 1;
+    }
+    // Lo que no encontró lugar (pared, agua) vuelve a la cola de la ronda.
+    ol.por_salir += n - hechos;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -317,7 +409,7 @@ fn mover_y_morder(
         let (dx, dz) = (tx - i.x, tz - i.z);
         let d = d_jug;
         if d < olfato.max(if a_un_vecino { OLFATO_VECINO } else { 0.0 }) {
-            let v = if d < 8.0 { VEL_CERCA } else { VEL };
+            let v = if d < 8.0 { VEL_CERCA } else { VEL } * i.clase.velocidad();
             // Rumbo al jugador con un desvío fijo que se apaga al acercarse.
             let a = dz.atan2(dx) + i.desvio * (d / olfato).min(1.0);
             let (sx, sz) = (a.cos() * v * dt, a.sin() * v * dt);
@@ -502,6 +594,7 @@ fn herir(
     if i.vida <= 0.0 {
         let (x, z) = (i.x, i.z);
         bajas.total += 1;
+        bajas.puntos += crate::oleadas::puntos_de(i.clase, bajas.ronda);
         if bajas.recientes.len() < 32 {
             bajas.recientes.push((x, z));
         }
