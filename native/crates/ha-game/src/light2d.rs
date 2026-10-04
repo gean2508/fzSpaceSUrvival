@@ -1278,9 +1278,17 @@ fn cast_shadows(
     // mediodía. Ahora la fuerza sólo decide si HAY sombra (`sky_on` satura
     // enseguida) y el largo sale del ángulo: rasante = larga, cenital = un
     // asiento bajo los pies.
-    let sky_w = sky.strength;
-    let sky_on = (sky_w * 2.5).min(1.0);
-    let sky_v = -sky.dir * sky_on * (0.30 + 2.40 * (1.0 - sky.elevation));
+    // **Adentro de un edificio también hay sombra** (pedido del usuario, 4 oct 2026): no hay sol, pero hay lámparas
+    // en el techo y luz de las ventanas, así que cada objeto y cada persona apoya una sombra corta y suave, siempre
+    // igual (de día y de noche), hacia abajo y un poco a un lado.
+    let adentro = ha_shared::interiores::es_interior(ambiente.tiles.z);
+    let sky_w = if adentro { 0.55 } else { sky.strength };
+    let sky_on = if adentro { 1.0 } else { (sky_w * 2.5).min(1.0) };
+    let sky_v = if adentro {
+        Vec2::new(0.28, -0.22)
+    } else {
+        -sky.dir * sky_on * (0.30 + 2.40 * (1.0 - sky.elevation))
+    };
 
     // **La sombra es del color complementario a la luz que la hace**, y ahora eso
     // importa el doble: el disco del sol no se dibuja (ver `sky2d::SkyDisc`), así
@@ -1289,7 +1297,7 @@ fn cast_shadows(
     // principio que el velo de `sky2d`, y lo que hace que una hora dorada se lea
     // dorada—; al mediodía, con luz blanca, se queda en el verde azulado neutro de
     // la sombra ambiental. La luna (azul) no entra: `x - z` le da negativo.
-    let warm = (sky.color.x - sky.color.z).clamp(0.0, 1.0) * sky_on;
+    let warm = if adentro { 0.0 } else { (sky.color.x - sky.color.z).clamp(0.0, 1.0) * sky_on };
     let tint = Vec3::new(0.02, 0.06, 0.055).lerp(Vec3::new(0.030, 0.045, 0.105), warm);
 
     for (sh, mut tf, mut sprite) in &mut shadows {

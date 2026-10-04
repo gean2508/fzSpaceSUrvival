@@ -133,7 +133,13 @@ pub const ARMAS_PALETTE_BASE: usize = 20_000;
 
 /// Lo que vale un arma en lingotes de oro: la base es barata, el camuflaje la hace épica (Weaponized 115 y la
 /// materia oscura son las más caras), la pistola de rayos cuesta el doble. En creativo no se cobra.
+/// Mientras se aprueban las armas todo es gratis (pedido del usuario, 4 oct 2026): poné `true` para cobrar.
+const PRECIOS_ACTIVOS: bool = false;
+
 pub fn precio_en_oro(item: &str) -> u32 {
+    if !PRECIOS_ACTIVOS {
+        return 0;
+    }
     let Some((def, camo)) = parsear(item) else { return 0 };
     let base: u32 = match def.id {
         "pistola" => 4,
