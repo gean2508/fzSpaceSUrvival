@@ -126,7 +126,7 @@ impl Plugin for PandemiaPlugin {
             .add_systems(OnEnter(GamePhase::Loading), cargar)
             .add_systems(
                 Update,
-                (avanzar, laboratorio, curar, manchas, tenir_el_mundo, hud, guardar)
+                (avanzar, laboratorio, curar, manchas, tenir_el_mundo, hud, guardar, volcar_ui_esquina)
                     .chain()
                     .run_if(in_state(GamePhase::Playing)),
             )
@@ -196,6 +196,9 @@ fn avanzar(
     }
     bajas.avance = p.avance;
     let Ok(pt) = player.get_single() else { return };
+    if (time.elapsed_secs() as u32) % 10 == 0 && (time.elapsed_secs().fract() < dt) {
+        eprintln!("ha-pandemia: etapa={} avance={:.0} focos={} infectados={} cupo={}", p.etapa, p.avance, p.focos.len(), infectados.iter().filter(|i| !i.guardia).count(), p.cupo(0));
+    }
     let (px, pz) = (pt.translation.x, -pt.translation.y);
     // QA: `HA_PANDEMIA=1` arranca con el virus ya descubierto, 50 % de avance y dos focos cerca.
     if p.etapa == etapa::RUMOR && crate::flags::var("HA_PANDEMIA").is_ok() {
@@ -203,7 +206,7 @@ fn avanzar(
         p.avance = 50.0;
         p.dia_inicio = day.day_index();
         p.ultimo_dia = day.day_index();
-        p.focos = vec![(px + 30.0, pz), (px - 40.0, pz + 35.0)];
+        p.focos = vec![(px + 12.0, pz + 4.0), (px - 40.0, pz + 35.0)];
         p.sucio = true;
     }
     let dia = day.day_index();
@@ -445,8 +448,8 @@ fn manchas(
         let lado = RADIO_ENFERMO * 2.2;
         let mut sprite = Sprite::from_image(glow.0.clone());
         sprite.custom_size = Some(Vec2::splat(lado));
-        sprite.color = Color::srgba(0.45, 0.85, 0.30, 0.35);
-        commands.spawn((sprite, Transform::from_xyz(fx, -fz, sort_z(fz - 500.0)), Mancha, Name::new("ManchaInfectada")));
+        sprite.color = Color::srgba(0.62, 0.12, 0.58, 0.55);
+        commands.spawn((sprite, Transform::from_xyz(fx, -fz, crate::layers::FLOOR + crate::layers::SOBRE_EL_PISO), Mancha, Name::new("ManchaInfectada")));
     }
 }
 
@@ -478,7 +481,7 @@ fn tenir_el_mundo(
         let objetivo = if d < RADIO_ENFERMO && !curada { (1.0 - d / RADIO_ENFERMO) * fuerza } else { 0.0 };
         let c = sprite.color.to_srgba();
         // Mezcla el RGB hacia un verde-violeta enfermo; el alfa es de otro sistema y no se toca.
-        let (tr, tg, tb) = (0.62, 0.78, 0.55);
+        let (tr, tg, tb) = (0.72, 0.50, 0.78);
         let nr = 1.0 + (tr - 1.0) * objetivo;
         let ng = 1.0 + (tg - 1.0) * objetivo;
         let nb = 1.0 + (tb - 1.0) * objetivo;
@@ -520,8 +523,8 @@ fn hud(
         Node {
             position_type: PositionType::Absolute,
             right: Val::Px(layout.insets.right as f32 + 12.0),
-            top: Val::Px(layout.insets.top as f32 + 96.0 * k),
-            max_width: Val::Px(layout.width * 0.42),
+            top: Val::Px(layout.insets.top as f32 + 190.0 * k),
+            max_width: Val::Px(layout.width * 0.27),
             ..default()
         },
         GlobalZIndex(60),
@@ -571,5 +574,39 @@ mod tests {
         let json = serde_json::to_string(&p).unwrap();
         let q: Pandemia = serde_json::from_str(&json).unwrap();
         assert_eq!((q.etapa, q.alfas_muertos, q.focos.len()), (etapa::ANALIZADA, 2, 1));
+    }
+}
+
+/// QA: `HA_UIDUMP=1` imprime cada 6 s los nodos de UI que tocan la esquina inferior izquierda
+/// (x < 120 px, y > 70 % del alto), para identificar rectángulos sueltos.
+pub fn volcar_ui_esquina(
+    time: Res<Time>,
+    mut acc: Local<f32>,
+    nodos: Query<(Entity, &ComputedNode, &GlobalTransform, Option<&Name>, Option<&BackgroundColor>, Option<&ImageNode>)>,
+    ventana: Query<&Window, With<bevy::window::PrimaryWindow>>,
+) {
+    if crate::flags::var("HA_UIDUMP").is_err() {
+        return;
+    }
+    *acc += time.delta_secs();
+    if *acc < 6.0 {
+        return;
+    }
+    *acc = 0.0;
+    let Ok(w) = ventana.get_single() else { return };
+    let (an, al) = (w.physical_width() as f32, w.physical_height() as f32);
+    for (e, c, g, nombre, fondo, img) in &nodos {
+        let s = c.size();
+        let ctr = g.translation().truncate();
+        let (x0, x1, y0, y1) = (ctr.x - s.x / 2.0, ctr.x + s.x / 2.0, ctr.y - s.y / 2.0, ctr.y + s.y / 2.0);
+        if x0 < 120.0 && y1 > al * 0.70 && s.x > 8.0 && s.y > 8.0 && s.x < an * 0.9 {
+            eprintln!(
+                "ha-uidump: {:?} {:?} rect=({x0:.0},{y0:.0})-({x1:.0},{y1:.0}) bg={:?} img={}",
+                e,
+                nombre.map(|n| n.as_str()),
+                fondo.map(|b| b.0.to_srgba().to_f32_array()),
+                img.is_some()
+            );
+        }
     }
 }
