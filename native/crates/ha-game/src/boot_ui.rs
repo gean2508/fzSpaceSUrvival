@@ -542,15 +542,24 @@ fn armar_splash(
     images: ResMut<Assets<Image>>,
     mut armada: ResMut<SplashArmada>,
     ventana: Query<&Window, With<PrimaryWindow>>,
+    real: Res<Time<bevy::time::Real>>,
+    mut espera: Local<f32>,
 ) {
     if armada.0 {
         return;
     }
     let Ok(w) = ventana.get_single() else { return };
+    *espera += real.delta_secs();
+    // En Android la ventana arranca con el tamaño por defecto de Bevy (1280×720) y recién unos
+    // cuadros después trae el real (el log del celu decía `layout=1280x720`): iguales layout y
+    // ventana NO prueba que esté medida. Se espera a que el tamaño deje de ser el de fábrica, o a
+    // 1,5 s (escritorio con una ventana que de verdad mide 1280×720).
+    let de_fabrica = (w.width() - 1280.0).abs() < 0.5 && (w.height() - 720.0).abs() < 0.5;
     let medida = w.width() >= 1.0
         && w.height() >= 1.0
         && (touch.width - w.width()).abs() < 0.5
-        && (touch.height - w.height()).abs() < 0.5;
+        && (touch.height - w.height()).abs() < 0.5
+        && (!de_fabrica || *espera > 1.5);
     if !medida {
         return;
     }

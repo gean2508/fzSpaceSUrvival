@@ -197,6 +197,15 @@ fn avanzar(
     bajas.avance = p.avance;
     let Ok(pt) = player.get_single() else { return };
     let (px, pz) = (pt.translation.x, -pt.translation.y);
+    // QA: `HA_PANDEMIA=1` arranca con el virus ya descubierto, 50 % de avance y dos focos cerca.
+    if p.etapa == etapa::RUMOR && crate::flags::var("HA_PANDEMIA").is_ok() {
+        p.etapa = etapa::MUESTRA;
+        p.avance = 50.0;
+        p.dia_inicio = day.day_index();
+        p.ultimo_dia = day.day_index();
+        p.focos = vec![(px + 30.0, pz), (px - 40.0, pz + 35.0)];
+        p.sucio = true;
+    }
     let dia = day.day_index();
     let noche = day.daylight() <= 0.30;
     let body = active_surface_body(&ctx, &planet);
