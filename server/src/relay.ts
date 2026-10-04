@@ -139,7 +139,7 @@ export function startRelay(port: number, host: string) {
           if (m.t === "est") {
             const x = Number(m.x), z = Number(m.z), rumbo = Number(m.rumbo);
             if (![x, z, rumbo].every(Number.isFinite)) continue;
-            const est = { t: "est", id: miId, x, z, cuerpo: Number(m.cuerpo) & 255, rumbo, vuelo: !!m.vuelo, pts: Number(m.pts) >>> 0, baj: Number(m.baj) >>> 0 };
+            const est = { t: "est", id: miId, x, z, cuerpo: Number(m.cuerpo) & 255, rumbo, vuelo: !!m.vuelo, pts: Number(m.pts) >>> 0, baj: Number(m.baj) >>> 0, veh: typeof m.veh === "string" ? limpiar(m.veh, 40) : "" };
             const p = sala.pares.get(miId);
             if (p) p.ultimo = est;
             difundir(sala, est, miId);

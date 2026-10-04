@@ -150,6 +150,16 @@ impl Plugin for AutoDrivePlugin {
             );
             return;
         }
+        if crate::flags::var("HA_AUTOTEST").is_ok() {
+            app.init_resource::<FlyTestState>();
+            app.add_systems(
+                Update,
+                auto_test_drive
+                    .before(aplicar_actuacion_del_driver)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            return;
+        }
         if crate::flags::var("HA_BARRIOTEST").is_ok() {
             app.init_resource::<FlyTestState>().init_resource::<BarrioTestState>();
             app.add_systems(
@@ -2182,6 +2192,151 @@ fn armas_test_drive(world: &mut World) {
         eprintln!("ha-armas: infectados vivos {vivos}/5 · balas en vuelo {balas} · cargadas {cargadas:?} · reserva {reserva}");
         eprintln!("ha-armas: DONE");
         std::process::exit(0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HA_AUTOTEST — sube a un auto en una ciudad y lo maneja con policía, combustible y semáforos
+// ---------------------------------------------------------------------------
+
+/// `HA_AUTOTEST=1`: va al centro de la primera ciudad con calzada, pide un auto (`vehicle/coche_5`), se sube, comete un
+/// delito (la policía nace y persigue), maneja 12 s al este, deja capturas (`auto-0-manejando`, `auto-1-policia`),
+/// vacía el tanque y comprueba que el auto se frena solo. Informa por el log (`ha-auto:`) y termina con exit 0.
+fn auto_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 || !player_ready(world) {
+        return;
+    }
+    let stage = world.resource::<FlyTestState>().stage;
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    let t = now - entered;
+    let body = ha_shared::CelestialBody::Earth;
+    match stage {
+        0 => {
+            // La primera ciudad con calzada cerca del origen.
+            let mut destino = None;
+            'b: for sx in -2..=2i64 {
+                for sz in -2..=2i64 {
+                    let Some(c) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    for r in 0..40i64 {
+                        for dz in -r..=r {
+                            for dx in -r..=r {
+                                if dx.abs().max(dz.abs()) == r && ha_shared::roads::is_drivable_at(body, c.center.0 + dx, c.center.1 + dz) {
+                                    destino = Some((c.center.0 + dx, c.center.1 + dz));
+                                    break 'b;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let (x, z) = destino.map(|(x, z)| (x as f32 + 0.5, z as f32 + 0.5)).unwrap_or((0.0, 0.0));
+            {
+                let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+                let (mut sim, mut vis) = q.single_mut(world);
+                sim.body.x = x;
+                sim.body.z = z;
+                vis.from_x = x;
+                vis.to_x = x;
+                vis.from_z = z;
+                vis.to_z = z;
+                vis.to_rot = 0.0;
+            }
+            eprintln!("ha-auto: en la ciudad, calzada ({x:.0},{z:.0})");
+            advance_stage(world, now);
+        }
+        1 if t > 6.0 => {
+            world.resource_mut::<crate::vehiculos::Pedidos>().spawn = Some("vehicle/coche_5".into());
+            advance_stage(world, now);
+        }
+        2 if t > 1.0 => {
+            let mut q = world.query::<(Entity, &crate::vehiculos::Vehiculo)>();
+            let Some(e) = q.iter(world).find(|(_, v)| matches!(v.quien, crate::vehiculos::Quien::Nadie) && v.usado).map(|(e, _)| e) else {
+                eprintln!("ha-auto: FALLO · el pedido no creó el vehículo");
+                std::process::exit(2);
+            };
+            world.resource_mut::<crate::vehiculos::Manejando>().auto = Some(e);
+            {
+                let mut v = world.get_mut::<crate::vehiculos::Vehiculo>(e).unwrap();
+                v.quien = crate::vehiculos::Quien::Jugador;
+                v.robado = true;
+                eprintln!("ha-auto: al volante de {} · combustible {:.0}%", v.ficha.nombre, v.estado.comb * 100.0);
+            }
+            world.resource_mut::<crate::policia::Busqueda>().delito(1, "¡Robaste un vehículo!");
+            advance_stage(world, now);
+        }
+        3 => {
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
+            let shots = world.resource::<FlyTestState>().shots;
+            if shots == 0 && t > 3.0 {
+                shot(world, &format!("{}/auto-0-manejando.png", flytest_dir()));
+                world.resource_mut::<FlyTestState>().shots += 1;
+            }
+            if shots == 1 && t > 10.0 {
+                shot(world, &format!("{}/auto-1-policia.png", flytest_dir()));
+                world.resource_mut::<FlyTestState>().shots += 1;
+            }
+            if t > 12.0 {
+                let (vel, comb, x, z) = {
+                    let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+                    let v = world.get::<crate::vehiculos::Vehiculo>(e).unwrap();
+                    (v.estado.vel, v.estado.comb, v.estado.x, v.estado.z)
+                };
+                let patrullas = world.query::<&crate::vehiculos::Vehiculo>().iter(world).filter(|v| matches!(v.quien, crate::vehiculos::Quien::Policia(_))).count();
+                let nivel = world.resource::<crate::policia::Busqueda>().nivel;
+                let transito = world.query::<&crate::vehiculos::Vehiculo>().iter(world).filter(|v| matches!(v.quien, crate::vehiculos::Quien::Vecino(_))).count();
+                eprintln!("ha-auto: tras 12 s · vel {vel:.1} m/s · pos ({x:.0},{z:.0}) · combustible {:.1}% · patrullas {patrullas} · búsqueda {nivel} · tránsito {transito}", comb * 100.0);
+                let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+                world.get_mut::<crate::vehiculos::Vehiculo>(e).unwrap().estado.comb = 0.0;
+                advance_stage(world, now);
+            }
+        }
+        4 => {
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
+            if t > 8.0 {
+                let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+                let vel = world.get::<crate::vehiculos::Vehiculo>(e).unwrap().estado.vel;
+                let ok = vel.abs() < 2.0;
+                eprintln!("ha-auto: sin combustible a los 8 s · vel {vel:.2} m/s · {}", if ok { "OK se frenó solo" } else { "FALLO sigue andando" });
+                if !ok {
+                    std::process::exit(3);
+                }
+                advance_stage(world, now);
+            }
+        }
+        5 => {
+            // A la gasolinera más cercana: el auto queda parado adentro con el tanque casi vacío.
+            let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+            let (x, z) = {
+                let v = world.get::<crate::vehiculos::Vehiculo>(e).unwrap();
+                (v.estado.x, v.estado.z)
+            };
+            match ha_shared::vehiculos::gasolinera_cercana(body, x, z, 900.0) {
+                Some((gx, gz, d)) => {
+                    let mut v = world.get_mut::<crate::vehiculos::Vehiculo>(e).unwrap();
+                    v.estado.x = gx;
+                    v.estado.z = gz;
+                    v.estado.vel = 0.0;
+                    v.estado.comb = 0.1;
+                    eprintln!("ha-auto: gasolinera a {d:.0} m en ({gx:.0},{gz:.0}) · tanque al 10%");
+                    advance_stage(world, now);
+                }
+                None => {
+                    eprintln!("ha-auto: sin gasolinera a 900 m (repostaje omitido)");
+                    eprintln!("ha-auto: DONE");
+                    std::process::exit(0);
+                }
+            }
+        }
+        6 if t > 6.0 => {
+            let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+            let comb = world.get::<crate::vehiculos::Vehiculo>(e).unwrap().estado.comb;
+            let ok = comb > 0.6;
+            eprintln!("ha-auto: tras 6 s en la gasolinera · tanque {:.0}% · {}", comb * 100.0, if ok { "OK repostó" } else { "FALLO no repostó" });
+            eprintln!("ha-auto: DONE");
+            std::process::exit(if ok { 0 } else { 4 });
+        }
+        _ => {}
     }
 }
 

@@ -9077,8 +9077,33 @@ nuevo. Choque a más de 4 m/s abolla; a 0 queda chatarra.
 terraza, puente donde cruza agua, circunvalación donde desemboca en un casco, y ahora **`de_cada_nucleo_se_llega_en_auto_al_vecino`**
 (inundación desde un núcleo hasta el siguiente por celdas transitables). Un callejón (3 tiles) no lleva tránsito.
 **Probar**: `cargo test -p ha-shared vehiculos`, `cargo test -p ha-shared tests_conectividad`, `cargo test -p ha-game vehiculos`.
-**Falta (honesto)**: semáforos que el tránsito respete, policía que persiga el robo, estaciones de servicio / combustible, lanchas en
-el tránsito (hoy sólo existe la clase), multijugador (el vehículo es local), prueba en el Redmi.
+#### Semáforos, policía, combustible y multijugador (3 oct 2026, 2.ª tanda)
+
+**Semáforos** (`vehiculos::luz_en`): ciclo de 34 s función del reloj (norte-sur verde 14 s, amarillo 2, todo rojo 1; luego este-oeste), todos
+los cruces en fase, sin estado. `conducir` mira hasta 30 m: con luz no verde y espacio para frenar (`distancia_de_frenado`, al 60 % del
+freno) el borde del cruce cuenta como obstáculo; con amarillo tardío sigue de largo. Lo clava `el_vecino_maneja_bien_con_cualquier_semilla…`
+(6 semillas × 4 manos, 0 cruces con rojo de más de 1,5 s). **Las lámparas se ven**: cada poste (`road/semaforo_*`) cuelga una lámpara hija (`vehiculos::agregar_lampara`, llamada desde `world2d`) que `lamparas_semaforo` pinta de verde/amarillo/rojo con la misma `luz_en` (la posición de la lámpara sobre el poste es un número a ojo, `Transform` en `agregar_lampara`: afinar mirando una captura).
+**Combustible**: `Ficha.alcance` (m con tanque lleno: auto 12 km, moto 18, colectivo 9, bici/sin motor 0) y `Estado.comb` (0..1). Gasta por metro
+más un goteo con el pie en el acelerador; en 0 el motor no responde y el vehículo rueda hasta frenar. Los estacionados nacen entre 3 % y 90 %,
+el tránsito entre 40 % y 100 %. **Repostar** (`vehiculos::repostar`): casi parado dentro de una gasolinera, 10 s a tanque lleno. Cuenta la
+gasolinera generada (el lote `building/gasolinera` entero, `vehiculos::gasolinera_en`) y los surtidores colocados (`es_surtidor`: gasolinera,
+surtidor, estación de servicio, `fuel_source`, a 3 m de su base). Con menos de 25 % el HUD dice «Gasolinera a N m al noreste»
+(`gasolinera_cercana`, cada 4 s, radio 320). Gratis: todavía no hay moneda.
+**Policía** (`ha-game/policia.rs`): `Busqueda` 0-3. Robar un vehículo o atropellar a alguien (con el jugador al volante, > 5 m/s) sube un nivel
+(enfriamiento 4 s). Con nivel > 0 hay tantas patrullas como niveles (`vehicle/coche_13` con barra de luces roja/azul), una cada 6 s, a 70-110 m
+fuera de cámara; persiguen con `vehiculos::perseguir` (control del stick hacia el objetivo, marcha atrás si se atascan). A < 14 m disparan cada
+0,9 s (60 % de acierto, 4 de vida por patrulla, sujeto a la armadura). Si una te alcanza (< 4,5 m) y vas casi parado 3,5 s: multa de 15 de vida y,
+si el vehículo era robado, lo confiscan. 25 s sin que ninguna te vea (> 60 m) bajan un nivel. Sin nivel, las patrullas se quedan quietas y el
+tránsito las borra al alejarse.
+**Multijugador**: `Msg::Est` lleva `veh` (clave del vehículo que manejás, vacío = a pie; compatible con clientes viejos por `serde(default)`),
+el hub LAN (`red.rs`) y el relay (`relay.ts`) lo reenvían sanitizado, y el avatar remoto se dibuja con el sprite y la pose del vehículo
+(`multijugador::sprite_remoto`). ⚠ lo que NO se comparte: el tránsito, los estacionados, la búsqueda ni el tanque — cada cliente simula el suyo
+(el mundo compartido sólo replica ediciones, §15). Dos jugadores ven al otro en su auto, no el mismo auto.
+**Consola**: `/auto [modelo]` (delante tuyo; `taxi`, `colectivo`, `moto`, `bici`, `lancha`, `patrulla`, `coche_7`…), `/nafta` (tanque lleno),
+`/buscado <0-3>`. **Probar en la compu**: `HA_AUTOTEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./target/qa/ha-game` (va a una ciudad, pide un auto, se
+sube, comete un delito, maneja 12 s, vacía el tanque y comprueba que se frena; capturas `auto-0/1`; log `ha-auto:`).
+**Falta (honesto)** — todo lo de esta tanda está escrito pero **sin compilar ni probar** (el usuario hace los builds y los tests): policía a pie y comisarías; gasto de dinero al repostar; lanchas en el tránsito;
+peatones que esquiven autos; sincronizar tránsito y búsqueda entre jugadores; prueba en el Redmi.
 
 ---
 

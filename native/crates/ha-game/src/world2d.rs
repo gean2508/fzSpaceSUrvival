@@ -3144,6 +3144,15 @@ fn spawn_chunk_small_decor(
                 // (musgo, charco, hojas caídas) no debe taparte los pies.
                 Transform::from_xyz(r.x, y, capa),
             ));
+            // **El semáforo muestra su luz**: una lámpara hija que `vehiculos::lamparas_semaforo`
+            // pinta de verde, amarillo o rojo según el reloj del mundo (la misma
+            // `luz_en` con la que frena el tránsito). El poste mira contra el tránsito
+            // de su brazo, así que gobierna a quien viaja en sentido opuesto.
+            if e.key.starts_with("road/semaforo_") {
+                if let Some(rumbo) = ha_shared::roads::semaforo_at(body, tx, tz) {
+                    crate::vehiculos::agregar_lampara(&mut ent, (rumbo + 4) % 8);
+                }
+            }
             // **TODO prop es tocable** (15 ago 2026). Hasta acá el dedo sólo
             // encontraba árboles, rocas, vetas y lo que vos hubieras colocado: el
             // banco de la vereda, el farol, el cajón y las 7.821 claves del pack

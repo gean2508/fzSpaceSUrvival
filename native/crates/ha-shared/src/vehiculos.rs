@@ -33,6 +33,8 @@ pub enum Clase {
     Basura,
     Bomberos,
     Ambulancia,
+    /// El coche de policía: sólo nace cuando hay búsqueda (`ha-game/src/policia.rs`).
+    Patrulla,
     CasaRodante,
     Moto,
     Bici,
@@ -62,6 +64,8 @@ pub struct Ficha {
     pub dos_ruedas: bool,
     /// La bici no tiene motor: no hace ruido ni se roba "con las llaves".
     pub motor: bool,
+    /// Metros que rinde con el tanque lleno. `0` = no gasta (bici, lancha de juguete).
+    pub alcance: f32,
 }
 
 pub fn ficha(c: Clase) -> Ficha {
@@ -75,19 +79,21 @@ pub fn ficha(c: Clase) -> Ficha {
         medio: Medio::Tierra,
         dos_ruedas: false,
         motor: true,
+        alcance: 12_000.0,
     };
     match c {
         Clase::Auto => f("Auto", 20.0, 6.0, 12.0, 2.4, 100.0),
         Clase::Taxi => f("Taxi", 20.0, 6.0, 12.0, 2.4, 100.0),
-        Clase::Colectivo => f("Colectivo", 13.0, 3.0, 8.0, 1.5, 220.0),
-        Clase::Camion => f("Camión", 14.0, 3.0, 8.0, 1.5, 250.0),
+        Clase::Colectivo => Ficha { alcance: 9_000.0, ..f("Colectivo", 13.0, 3.0, 8.0, 1.5, 220.0) },
+        Clase::Camion => Ficha { alcance: 8_000.0, ..f("Camión", 14.0, 3.0, 8.0, 1.5, 250.0) },
         Clase::Basura => f("Camión de basura", 12.0, 2.5, 8.0, 1.4, 260.0),
         Clase::Bomberos => f("Autobomba", 16.0, 3.5, 9.0, 1.5, 300.0),
         Clase::Ambulancia => f("Ambulancia", 19.0, 5.0, 11.0, 2.0, 150.0),
         Clase::CasaRodante => f("Casa rodante", 13.0, 2.8, 8.0, 1.4, 200.0),
-        Clase::Moto => Ficha { dos_ruedas: true, ..f("Moto", 24.0, 9.0, 14.0, 3.2, 50.0) },
-        Clase::Bici => Ficha { dos_ruedas: true, motor: false, ..f("Bicicleta", 8.0, 4.0, 8.0, 3.4, 30.0) },
-        Clase::Lancha => Ficha { medio: Medio::Agua, ..f("Lancha", 16.0, 4.0, 4.0, 1.8, 120.0) },
+        Clase::Patrulla => Ficha { alcance: 20_000.0, ..f("Patrulla", 23.0, 7.5, 13.0, 2.6, 160.0) },
+        Clase::Moto => Ficha { dos_ruedas: true, alcance: 18_000.0, ..f("Moto", 24.0, 9.0, 14.0, 3.2, 50.0) },
+        Clase::Bici => Ficha { dos_ruedas: true, motor: false, alcance: 0.0, ..f("Bicicleta", 8.0, 4.0, 8.0, 3.4, 30.0) },
+        Clase::Lancha => Ficha { medio: Medio::Agua, alcance: 9_000.0, ..f("Lancha", 16.0, 4.0, 4.0, 1.8, 120.0) },
     }
 }
 
@@ -137,6 +143,30 @@ pub const MODELOS: &[(&str, Clase)] = &[
     ("vehicle/moto", Clase::Moto),
     ("vehicle/bici", Clase::Bici),
 ];
+
+/// Un nombre que escribe una persona (`taxi`, `colectivo`, `coche_7`) → la clave de arte.
+/// Lo usa la consola (`/auto taxi`).
+pub fn modelo_por_nombre(nombre: &str) -> Option<&'static str> {
+    let n = nombre.trim().to_lowercase();
+    if let Some((k, _)) = MODELOS.iter().find(|(k, _)| k.strip_prefix("vehicle/") == Some(n.as_str())) {
+        return Some(k);
+    }
+    Some(match n.as_str() {
+        "auto" | "coche" | "carro" => "vehicle/coche_1",
+        "taxi" => "vehicle/coche_11",
+        "patrulla" | "policia" | "policía" => "vehicle/coche_13",
+        "colectivo" | "bus" | "micro" => "vehicle/colectivo_1",
+        "camion" | "camión" => "vehicle/camion",
+        "basura" => "vehicle/basura",
+        "bomberos" | "autobomba" => "vehicle/bomberos",
+        "ambulancia" => "vehicle/ambulancia",
+        "casa" | "casa_rodante" => "vehicle/casa_rodante",
+        "lancha" | "barco" => "vehicle/lancha",
+        "moto" => "vehicle/moto",
+        "bici" | "bicicleta" => "vehicle/bici",
+        _ => return None,
+    })
+}
 
 pub fn clase_de(clave: &str) -> Option<Clase> {
     MODELOS.iter().find(|(k, _)| *k == clave).map(|&(_, c)| c)
@@ -245,15 +275,22 @@ pub struct Estado {
     /// Medidas en metros, del sprite medido.
     pub largo: f32,
     pub ancho: f32,
+    /// Combustible, 0..1 (1 = tanque lleno).
+    pub comb: f32,
 }
 
 impl Estado {
     pub fn nuevo(x: f32, z: f32, rumbo: f32, f: &Ficha, largo: f32, ancho: f32) -> Self {
-        Self { x, z, rumbo, vel: 0.0, salud: f.salud, largo, ancho }
+        Self { x, z, rumbo, vel: 0.0, salud: f.salud, largo, ancho, comb: 1.0 }
     }
 
     pub fn chatarra(&self) -> bool {
         self.salud <= 0.0
+    }
+
+    /// ¿Tiene con qué andar? (la bici nunca se queda sin nada)
+    pub fn con_combustible(&self, f: &Ficha) -> bool {
+        f.alcance <= 0.0 || self.comb > 0.0
     }
 
     /// Los círculos con que choca: uno por cada "ancho" de largo, sobre el eje.
@@ -342,7 +379,15 @@ pub fn paso(
     let mut out = Paso::default();
     let s = suelo(e.x.floor() as i64, e.z.floor() as i64);
     let agarre = s.agarre();
-    let (acel, giro) = if e.chatarra() { (0.0, 0.0) } else { (m.acel.clamp(-1.0, 1.0), m.giro.clamp(-1.0, 1.0)) };
+    let (mut acel, giro) = if e.chatarra() { (0.0, 0.0) } else { (m.acel.clamp(-1.0, 1.0), m.giro.clamp(-1.0, 1.0)) };
+    // Sin nafta el motor no responde: el auto rueda por inercia hasta frenarse solo.
+    if !e.con_combustible(f) && acel > 0.0 {
+        acel = 0.0;
+    }
+    if f.alcance > 0.0 && acel != 0.0 {
+        // Gasto por metro recorrido, más un goteo por tener el pie en el acelerador.
+        e.comb = (e.comb - (e.vel.abs() * dt + 0.4 * acel.abs() * dt) / f.alcance).max(0.0);
+    }
     let tope = f.vel_max * s.tope(f).max(0.05);
     let tope_atras = tope * 0.35;
 
@@ -423,6 +468,156 @@ fn s_no_admite(f: &Ficha, s: Suelo) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Semáforos
+// ---------------------------------------------------------------------------
+
+/// La luz que ve un conductor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Luz {
+    Verde,
+    Amarillo,
+    Rojo,
+}
+
+/// Duración de un ciclo completo, en segundos.
+pub const CICLO_SEMAFORO: f64 = 34.0;
+
+/// **La luz del eje por el que se circula**, según el reloj del mundo.
+///
+/// Un ciclo de 34 s: norte-sur verde 14 s, amarillo 2, todo rojo 1; este-oeste
+/// verde 14 s, amarillo 2, todo rojo 1. Es una función del reloj y nada más: todos
+/// los cruces del mundo van en fase, así que no hay que guardar un byte por
+/// semáforo, el cliente y el servidor ven lo mismo, y dos jugadores en la misma
+/// esquina ven la misma luz. `rumbo` es el octante de `roads::lane_at` (`0` este,
+/// `2` norte, `4` oeste, `6` sur).
+pub fn luz_en(t: f64, rumbo: u8) -> Luz {
+    let ns = rumbo % 4 == 2;
+    let f = t.rem_euclid(CICLO_SEMAFORO);
+    let (inicio, _) = if ns { (0.0, 17.0) } else { (17.0, 34.0) };
+    let d = f - inicio;
+    if (0.0..14.0).contains(&d) {
+        Luz::Verde
+    } else if (14.0..16.0).contains(&d) {
+        Luz::Amarillo
+    } else {
+        Luz::Rojo
+    }
+}
+
+/// Metros que hacen falta para clavar el freno desde `vel` (con margen: frena al
+/// 60 % de lo que da el vehículo, que es como frena alguien que no quiere
+/// derrapar).
+pub fn distancia_de_frenado(vel: f32, f: &Ficha) -> f32 {
+    vel * vel / (2.0 * f.freno * 0.6)
+}
+
+// ---------------------------------------------------------------------------
+// La patrulla
+// ---------------------------------------------------------------------------
+
+/// Memoria del que persigue: se atasca contra una pared y tiene que dar marcha
+/// atrás sin que nadie se lo diga.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Persecucion {
+    /// Segundos casi parado sin estar donde quería.
+    pub atasco: f32,
+    /// Segundos que le quedan de marcha atrás para desatascarse.
+    pub reversa: f32,
+    /// Hacia qué lado gira al desatascarse (±1).
+    pub lado: f32,
+}
+
+/// **Perseguir un punto.** El perseguidor apunta el rumbo hacia el objetivo con el
+/// mismo control que el jugador (`mando_desde_stick`), acelera a fondo lejos y se
+/// acomoda a unos 6 m. Si lleva más de 1,2 s empujando una pared da marcha atrás
+/// girando hacia el lado contrario.
+pub fn perseguir(e: &Estado, f: &Ficha, p: &mut Persecucion, objetivo: (f32, f32), dt: f32) -> Mando {
+    let (dx, dz) = (objetivo.0 - e.x, objetivo.1 - e.z);
+    let d = (dx * dx + dz * dz).sqrt();
+    if p.reversa > 0.0 {
+        p.reversa -= dt;
+        return Mando { acel: -1.0, giro: p.lado };
+    }
+    if d < 6.0 {
+        // Llegó: frena a fondo y se queda.
+        p.atasco = 0.0;
+        return Mando { acel: if e.vel > 0.5 { -1.0 } else { 0.0 }, giro: 0.0 };
+    }
+    if e.vel.abs() < 0.8 && d > 8.0 {
+        p.atasco += dt;
+        if p.atasco > 1.2 {
+            p.atasco = 0.0;
+            p.reversa = 1.1;
+            p.lado = if (e.x + e.z).floor() as i64 % 2 == 0 { 1.0 } else { -1.0 };
+        }
+    } else {
+        p.atasco = 0.0;
+    }
+    let mag = if d > 30.0 { 1.0 } else { (d / 30.0).clamp(0.45, 1.0) };
+    let _ = f;
+    mando_desde_stick(e, dx / d * mag, dz / d * mag)
+}
+
+// ---------------------------------------------------------------------------
+// Gasolineras
+// ---------------------------------------------------------------------------
+
+/// La clave del lote que genera la ciudad (`city::LOT_PROGRAMS`).
+pub const LOTE_GASOLINERA: &str = "building/gasolinera";
+
+/// ¿Esta pieza colocada (la clave de arte) es un surtidor? Cuenta lo que el
+/// jugador planta con el editor (`decor/fuel_source`, `edif_gasolinera`) y las
+/// piezas de estación de servicio del pack.
+pub fn es_surtidor(art: &str) -> bool {
+    ["gasolinera", "surtidor", "estacion_de_servicio", "fuel_source"].iter().any(|k| art.contains(k))
+}
+
+/// Rectángulo `[x0, z0, x1, z1]` (tiles) de la gasolinera generada que cubre la
+/// celda `(tx, tz)`, si la hay. El lote entero cuenta como surtidor: el playón
+/// donde se para el auto es parte de la parcela.
+pub fn gasolinera_en(body: crate::celestial_bodies::CelestialBody, tx: i64, tz: i64) -> Option<[i64; 4]> {
+    let s = crate::geography::settlement_covering(body, tx, tz)?;
+    let lot = crate::city::lot_at(body, &s, tx, tz)?;
+    (lot.program().key == LOTE_GASOLINERA).then(|| [lot.min.0, lot.min.1, lot.min.0 + lot.w, lot.min.1 + lot.h])
+}
+
+/// La gasolinera generada más cercana a `(x, z)` dentro de `radio` metros: su
+/// centro y la distancia. Es la pista de «no tenés nafta, andá para allá».
+///
+/// Barre la zona de a `PASO` tiles preguntando por el lote (memoizado por el
+/// asentamiento), no celda a celda: un lote de gasolinera mide 14 × 14 como
+/// mínimo, así que un paso de 10 no puede saltearse ninguno. Cuesta unas mil
+/// consultas con radio 200, y se llama cada varios segundos y sólo con el tanque
+/// bajo.
+pub fn gasolinera_cercana(
+    body: crate::celestial_bodies::CelestialBody,
+    x: f32,
+    z: f32,
+    radio: f32,
+) -> Option<(f32, f32, f32)> {
+    const PASO: i64 = 10;
+    let r = radio as i64;
+    let (cx, cz) = (x.floor() as i64, z.floor() as i64);
+    let mut mejor: Option<(f32, f32, f32)> = None;
+    let mut dz = -r;
+    while dz <= r {
+        let mut dx = -r;
+        while dx <= r {
+            if let Some([x0, z0, x1, z1]) = gasolinera_en(body, cx + dx, cz + dz) {
+                let (gx, gz) = ((x0 + x1) as f32 * 0.5, (z0 + z1) as f32 * 0.5);
+                let d = ((gx - x).powi(2) + (gz - z).powi(2)).sqrt();
+                if d <= radio && mejor.is_none_or(|(_, _, m)| d < m) {
+                    mejor = Some((gx, gz, d));
+                }
+            }
+            dx += PASO;
+        }
+        dz += PASO;
+    }
+    mejor
+}
+
+// ---------------------------------------------------------------------------
 // El conductor
 // ---------------------------------------------------------------------------
 
@@ -484,6 +679,7 @@ pub fn conducir(
     c: &mut Conductor,
     calzada: &impl Fn(i64, i64) -> bool,
     libre_adelante: f32,
+    luz: &impl Fn(u8) -> Luz,
 ) -> Mando {
     let (tx, tz) = (e.x.floor() as i64, e.z.floor() as i64);
     if !calzada(tx, tz) {
@@ -539,6 +735,30 @@ pub fn conducir(
     let diff = envolver(deseado - e.rumbo);
     let giro = (diff * 2.5).clamp(-1.0, 1.0);
 
+    // **El semáforo.** Antes de cada cruce se mira hasta 30 m: si la luz de SU eje
+    // no es verde y todavía puede clavar el freno, el borde del cruce cuenta como
+    // un obstáculo. Si ya no llega a frenar (amarillo tardío) sigue de largo: parar
+    // en medio del cruce es peor que cruzar. Una vez adentro no se frena nunca.
+    let mut libre_adelante = libre_adelante;
+    if !cruce {
+        let (fx, fz) = dir_octante(c.rumbo);
+        if let Some(k) = (1..=30).find(|&k| crate::roads::cruce_con(calzada, tx + fx * k, tz + fz * k)) {
+            // Coordenada, a lo largo del rumbo, del borde cercano del cruce.
+            let (a, borde) = if fx != 0 {
+                let celda = tx + fx * k;
+                (e.x, if fx > 0 { celda as f32 } else { (celda + 1) as f32 })
+            } else {
+                let celda = tz + fz * k;
+                (e.z, if fz > 0 { celda as f32 } else { (celda + 1) as f32 })
+            };
+            let al_borde = if fx + fz > 0 { borde - a } else { a - borde };
+            let paragolpes = al_borde - e.largo * 0.5;
+            if luz(c.rumbo) != Luz::Verde && paragolpes >= distancia_de_frenado(e.vel.max(0.0), f) {
+                libre_adelante = libre_adelante.min(al_borde);
+            }
+        }
+    }
+
     // Velocidad: la suya en recta, despacio doblando, y frena ante lo que tenga
     // enfrente (mantiene distancia en vez de comérselo).
     let mut objetivo = f.vel_max * c.apuro;
@@ -548,8 +768,10 @@ pub fn conducir(
     let distancia = libre_adelante - e.largo * 0.5;
     if distancia < 3.0 {
         objetivo = 0.0;
-    } else if distancia < 12.0 {
-        objetivo = objetivo.min((distancia - 3.0) * 1.2);
+    } else if distancia < 45.0 {
+        // La velocidad desde la que todavía se frena en lo que queda (a la mitad del
+        // freno del vehículo, que es como frena quien no quiere derrapar).
+        objetivo = objetivo.min(((distancia - 3.0) * f.freno).sqrt());
     }
     let acel = ((objetivo - e.vel) * 0.6).clamp(-1.0, 1.0);
     Mando { acel, giro }
@@ -672,7 +894,9 @@ mod tests {
         en(tx) || en(tz)
     }
 
-    fn manejar_por_la_ciudad(x: f32, z: f32, o: u8, semilla: u32, segs: f32) -> (f32, usize, usize) {
+    /// Devuelve (metros recorridos, pasos fuera del asfalto, % a contramano,
+    /// entradas a un cruce con rojo de más de 1,5 s, cruces atravesados).
+    fn manejar_por_la_ciudad(x: f32, z: f32, o: u8, semilla: u32, segs: f32) -> (f32, usize, usize, usize, usize) {
         let f = ficha(Clase::Auto);
         let rumbo = -(o as f32) * std::f32::consts::FRAC_PI_4;
         let mut e = Estado::nuevo(x, z, rumbo, &f, 4.1, 2.3);
@@ -682,30 +906,45 @@ mod tests {
         let mut recorrido = 0.0;
         let mut fuera = 0;
         let mut contramano = 0;
+        let mut en_rojo = 0;
+        let mut cruces = 0;
+        let mut estaba_en_cruce = false;
         let pasos = (segs * 20.0) as usize;
-        for _ in 0..pasos {
-            let m = conducir(&e, &f, &mut c, &calzada, f32::INFINITY);
+        // Cada semilla arranca en otro punto del ciclo.
+        let t0 = (semilla % 34) as f64;
+        for i in 0..pasos {
+            let t = t0 + i as f64 * 0.05;
+            let luz = |r: u8| luz_en(t, r);
+            let rumbo_antes = c.rumbo;
+            let m = conducir(&e, &f, &mut c, &calzada, f32::INFINITY, &luz);
             let (x0, z0) = (e.x, e.z);
             paso(&mut e, m, &f, 0.05, &suelo, &|_, _, _| false);
             recorrido += ((e.x - x0).powi(2) + (e.z - z0).powi(2)).sqrt();
             let (tx, tz) = (e.x.floor() as i64, e.z.floor() as i64);
+            let en_cruce = crate::roads::cruce_con(&calzada, tx, tz);
+            if en_cruce && !estaba_en_cruce {
+                cruces += 1;
+                if luz_en(t, rumbo_antes) == Luz::Rojo && luz_en(t - 1.5, rumbo_antes) == Luz::Rojo {
+                    en_rojo += 1;
+                }
+            }
+            estaba_en_cruce = en_cruce;
             if !reticula(tx, tz) {
                 fuera += 1;
-            } else if !crate::roads::cruce_con(&calzada, tx, tz)
-                && crate::roads::carril_con(&calzada, tx, tz) == Some(opuesto(c.rumbo))
-            {
+            } else if !en_cruce && crate::roads::carril_con(&calzada, tx, tz) == Some(opuesto(c.rumbo)) {
                 contramano += 1;
             }
         }
-        (recorrido, fuera, contramano * 100 / pasos.max(1))
+        (recorrido, fuera, contramano * 100 / pasos.max(1), en_rojo, cruces)
     }
 
     #[test]
     fn el_vecino_maneja_por_su_mano_sin_salirse_de_la_calle() {
         // La mitad sur de la calle este-oeste (z 20..22) va al este.
-        let (recorrido, fuera, contramano) = manejar_por_la_ciudad(5.5, 21.5, 0, 7, 90.0);
+        let (recorrido, fuera, contramano, en_rojo, _) = manejar_por_la_ciudad(5.5, 21.5, 0, 7, 90.0);
         assert_eq!(fuera, 0, "se salió del asfalto {fuera} pasos");
-        assert!(recorrido > 400.0, "apenas recorrió {recorrido} m en 90 s");
+        assert_eq!(en_rojo, 0, "cruzó {en_rojo} veces con el semáforo en rojo");
+        assert!(recorrido > 250.0, "apenas recorrió {recorrido} m en 90 s");
         assert!(contramano <= 5, "{contramano}% del tiempo a contramano");
     }
 
@@ -715,9 +954,10 @@ mod tests {
         let salidas = [(5.5, 21.5, 0u8), (35.5, 18.5, 4), (21.5, 35.5, 2), (18.5, 5.5, 6)];
         for semilla in [1u32, 2, 3, 99, 1234, 777_777] {
             for &(x, z, o) in &salidas {
-                let (recorrido, fuera, contramano) = manejar_por_la_ciudad(x, z, o, semilla, 60.0);
+                let (recorrido, fuera, contramano, en_rojo, _) = manejar_por_la_ciudad(x, z, o, semilla, 90.0);
                 assert_eq!(fuera, 0, "semilla {semilla} desde ({x},{z}): se salió {fuera} pasos");
-                assert!(recorrido > 200.0, "semilla {semilla} desde ({x},{z}): recorrió {recorrido}");
+                assert_eq!(en_rojo, 0, "semilla {semilla} desde ({x},{z}): {en_rojo} cruces con rojo");
+                assert!(recorrido > 120.0, "semilla {semilla} desde ({x},{z}): recorrió {recorrido}");
                 assert!(contramano <= 8, "semilla {semilla} desde ({x},{z}): {contramano}% a contramano");
             }
         }
@@ -729,7 +969,7 @@ mod tests {
         let mut e = Estado::nuevo(5.5, 21.5, 0.0, &f, 4.1, 2.3);
         e.vel = 10.0;
         let mut c = Conductor::nuevo(0, 3);
-        let m = conducir(&e, &f, &mut c, &|x, z| reticula(x, z), 4.0);
+        let m = conducir(&e, &f, &mut c, &|x, z| reticula(x, z), 4.0, &|_| Luz::Verde);
         assert!(m.acel < 0.0, "con algo a 4 m acelera: {m:?}");
     }
 
@@ -748,10 +988,168 @@ mod tests {
     }
 
     #[test]
+    fn los_nombres_de_la_consola_llevan_a_un_modelo_que_existe() {
+        for n in ["auto", "taxi", "colectivo", "camion", "basura", "bomberos", "ambulancia", "casa", "lancha", "moto", "bici", "patrulla", "coche_7", "colectivo_3"] {
+            let k = modelo_por_nombre(n).unwrap_or_else(|| panic!("{n} no se entiende"));
+            assert!(clase_de(k).is_some(), "{n} → {k} no está en MODELOS");
+        }
+        assert_eq!(modelo_por_nombre("avioneta"), None);
+    }
+
+    #[test]
+    fn los_surtidores_se_reconocen_por_la_clave_de_arte() {
+        assert!(es_surtidor("building/gasolinera"));
+        assert!(es_surtidor("decor/fuel_source"));
+        assert!(es_surtidor("building/estacion_de_servicio_2"));
+        assert!(!es_surtidor("building/hospital"));
+    }
+
+    #[test]
     fn el_suelo_sale_del_tile() {
         assert_eq!(suelo_de(Tile::Asphalt), Suelo::Asfalto);
         assert_eq!(suelo_de(Tile::Grass), Suelo::Pasto);
         assert_eq!(suelo_de(Tile::WaterDeep), Suelo::Hondo);
         assert_eq!(suelo_de(Tile::Pavement), Suelo::Firme);
+    }
+
+    #[test]
+    fn el_ciclo_del_semaforo_nunca_da_verde_a_los_dos_ejes() {
+        let mut ns_verde = 0.0f64;
+        let mut ew_verde = 0.0f64;
+        let mut t = 0.0;
+        while t < CICLO_SEMAFORO * 3.0 {
+            let (ns, ew) = (luz_en(t, 2), luz_en(t, 0));
+            assert!(!(ns != Luz::Rojo && ew != Luz::Rojo), "t={t}: ns {ns:?} y ew {ew:?} a la vez");
+            assert_eq!(luz_en(t, 2), luz_en(t, 6), "norte y sur van juntos");
+            assert_eq!(luz_en(t, 0), luz_en(t, 4), "este y oeste van juntos");
+            if ns == Luz::Verde {
+                ns_verde += 0.05;
+            }
+            if ew == Luz::Verde {
+                ew_verde += 0.05;
+            }
+            t += 0.05;
+        }
+        assert!((ns_verde - ew_verde).abs() < 1.0, "reparto parejo: {ns_verde} vs {ew_verde}");
+        assert!(ns_verde > 3.0 * 13.0, "el verde dura: {ns_verde}");
+    }
+
+    #[test]
+    fn con_rojo_se_para_antes_del_cruce_y_con_verde_pasa() {
+        let calzada = |x: i64, z: i64| reticula(x, z);
+        let suelo = |x: i64, z: i64| if reticula(x, z) { Suelo::Asfalto } else { Suelo::Pasto };
+        let f = ficha(Clase::Auto);
+        // Calle este-oeste (z 20..22), mitad sur, yendo al este; el cruce es x 18..22.
+        for (rojo, nombre) in [(true, "rojo"), (false, "verde")] {
+            let mut e = Estado::nuevo(2.5, 21.5, 0.0, &f, 4.1, 2.3);
+            let mut c = Conductor::nuevo(0, 5);
+            let luz = |_: u8| if rojo { Luz::Rojo } else { Luz::Verde };
+            let mut max_x = 0.0f32;
+            for _ in 0..(40.0 * 20.0) as usize {
+                let m = conducir(&e, &f, &mut c, &calzada, f32::INFINITY, &luz);
+                paso(&mut e, m, &f, 0.05, &suelo, &|_, _, _| false);
+                max_x = max_x.max(e.x);
+            }
+            if rojo {
+                assert!(max_x + e.largo * 0.5 < 18.0, "{nombre}: el paragolpes llegó a {} (cruce desde x=18)", max_x + e.largo * 0.5);
+                assert!(max_x > 8.0, "{nombre}: ni se acercó al cruce ({max_x})");
+            } else {
+                assert!(max_x > 30.0, "{nombre}: no cruzó ({max_x})");
+            }
+        }
+    }
+
+    #[test]
+    fn el_amarillo_tardio_no_clava_el_freno_en_medio_del_cruce() {
+        let calzada = |x: i64, z: i64| reticula(x, z);
+        let f = ficha(Clase::Auto);
+        let mut e = Estado::nuevo(15.5, 21.5, 0.0, &f, 4.1, 2.3);
+        e.vel = 8.0; // a 8 m/s el cruce queda a ~0,5 m del paragolpes: ya no llega a frenar
+        let mut c = Conductor::nuevo(0, 5);
+        let m = conducir(&e, &f, &mut c, &calzada, f32::INFINITY, &|_| Luz::Amarillo);
+        assert!(m.acel > -0.2, "frena a fondo pegado al cruce: {m:?}");
+    }
+
+    #[test]
+    fn sin_combustible_el_motor_no_responde_y_la_bici_nunca_se_queda() {
+        let (f, mut e) = auto();
+        manejar(&mut e, &f, Mando { acel: 1.0, giro: 0.0 }, Suelo::Asfalto, 2.0);
+        assert!(e.comb < 1.0, "no gastó nada");
+        e.comb = 0.0;
+        let v0 = e.vel;
+        manejar(&mut e, &f, Mando { acel: 1.0, giro: 0.0 }, Suelo::Asfalto, 6.0);
+        assert!(e.vel < v0 * 0.5, "sin nafta siguió acelerando: {} → {}", v0, e.vel);
+
+        let fb = ficha(Clase::Bici);
+        let mut b = Estado::nuevo(0.5, 0.5, 0.0, &fb, 1.6, 0.6);
+        b.comb = 0.0;
+        manejar(&mut b, &fb, Mando { acel: 1.0, giro: 0.0 }, Suelo::Asfalto, 3.0);
+        assert!(b.vel > 3.0, "la bici no pedalea: {}", b.vel);
+    }
+
+    #[test]
+    fn el_tanque_rinde_lo_que_dice_la_ficha() {
+        let (f, mut e) = auto();
+        let mut recorrido = 0.0;
+        while e.comb > 0.0 && recorrido < 30_000.0 {
+            let x0 = e.x;
+            paso(&mut e, Mando { acel: 0.6, giro: 0.0 }, &f, 0.05, &|_, _| Suelo::Asfalto, &|_, _, _| false);
+            recorrido += e.x - x0;
+            if e.x > 5_000.0 {
+                e.x = 0.5;
+            }
+        }
+        assert!(e.comb <= 0.0, "ni gastó el tanque en 30 km");
+        assert!(recorrido > f.alcance * 0.5 && recorrido < f.alcance * 1.1, "rindió {recorrido} m de {}", f.alcance);
+    }
+
+    #[test]
+    fn la_patrulla_alcanza_al_que_huye_y_se_desatasca() {
+        let f = ficha(Clase::Patrulla);
+        let mut e = Estado::nuevo(0.5, 0.5, 0.0, &f, 4.1, 2.3);
+        let mut p = Persecucion::default();
+        let objetivo = (120.0, 40.0);
+        for _ in 0..(30.0 * 20.0) as usize {
+            let m = perseguir(&e, &f, &mut p, objetivo, 0.05);
+            paso(&mut e, m, &f, 0.05, &|_, _| Suelo::Pasto, &|_, _, _| false);
+        }
+        let d = ((e.x - objetivo.0).powi(2) + (e.z - objetivo.1).powi(2)).sqrt();
+        assert!(d < 12.0, "la patrulla quedó a {d} m");
+
+        // Una pared entre medio: da marcha atrás y la rodea en vez de quedarse clavada.
+        let pared = |x: f32, z: f32, r: f32| (x + r > 50.0 && x - r < 52.0) && z > -30.0 && z < 30.0;
+        let mut e = Estado::nuevo(0.5, 0.5, 0.0, &f, 4.1, 2.3);
+        let mut p = Persecucion::default();
+        let objetivo = (120.0, 0.5);
+        let mut paso_la_pared = false;
+        for _ in 0..(60.0 * 20.0) as usize {
+            let m = perseguir(&e, &f, &mut p, objetivo, 0.05);
+            paso(&mut e, m, &f, 0.05, &|_, _| Suelo::Pasto, &pared);
+            paso_la_pared |= e.x > 55.0;
+        }
+        assert!(paso_la_pared, "quedó clavada contra la pared en x={}", e.x);
+    }
+
+    #[test]
+    fn hay_gasolineras_en_las_ciudades_y_la_pista_apunta_a_una() {
+        use crate::celestial_bodies::CelestialBody;
+        let body = CelestialBody::Earth;
+        let mut halladas = 0;
+        'b: for sx in -3..=3i64 {
+            for sz in -3..=3i64 {
+                let Some(s) = crate::geography::settlement_in(body, sx, sz) else { continue };
+                if let Some((gx, gz, d)) = gasolinera_cercana(body, s.center.0 as f32, s.center.1 as f32, 300.0) {
+                    let r = gasolinera_en(body, gx.floor() as i64, gz.floor() as i64);
+                    // El centro del lote es parte del lote.
+                    assert!(r.is_some(), "la pista ({gx},{gz}) no cae en una gasolinera");
+                    assert!(d <= 300.0);
+                    halladas += 1;
+                    if halladas >= 3 {
+                        break 'b;
+                    }
+                }
+            }
+        }
+        assert!(halladas >= 1, "ninguna ciudad cercana tiene gasolinera");
     }
 }
