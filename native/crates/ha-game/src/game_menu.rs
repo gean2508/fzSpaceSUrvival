@@ -333,7 +333,7 @@ fn panel_pausa(p: &mut ChildBuilder, art: &ArtLibrary, k: f32) {
 
     // Seis casillas, 3 × 2.
     let tw = (iw - geo::GAP * 2.0) / 3.0;
-    let th = 196.0;
+    let th = 188.0;
     let y0 = y + 84.0 + 150.0 + geo::GAP + 6.0;
     let casillas: [(&str, &str); 6] = [
         ("AJUSTES", "ui/ic_engranaje"),
@@ -546,7 +546,7 @@ mod tests {
     fn la_pausa_entra_en_su_panel() {
         let (x, y, w, h) = geo::PAUSA;
         let iw = w - geo::MARGEN * 2.0;
-        let th = 196.0;
+        let th = 188.0;
         let y0 = y + 84.0 + 150.0 + geo::GAP + 6.0;
         let fin_casillas = y0 + 2.0 * th + geo::GAP;
         let yb = y + h - 42.0 - 112.0;
