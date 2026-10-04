@@ -422,6 +422,10 @@ fn build_tab_select(
         ResMut<crate::inventory_persist::PlayerInventory>,
         ResMut<crate::inventory_persist::InventoryPersistState>,
     ),
+    (mut inv_ui, mut equipped): (
+        ResMut<crate::hud::inventory_ui::InventoryUiState>,
+        ResMut<crate::input::EquippedItem>,
+    ),
 ) {
     for (interaction, button, mut bg) in &mut buttons {
         if *interaction == Interaction::Pressed {
@@ -456,6 +460,29 @@ fn build_tab_select(
                 }
                 inv.add(item, 1);
                 persist.mark_dirty();
+                // **Elegir un arma la deja EN LA MANO** (pedido del usuario, 4 oct 2026: «selecciono un arma pero no veo
+                // el inventario ni me deja usarla»): va a la barra, queda elegida y equipada, y la mochila se cierra.
+                use crate::hud::inventory_ui::{add_item_to_slots, SlotId, Stack, HOTBAR_ITEM_SLOTS};
+                add_item_to_slots(&mut inv_ui, item, 1);
+                let idx = match inv_ui.hotbar.iter().position(|s| s.item_id.as_deref() == Some(item)) {
+                    Some(i) => i,
+                    None => {
+                        // Cayó en la grilla: se cambia por el primer hueco de la barra (o la última casilla).
+                        let hueco = inv_ui.hotbar.iter().position(|s| s.is_empty()).unwrap_or(HOTBAR_ITEM_SLOTS - 1);
+                        let viejo = std::mem::take(&mut inv_ui.hotbar[hueco]);
+                        if let Some(gi) = inv_ui.grid.iter().position(|g| g.item_id.as_deref() == Some(item)) {
+                            let nuevo = std::mem::replace(&mut inv_ui.grid[gi], viejo);
+                            inv_ui.hotbar[hueco] = nuevo;
+                        } else {
+                            inv_ui.hotbar[hueco] = Stack { item_id: Some(item.to_string()), qty: 1 };
+                        }
+                        hueco
+                    }
+                };
+                inv_ui.selected = Some(SlotId::Hotbar(idx));
+                equipped.item_id = item.to_string();
+                build_mode.active = false;
+                bag.open = false;
             }
         }
     } else if *recorrido <= crate::hud::BAG_UMBRAL {
