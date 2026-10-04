@@ -23,6 +23,7 @@ corresponda:
 | qué falta hacer | §13 |
 | "¿por qué no hacemos X?" | §14 (cementerio) |
 | gameplay nuevo, "¿qué hacemos para que sea divertido?" | §16 (pilares) + §20 (ideas de 25+ juegos) |
+| gameplay nuevo, "¿qué hacemos para que sea divertido?" | §16 (pilares) + §19 (ideas de 25+ juegos) |
 
 Si algo del documento contradice al código, **gana el código** — pero actualizá el
 documento.

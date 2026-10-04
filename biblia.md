@@ -8606,6 +8606,7 @@ Investigación de diseño (sandbox/survival): el bucle que engancha es *recolect
 herramienta mejor → recolectar más profundo*, con metas visibles que enseñan el circuito,
 peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los busque.
 Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§20**.
+Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§19**.
 
 **Hecho**
 * `metas.rs`: cadena de 13 metas (madera → pico → piedra → antorcha → cuero → ropa → hierro →
@@ -9108,6 +9109,9 @@ peatones que esquiven autos; sincronizar tránsito y búsqueda entre jugadores; 
 ---
 
 ## §20 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)
+---
+
+## §19 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)
 
 Pedido del usuario: *«buscar en internet los juegos desde el 2000 hasta la actualidad y armar una
 lluvia de ideas de lo que los hizo divertidos, un boom, aceptados por la gente; llevarlo a mi juego
@@ -9297,6 +9301,8 @@ todo a la más vulnerable. **Regla de Ki**: la gente vuelve porque quiere, no po
    (1.º, 5.º y cada 10.º). Al abrir el menú de un vecino (`te_reconocen`, una vez por vecino) te
    reconoce; PREGUNTAR suma «vos solo acabaste con N acá» a las noticias y **el último hecho de la
    crónica de su pueblo** (`SaberNpc::rumor`). Tests: `barrio::tests::el_barrio_te_recuerda_…`.
+1. **Jugo del golpe y de la carga de Ki** — barato, mejora cada segundo de juego.
+2. **El diario del pueblo + vecinos que recuerdan** — la sim ya existe; sólo hay que contarla.
 3. **Técnicas de Ki + aura personal** — la identidad del juego; nadie más la tiene.
 4. **Torneo de las Artes Marciales** — evento recurrente con rivales, público y premio.
 5. **Fuego que se propaga** (química al mundo, reusa `materia.rs`).
