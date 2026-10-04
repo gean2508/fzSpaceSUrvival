@@ -55,6 +55,8 @@ pub struct Remoto {
     pub vuelo: bool,
     /// Clave del vehículo que maneja ahora (vacío = a pie).
     pub veh: String,
+    /// Nivel en el que está (0 = la calle; la banda de pisos de un edificio, adentro).
+    pub nivel: i32,
     pub pts: u32,
     pub baj: u32,
     /// Lo que se ve ahora (suavizado hacia x/z).
@@ -297,6 +299,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                             rumbo: 0.0,
                             vuelo: false,
                             veh: String::new(),
+                            nivel: 0,
                             pts: 0,
                             baj: 0,
                             vx: f32::NAN,
@@ -306,7 +309,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                         multi.mensaje = format!("{nombre} entró");
                     }
                 }
-                Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj, veh } => {
+                Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj, veh, nivel } => {
                     let m = &mut *multi;
                     if let Some(r) = m.remotos.get_mut(&id) {
                         if r.pts != pts || r.baj != baj {
@@ -320,6 +323,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                         r.rumbo = rumbo;
                         r.vuelo = vuelo;
                         r.veh = veh;
+                        r.nivel = nivel;
                     }
                 }
                 Msg::Chat { id, msg } => multi.charlas.push((id, msg)),
@@ -411,6 +415,7 @@ fn enviar_estado(
     bajas: Res<crate::infectados::Bajas>,
     manejando: Res<crate::vehiculos::Manejando>,
     autos: Query<&crate::vehiculos::Vehiculo>,
+    tiles: Res<crate::world2d::TileWorld>,
 ) {
     if multi.estado != EstadoRed::Dentro {
         return;
@@ -430,7 +435,7 @@ fn enviar_estado(
         veh = v.clave.to_string();
         rumbo = v.estado.rumbo;
     }
-    multi.enviar(Msg::Est { id: 0, x: tf.translation.x, z: -tf.translation.y, cuerpo, rumbo, vuelo, pts: metas.puntos(), baj: bajas.total, veh });
+    multi.enviar(Msg::Est { id: 0, x: tf.translation.x, z: -tf.translation.y, cuerpo, rumbo, vuelo, pts: metas.puntos(), baj: bajas.total, veh, nivel: tiles.z });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -442,8 +447,10 @@ fn sincronizar_avatares(
     planet: Res<ActivePlanet>,
     mut multi: ResMut<Multi>,
     mut avatares: Query<(Entity, &JugadorRemoto, &mut Transform, &mut Visibility, &mut Sprite, &mut Dibujado)>,
+    tiles: Res<crate::world2d::TileWorld>,
 ) {
     let mi_cuerpo = active_surface_body(&ctx, &planet) as u8;
+    let mi_nivel = tiles.z;
     let dt = time.delta_secs();
     // Los que ya no están en la tabla se van.
     for (e, j, _, _, _, _) in &avatares {
@@ -471,7 +478,8 @@ fn sincronizar_avatares(
             r.vx += dx * k;
             r.vz += dz * k;
         }
-        let visible = r.cuerpo == mi_cuerpo;
+        // Sólo se ven si comparten cuerpo Y nivel: adentro de un edificio no se cuela el que está en la calle.
+        let visible = r.cuerpo == mi_cuerpo && r.nivel == mi_nivel;
         match r.entidad.filter(|e| avatares.get(*e).is_ok()) {
             Some(e) => {
                 if let Ok((_, _, mut tf, mut vis, mut sprite, mut dib)) = avatares.get_mut(e) {

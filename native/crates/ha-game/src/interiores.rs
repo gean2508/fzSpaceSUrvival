@@ -214,6 +214,8 @@ impl Plugin for InterioresPlugin {
         app.init_resource::<Interiores>()
             .init_resource::<ObjetivoHostil>()
             .add_systems(Startup, crear_panel)
+            .add_systems(OnEnter(GamePhase::Loading), cargar_puertas)
+            .add_systems(Update, guardar_puertas.run_if(in_state(GamePhase::Playing)))
             .add_systems(
                 Update,
                 (
@@ -236,6 +238,51 @@ impl Plugin for InterioresPlugin {
                     .before(crate::hud::append_hud_touch_blocks),
             )
             .add_systems(OnExit(GamePhase::Playing), salir_de_partida);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Guardado: el estado de las puertas (cerrada, nivel, vida, rota) sobrevive a la sesión
+// ---------------------------------------------------------------------------
+
+fn ruta_puertas() -> std::path::PathBuf {
+    crate::inventory_persist::persist_dir().join("puertas_edificios.json")
+}
+
+type FilaPuerta = (u8, i64, i64, bool, u8, f32, bool);
+
+fn cargar_puertas(mut int: ResMut<Interiores>) {
+    int.puertas.clear();
+    let Ok(raw) = std::fs::read_to_string(ruta_puertas()) else { return };
+    if let Ok(filas) = serde_json::from_str::<Vec<FilaPuerta>>(&raw) {
+        for (b, x, z, cerrada, nivel, vida, rota) in filas {
+            int.puertas.insert((b, x, z), Puerta { cerrada, nivel, vida: if vida.is_finite() { vida } else { 1.0e9 }, rota });
+        }
+    }
+}
+
+fn guardar_puertas(time: Res<Time>, int: Res<Interiores>, mut acc: Local<f32>, mut ultimo: Local<String>) {
+    *acc += time.delta_secs();
+    if *acc < 4.0 {
+        return;
+    }
+    *acc = 0.0;
+    let mut filas: Vec<FilaPuerta> = int
+        .puertas
+        .iter()
+        .filter(|(_, p)| p.cerrada || p.nivel > 0 || p.rota)
+        .map(|(&(b, x, z), p)| (b, x, z, p.cerrada, p.nivel, if p.vida.is_finite() { p.vida } else { 1.0e9 }, p.rota))
+        .collect();
+    filas.sort_by_key(|f| (f.0, f.1, f.2));
+    let Ok(json) = serde_json::to_string(&filas) else { return };
+    if *ultimo == json {
+        return;
+    }
+    if let Some(dir) = ruta_puertas().parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if std::fs::write(ruta_puertas(), &json).is_ok() {
+        *ultimo = json;
     }
 }
 

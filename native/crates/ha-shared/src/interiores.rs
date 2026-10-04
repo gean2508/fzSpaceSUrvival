@@ -322,7 +322,7 @@ struct R {
 
 /// Ancho del hall de la escalera (adentro de sus paredes) y alto mínimo.
 const HALL_W: i64 = 9;
-const HALL_H: i64 = 6;
+const HALL_H: i64 = 9;
 
 fn pared_de(arq: Arq) -> Tile {
     match arq {
@@ -354,7 +354,11 @@ pub fn generar(l: &Lote) -> Plano {
     let (ox, oz) = origen(CelestialBody::from_u8(l.body).unwrap_or(CelestialBody::Earth));
     let arq = arquetipo_de(l.clave);
     let (w, h) = medidas(l.w, l.h);
-    let pisos = pisos_de(arq, l.clave, w, h);
+    let mut pisos = pisos_de(arq, l.clave, w, h);
+    // Sin lugar para el hall de la escalera no hay segunda planta (un piso al que no se llega no existe).
+    if pisos > 1 && !(w - 2 >= HALL_W + 2 + minimo_de(arq) && h - 2 >= HALL_H) {
+        pisos = 1;
+    }
     let mut rng = Rng::new(0x1_47e7, l.x, l.z);
     let pared = pared_de(arq);
     let n = (w * h) as usize;
@@ -447,17 +451,19 @@ pub fn generar(l: &Lote) -> Plano {
     }
     // El vano de la puerta del frente también deja ver el cuarto desde afuera: ya está.
 
-    // Escaleras: un tramo por cada par de plantas, cada uno en su fila del hall.
+    // Escaleras: como en cualquier juego visto desde arriba, SUBEN HACIA ARRIBA DE LA PANTALLA (norte): los
+    // escalones quedan apilados en una columna, con el pie al sur y el rellano al norte. Uno por cada par de
+    // plantas, cada uno en su columna del hall (así el que llega de abajo no tapa al que sigue subiendo).
     let mut tramos: Vec<TramoLocal> = Vec::new();
     if let Some(hl) = hall {
         for p in 0..pisos - 1 {
-            let fila = hl.z + 1 + (p as i64 % 2) * 2;
-            let pie_x = hl.x + 1;
+            let col = hl.x + 2 + (p as i64 % 2) * 3;
+            let pie_z = hl.z + hl.h - 2;
             for i in 0..PASOS as i64 {
-                plantas[p as usize][idx(pie_x + i, fila)] = Tile::Step;
-                plantas[p as usize + 1][idx(pie_x + i, fila)] = Tile::Stairwell;
+                plantas[p as usize][idx(col, pie_z - i)] = Tile::Step;
+                plantas[p as usize + 1][idx(col, pie_z - i)] = Tile::Stairwell;
             }
-            tramos.push(TramoLocal { piso: p, tx: ox + pie_x, tz: oz + fila, dir: 1 });
+            tramos.push(TramoLocal { piso: p, tx: ox + col, tz: oz + pie_z, dir: 0 });
         }
     }
 
@@ -797,11 +803,11 @@ mod tests {
         let p = plano_de(slot).expect("plano");
         assert!(p.pisos >= 2 && !p.tramos.is_empty());
         let t = p.tramos[0];
-        let abajo = tramo_en(CelestialBody::Earth, z_de(slot, t.piso), t.tx + 1, t.tz).expect("tramo abajo");
+        let abajo = tramo_en(CelestialBody::Earth, z_de(slot, t.piso), t.tx, t.tz - 1).expect("tramo abajo");
         assert_eq!(abajo.z, z_de(slot, t.piso));
-        assert!(tramo_en(CelestialBody::Earth, z_de(slot, t.piso + 1), t.tx + 1, t.tz).is_none(), "arriba no se indexa");
-        assert_eq!(tile(CelestialBody::Earth, z_de(slot, t.piso), t.tx + 1, t.tz), Tile::Step);
-        assert_eq!(tile(CelestialBody::Earth, z_de(slot, t.piso + 1), t.tx + 1, t.tz), Tile::Stairwell);
+        assert!(tramo_en(CelestialBody::Earth, z_de(slot, t.piso + 1), t.tx, t.tz - 1).is_none(), "arriba no se indexa");
+        assert_eq!(tile(CelestialBody::Earth, z_de(slot, t.piso), t.tx, t.tz - 1), Tile::Step);
+        assert_eq!(tile(CelestialBody::Earth, z_de(slot, t.piso + 1), t.tx, t.tz - 1), Tile::Stairwell);
     }
 
     #[test]

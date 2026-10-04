@@ -126,6 +126,10 @@ pub enum Msg {
         /// Un cliente viejo no la manda y los demás lo ven caminar: compatible.
         #[serde(default)]
         veh: String,
+        /// Nivel en el que está (`TileWorld::z`): 0 en la calle, la banda de pisos de un edificio adentro.
+        /// Dos jugadores sólo se ven si comparten nivel. Un cliente viejo no lo manda: 0.
+        #[serde(default)]
+        nivel: i32,
     },
     #[serde(rename = "chat")]
     Chat {
@@ -372,11 +376,11 @@ fn atender(s: TcpStream, vivo: Arc<AtomicBool>, estado: Arc<Mutex<EstadoHub>>) {
                 }
                 mi_id = Some(id);
             }
-            (Msg::Est { x, z, cuerpo, rumbo, vuelo, pts, baj, veh, .. }, Some(id)) => {
+            (Msg::Est { x, z, cuerpo, rumbo, vuelo, pts, baj, veh, nivel, .. }, Some(id)) => {
                 if !(x.is_finite() && z.is_finite() && rumbo.is_finite()) {
                     continue;
                 }
-                let m = Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj, veh: limpiar(&veh, 40) };
+                let m = Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj, veh: limpiar(&veh, 40), nivel };
                 if let Some(p) = e.pares.get_mut(&id) {
                     p.ultimo = Some(m.clone());
                 }

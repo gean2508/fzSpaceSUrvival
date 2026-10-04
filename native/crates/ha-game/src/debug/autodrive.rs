@@ -7938,8 +7938,8 @@ fn interior_test_buscar(skip: usize) -> Option<(ha_shared::interiores::Lote, (i6
                     }
                     vistas.push((x, z));
                     // Casas con piso alto, para probar la escalera: casa grande, villa, hotel…
-                    let pisos = ha_shared::interiores::pisos_de(ha_shared::interiores::arquetipo_de(clave), clave, w, h);
-                    if pisos < 2 {
+                    let candidato = ha_shared::interiores::Lote { body: body as u8, x, z, w, h, clave };
+                    if ha_shared::interiores::generar(&candidato).pisos < 2 {
                         continue;
                     }
                     let puerta = (x..x + w).find(|&px| ha_shared::topdown::topdown_tile(body, 0, px, z + h - 1) == ha_shared::topdown::Tile::Door);
@@ -8040,6 +8040,13 @@ fn interior_test_drive(world: &mut World) {
                 report_bug("interiores", "el_interior_respeta_el_tope", "pasa de 1,5x");
                 world.resource_mut::<InteriorTestState>().failed = true;
             }
+            {
+                let zc = world.resource::<TileWorld>().z;
+                let mut q = world.query::<(&crate::world2d::SurfaceDecor, &Transform)>();
+                let n = q.iter(world).filter(|(d, _)| d.z == zc).count();
+                let cerca = q.iter(world).filter(|(d, t)| d.z == zc && (t.translation.x - plano.entrada.0).abs() < 20.0).count();
+                eprintln!("ha-interior: decor del nivel {zc}: {n} (cerca de la entrada: {cerca})");
+            }
             shot(world, &format!("{dir}/interior-1-adentro.png"));
             world.resource_mut::<InteriorTestState>().step = 4;
             proximo(world, 2.0);
@@ -8053,10 +8060,10 @@ fn interior_test_drive(world: &mut World) {
                 world.resource_mut::<InteriorTestState>().step = 8;
                 return;
             };
-            // Un paso antes del pie, mirando al este.
-            teleport_a_celda_nivel(world, t.tx as f32 - 0.6, t.tz as f32 + 0.5);
+            // Un paso antes del pie (al sur), subiendo hacia el norte.
+            teleport_a_celda_nivel(world, t.tx as f32 + 0.5, t.tz as f32 + 1.6);
             let mut st = world.resource_mut::<InteriorTestState>();
-            st.empuje = Vec2::new(1.0, 0.0);
+            st.empuje = Vec2::new(0.0, -1.0);
             st.empuje_hasta = now + 6.0;
             st.step = 5;
             st.retries = 0;
@@ -8083,7 +8090,7 @@ fn interior_test_drive(world: &mut World) {
                 world.resource_mut::<InteriorTestState>().failed = true;
                 world.resource_mut::<InteriorTestState>().step = 8;
             } else {
-                st.empuje = Vec2::new(1.0, 0.0);
+                st.empuje = Vec2::new(0.0, -1.0);
                 st.empuje_hasta = now + 2.0;
                 st.next_t = now + 1.0;
             }

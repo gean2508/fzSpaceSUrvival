@@ -3034,7 +3034,8 @@ fn spawn_chunk_small_decor(
                 continue;
             }
             let (tile, nivel, atenuar) = suelo_a_la_vista(tiles, body, tx, tz);
-            if nivel != 0 {
+            // Lo que se ve tiene que ser ESTE nivel: planta baja de la calle, o la planta de un interior.
+            if nivel != 0 && !ha_shared::interiores::es_interior(nivel) {
                 continue;
             }
             // EL AGUA TAMBIÉN SE DECORA. Antes esta puerta era "sólo suelo firme",
