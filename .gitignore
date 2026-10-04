@@ -57,3 +57,12 @@ __pycache__/
 # Partidas de prueba (nunca se commitean) y bancos derivados del pack LimeZu (no redistribuir).
 native/partidas/
 scripts/lib/bancos/
+
+# Estado de partida generado al jugar (no se versiona)
+native/chests.json
+native/civ/
+native/cultivos.json
+native/descubrimientos.json
+native/structures.json
+native/vivarium/g_*.adn
+native/musica/
