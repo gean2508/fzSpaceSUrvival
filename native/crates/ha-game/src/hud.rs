@@ -1763,6 +1763,8 @@ fn item_label(id: &str) -> &str {
         "gold_ingot" => "Oro",
         "gem_blue" => "Gema",
         "leather" => "Cuero",
+        "virus_sample" => "Muestra del virus",
+        "antidoto" => "Antídoto",
         "apple" => "Manzana",
         "orange" => "Naranja",
         "grape" => "Uvas",

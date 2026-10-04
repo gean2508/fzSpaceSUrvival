@@ -110,6 +110,35 @@ pub const LOTES_MODULARES: &[(&str, u8, u8)] = &[
 ///
 /// Determinista por esquina: la misma manzana se dibuja igual siempre, y el
 /// streaming no hace titilar la altura de una torre al entrar y salir.
+/// **La comisaría más cercana** (centro del lote, en tiles) dentro de `radio` tiles de `(tx, tz)`.
+///
+/// Busca entre los lotes que el generador ya coloca (`building/comisaria*`) barriendo una grilla de
+/// 6 tiles alrededor del punto, así que sirve para que la policía a pie salga de un edificio que
+/// existe en el mundo y no de la nada. Es barata para llamarla cada pocos segundos.
+pub fn comisaria_cercana(body: CelestialBody, tx: i64, tz: i64, radio: i64) -> Option<(i64, i64)> {
+    let mut mejor: Option<(i64, (i64, i64))> = None;
+    let mut z = tz - radio;
+    while z <= tz + radio {
+        let mut x = tx - radio;
+        while x <= tx + radio {
+            if let Some(s) = crate::geography::settlement_covering(body, x, z) {
+                if let Some(lot) = lot_at(body, &s, x, z) {
+                    if lot.program().key.starts_with("building/comisaria") {
+                        let c = (lot.min.0 + lot.w / 2, lot.min.1 + lot.h / 2);
+                        let d = (c.0 - tx).pow(2) + (c.1 - tz).pow(2);
+                        if mejor.map_or(true, |(m, _)| d < m) {
+                            mejor = Some((d, c));
+                        }
+                    }
+                }
+            }
+            x += 6;
+        }
+        z += 6;
+    }
+    mejor.map(|(_, c)| c)
+}
+
 pub fn pisos_modulares(key: &str, x: i64, z: i64) -> Option<u8> {
     let &(_, min, max) = LOTES_MODULARES.iter().find(|(k, _, _)| *k == key)?;
     if max <= min {

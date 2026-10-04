@@ -118,6 +118,8 @@ fn rasterize_item(item_id: &str) -> Image {
         "gold_ingot" => draw_ingot(&mut data, size, PaletteKey::Gold),
         "potion_blue" | "potion_green" => draw_potion(&mut data, size, PaletteKey::NeonCyan),
         "gem_blue" => draw_gem(&mut data, size, PaletteKey::NeonCyan),
+        "virus_sample" => draw_potion(&mut data, size, PaletteKey::NeonPink),
+        "antidoto" => draw_potion(&mut data, size, PaletteKey::Gold),
         "leather" => draw_leather(&mut data, size),
         MAP_SMALL_ID | MAP_LARGE_ID => draw_map(&mut data, size, item_id == MAP_LARGE_ID),
         "axe" | "wood_axe" | "stone_axe" => draw_axe(&mut data, size),

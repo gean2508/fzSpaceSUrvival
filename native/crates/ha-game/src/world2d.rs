@@ -4042,6 +4042,11 @@ fn spawn_chunk_tile_art(
                     continue;
                 }
             }
+            // Los escalones los dibuja `escaleras::dibujar_escalones` orientados al tramo (el arte del
+            // pack sube de norte a sur; un tramo que sube de izquierda a derecha necesita girarlo).
+            if matches!(tile, Tile::Step | Tile::Stairwell) {
+                continue;
+            }
             if !art.tile_has_art(key) {
                 continue;
             }

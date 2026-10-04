@@ -9338,23 +9338,25 @@ prueba multi-semilla (§2) y arte del pack o dibujado con la skill `pixel-art` a
 [Wordle](https://www.newswise.com/articles/the-word-on-wordle) ·
 [patrones oscuros](https://deceptive.design/articles/level-up-or-game-over-exploring-how-dark-patterns-shape-mobile-games).
 
-## §21 Oleadas de zombis, inspiradas en Call of Duty: Black Ops 2 (3 oct 2026)
+## §21 La pandemia: virus que se descubre, se propaga y se detiene (4 oct 2026)
 
-Código: `native/crates/ha-game/src/oleadas.rs` (reglas puras y HUD) + `infectados.rs`
-(`ronda_de_horda`, `crear_infectado`, `Bajas.puntos/ronda`). Rust-only, como los infectados.
+Código: `ha-game/src/pandemia.rs` (historia, focos, jefes, cura, terreno enfermo, HUD), `oleadas.rs` (clases y puntos),
+`infectados.rs` (spawn por focos, roles), `policia_pie.rs` (agentes a pie). **No hay rondas**: el pedido del usuario era
+la sensación de Black Ops 2 (matar a lo loco, esquivar, que te sigan) con una historia, en mundo abierto.
 
-* **Partida = noche de horda** (`infectados::es_horda`, cada tercera noche, de noche).
-  Fuera de la superficie o al amanecer la partida se reinicia; los puntos no se guardan.
-* **Rondas:** la ronda N trae `6 + 4·(N−1)` infectados (tope 60). Salen en hordas de 2 a 5
-  desde un mismo rumbo del anillo de aparición, cada `2,2 − 0,12·N` s (piso 0,7 s).
-* **Clases:** común; corredor desde la ronda 2 (30 %, vel ×1,6, vida ×0,7); tanque desde la
-  ronda 5 (10 %, vel ×0,7, vida ×2,2, más grande). Se leen de lejos por el color.
-* **Puntos:** común 50, corredor 70, tanque 120, +10 por ronda después de la primera (tope +200).
-* **Pausa entre rondas:** 12 s con el aviso «RONDA N COMPLETA»; luego «RONDA N+1».
-  Una ronda se da por limpia cuando no queda nadie vivo de la ronda (los guardias de alijo no cuentan).
-* **HUD:** texto arriba a la derecha con ronda, zombis vivos, quedan, puntos y la cuenta de
-  la pausa; aviso grande centrado al empezar/limpiar cada ronda.
-* **Lo que se suma a BO2:** las hordas entran como grupo desde un mismo rumbo (se las ve venir
-  y se puede esperar en una puerta), y la clase que sale se sortea con la ronda, no con el día.
-* Pruebas: `cargo test -p ha-game --lib oleadas` (7). Pendiente: verificar en el Redmi
-  (fps con 60 infectados + luces), y decidir si el tanque rompe paredes de madera (hoy no).
+* **Historia:** rumor (días 0-1, nada) → desde el día 2, de noche, aparece el **paciente cero** (rojizo) → al abatirlo suelta
+  `virus_sample` (queda en el cadáver) → **analizarla** en una comisaría (laboratorio, `city::comisaria_cercana`, 4 s quieto a < 14 m)
+  → nacen **3 alfas** (rol 2, 3× vida) en tres focos → al caer los tres vuelve a la comisaría por el `antidoto` → llevarlo al
+  **foco principal** y quedarse 5 s: pandemia curada (infectados desaparecen, 15 lingotes). **Easter egg:** cortar el brote antes del día 7 da 3 gemas más.
+* **Se propaga:** el avance (0-100) sube 10 por día; cada día nace un foco nuevo a 150-300 m del anterior (hasta 8). Los infectados
+  sueltos salen alrededor de los focos (cupo `2 + avance/8`, tope 12 + 2 por jugador); con avance ≥ 60 salen también por el borde.
+  Clases: común / corredor (avance ≥ 25) / tanque (≥ 60). Puntos por baja (`oleadas::puntos_de`).
+* **Jefes de foco** (rol 3, `infectados::crear_jefe`): 14× la vida de un infectado × jugadores conectados (coop), botín raro; salen al acercarse a un foco (avance ≥ 20).
+* **Terreno enfermo:** mancha verde en el suelo de cada foco y los árboles/plantas a < 55 m se tiñen (a 1 Hz). Sin textura nueva: tinte.
+* Persistencia: `pandemia.json` por partida. Items: `virus_sample` y `antidoto` (icono procedural + etiqueta en `hud::item_label`).
+* **Policía a pie:** con búsqueda salen `nivel + 1` agentes a pie desde la comisaría más cercana (< 140 m) o por el borde; disparan a < 12 m; si uno te alcanza 2,5 s quieto, multa y fin de la búsqueda.
+* **Lanchas:** `Quien::Navegante` + `vehiculos::transito_maritimo` (hasta 3, sólo en agua honda, fuera de cámara). IA en `ha_shared::vehiculos::navegar` con prueba.
+* **Gasolina** cuesta oro (1 lingote por cuarto de tanque, sumidero); **creativo**: munición infinita; peatones esquivan autos (`AutosCaja`).
+* **Escalones** se dibujan girados según el tramo (`escaleras::dibujar_escalones`).
+* **Decidido:** la búsqueda y el tránsito son locales a cada cliente (cada jugador tiene su propia búsqueda); los vehículos de otros jugadores ya se ven (`Msg::Est.veh`).
+* **Falta:** probar todo en el Redmi (fps con 12 infectados + manchas + teñido), dibujar arte propio de infectados si se quiere más que un tinte, integrar la rama `phaser-arena-ui`.

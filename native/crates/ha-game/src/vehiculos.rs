@@ -85,7 +85,7 @@ impl Plugin for VehiculosPlugin {
             )
             .add_systems(
                 Update,
-                (atender_pedidos, manejar_transito, subir_bajar, repostar, dibujar_vehiculos, huir, hud_vehiculo, lamparas_semaforo)
+                (atender_pedidos, manejar_transito, transito_maritimo, subir_bajar, repostar, dibujar_vehiculos, huir, hud_vehiculo, lamparas_semaforo)
                     .chain()
                     .run_if(in_state(GamePhase::Playing)),
             )
@@ -188,6 +188,8 @@ pub enum Quien {
     Vecino(Conductor),
     /// Una patrulla en persecución (`policia.rs`).
     Policia(ha_shared::vehiculos::Persecucion),
+    /// Una lancha del tránsito marítimo: navega por agua libre y esquiva la costa.
+    Navegante(ha_shared::vehiculos::Navegante),
 }
 
 #[derive(Component)]
@@ -311,6 +313,22 @@ fn fisica_vehiculos(
         let mando = match &mut quien {
             Quien::Jugador => veh::mando_desde_stick(&v.estado, intent.move_x, intent.move_z),
             Quien::Nadie => Mando::default(),
+            Quien::Navegante(n) => {
+                let agua = |tx: i64, tz: i64| matches!(suelo(tx, tz), Suelo::Hondo | Suelo::Bajio);
+                let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+                let mut libre = f32::INFINITY;
+                for &(o, x, z, r) in &fotos {
+                    let (dx, dz) = (x - v.estado.x, z - v.estado.z);
+                    let ad = dx * fx + dz * fz;
+                    if o != e && ad > 0.0 && (dz * fx - dx * fz).abs() < v.estado.ancho * 0.5 + r + 0.5 {
+                        libre = libre.min(ad - r);
+                    }
+                }
+                let mut n2 = *n;
+                let m = veh::navegar(&v.estado, &v.ficha, &mut n2, &agua, libre);
+                *n = n2;
+                m
+            }
             Quien::Policia(p) => match pj {
                 Some(o) => veh::perseguir(&v.estado, &v.ficha, p, o, dt),
                 None => Mando::default(),
@@ -481,7 +499,7 @@ fn manejar_transito(
         let tope = if v.usado { LEJOS_USADO } else { LEJOS_TRANSITO };
         if Some(e) != manejando.auto && (d > tope || (!en_superficie && !v.usado)) {
             commands.entity(e).despawn_recursive();
-        } else if !v.usado && !matches!(v.quien, Quien::Policia(_)) {
+        } else if !v.usado && !matches!(v.quien, Quien::Policia(_) | Quien::Navegante(_)) {
             vivos += 1;
         }
     }
@@ -532,6 +550,63 @@ fn manejar_transito(
     let r = (hash(h ^ 0x7a11) % 1000) as f32 / 1000.0;
     estado.comb = if estacionado { 0.03 + r * 0.87 } else { 0.4 + r * 0.6 };
     let quien = if estacionado { Quien::Nadie } else { Quien::Vecino(Conductor::nuevo(o, h)) };
+    spawn_vehiculo(&mut commands, &art, clave, clase, estado, quien, false, h);
+}
+
+/// Cupo del tránsito marítimo: cuántas lanchas navegan a la vez cerca del jugador.
+const CUPO_LANCHAS: usize = 3;
+
+/// **Lanchas en el mar.** Cuando hay agua honda cerca (a menos de ~120 m) salen hasta `CUPO_LANCHAS`
+/// lanchas con piloto (`Quien::Navegante`), fuera de cámara, que navegan y esquivan la costa. Sólo
+/// en el mar: nunca en la calle (lo vigila `modelo_de_transito`, que no devuelve lanchas).
+#[allow(clippy::too_many_arguments)]
+fn transito_maritimo(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    world_ctx: Res<WorldContextRuntime>,
+    planet_ctx: Res<ActivePlanet>,
+    tiles: Res<TileWorld>,
+    zoom: Res<crate::camera::CameraZoom>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    mut cache: ResMut<CacheSuelo>,
+    mut transito: ResMut<Transito>,
+    autos: Query<&Vehiculo>,
+    player: Query<&SimState, With<Player>>,
+) {
+    let Ok(pj) = player.get_single() else { return };
+    if tiles.z != 0 || fly.flying() || matches!(world_ctx.active, ha_shared::WorldContext::Space) {
+        return;
+    }
+    let lanchas = autos.iter().filter(|v| matches!(v.quien, Quien::Navegante(_))).count();
+    if lanchas >= CUPO_LANCHAS {
+        return;
+    }
+    let (px, pz) = (pj.body.x, pj.body.z);
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+    transito.semilla = hash(transito.semilla.wrapping_add(0x1a4c));
+    let h = transito.semilla;
+    let afuera = (zoom.live_view_h * 1.05).max(36.0);
+    let ang = (h % 3600) as f32 / 3600.0 * std::f32::consts::TAU;
+    let dist = afuera + 10.0 + ((h >> 12) % 60) as f32;
+    let (x, z) = (px + ang.cos() * dist, pz + ang.sin() * dist);
+    let cache = RefCell::new(&mut *cache);
+    let hondo = |tx: i64, tz: i64| suelo_cacheado(&cache, &tiles, body, tx, tz) == Suelo::Hondo;
+    // Un cuadro de agua honda de 7×7: el casco entra y queda margen para girar.
+    let (tx, tz) = (x.floor() as i64, z.floor() as i64);
+    if !(-3..=3).all(|dz| (-3..=3).all(|dx| hondo(tx + dx, tz + dz))) {
+        return;
+    }
+    if autos.iter().any(|v| (v.estado.x - x).powi(2) + (v.estado.z - z).powi(2) < 400.0) {
+        return;
+    }
+    let clave = "vehicle/lancha";
+    let Some(clase) = veh::clase_de(clave) else { return };
+    let Some((largo, ancho)) = medidas(&art, clave) else { return };
+    let ficha = veh::ficha(clase);
+    let rumbo = ((h >> 8) % 628) as f32 / 100.0;
+    let mut estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho);
+    estado.comb = 1.0;
+    let quien = Quien::Navegante(ha_shared::vehiculos::Navegante { lado: if h & 1 == 0 { 1.0 } else { -1.0 }, semilla: h });
     spawn_vehiculo(&mut commands, &art, clave, clase, estado, quien, false, h);
 }
 

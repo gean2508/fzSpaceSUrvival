@@ -77,6 +77,19 @@ impl Busqueda {
     pub fn buscado(&self) -> bool {
         self.nivel > 0
     }
+
+    /// Un agente te está viendo: corre de nuevo el reloj de «te perdieron de vista».
+    pub fn visto(&mut self) {
+        self.sin_ver = 0.0;
+    }
+
+    /// Te atraparon: se acaba la búsqueda y queda el aviso.
+    pub fn atrapar(&mut self, aviso: &str) {
+        self.nivel = 0;
+        self.sin_ver = 0.0;
+        self.atrapado = 0.0;
+        self.aviso = Some((aviso.to_string(), 4.0));
+    }
 }
 
 /// La barra de luces de la patrulla (hija del vehículo).

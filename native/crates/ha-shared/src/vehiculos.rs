@@ -673,6 +673,38 @@ fn sigue_derecho(calzada: &impl Fn(i64, i64) -> bool, tx: i64, tz: i64, o: u8) -
 /// Fuera del asfalto (lo sacaste de la calle, lo chocaste) vuelve hacia la calzada
 /// más cercana que vea; si no ve ninguna, se queda parado: un conductor de tránsito
 /// no sale a pasear por el campo.
+/// **Navegante: el piloto de una lancha del tránsito marítimo.** Avanza a ~60 % de la máxima por agua
+/// libre y, si a 8 m o 14 m de proa no hay agua (costa, muelle), gira hacia el lado que despeja.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Navegante {
+    /// Hacia dónde dobla cuando hay que esquivar (+1 / −1); se invierte si ambos lados están cerrados.
+    pub lado: f32,
+    pub semilla: u32,
+}
+
+/// El mando de un [`Navegante`]. `agua(tx, tz)` dice si la celda se navega.
+pub fn navegar(e: &Estado, f: &Ficha, n: &mut Navegante, agua: &impl Fn(i64, i64) -> bool, libre_adelante: f32) -> Mando {
+    let lado = if n.lado == 0.0 { 1.0 } else { n.lado };
+    let abierto = |ang: f32, d: f32| {
+        let (x, z) = (e.x + (e.rumbo + ang).cos() * d, e.z + (e.rumbo + ang).sin() * d);
+        agua(x.floor() as i64, z.floor() as i64)
+    };
+    let cerca = !abierto(0.0, 8.0) || !abierto(0.0, 14.0) || libre_adelante < 10.0;
+    if !cerca {
+        let tope = 0.6 * f.vel_max;
+        return Mando { acel: if e.vel < tope { 0.7 } else { 0.0 }, giro: 0.0 };
+    }
+    // Costa a la vista: se elige el lado más despejado y se baja la velocidad.
+    let a = abierto(0.7 * lado, 10.0);
+    let b = abierto(-0.7 * lado, 10.0);
+    if !a && b {
+        n.lado = -lado;
+    } else if !a && !b {
+        n.lado = -lado; // callejón sin salida: vuelta completa
+    }
+    Mando { acel: if e.vel > 0.3 * f.vel_max { -0.4 } else { 0.4 }, giro: n.lado.signum() }
+}
+
 pub fn conducir(
     e: &Estado,
     f: &Ficha,
@@ -816,6 +848,22 @@ mod tests {
         manejar(&mut a, &fa, fondo, Suelo::Pasto, 8.0);
         manejar(&mut m, &fm, fondo, Suelo::Pasto, 8.0);
         assert!(m.x > a.x);
+    }
+
+    #[test]
+    fn la_lancha_navegante_no_toca_la_costa_en_un_minuto() {
+        // Mar entre x ∈ [0, 120) y z ∈ [-60, 60); tierra afuera.
+        let mar = |tx: i64, tz: i64| (0..120).contains(&tx) && (-60..60).contains(&tz);
+        let suelo = |tx: i64, tz: i64| if mar(tx, tz) { Suelo::Hondo } else { Suelo::Asfalto };
+        let f = ficha(Clase::Lancha);
+        let mut e = Estado::nuevo(60.5, 0.5, 0.0, &f, 3.3, 1.8);
+        let mut n = Navegante::default();
+        for _ in 0..1200 {
+            let m = navegar(&e, &f, &mut n, &mar, f32::INFINITY);
+            paso(&mut e, m, &f, 0.05, &suelo, &|_, _, _| false);
+            assert!(mar(e.x.floor() as i64, e.z.floor() as i64), "la lancha salió del agua en ({:.1}, {:.1})", e.x, e.z);
+        }
+        assert!(e.vel > 1.0, "la lancha quedó parada: {}", e.vel);
     }
 
     #[test]
