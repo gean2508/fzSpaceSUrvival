@@ -178,7 +178,7 @@ const SHADOW_TEX: u32 = 192;
 /// global ~140 (hijo de la cámara, ver `sky2d`) y los sprites del mundo a ~2
 /// (`world2d::sort_z`) → 700 los deja siempre por encima del velo y por debajo
 /// de las luciérnagas (900) y del HUD.
-const GLOW_Z: f32 = 700.0;
+pub(crate) const GLOW_Z: f32 = 700.0;
 
 /// Cuántas veces por segundo se recalculan alpha/parpadeo/culling. El movimiento
 /// de los quads NO depende de esto (lo hace la propagación de transforms).

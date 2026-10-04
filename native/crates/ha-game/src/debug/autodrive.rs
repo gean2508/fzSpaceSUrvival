@@ -235,6 +235,14 @@ impl Plugin for AutoDrivePlugin {
             );
             return;
         }
+        // **Entrar a un edificio** (espacio interior aparte): entra por el botón, comprueba el piso, sube la
+        // escalera CAMINANDO hasta el segundo piso, vuelve a bajar y sale. Deja capturas de cada paso.
+        // HA_INTERIORTEST=1 (con HA_FORCE_TOUCH=1). `HA_INTERIORTEST=<n>` salta a la n-ésima casa encontrada.
+        if crate::flags::var("HA_INTERIORTEST").is_ok() {
+            app.init_resource::<InteriorTestState>();
+            app.add_systems(Update, interior_test_drive.before(aplicar_actuacion_del_driver));
+            return;
+        }
         // Construcción por BORDES (LDoE): levanta un cuarto real por el mismo
         // camino que el jugador (hold → `apply_build_hold`) y comprueba que el
         // piso queda, que las paredes se pegan a los bordes, que una pared sin
@@ -7895,4 +7903,268 @@ fn descanso_test_drive(world: &mut World) {
         }
         _ => {}
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_INTERIORTEST — entrar a un edificio, recorrerlo, subir y salir
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct InteriorTestState {
+    step: u32,
+    next_t: f32,
+    lote: Option<ha_shared::interiores::Lote>,
+    puerta: (f32, f32),
+    retries: u32,
+    empuje_hasta: f32,
+    empuje: Vec2,
+    failed: bool,
+}
+
+/// Busca una casa con puerta en el frente cerca de la primera ciudad: `(lote, celda de la puerta)`.
+fn interior_test_buscar(skip: usize) -> Option<(ha_shared::interiores::Lote, (i64, i64))> {
+    let body = ha_shared::CelestialBody::Earth;
+    let mut vistas = Vec::new();
+    for sx in -6..6 {
+        for sz in -6..6 {
+            let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+            let (cx, cz) = s.center;
+            for dz in (-60..60).step_by(5) {
+                for dx in (-60..60).step_by(5) {
+                    let Some((x, z, w, h, clave)) = ha_shared::amueblado::casa_en(body, cx + dx, cz + dz) else { continue };
+                    if vistas.contains(&(x, z)) {
+                        continue;
+                    }
+                    vistas.push((x, z));
+                    // Casas con piso alto, para probar la escalera: casa grande, villa, hotel…
+                    let pisos = ha_shared::interiores::pisos_de(ha_shared::interiores::arquetipo_de(clave), clave, w, h);
+                    if pisos < 2 {
+                        continue;
+                    }
+                    let puerta = (x..x + w).find(|&px| ha_shared::topdown::topdown_tile(body, 0, px, z + h - 1) == ha_shared::topdown::Tile::Door);
+                    if let Some(px) = puerta {
+                        if vistas.len() > skip {
+                            return Some((ha_shared::interiores::Lote { body: body as u8, x, z, w, h, clave }, (px, z + h - 1)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn interior_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 2.0 || !player_ready(world) {
+        return;
+    }
+    {
+        let st = world.resource::<InteriorTestState>();
+        if st.empuje != Vec2::ZERO && now < st.empuje_hasta {
+            let e = st.empuje;
+            actuar(world, Accion::Mover(e));
+        }
+    }
+    let (step, next_t) = {
+        let st = world.resource::<InteriorTestState>();
+        (st.step, st.next_t)
+    };
+    if now < next_t {
+        return;
+    }
+    let dir = flytest_dir();
+    let skip: usize = crate::flags::var("HA_INTERIORTEST").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let body = ha_shared::CelestialBody::Earth;
+    let proximo = |world: &mut World, dt: f32| world.resource_mut::<InteriorTestState>().next_t = now + dt;
+    match step {
+        // 0. Buscar una casa y plantarse frente a su puerta.
+        0 => {
+            let Some((lote, puerta)) = interior_test_buscar(skip) else {
+                report_bug("interiores", "hay_una_casa_con_piso_alto", "no se encontró ninguna");
+                eprintln!("ha-verify: INTERIORTEST FAIL — sin casa");
+                world.resource_mut::<InteriorTestState>().step = 99;
+                return;
+            };
+            let c = (puerta.0 as f32 + 0.5, puerta.1 as f32 + 1.6);
+            eprintln!("ha-interior: casa {} {}x{} en ({}, {}), puerta {:?}", lote.clave, lote.w, lote.h, lote.x, lote.z, puerta);
+            teleport_a_celda(world, c.0, c.1);
+            let mut st = world.resource_mut::<InteriorTestState>();
+            st.lote = Some(lote);
+            st.puerta = (puerta.0 as f32 + 0.5, puerta.1 as f32 + 0.5);
+            st.step = 1;
+            st.next_t = now + 2.0;
+        }
+        // 1. Esperar el mundo armado y sacar la fachada.
+        1 => {
+            if !mundo_listo(world) && now < 60.0 {
+                return;
+            }
+            shot(world, &format!("{dir}/interior-0-fachada.png"));
+            world.resource_mut::<InteriorTestState>().step = 2;
+            proximo(world, 1.0);
+        }
+        // 2. Pulsar ENTRAR.
+        2 => {
+            let (lote, puerta) = {
+                let st = world.resource::<InteriorTestState>();
+                (st.lote.expect("lote"), st.puerta)
+            };
+            crate::interiores::debug_pulsar(world, Some(crate::interiores::Cerca::Entrada { lote, puerta }), "pasar");
+            world.resource_mut::<InteriorTestState>().step = 3;
+            proximo(world, 2.5);
+        }
+        // 3. ¿Entramos?
+        3 => {
+            let (dentro, z) = {
+                let int = world.resource::<crate::interiores::Interiores>();
+                (int.dentro, world.resource::<TileWorld>().z)
+            };
+            let Some(d) = dentro else {
+                report_bug("interiores", "entrar_cambia_de_espacio", "pulsar ENTRAR no te metió");
+                world.resource_mut::<InteriorTestState>().failed = true;
+                world.resource_mut::<InteriorTestState>().step = 99;
+                return;
+            };
+            if z != ha_shared::interiores::z_de(d.slot, 0) {
+                report_bug("interiores", "entrar_pone_la_planta_baja", &format!("z={z}"));
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            eprintln!(
+                "ha-interior: adentro, {}x{} (exterior {}x{}), {} pisos, {} ventanas, {} tramos",
+                plano.w, plano.h, d.lote.w, d.lote.h, plano.pisos, plano.ventanas.len(), plano.tramos.len()
+            );
+            if plano.w as f32 > d.lote.w as f32 * 1.5 + 12.0 {
+                report_bug("interiores", "el_interior_respeta_el_tope", "pasa de 1,5x");
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            shot(world, &format!("{dir}/interior-1-adentro.png"));
+            world.resource_mut::<InteriorTestState>().step = 4;
+            proximo(world, 2.0);
+        }
+        // 4. Al pie de la escalera.
+        4 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            let Some(t) = plano.tramos.first().copied() else {
+                eprintln!("ha-interior: sin escalera (un solo piso); se salta");
+                world.resource_mut::<InteriorTestState>().step = 8;
+                return;
+            };
+            // Un paso antes del pie, mirando al este.
+            teleport_a_celda_nivel(world, t.tx as f32 - 0.6, t.tz as f32 + 0.5);
+            let mut st = world.resource_mut::<InteriorTestState>();
+            st.empuje = Vec2::new(1.0, 0.0);
+            st.empuje_hasta = now + 6.0;
+            st.step = 5;
+            st.retries = 0;
+            st.next_t = now + 1.0;
+        }
+        // 5. Subió?
+        5 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let z = world.resource::<TileWorld>().z;
+            if z == ha_shared::interiores::z_de(d.slot, 1) {
+                eprintln!("ha-interior: subió al piso 1 CAMINANDO");
+                shot(world, &format!("{dir}/interior-2-segundo-piso.png"));
+                let mut st = world.resource_mut::<InteriorTestState>();
+                st.empuje = Vec2::ZERO;
+                st.step = 6;
+                st.next_t = now + 2.0;
+                return;
+            }
+            let mut st = world.resource_mut::<InteriorTestState>();
+            st.retries += 1;
+            if st.retries > 8 {
+                drop(st);
+                report_bug("interiores", "la_escalera_se_camina", &format!("z={z}: andar el tramo no subió de planta"));
+                world.resource_mut::<InteriorTestState>().failed = true;
+                world.resource_mut::<InteriorTestState>().step = 8;
+            } else {
+                st.empuje = Vec2::new(1.0, 0.0);
+                st.empuje_hasta = now + 2.0;
+                st.next_t = now + 1.0;
+            }
+        }
+        // 6. Muebles en el segundo piso (tiene que haber algo de piso alto).
+        6 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            let z1 = ha_shared::interiores::z_de(d.slot, 1);
+            let casa = (plano.x0, plano.z0, plano.w, plano.h, plano.clave);
+            let n1 = ha_shared::amueblado::muebles_de_z(body, z1, casa).len();
+            let n0 = ha_shared::amueblado::muebles_de_z(body, ha_shared::interiores::z_de(d.slot, 0), casa).len();
+            eprintln!("ha-interior: muebles piso0={n0} piso1={n1}");
+            if n0 == 0 {
+                report_bug("interiores", "la_casa_tiene_muebles", "piso 0 vacío");
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            world.resource_mut::<InteriorTestState>().step = 7;
+            proximo(world, 0.5);
+        }
+        // 7. Volver a la planta baja (teleport interno) y a la puerta.
+        7 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            {
+                let mut tiles = world.resource_mut::<TileWorld>();
+                tiles.z = ha_shared::interiores::z_de(d.slot, 0);
+                tiles.version = tiles.version.wrapping_add(1);
+            }
+            bt_teleport(world, plano.puerta.0 as f32 + 0.5, plano.puerta.1 as f32 - 0.6);
+            world.resource_mut::<InteriorTestState>().step = 8;
+            proximo(world, 1.5);
+        }
+        // 8. Cerrar con llave, probar el botón de salida.
+        8 => {
+            let ya_dentro = world.resource::<crate::interiores::Interiores>().dentro.is_some();
+            if ya_dentro {
+                crate::interiores::debug_pulsar(world, Some(crate::interiores::Cerca::Salida), "llave");
+                world.resource_mut::<InteriorTestState>().step = 9;
+                proximo(world, 1.0);
+            } else {
+                world.resource_mut::<InteriorTestState>().step = 10;
+            }
+        }
+        9 => {
+            let cerrada = {
+                let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+                world.resource_mut::<crate::interiores::Interiores>().puerta_de(&d.lote).cerrada
+            };
+            if !cerrada {
+                report_bug("interiores", "la_llave_cierra", "la puerta no quedó cerrada");
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            shot(world, &format!("{dir}/interior-3-puerta.png"));
+            crate::interiores::debug_pulsar(world, Some(crate::interiores::Cerca::Salida), "pasar");
+            world.resource_mut::<InteriorTestState>().step = 10;
+            proximo(world, 2.5);
+        }
+        // 10. Veredicto.
+        10 => {
+            let dentro = world.resource::<crate::interiores::Interiores>().dentro.is_some();
+            let z = world.resource::<TileWorld>().z;
+            if dentro || z != 0 {
+                report_bug("interiores", "salir_vuelve_al_exterior", &format!("dentro={dentro} z={z}"));
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            shot(world, &format!("{dir}/interior-4-afuera.png"));
+            let failed = world.resource::<InteriorTestState>().failed;
+            eprintln!("ha-verify: INTERIORTEST {}", if failed { "FAIL" } else { "DONE" });
+            world.resource_mut::<InteriorTestState>().step = 99;
+            proximo(world, 2.0);
+        }
+        _ => {
+            if now > next_t + 1.0 {
+                world.send_event(AppExit::Success);
+            }
+        }
+    }
+}
+
+/// Teletransporta sin tocar el nivel (para moverse DENTRO de un interior).
+fn teleport_a_celda_nivel(world: &mut World, x: f32, z: f32) {
+    bt_teleport(world, x, z);
 }

@@ -115,6 +115,7 @@ fn patrullas(
     mut autos: Query<(Entity, &mut Vehiculo)>,
     mut player: Query<&mut SimState, With<Player>>,
     (mut sfx, mut shake): (EventWriter<PlaySfxAt>, EventWriter<CameraShakeEvent>),
+    objetivo: Res<crate::interiores::ObjetivoHostil>,
 ) {
     let dt = time.delta_secs().min(0.1);
     busq.enfriar_delito = (busq.enfriar_delito - dt).max(0.0);
@@ -128,7 +129,8 @@ fn patrullas(
     }
     let Ok(mut sim) = player.get_single_mut() else { return };
     let body = active_surface_body(&world_ctx, &planet_ctx);
-    let yo = Vec2::new(sim.body.x, sim.body.z);
+    // Si estás encerrado en un edificio, te «ven» en su puerta: no pierden la búsqueda por esconderte.
+    let yo = if objetivo.activo { Vec2::new(objetivo.puerta.0, objetivo.puerta.1) } else { Vec2::new(sim.body.x, sim.body.z) };
 
     let patrullas: Vec<Entity> = autos.iter().filter(|(_, v)| matches!(v.quien, Quien::Policia(_))).map(|(e, _)| e).collect();
 
@@ -202,6 +204,11 @@ fn patrullas(
         if d < ALCANCE_TIRO {
             tiradores.push(p);
         }
+    }
+    // Encerrado adentro no te alcanzan los tiros ni te atrapan: sólo asedian la puerta.
+    if objetivo.activo {
+        tiradores.clear();
+        pegada = false;
     }
     if cerca_vista {
         busq.sin_ver = 0.0;

@@ -34,6 +34,20 @@ pub struct PoliciaPie {
     tiro_cd: f32,
 }
 
+impl PoliciaPie {
+    pub fn x(&self) -> f32 {
+        self.x
+    }
+    pub fn z(&self) -> f32 {
+        self.z
+    }
+    /// Lo coloca en otro sitio (por ejemplo, adentro de un edificio al que te siguió).
+    pub fn poner(&mut self, x: f32, z: f32) {
+        self.x = x;
+        self.z = z;
+    }
+}
+
 #[derive(Resource, Default)]
 struct Estado {
     spawn_cd: f32,
@@ -83,13 +97,16 @@ fn agentes(
     mut est: ResMut<Estado>,
     mut policias: Query<(Entity, &mut PoliciaPie, &mut Transform), Without<Player>>,
     mut player: Query<&mut SimState, With<Player>>,
+    objetivo: Res<crate::interiores::ObjetivoHostil>,
     (mut sfx, mut shake): (EventWriter<PlaySfxAt>, EventWriter<CameraShakeEvent>),
 ) {
     let dt = time.delta_secs().min(0.1);
     let Ok(mut sim) = player.get_single_mut() else { return };
     let body = active_surface_body(&ctx, &planet);
-    let yo = Vec2::new(sim.body.x, sim.body.z);
-    let en_superficie = matches!(ctx.active, ha_shared::WorldContext::Overworld) && obs.capa() == 0;
+    // Encerrado en un edificio, «tu» sitio para ellos es la puerta de afuera.
+    let yo_jugador = Vec2::new(sim.body.x, sim.body.z);
+    let yo = if objetivo.activo { Vec2::new(objetivo.puerta.0, objetivo.puerta.1) } else { yo_jugador };
+    let en_superficie = matches!(ctx.active, ha_shared::WorldContext::Overworld) && (obs.capa() == 0 || objetivo.activo);
 
     // Sin búsqueda (o fuera de la superficie) se retiran.
     if !busq.buscado() || !en_superficie {
@@ -143,11 +160,22 @@ fn agentes(
     // --- Perseguir, disparar, atrapar ---
     let mut visto = false;
     let mut pegado = false;
+    let yo_real = yo_jugador;
     for (_, mut p, mut tf) in &mut policias {
         let pos = Vec2::new(p.x, p.z);
+        // Los de afuera, con el jugador encerrado, los acerca `interiores::asedio_de_puertas`.
+        if objetivo.activo && !objetivo.esta_adentro(p.x, p.z) {
+            tf.translation = Vec3::new(p.x, -p.z, sort_z(p.z));
+            visto = true;
+            continue;
+        }
+        // Con el jugador encerrado, los de afuera asedian la puerta; los que entraron van por él.
+        let (ox, oz) = objetivo.objetivo(p.x, p.z, (yo_real.x, yo_real.y));
+        let yo = Vec2::new(ox, oz);
+        let hacia_jugador = yo == yo_real;
         let d = pos.distance(yo);
         visto |= d < 60.0;
-        pegado |= d < 1.8;
+        pegado |= d < 1.8 && hacia_jugador;
         p.tiro_cd = (p.tiro_cd - dt).max(0.0);
         if d > 1.4 {
             let dir = (yo - pos) / d.max(1e-3);
@@ -160,7 +188,7 @@ fn agentes(
                 p.z += paso.y;
             }
         }
-        if d < ALCANCE_TIRO && p.tiro_cd <= 0.0 {
+        if d < ALCANCE_TIRO && p.tiro_cd <= 0.0 && hacia_jugador {
             p.tiro_cd = 1.4;
             sfx.send(PlaySfxAt(Sfx::ShotPistol, render_xy(p.x, p.z)));
             let h = hash((time.elapsed_secs() * 733.0) as u32 ^ (p.x as u32));

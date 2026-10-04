@@ -256,13 +256,10 @@ fn build_groups() -> Vec<(BuildGroup, &'static str)> {
         out.push((BuildGroup::Place(cat), cat.chip()));
     }
     out.push((BuildGroup::Fauna, "FAUNA"));
-    out.extend([
-        (BuildGroup::Pieces, "PIEZAS"),
-        (BuildGroup::Edges, "PAREDES"),
-        (BuildGroup::Ceilings, "TECHOS"),
-        (BuildGroup::Edificio, "EDIFICIO"),
-        (BuildGroup::Prefabs, "PREFABS"),
-    ]);
+    // **El sistema de construir pared por pared se fue** (pedido del usuario, 4 oct 2026: «nada de lo que
+    // hayamos hecho hasta ahora sirve»). PIEZAS, PAREDES, TECHOS, EDIFICIO modular y PREFABS ya no están en el
+    // menú: una casa se coloca ENTERA por fuera (categoría EDIFICIO del catálogo) y por dentro se genera sola
+    // (`ha_shared::interiores`). El código de esas piezas queda para las partidas viejas y los drivers.
     out
 }
 

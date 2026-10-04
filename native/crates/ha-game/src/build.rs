@@ -700,7 +700,10 @@ fn sync_floor_indicator(
             continue;
         }
         // ASCII-only: la fuente del juego no dibuja acentos ni flechas.
-        let line = if z > 0 {
+        let line = if let Some((_, piso)) = ha_shared::interiores::de_z(z) {
+            // Dentro de un edificio la planta es relativa a ese edificio (PB, 1, 2…), no el nivel absoluto.
+            if piso == 0 { "PLANTA BAJA".to_string() } else { format!("PISO {piso}") }
+        } else if z > 0 {
             format!("PISO {}", z + 1)
         } else if let Some(b) = bioma {
             b.to_string()

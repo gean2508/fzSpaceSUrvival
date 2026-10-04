@@ -244,7 +244,12 @@ fn aparecer(
     player: Query<&Transform, With<Player>>,
     existentes: Query<&Infectado>,
     pand: Res<crate::pandemia::Pandemia>,
+    objetivo: Res<crate::interiores::ObjetivoHostil>,
 ) {
+    // Encerrado en un edificio no nace nadie nuevo (los de afuera ya están asediando).
+    if objetivo.activo {
+        return;
+    }
     // Sin pandemia (todavía no se descubrió el virus, o ya se curó) no hay infectados sueltos.
     if !pand.activa() {
         return;
@@ -397,6 +402,7 @@ fn mover_y_morder(
     mut sfx: EventWriter<crate::audio::PlaySfx>,
     mut sim: Query<&mut SimState, With<Player>>,
     ruido_de_arma: Res<crate::armas::RuidoDeArma>,
+    objetivo: Res<crate::interiores::ObjetivoHostil>,
     mut q: Query<(&mut Infectado, &mut Transform, &mut Sprite)>,
     mut ultimo: Local<f32>,
     mut ultimo_z: Local<f32>,
@@ -413,9 +419,18 @@ fn mover_y_morder(
     // Un disparo se oye desde mucho más lejos que unos pasos.
     let olfato = if ruido_de_arma.0 > 0.0 { olfato * crate::armas::OIDO_DE_TIRO } else { olfato };
     let mut mordidas = 0u32;
+    let (jug_x, jug_z) = (px, pz);
     for (mut i, mut tf, mut sprite) in &mut q {
         i.ataque_cd = (i.ataque_cd - dt).max(0.0);
         i.destello = (i.destello - dt).max(0.0);
+        // Con el jugador encerrado, los de afuera NO usan la colisión de este nivel (es la del interior, todo
+        // pared): `interiores::asedio_de_puertas` los acerca a la puerta. Acá sólo se dibujan.
+        if objetivo.activo && !objetivo.esta_adentro(i.x, i.z) {
+            tf.translation = Vec3::new(i.x, -i.z, sort_z(i.z));
+            continue;
+        }
+        let (px, pz) = objetivo.objetivo(i.x, i.z, (jug_x, jug_z));
+        let hacia_jugador = (px, pz) == (jug_x, jug_z);
         // Persigue a quien tenga más cerca: vos o un vecino (que se defiende, ver `barrio.rs`).
         let (mut tx, mut tz) = (px, pz);
         let mut d_jug = ((px - i.x).powi(2) + (pz - i.z).powi(2)).sqrt().max(1e-3);
@@ -456,7 +471,7 @@ fn mover_y_morder(
                 }
             }
         }
-        if d < ATAQUE_RADIO && i.ataque_cd <= 0.0 && !a_un_vecino {
+        if d < ATAQUE_RADIO && i.ataque_cd <= 0.0 && !a_un_vecino && hacia_jugador {
             i.ataque_cd = ATAQUE_CD;
             mordidas += 1;
         }
