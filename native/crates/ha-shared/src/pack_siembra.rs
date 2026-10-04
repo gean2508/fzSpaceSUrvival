@@ -29,7 +29,6 @@ pub const VEREDA: &[ExtraDecor] = &[
     ExtraDecor { key: "prop/calle_buzon", size: [0.95, 1.90], weight: 6 },
     ExtraDecor { key: "prop/parquimetro", size: [0.95, 1.90], weight: 6 },
     ExtraDecor { key: "prop/paloma_1", size: [0.95, 0.95], weight: 6 },
-    ExtraDecor { key: "prop/maceta_3", size: [0.95, 0.95], weight: 9 },
     ExtraDecor { key: "prop/tacho_de_basura_chico_cerrado", size: [0.95, 1.90], weight: 6 },
     ExtraDecor { key: "prop/tacho_de_basura_chico_vacio", size: [0.95, 1.90], weight: 6 },
     ExtraDecor { key: "prop/tacho_de_basura_chico_lleno", size: [0.95, 1.90], weight: 6 },

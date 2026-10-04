@@ -41,6 +41,13 @@ pub struct Companion {
     bump: f32,
     say_cd: f32,
     was_founded: bool,
+    /// Su lugar en el mundo: donde vive su vida cuando no lo mandás a seguirte. Se corre a donde esté
+    /// cuando le decís «vivi tu vida».
+    casa: (f32, f32),
+    /// Para detectar el cambio de orden.
+    orden_previa: CompanionTask,
+    /// Cuánto lleva trabajando desde la última entrega (s).
+    cosecha: f32,
 }
 
 impl Companion {
@@ -59,8 +66,11 @@ impl Companion {
 /// `Pray` = orbita cerca del ídolo (venera).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum CompanionTask {
+    /// Hace su vida alrededor de su casa: pasea, descansa, charla si pasás cerca. No te sigue.
     #[default]
+    Libre,
     Follow,
+    /// Trabaja: recorre la zona y te trae recursos de a poco.
     Gather,
     Pray,
 }
@@ -121,6 +131,9 @@ fn spawn_companion(
             bump: 0.0,
             say_cd: 3.0,
             was_founded: false,
+            casa: (cx, cz),
+            orden_previa: CompanionTask::Libre,
+            cosecha: 0.0,
         },
         Name::new("Companion"),
     ));
@@ -141,6 +154,8 @@ fn tick_companion(
     mut speech: ResMut<crate::dialog::SpeechQueue>,
     player: Query<&Transform, (With<Player>, Without<Companion>)>,
     mut q: Query<(&mut Companion, &mut Transform, &mut Sprite)>,
+    mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
+    mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
     mut acc: Local<f32>,
     mut ads: Local<Vec<Anuncio>>,
 ) {
@@ -166,10 +181,22 @@ fn tick_companion(
     // sigue siendo tu mano derecha.
     let dx = px - c.x;
     let dz = pz - c.z;
-    if body != c.body || (dx * dx + dz * dz).sqrt() > LEASH {
+    // Sólo reaparece a tu lado si cambiaste de cuerpo, o si lo mandaste a seguirte y te fuiste muy lejos.
+    // Libre, se queda en su casa: tiene su vida.
+    if body != c.body || (order.0 == CompanionTask::Follow && (dx * dx + dz * dz).sqrt() > LEASH) {
         c.x = px + 1.5;
         c.z = pz + 1.5;
+        c.casa = (c.x, c.z);
         c.body = body;
+        c.vida.abandonar();
+    }
+    // Al soltarlo (vivi tu vida) o mandarlo a trabajar, su casa es donde esté.
+    if order.0 != c.orden_previa {
+        if matches!(order.0, CompanionTask::Libre | CompanionTask::Gather) {
+            c.casa = (c.x, c.z);
+        }
+        c.orden_previa = order.0;
+        c.cosecha = 0.0;
         c.vida.abandonar();
     }
     let dx = px - c.x;
@@ -188,6 +215,7 @@ fn tick_companion(
     c.vida.tick(Clase::Companero, fase, dt, (c.x, c.z));
     if c.vida.necesita_decidir(Clase::Companero, fase) {
         let desired = match order.0 {
+            CompanionTask::Libre => 6.0,
             CompanionTask::Follow => FOLLOW_MIN,
             CompanionTask::Pray => 1.3,
             CompanionTask::Gather => 7.0,
@@ -197,48 +225,50 @@ fn tick_companion(
             (h >> 40) as f32 / (1u64 << 24) as f32
         };
         ads.clear();
-        // Acompañarte: siempre se ofrece, y la orden lo empuja más o menos.
-        let bono_seguir = match order.0 {
-            CompanionTask::Follow => 0.9,
-            CompanionTask::Pray => 0.3,
-            CompanionTask::Gather => 0.2,
-        };
-        ads.push(Anuncio::nuevo(Actividad::Seguir, px, pz).alcance(1e4).uso(desired).dur(6.0).bono(bono_seguir));
-        // Charlar con vos (compañía).
-        ads.push(
-            Anuncio::nuevo(Actividad::Charlar, px, pz).alcance(1e4).uso(2.5).dur(8.0).gana(Motivo::Social, 0.05),
-        );
-        // Dar una vuelta cerca (ocio): más lejos si le pediste que reúna/explore.
-        let radio = if order.0 == CompanionTask::Gather { 8.0 } else { 4.0 };
-        let ang = azar(1) * TAU;
-        ads.push(
-            Anuncio::nuevo(Actividad::Jugar, px + ang.cos() * radio, pz + ang.sin() * radio)
-                .alcance(1e4)
-                .uso(1.5)
-                .dur(9.0)
-                .gana(Motivo::Ocio, 0.05)
-                .bono(if order.0 == CompanionTask::Gather { 0.9 } else { 0.0 }),
-        );
-        // Descansar: se sienta a tu lado, pero sólo si vos también parás.
-        if c.quieto > 2.0 {
-            ads.push(
-                Anuncio::nuevo(Actividad::Descansar, px + 1.0, pz + 1.0)
-                    .alcance(1e4)
-                    .uso(1.5)
-                    .dur(14.0)
-                    .gana(Motivo::Sueno, 0.03),
-            );
-        }
-        // Rezar cerca tuyo cuando se lo pedís.
-        if order.0 == CompanionTask::Pray {
-            ads.push(Anuncio::nuevo(Actividad::Rezar, px, pz).alcance(1e4).uso(1.3).dur(12.0).bono(1.2));
+        let (hx, hz) = c.casa;
+        let cerca_mio = dist < 14.0;
+        match order.0 {
+            // Te sigue: sólo si se lo pediste.
+            CompanionTask::Follow => {
+                ads.push(Anuncio::nuevo(Actividad::Seguir, px, pz).alcance(1e4).uso(desired).dur(6.0).bono(0.9));
+                ads.push(Anuncio::nuevo(Actividad::Charlar, px, pz).alcance(1e4).uso(2.5).dur(8.0).gana(Motivo::Social, 0.05));
+                if c.quieto > 2.0 {
+                    ads.push(Anuncio::nuevo(Actividad::Descansar, px + 1.0, pz + 1.0).alcance(1e4).uso(1.5).dur(14.0).gana(Motivo::Sueno, 0.03));
+                }
+            }
+            CompanionTask::Pray => {
+                ads.push(Anuncio::nuevo(Actividad::Rezar, px, pz).alcance(1e4).uso(1.3).dur(12.0).bono(1.2));
+                ads.push(Anuncio::nuevo(Actividad::Seguir, px, pz).alcance(1e4).uso(2.0).dur(6.0).bono(0.3));
+            }
+            // Trabaja: recorre una zona amplia alrededor de su casa.
+            CompanionTask::Gather => {
+                for k in 0..3u64 {
+                    let ang = azar(1 + k) * TAU;
+                    let r = 8.0 + azar(7 + k) * 22.0;
+                    ads.push(Anuncio::nuevo(Actividad::Jugar, hx + ang.cos() * r, hz + ang.sin() * r).alcance(1e4).uso(1.5).dur(10.0).gana(Motivo::Ocio, 0.02).bono(0.9));
+                }
+            }
+            // Vive su vida: pasea cerca de su casa, descansa, charla si pasás, reza de vez en cuando.
+            CompanionTask::Libre => {
+                for k in 0..3u64 {
+                    let ang = azar(1 + k) * TAU;
+                    let r = 2.0 + azar(7 + k) * 8.0;
+                    ads.push(Anuncio::nuevo(Actividad::Jugar, hx + ang.cos() * r, hz + ang.sin() * r).alcance(1e4).uso(1.5).dur(9.0).gana(Motivo::Ocio, 0.05));
+                }
+                ads.push(Anuncio::nuevo(Actividad::Descansar, hx + 1.0, hz + 1.0).alcance(1e4).uso(1.5).dur(16.0).gana(Motivo::Sueno, 0.04).bono(if c.vida.actividad() == Actividad::Jugar { 0.3 } else { 0.0 }));
+                ads.push(Anuncio::nuevo(Actividad::Rezar, hx, hz).alcance(1e4).uso(1.3).dur(10.0).bono(0.1));
+                // Sólo si pasás cerca se acerca a charlar: no te persigue.
+                if cerca_mio {
+                    ads.push(Anuncio::nuevo(Actividad::Charlar, px, pz).alcance(1e4).uso(2.5).dur(8.0).gana(Motivo::Social, 0.05).bono(0.5));
+                }
+            }
         }
         c.vida.decidir(Clase::Companero, (c.x, c.z), fase, &ads);
     }
     // Lo que persigue se mueve con vos.
     if let Some((_, _, _)) = c.vida.destino() {
         match c.vida.actividad() {
-            Actividad::Seguir | Actividad::Charlar | Actividad::Rezar | Actividad::Descansar => {
+            Actividad::Seguir | Actividad::Charlar | Actividad::Rezar | Actividad::Descansar if order.0 == CompanionTask::Follow || order.0 == CompanionTask::Pray || c.vida.actividad() == Actividad::Charlar => {
                 let (ox, oz) = if c.vida.actividad() == Actividad::Descansar { (1.0, 1.0) } else { (0.0, 0.0) };
                 c.vida.apuntar(px + ox, pz + oz);
             }
@@ -291,6 +321,19 @@ fn tick_companion(
         Color::WHITE
     };
 
+    // ── TRABAJAR: cada ~25 s de paseo por la zona te trae un recurso (llega a tu mochila si estás a < 90 m) ──
+    if order.0 == CompanionTask::Gather && c.vida.actividad() == Actividad::Jugar {
+        c.cosecha += dt;
+        if c.cosecha >= 25.0 && dist < 90.0 {
+            c.cosecha = 0.0;
+            let botin = ["wood", "stone", "sticks", "apple"][(sims::hash(time.elapsed().as_millis() as u64) % 4) as usize];
+            inv.add(botin, 1);
+            persist.mark_dirty();
+            let nombre = match botin { "wood" => "madera", "stone" => "piedra", "sticks" => "palos", _ => "una manzana" };
+            crate::dialog::say(&mut speech, c.x, c.z, format!("Te dejé {nombre} en la mochila."), Color::srgb(0.6, 0.9, 1.0));
+        }
+    }
+
     // ── CHAT (mano derecha): reacciona al culto y a cómo está; conversa ────────
     c.say_cd -= dt;
     let just_founded = religion.founded && !c.was_founded;
@@ -314,7 +357,8 @@ fn tick_companion(
                 (Actividad::Jugar, _) => "Voy a echar un vistazo.".into(),
                 (_, CompanionTask::Follow) if religion.founded => "Los fieles crecen, jefe.".into(),
                 (_, CompanionTask::Follow) => "A tus órdenes.".into(),
-                (_, CompanionTask::Gather) => "Reuniendo al rebaño.".into(),
+                (_, CompanionTask::Libre) => "Hago mi vida por acá, jefe.".into(),
+                (_, CompanionTask::Gather) => "Trabajando la zona.".into(),
                 (_, CompanionTask::Pray) => "Que el Ki nos guíe.".into(),
             }
         };

@@ -1423,6 +1423,18 @@ fn constructor_obra(
         if celdas().any(|(tx, tz)| obs.solido(body, tx, tz)) {
             continue;
         }
+        // **Nada en la calzada.** Un Constructor puso un mantel de picnic en mitad de la carretera
+        // (4 oct 2026): el mobiliario va en parque o vereda, nunca sobre asfalto ni puente, ni
+        // pegado a ellos (un celda de margen para que el auto no roce la pieza).
+        let sobre_calzada = |tx: i64, tz: i64| matches!(ha_shared::geography::civil_at(body, tx, tz), Some(ha_shared::geography::Civil::Road | ha_shared::geography::Civil::Bridge));
+        if celdas().any(|(tx, tz)| (-1..=1).any(|dz| (-1..=1).any(|dx| sobre_calzada(tx + dx, tz + dz)))) {
+            continue;
+        }
+        // Mesas y barriles son de parque: tampoco sobre la vereda (sólo el banco y el farol).
+        let es_de_vereda = matches!(id, "calle_banco" | "calle_farol");
+        if !es_de_vereda && celdas().any(|(tx, tz)| ha_shared::geography::civil_at(body, tx, tz).is_some()) {
+            continue;
+        }
         let (mx, mz) = (min.0 as f32 + a.w as f32 * 0.5, min.1 as f32 + a.h as f32 * 0.5);
         if !obs.libre(body, mx, mz, 0.4) {
             continue;

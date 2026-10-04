@@ -136,6 +136,10 @@ impl Escaleras {
         if let Some(&i) = self.por_celda.get(&(body as u8, z, tx, tz)) {
             return Some(self.list[i]);
         }
+        // Los interiores de los edificios traen sus escaleras (`interiores`); luego las cuevas naturales.
+        if ha_shared::interiores::es_interior(z) {
+            return ha_shared::interiores::tramo_en(body, z, tx, tz);
+        }
         ha_shared::cuevas::tramo_natural(body, z, tx, tz)
     }
 

@@ -165,8 +165,11 @@ pub struct MetasPlugin;
 
 impl Plugin for MetasPlugin {
     fn build(&self, app: &mut App) {
+        // El cartel «META n/18» y su seguimiento están APAGADOS (4 oct 2026): el usuario nunca los pidió
+        // («¿qué es el letrero de meta? yo nunca te pedí esa mierda»). El recurso `Metas` queda porque lo
+        // lee el multijugador; para volver a prender el cartel basta registrar de nuevo los dos sistemas.
+        let _ = (revisar_metas, pintar_metas);
         app.init_resource::<Metas>()
-            .add_systems(Update, (revisar_metas, pintar_metas).chain().run_if(in_state(GamePhase::Playing)))
             .add_systems(OnExit(GamePhase::Playing), salir);
     }
 }

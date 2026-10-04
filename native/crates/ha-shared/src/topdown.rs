@@ -834,6 +834,10 @@ pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
 }
 
 fn topdown_tile_calc(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
+    // Los interiores de los edificios viven en su propia banda de pisos (ver `interiores`).
+    if crate::interiores::es_interior(z) {
+        return crate::interiores::tile(body, z, tx, tz);
+    }
     if z == 0 {
         // MUNDO FINITO (29 jul 2026): más allá del radio caminable del cuerpo no
         // hay más mundo. El mapa es procedural pero ACOTADO — 60 km de punta a

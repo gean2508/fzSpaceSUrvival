@@ -824,7 +824,7 @@ pub fn decor_hits_box(
     // Celdas ancla candidatas: las que toca la caja, más el alcance de las huellas
     // multi-celda (un asset anclado lejos puede tener una caja acá). Sin huellas
     // declaradas el escaneo es la vecindad inmediata — el costo de antes.
-    if z == 0 && muebles_frenan(flora, body, aabb) {
+    if (z == 0 || ha_shared::interiores::es_interior(z)) && muebles_frenan(flora, body, z, aabb) {
         return true;
     }
     // **El alcance depende de QUIÉN se siembra.** Lo procedural (árboles y rocas) casi no tiene
@@ -880,8 +880,8 @@ fn pisa_un_edificio(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64, si
 /// **Los muebles frenan** (29 sep 2026): su pie, medido por `amueblado`. Antes no
 /// tenían colisión y se atravesaban camas y roperos. Lo que el jugador levantó ya
 /// no está y no frena.
-fn muebles_frenan(flora: Option<&FloraHarvest>, body: CelestialBody, aabb: [f32; 4]) -> bool {
-    ha_shared::amueblado::muebles_cerca(body, aabb).iter().any(|m| {
+fn muebles_frenan(flora: Option<&FloraHarvest>, body: CelestialBody, z: i32, aabb: [f32; 4]) -> bool {
+    ha_shared::amueblado::muebles_cerca_z(body, z, aabb).iter().any(|m| {
         let (ax, az) = m.ancla();
         let (kx, kz) = crate::targeting::PROP_REMOVED_KEY;
         let levantado = flora.is_some_and(|f| f.is_removed(body, kx, kz, pack_cell(ax, az)));
@@ -3053,7 +3053,7 @@ fn spawn_chunk_small_decor(
             // aparecían arbustos, fuentes y arcos de seto. El piso de una casa
             // lo decide `ha_shared::amueblado` y nadie más.
             let mueble = (tile == Tile::WoodFloor)
-                .then(|| ha_shared::amueblado::mueble_anclado(body, tx, tz))
+                .then(|| ha_shared::amueblado::mueble_anclado_z(body, z, tx, tz))
                 .flatten();
             let e = if tile.swim() {
                 ha_shared::agua::decor_at(body, tx, tz)
@@ -3644,8 +3644,15 @@ fn arte_de_interior(
             (mx, mz, mw, mh, e)
         }
         _ => {
-            let s = ha_shared::geography::settlement_covering(body, tx, tz)?;
-            let (x, z0, w, h, _) = ha_shared::city::roofed_rect(body, &s, tx, tz)?;
+            // Un interior (banda de pisos propia) trae su rectángulo del plano; una casa del mapa, de la ciudad.
+            let (x, z0, w, h) = if ha_shared::interiores::es_interior(tiles.z) {
+                let r = ha_shared::interiores::rect_de_z(tiles.z)?;
+                (r.0, r.1, r.2, r.3)
+            } else {
+                let s = ha_shared::geography::settlement_covering(body, tx, tz)?;
+                let (x, z0, w, h, _) = ha_shared::city::roofed_rect(body, &s, tx, tz)?;
+                (x, z0, w, h)
+            };
             let idx = ha_shared::worldgen::hash_cell(0x1_7ee2, x, z0) as usize % estilos.len();
             memo.rect = Some((x, z0, w, h));
             memo.estilo = Some(estilos[idx]);

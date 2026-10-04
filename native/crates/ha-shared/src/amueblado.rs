@@ -175,7 +175,7 @@ pub fn medida_en_celdas(size: [f32; 2]) -> (i64, i64) {
     (cw, prof)
 }
 
-type Cache = Mutex<HashMap<(u8, i64, i64), Arc<Vec<Mueble>>>>;
+type Cache = Mutex<HashMap<(u8, i32, i64, i64), Arc<Vec<Mueble>>>>;
 
 fn cache() -> &'static Cache {
     static C: OnceLock<Cache> = OnceLock::new();
@@ -184,7 +184,17 @@ fn cache() -> &'static Cache {
 
 /// La casa (rect edificado y programa) que cubre esta celda, si hay.
 pub fn casa_en(body: CelestialBody, tx: i64, tz: i64) -> Option<(i64, i64, i64, i64, &'static str)> {
-    if body != CelestialBody::Earth {
+    casa_en_z(body, 0, tx, tz)
+}
+
+/// Igual, pero en el nivel `z`: los interiores (`interiores`) viven en su propia banda de pisos y su
+/// «casa» es el rectángulo del plano.
+pub fn casa_en_z(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<(i64, i64, i64, i64, &'static str)> {
+    if crate::interiores::es_interior(z) {
+        let r = crate::interiores::rect_de_z(z)?;
+        return (tx >= r.0 && tz >= r.1 && tx < r.0 + r.2 && tz < r.1 + r.3).then_some(r);
+    }
+    if z != 0 || body != CelestialBody::Earth {
         return None;
     }
     let s = crate::geography::settlement_covering(body, tx, tz)?;
@@ -194,11 +204,15 @@ pub fn casa_en(body: CelestialBody, tx: i64, tz: i64) -> Option<(i64, i64, i64, 
 
 /// Los muebles de la casa de ese rect (cacheado: se calcula una vez).
 pub fn muebles_de(body: CelestialBody, casa: (i64, i64, i64, i64, &'static str)) -> Arc<Vec<Mueble>> {
-    let k = (body as u8, casa.0, casa.1);
+    muebles_de_z(body, 0, casa)
+}
+
+pub fn muebles_de_z(body: CelestialBody, z: i32, casa: (i64, i64, i64, i64, &'static str)) -> Arc<Vec<Mueble>> {
+    let k = (body as u8, z, casa.0, casa.1);
     if let Some(v) = cache().lock().ok().and_then(|c| c.get(&k).cloned()) {
         return v;
     }
-    let v = Arc::new(amueblar(body, casa));
+    let v = Arc::new(amueblar_z(body, z, casa));
     if let Ok(mut c) = cache().lock() {
         if c.len() > 512 {
             c.clear();
@@ -210,30 +224,39 @@ pub fn muebles_de(body: CelestialBody, casa: (i64, i64, i64, i64, &'static str))
 
 /// El mueble anclado en esta celda, si hay.
 pub fn mueble_anclado(body: CelestialBody, tx: i64, tz: i64) -> Option<Mueble> {
-    if topdown_tile(body, 0, tx, tz) != Tile::WoodFloor {
+    mueble_anclado_z(body, 0, tx, tz)
+}
+
+pub fn mueble_anclado_z(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Option<Mueble> {
+    if topdown_tile(body, z, tx, tz) != Tile::WoodFloor {
         return None;
     }
-    let casa = casa_en(body, tx, tz)?;
-    muebles_de(body, casa).iter().copied().find(|m| m.ancla() == (tx, tz))
+    let casa = casa_en_z(body, z, tx, tz)?;
+    muebles_de_z(body, z, casa).iter().copied().find(|m| m.ancla() == (tx, tz))
 }
 
 /// Los muebles de las casas que toca la caja `[x0, z0, x1, z1]`.
 pub fn muebles_cerca(body: CelestialBody, caja: [f32; 4]) -> Vec<Mueble> {
+    muebles_cerca_z(body, 0, caja)
+}
+
+pub fn muebles_cerca_z(body: CelestialBody, nivel: i32, caja: [f32; 4]) -> Vec<Mueble> {
     let mut vistas: Vec<(i64, i64)> = Vec::new();
     let mut fuera = Vec::new();
     for (x, z) in [(caja[0], caja[1]), (caja[2], caja[1]), (caja[0], caja[3]), (caja[2], caja[3])] {
-        let Some(casa) = casa_en(body, x.floor() as i64, z.floor() as i64) else { continue };
+        let Some(casa) = casa_en_z(body, nivel, x.floor() as i64, z.floor() as i64) else { continue };
         if vistas.contains(&(casa.0, casa.1)) {
             continue;
         }
         vistas.push((casa.0, casa.1));
-        fuera.extend(muebles_de(body, casa).iter().copied());
+        fuera.extend(muebles_de_z(body, nivel, casa).iter().copied());
     }
     fuera
 }
 
 fn es_casa(lote: &str) -> bool {
-    matches!(
+    crate::interiores::arquetipo_de(lote) == crate::interiores::Arq::Vivienda
+        || matches!(
         lote,
         "building/casa_chica"
             | "building/casa_mediana"
@@ -259,8 +282,12 @@ fn tabla_de_cuarto(lote: &str, orden: usize) -> Option<&'static [ExtraDecor]> {
 /// **Amuebla una casa entera.** Pura y determinista (el mismo mundo, los mismos
 /// muebles), así que no se guarda nada.
 pub fn amueblar(body: CelestialBody, casa: (i64, i64, i64, i64, &'static str)) -> Vec<Mueble> {
+    amueblar_z(body, 0, casa)
+}
+
+pub fn amueblar_z(body: CelestialBody, nivel: i32, casa: (i64, i64, i64, i64, &'static str)) -> Vec<Mueble> {
     let (hx, hz, hw, hd, lote) = casa;
-    let t = |x: i64, z: i64| topdown_tile(body, 0, x, z);
+    let t = |x: i64, z: i64| topdown_tile(body, nivel, x, z);
     let es_muro = |x: i64, z: i64| matches!(t(x, z), Tile::WoodWall | Tile::StoneBrick | Tile::Window);
     let mut piso: HashSet<(i64, i64)> = HashSet::new();
     let mut puertas: Vec<(i64, i64)> = Vec::new();
@@ -334,7 +361,7 @@ pub fn amueblar(body: CelestialBody, casa: (i64, i64, i64, i64, &'static str)) -
         // del de arriba ("los muebles están cortados"). Dos dibujos no se pisan.
         let mut a_la_vista: HashSet<(i64, i64)> = HashSet::new();
         let limite = (cuarto.len() as f32 * 0.34) as usize;
-        let mut sem = hash_cell(0x3ab1_e0d0 ^ orden as u32, hx, hz) | 1;
+        let mut sem = hash_cell(0x3ab1_e0d0 ^ orden as u32 ^ (nivel as u32).wrapping_mul(0x9e37), hx, hz) | 1;
         let mut azar = move || {
             sem ^= sem << 13;
             sem ^= sem >> 17;

@@ -300,6 +300,11 @@ fn objetivo_de_nivel(
     tz: i64,
     sim: &SimState,
 ) -> (f32, Option<(i64, i64)>) {
+    // Un interior de edificio (banda propia): luz de casa, ni cueva ni plena calle. De noche las lámparas y
+    // las ventanas la sostienen; de día entra más luz por las ventanas.
+    if ha_shared::interiores::es_interior(z) {
+        return (0.22, None);
+    }
     if z >= 0 {
         let dentro = cuartos
             .en(body, z, tx, tz)

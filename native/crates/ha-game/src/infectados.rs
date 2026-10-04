@@ -297,6 +297,19 @@ fn aparecer(
     crear_infectado(&mut commands, &art, x, z, clase, (h(3), h(4), h(5)));
 }
 
+/// El color de un infectado en reposo según su clase y su rol (lo mismo con que nace).
+fn color_base(clase: crate::oleadas::Clase, rol: u8) -> Color {
+    match rol {
+        3 => Color::srgb(0.75, 0.35, 0.55),
+        1 | 2 => Color::srgb(0.85, 0.45, 0.45),
+        _ => match clase {
+            crate::oleadas::Clase::Comun => Color::srgb(0.55, 0.78, 0.55),
+            crate::oleadas::Clase::Corredor => Color::srgb(0.85, 0.95, 0.70),
+            crate::oleadas::Clase::Tanque => Color::srgb(0.40, 0.55, 0.42),
+        },
+    }
+}
+
 /// Un infectado de la oleada en `(x, z)`, de una clase dada. `sorteos` = tres números en [0, 1).
 fn crear_infectado(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, clase: crate::oleadas::Clase, sorteos: (f32, f32, f32)) {
     crear_infectado_con_rol(commands, art, x, z, clase, sorteos, 0);
@@ -448,7 +461,14 @@ fn mover_y_morder(
             mordidas += 1;
         }
         tf.translation = Vec3::new(i.x, -i.z, sort_z(i.z));
-        sprite.color = if i.destello > 0.0 { Color::srgb(1.0, 0.35, 0.35) } else { Color::srgb(0.55, 0.78, 0.55) };
+        // Destello: blanco los primeros ~⅓ del golpe y después rojo (receta de `disparo-y-apuntado`).
+        sprite.color = if i.destello > 0.10 {
+            Color::WHITE
+        } else if i.destello > 0.0 {
+            Color::srgb(1.0, 0.35, 0.35)
+        } else {
+            color_base(i.clase, i.rol)
+        };
         // Mira hacia donde va.
         tf.scale.x = if dx < 0.0 { -1.0 } else { 1.0 };
     }
@@ -592,7 +612,7 @@ fn herir(
     empuje: f32,
 ) {
     i.vida -= dano;
-    i.destello = 0.15;
+    i.destello = 0.20;
     // Retroceso: lo empuja lejos de quien pegó.
     let (dx, dz) = (i.x - desde.x, i.z - desde.y);
     let d = (dx * dx + dz * dz).sqrt().max(1e-3);
@@ -646,6 +666,7 @@ pub(crate) fn balas_a_infectados(
     planet: Res<ActivePlanet>,
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
     mut q: Query<(Entity, &mut Infectado, &Sprite)>,
+    mut jugo: EventWriter<crate::jugo::Golpe>,
 ) {
     const RADIO_BLANCO: f32 = 0.55;
     for mut b in &mut balas {
@@ -662,7 +683,12 @@ pub(crate) fn balas_a_infectados(
             }
             let dano = b.dano_ahora();
             let desde = b.origen;
+            // Hitstop y número de daño SOLO en la baja (receta: nunca por bala, una ráfaga tartamudearía).
+            let letal = i.vida - dano <= 0.0;
             herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, dano, desde, 0.25);
+            if letal {
+                jugo.send(crate::jugo::Golpe { en: pos, dano, letal: true, color: Color::srgb(0.75, 0.15, 0.12) });
+            }
             crate::armas::chispa_de_impacto(&mut commands, pos, if b.rayo { Color::srgb(0.4, 1.0, 0.6) } else { Color::srgb(0.75, 0.15, 0.12) });
             sfx.send(crate::audio::PlaySfxAt(b.impacto, Vec2::new(pos.x, -pos.y)));
             b.registrar(e);
