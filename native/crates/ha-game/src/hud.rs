@@ -239,6 +239,9 @@ enum BuildGroup {
     Place(ha_shared::placeables::PlaceCat),
     /// Fauna y utilería de vivario — sólo surte efecto en creativo.
     Fauna,
+    /// **Armas**: las 9 con sus camuflajes. Tocar una carta la pone en la mochila (gratis en creativo; si no,
+    /// las comunes cuestan poco oro y las épicas —los camuflajes— bastante más).
+    Armas,
 }
 
 /// **La paleta se navega por grupos, no scrolleando 350 tarjetas.**
@@ -255,6 +258,7 @@ fn build_groups() -> Vec<(BuildGroup, &'static str)> {
     for &cat in ha_shared::placeables::PlaceCat::all() {
         out.push((BuildGroup::Place(cat), cat.chip()));
     }
+    out.push((BuildGroup::Armas, "ARMAS"));
     out.push((BuildGroup::Fauna, "FAUNA"));
     // **El sistema de construir pared por pared se fue** (pedido del usuario, 4 oct 2026: «nada de lo que
     // hayamos hecho hasta ahora sirve»). PIEZAS, PAREDES, TECHOS, EDIFICIO modular y PREFABS ya no están en el
@@ -285,6 +289,7 @@ fn arte_de_ficha(grupo: BuildGroup) -> Option<String> {
         BuildGroup::Edificio => Some("edificio/fachada".to_string()),
         BuildGroup::Prefabs => Some("prop/banco_ciudad".to_string()),
         BuildGroup::Fauna => Some("fauna/pollo".to_string()),
+        BuildGroup::Armas => Some("items/gun_ak".to_string()),
     }
 }
 
@@ -3050,6 +3055,7 @@ fn build_group_hint(group: usize) -> &'static str {
         Some(BuildGroup::Prefabs) => "Estampa el área entera de una sola vez.",
         Some(BuildGroup::Edificio) => "Apuntá a la vereda y fundá; después ampliá, apilá plantas y abrile la puerta.",
         Some(BuildGroup::Fauna) => "Solo creativo: encerrala y observa como evoluciona.",
+        Some(BuildGroup::Armas) => "Tocá un arma y va a tu mochila. Creativo: gratis. Sino: comunes con poco oro, camuflajes épicos con mucho.",
         _ => "Se coloca entera y se rodea (no se entra). Cuesta material.",
     }
 }
@@ -3136,6 +3142,7 @@ fn build_group_len(group: BuildGroup) -> usize {
         BuildGroup::Todo => ha_shared::placeables::PLACEABLES.len(),
         BuildGroup::Place(cat) => ha_shared::placeables::placeables_in(cat).count(),
         BuildGroup::Fauna => crate::fauna::spawn_species_count() + 4,
+        BuildGroup::Armas => crate::armas::items_de_arma().len(),
     }
 }
 
@@ -3268,6 +3275,22 @@ fn fill_build_group(list: &mut ChildBuilder, group: usize, page: usize, heart: f
                     a.cost_qty,
                     // El colocable SE VE: su propio slot de arte es el icono.
                     UiIconSlot::art(&[a.art], a.cost_item),
+                    heart,
+                    card,
+                );
+            }
+        }
+        BuildGroup::Armas => {
+            for (i, item) in crate::armas::items_de_arma().iter().enumerate() {
+                let precio = crate::armas::precio_en_oro(item);
+                let nombre = crate::armas::etiqueta_estatica(item).unwrap_or(item);
+                carta!(
+                    list,
+                    crate::armas::ARMAS_PALETTE_BASE + i,
+                    nombre,
+                    "gold_ingot",
+                    precio,
+                    UiIconSlot::art(&[&format!("items/{item}")], "iron_ingot"),
                     heart,
                     card,
                 );

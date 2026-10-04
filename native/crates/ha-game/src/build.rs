@@ -417,6 +417,11 @@ fn build_tab_select(
     mut build_mode: ResMut<BuildModeActive>,
     mut bag: ResMut<BagPanelState>,
     mut pendiente: Local<Option<(usize, f32)>>,
+    (editor, mut inv, mut persist): (
+        Res<crate::ui_editor::UiEditorState>,
+        ResMut<crate::inventory_persist::PlayerInventory>,
+        ResMut<crate::inventory_persist::InventoryPersistState>,
+    ),
 ) {
     for (interaction, button, mut bg) in &mut buttons {
         if *interaction == Interaction::Pressed {
@@ -441,7 +446,19 @@ fn build_tab_select(
         return;
     }
     // Soltó: toque si no arrastró más que el umbral.
-    if *recorrido <= crate::hud::BAG_UMBRAL {
+    if *recorrido <= crate::hud::BAG_UMBRAL && *pieza >= crate::armas::ARMAS_PALETTE_BASE {
+        // Una carta de ARMAS: no se coloca, se lleva. Gratis en creativo; si no, se paga en oro.
+        if let Some(item) = crate::armas::items_de_arma().get(*pieza - crate::armas::ARMAS_PALETTE_BASE) {
+            let precio = crate::armas::precio_en_oro(item);
+            if editor.creative || inv.qty("gold_ingot") >= precio {
+                if !editor.creative {
+                    inv.remove("gold_ingot", precio);
+                }
+                inv.add(item, 1);
+                persist.mark_dirty();
+            }
+        }
+    } else if *recorrido <= crate::hud::BAG_UMBRAL {
         selected.0 = *pieza;
         build_mode.active = true;
         bag.open = false;

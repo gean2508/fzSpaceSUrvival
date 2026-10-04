@@ -3686,7 +3686,9 @@ fn arte_de_interior(
     // ve la tapa, no el paño, así que ahí va la pieza del muro. Sólo el muro que
     // enseña su paño (`edge_n`, el del fondo del cuarto) lleva el vidrio; el que
     // da a la calle lo dibuja la fachada.
-    if tile == Tile::Window && cara == "edge_n" {
+    // (En un interior la ventana del muro del fondo SÍ lleva el paño con su borde: el vidrio se le pone encima,
+    // `interiores::vidrios_de_adentro`; sin paño quedaba un hueco sin el borde de la pared.)
+    if tile == Tile::Window && cara == "edge_n" && !ha_shared::interiores::es_interior(tiles.z) {
         return None;
     }
     Some((clave, cara))

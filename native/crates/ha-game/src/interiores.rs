@@ -226,6 +226,7 @@ impl Plugin for InterioresPlugin {
                     publicar_objetivo,
                     asedio_de_puertas,
                     ocupantes,
+                    vidrios_de_adentro,
                     ocultar_puertas_rotas,
                 )
                     .chain()
@@ -963,6 +964,51 @@ pub fn debug_pulsar(world: &mut World, cerca: Option<Cerca>, accion: &str) {
         if *a == quiere {
             *i = Interaction::Pressed;
         }
+    }
+}
+
+#[derive(Component)]
+struct VidrioInterior;
+
+/// **El vidrio de las ventanas del muro del fondo.** El paño de la pared (con su borde de arriba) lo pone el arte
+/// del kit; encima va el vidrio, recortado de la ventana del pack (`window/stone`, celda 32×64: x 4..28, y 30..62).
+/// Antes la celda de la ventana no llevaba paño y quedaba un hueco sin el borde de la pared.
+fn vidrios_de_adentro(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    tiles: Res<TileWorld>,
+    viejos: Query<Entity, With<VidrioInterior>>,
+    mut visto: Local<(i32, u64)>,
+) {
+    let Some((slot, piso)) = interiores::de_z(tiles.z) else {
+        if !viejos.is_empty() {
+            for e in &viejos {
+                commands.entity(e).despawn_recursive();
+            }
+        }
+        *visto = (0, 0);
+        return;
+    };
+    if *visto == (tiles.z, tiles.version) {
+        return;
+    }
+    *visto = (tiles.z, tiles.version);
+    for e in &viejos {
+        commands.entity(e).despawn_recursive();
+    }
+    let Some(plano) = interiores::plano_de(slot) else { return };
+    for x in plano.x0 + 1..plano.x0 + plano.w - 1 {
+        let z = plano.z0;
+        if plano.celda(piso, x, z) != Tile::Window || plano.celda(piso, x, z + 1) != Tile::WoodFloor {
+            continue;
+        }
+        let mut sprite = art.sprite_or_color("window/stone", Color::srgb(0.72, 0.84, 0.95), Vec2::new(0.75, 1.0));
+        if let Some(r) = sprite.rect {
+            sprite.rect = Some(Rect::from_corners(r.min + Vec2::new(4.0, 30.0), r.min + Vec2::new(28.0, 62.0)));
+        }
+        sprite.custom_size = Some(Vec2::new(0.75, 1.0));
+        let c = render_xy(x as f32 + 0.5, z as f32 + 0.55);
+        commands.spawn((sprite, Transform::from_xyz(c.x, c.y, sort_z(z as f32 + 1.0) + 2.0e-5), VidrioInterior, Name::new("VidrioInterior")));
     }
 }
 

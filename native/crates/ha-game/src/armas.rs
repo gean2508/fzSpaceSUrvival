@@ -128,6 +128,28 @@ pub const CAMUFLAJES: [(&str, &str); 6] = [
     ("oscura", "Materia oscura"),
 ];
 
+/// Offset de índice de las cartas de la categoría ARMAS en la paleta de CONSTRUIR (`build.rs` las intercepta).
+pub const ARMAS_PALETTE_BASE: usize = 20_000;
+
+/// Lo que vale un arma en lingotes de oro: la base es barata, el camuflaje la hace épica (Weaponized 115 y la
+/// materia oscura son las más caras), la pistola de rayos cuesta el doble. En creativo no se cobra.
+pub fn precio_en_oro(item: &str) -> u32 {
+    let Some((def, camo)) = parsear(item) else { return 0 };
+    let base: u32 = match def.id {
+        "pistola" => 4,
+        "escopeta" => 8,
+        "raygun" => 20,
+        _ => 10,
+    };
+    let extra: u32 = match camo {
+        None => 0,
+        Some("115") | Some("oscura") => 40,
+        Some("singularidad") | Some("ciclon") => 28,
+        Some(_) => 18,
+    };
+    base + extra * if def.id == "raygun" { 2 } else { 1 }
+}
+
 /// Separa `gun_<arma>[__<camo>]`.
 pub fn parsear(item: &str) -> Option<(&'static ArmaDef, Option<&'static str>)> {
     let resto = item.strip_prefix("gun_")?;
