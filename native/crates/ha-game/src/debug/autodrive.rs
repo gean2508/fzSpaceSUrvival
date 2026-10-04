@@ -6583,11 +6583,21 @@ fn granja_test_drive(world: &mut World) {
         6 => {
             world.resource_mut::<crate::sky2d::DayClock>().t = crate::sky2d::DAY_SECS * 0.45;
             let (px, pz) = player_cell(world);
+            // Una celda con una roca, un árbol o un arbusto encima no se siembra (el objetivo es la
+            // roca): el driver las descarta con la misma colisión que el jugador.
+            let candidatas: Vec<(i64, i64)> = [(2, 0), (2, 1), (2, -1), (-2, 0), (-2, 1), (-2, -1), (0, 2), (1, 2), (-1, 2), (3, 0), (-3, 0), (0, 3), (0, -3), (2, 2), (-2, 2)]
+                .iter()
+                .map(|&(dx, dz)| (px + dx, pz + dz))
+                .collect();
+            let libres: Vec<bool> = {
+                let mut st = bevy::ecs::system::SystemState::<crate::obstaculos::Obstaculos>::new(world);
+                let obs = st.get(world);
+                candidatas.iter().map(|&(x, z)| !obs.caja_frena(body, x as f32 + 0.5, z as f32 + 0.5, 0.45)).collect()
+            };
             let tiles = world.resource::<TileWorld>();
             let mut celdas = Vec::new();
-            for (dx, dz) in [(2, 0), (2, 1), (2, -1), (-2, 0), (-2, 1), (-2, -1), (0, 2), (1, 2), (-1, 2)] {
-                let (x, z) = (px + dx, pz + dz);
-                if crate::granja::suelo_sembrable(tiles.tile_at(body, x, z)) && !tiles.solid_at(body, x, z) {
+            for (i, &(x, z)) in candidatas.iter().enumerate() {
+                if libres[i] && crate::granja::suelo_sembrable(tiles.tile_at(body, x, z)) && !tiles.solid_at(body, x, z) {
                     celdas.push((x, z));
                 }
             }
