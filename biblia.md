@@ -9360,3 +9360,35 @@ la sensación de Black Ops 2 (matar a lo loco, esquivar, que te sigan) con una h
 * **Escalones** se dibujan girados según el tramo (`escaleras::dibujar_escalones`).
 * **Decidido:** la búsqueda y el tránsito son locales a cada cliente (cada jugador tiene su propia búsqueda); los vehículos de otros jugadores ya se ven (`Msg::Est.veh`).
 * **Falta:** probar todo en el Redmi (fps con 12 infectados + manchas + teñido), dibujar arte propio de infectados si se quiere más que un tinte, integrar la rama `phaser-arena-ui`.
+
+## §22 Interiores como espacio aparte (4 oct 2026) — reemplaza TODO el sistema de construcción por piezas
+
+Pedido del usuario (estilo GTA San Andreas): entrar a un edificio cambia a un espacio interior; el exterior no se ve ni se
+atenúa; se construye la fachada entera y el interior se decide solo. Lo construido por piezas (paredes, pisos, techos, prefabs,
+edificio modular) ya NO está en el menú CONSTRUIR (el código queda para partidas viejas y drivers).
+
+* **Dónde viven** (`ha_shared::interiores`): banda de pisos `z >= Z0 (20000)`, una por edificio (`z_de(slot, piso)`, 8 pisos por
+  banda), en el borde este del mundo (`origen(body)`, franja de agua sin nada): lo de afuera queda a ~30 km. `topdown_tile` delega
+  en `interiores::tile`. Registro de slots en memoria (`registrar`); el interior sale del lote, no se guarda.
+* **Plano generado** (`generar`, puro): hasta 1,5× la huella (tope 56 tiles), BSP de ambientes con vanos, ventanas en las paredes
+  de afuera, puerta del frente (sur), hall con escalera de 2 columnas que SUBE HACIA ARRIBA DE LA PANTALLA (`building/escalera_1`
+  dibujada entera, `escaleras::dibujar_escalones`). Sin lugar para el hall → un solo piso (nunca un piso inalcanzable).
+  `arquetipo_de(clave)` cubre todo el pack por palabra (vivienda, comercio, gasolinera, hospital, escuela, comisaría, bomberos,
+  correo, estación, industrial, granero, búnker, iglesia, restaurante…) y `worldgen::tabla_interior` da a cada uno su mobiliario.
+* **Muebles/camas/cofres**: el amueblado de siempre, ahora con nivel (`casa_en_z`, `muebles_de_z`, `mueble_anclado_z`).
+* **Cliente** (`ha-game/interiores.rs`): flecha amarilla sobre la puerta (`ui_pack`/`ic_flecha_arriba`), botón propio ENTRAR/SALIR,
+  LLAVE, REFORZAR y REPONER. **Puerta con vida**: madera 40 → reforzada 120 (10 madera) → hierro 400 (6 hierro) → blindada
+  irrompible (10 hierro + 5 oro). Los infectados y la policía a pie se juntan en la puerta de afuera (`ObjetivoHostil`) y la golpean
+  (3/s, tanque ×2,5, jefe ×6; policía 6/s); rota o abierta, entran tras de vos. Rota, la fachada queda sin hoja hasta reponerla.
+  Estado de puertas en `puertas_edificios.json`. Encerrado no te alcanzan los tiros ni te atrapan; la búsqueda no baja por esconderte.
+* **Gente adentro**: `residentes(lote)`; despiertos de día, durmiendo en sus camas de madrugada (`despierto`).
+* **Ventanas de la fachada** (`luces_ventanas.rs`, `scripts/medir-ventanas.py` → `art/ventanas.json`, 557 edificios): de noche se
+  prenden las de los cuartos ocupados (`ventana_prendida`): las casas, hoteles y guardias velan distinto.
+* **Casas colocadas** (jugador o vecinos constructores, `society::constructor_obra`): son enterables (`es_edificio_enterable`);
+  el interior se genera solo. **Multijugador**: `Msg::Est.nivel`; sólo se ven los que comparten nivel.
+* **Adentro**: sin lluvia ni relámpago, la lluvia se oye apagada (0,18×), luz propia (`interior::objetivo_de_nivel`), sin fauna ni
+  infectados ambientales nuevos.
+* Pruebas: `cargo test -p ha-shared --lib interiores` (8: arquetipos, tope 1,5×, conectividad de las 30 claves, escalera, ventanas,
+  sueño) y el driver `HA_INTERIORTEST=1` (entra, sube caminando, cierra con llave, sale; capturas en `HA_SHOTDIR`).
+* **Falta**: tiendas con mostrador y NPC vendedor, llaves de otros jugadores, interiores de los buildings no enterables, probar
+  todo en el Redmi, apagar/prender luces del interior por habitante.

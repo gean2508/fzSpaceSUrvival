@@ -457,13 +457,16 @@ pub fn generar(l: &Lote) -> Plano {
     let mut tramos: Vec<TramoLocal> = Vec::new();
     if let Some(hl) = hall {
         for p in 0..pisos - 1 {
+            // Dos columnas de ancho (un tramo cada una): una escalera de una sola celda no se lee como escalera.
             let col = hl.x + 2 + (p as i64 % 2) * 3;
             let pie_z = hl.z + hl.h - 2;
-            for i in 0..PASOS as i64 {
-                plantas[p as usize][idx(col, pie_z - i)] = Tile::Step;
-                plantas[p as usize + 1][idx(col, pie_z - i)] = Tile::Stairwell;
+            for dc in 0..2i64 {
+                for i in 0..PASOS as i64 {
+                    plantas[p as usize][idx(col + dc, pie_z - i)] = Tile::Step;
+                    plantas[p as usize + 1][idx(col + dc, pie_z - i)] = Tile::Stairwell;
+                }
+                tramos.push(TramoLocal { piso: p, tx: ox + col + dc, tz: oz + pie_z, dir: 0 });
             }
-            tramos.push(TramoLocal { piso: p, tx: ox + col, tz: oz + pie_z, dir: 0 });
         }
     }
 

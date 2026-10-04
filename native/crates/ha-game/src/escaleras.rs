@@ -685,6 +685,45 @@ fn dibujar_escalones(
     viejos: Query<Entity, With<EscalonArt>>,
     mut visto: Local<(i32, usize, u64)>,
 ) {
+    // Dentro de un edificio: UNA escalera dibujada entera (2 de ancho × 4 de largo) por tramo doble.
+    if let Some((slot, piso)) = ha_shared::interiores::de_z(tiles.z) {
+        let clave = (tiles.z, usize::MAX, tiles.version);
+        if *visto == clave && !viejos.is_empty() {
+            return;
+        }
+        *visto = clave;
+        for e in &viejos {
+            commands.entity(e).despawn_recursive();
+        }
+        let Some(plano) = ha_shared::interiores::plano_de(slot) else { return };
+        let arte = "building/escalera_1";
+        let mut hechas: Vec<(i32, i64)> = Vec::new();
+        for t in plano.tramos.iter().filter(|t| t.piso == piso || t.piso + 1 == piso) {
+            // El par de columnas empieza en la menor `tx` de los dos tramos del mismo piso.
+            let tx0 = plano.tramos.iter().filter(|u| u.piso == t.piso && u.tz == t.tz).map(|u| u.tx).min().unwrap_or(t.tx);
+            if hechas.contains(&(t.piso, tx0)) {
+                continue;
+            }
+            hechas.push((t.piso, tx0));
+            let largo = ha_shared::escaleras::PASOS as f32;
+            // Centro del bloque 2 × PASOS: las celdas van de tz-(PASOS-1) a tz.
+            let (cx, cz) = (tx0 as f32 + 1.0, t.tz as f32 + 1.0 - largo * 0.5);
+            let r = crate::world2d::render_xy(cx, cz);
+            let mut sprite = art.sprite_or_color(arte, Color::srgb(0.62, 0.50, 0.32), Vec2::new(2.0, largo));
+            sprite.custom_size = Some(Vec2::new(2.0, largo));
+            // Vista desde arriba (el hueco por el que se baja) se oscurece un poco.
+            if piso == t.piso + 1 {
+                sprite.color = Color::srgb(0.72, 0.72, 0.78);
+            }
+            commands.spawn((
+                sprite,
+                Transform::from_xyz(r.x, r.y, crate::layers::FLOOR + crate::layers::SOBRE_EL_PISO),
+                EscalonArt,
+                Name::new("Escalera"),
+            ));
+        }
+        return;
+    }
     let clave = (tiles.z, escaleras.list.len(), tiles.version);
     if *visto == clave && !viejos.is_empty() || (escaleras.list.is_empty() && viejos.is_empty()) {
         *visto = clave;
