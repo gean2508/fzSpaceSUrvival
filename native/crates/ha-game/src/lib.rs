@@ -49,6 +49,7 @@ pub mod pandemia;
 pub mod policia_pie;
 pub mod interiores;
 pub mod incendios;
+pub mod trenes;
 pub mod luces_ventanas;
 pub mod armas;
 pub mod vehiculos;
@@ -416,7 +417,7 @@ fn run_app_inner() {
         .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, frutales::FrutalesPlugin, i18n::IdiomaPlugin, multijugador::MultijugadorPlugin, metas::MetasPlugin, habilidades::HabilidadesPlugin, infectados::InfectadosPlugin, estados::EstadosPlugin, alijos::AlijosPlugin, causal::CausalPlugin, equipo::EquipoPlugin, fps_tope::FpsTopePlugin))
         .add_plugins((experimentos::ExperimentosPlugin, casas_npc::CasasNpcPlugin, saber_vivo::SaberVivoPlugin, barrio::BarrioPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
-        .add_plugins((pandemia::PandemiaPlugin, policia_pie::PoliciaPiePlugin, autotecho::AutoTechoPlugin, interiores::InterioresPlugin, luces_ventanas::LucesVentanasPlugin, incendios::IncendiosPlugin))
+        .add_plugins((pandemia::PandemiaPlugin, policia_pie::PoliciaPiePlugin, autotecho::AutoTechoPlugin, interiores::InterioresPlugin, luces_ventanas::LucesVentanasPlugin, incendios::IncendiosPlugin, trenes::TrenesPlugin))
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)
         .add_plugins(layers::LayersPlugin)
