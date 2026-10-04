@@ -6584,8 +6584,13 @@ casa.»* Lo que hay desde hoy:
   está decorado. Tests: `la_casa_mide_su_dibujo_y_la_parcela_tiene_jardin`,
   `la_parcela_tiene_jardin_decorado_y_pileta_sin_pisar_la_casa`.
 - ⛔ Esto aplica a las **viviendas**. Los edificios (universidad, hospital…) siguen sin achicarse (24 ago).
-- `import-casas-a-medida.py` (re-medir pixel del pack a la huella) **queda sin uso para las casas**: era la
-  solución al problema mal planteado. Se conserva porque `lib/edificio.py` sirve para otras piezas.
+- `import-casas-a-medida.py` (estirar el pixel del pack a la huella) **se borró**: era la solución al problema mal
+  planteado. `lib/edificio.py` y `lib/juez.py` quedan: sirven para otras piezas.
+- **Estado de la prueba (3 oct 2026, noche):** el APK de esta rama (versionCode 453, armado con gradle aparte) se
+  instaló en el Redmi por USB, arrancó, mostró el menú y entró al mundo sin pantalla negra. **No se miraron casas ahí**
+  (el punto de aparición está en un páramo) ni se probó el escritorio. Falta, a cargo del usuario: abrir una ciudad y
+  ver que cada casa se dibuje a su tamaño con el rectángulo de interior justo debajo, piscina al costado y jardín
+  decorado; y medir fps (la decoración de jardín suma entidades: ~5 % de las celdas libres de cada parcela).
 
 Orden: `import-casas-medidas.py` va DESPUÉS de `import-completos.py` → `medir-puertas.py` →
 `import-puertas-edificios.py` (cualquier cambio de variantes de casa cambia la tabla: el test del cliente avisa).
