@@ -53,6 +53,8 @@ pub struct Remoto {
     pub cuerpo: u8,
     pub rumbo: f32,
     pub vuelo: bool,
+    /// Clave del vehículo que maneja ahora (vacío = a pie).
+    pub veh: String,
     pub pts: u32,
     pub baj: u32,
     /// Lo que se ve ahora (suavizado hacia x/z).
@@ -206,6 +208,24 @@ pub fn piel_para(nombre: &str) -> String {
 #[derive(Component)]
 pub struct JugadorRemoto(pub u32);
 
+/// Qué sprite lleva puesto el avatar ahora (`piel` o `vehículo#pose`), para no rehacerlo cada cuadro.
+#[derive(Component)]
+pub struct Dibujado(String);
+
+/// El sprite que le toca a un remoto: su piel a pie, o su vehículo con la pose del rumbo.
+/// Devuelve la clave de lo dibujado y el sprite (`None` = no hay arte, se queda con lo que tiene).
+fn sprite_remoto(art: &crate::art2d::ArtLibrary, r: &Remoto) -> (String, Option<Sprite>) {
+    if r.veh.is_empty() {
+        return (r.piel.clone(), Some(art.sprite_or_color(&r.piel, Color::srgb(0.9, 0.6, 0.2), AVATAR)));
+    }
+    let pose = crate::vehiculos::pose_de_rumbo(r.rumbo);
+    let clave = format!("{}#{pose}", r.veh);
+    let sprite = art.pose(&r.veh, pose).and_then(|([_, _, w, h], _)| {
+        art.pose_sprite(&r.veh, pose, Vec2::new(w as f32 / 32.0, h as f32 / 32.0))
+    });
+    (clave, sprite)
+}
+
 #[derive(Component)]
 struct EtiquetaRemoto;
 
@@ -276,6 +296,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                             cuerpo: 0,
                             rumbo: 0.0,
                             vuelo: false,
+                            veh: String::new(),
                             pts: 0,
                             baj: 0,
                             vx: f32::NAN,
@@ -285,7 +306,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                         multi.mensaje = format!("{nombre} entró");
                     }
                 }
-                Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj } => {
+                Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj, veh } => {
                     let m = &mut *multi;
                     if let Some(r) = m.remotos.get_mut(&id) {
                         if r.pts != pts || r.baj != baj {
@@ -298,6 +319,7 @@ fn sondear_red(mut multi: ResMut<Multi>) {
                         r.cuerpo = cuerpo;
                         r.rumbo = rumbo;
                         r.vuelo = vuelo;
+                        r.veh = veh;
                     }
                 }
                 Msg::Chat { id, msg } => multi.charlas.push((id, msg)),
@@ -387,6 +409,8 @@ fn enviar_estado(
     player: Query<&Transform, With<Player>>,
     metas: Res<crate::metas::Metas>,
     bajas: Res<crate::infectados::Bajas>,
+    manejando: Res<crate::vehiculos::Manejando>,
+    autos: Query<&crate::vehiculos::Vehiculo>,
 ) {
     if multi.estado != EstadoRed::Dentro {
         return;
@@ -398,9 +422,15 @@ fn enviar_estado(
     multi.acc = 0.0;
     let Ok(tf) = player.get_single() else { return };
     let cuerpo = active_surface_body(&ctx, &planet) as u8;
-    let (_, _, rumbo) = tf.rotation.to_euler(EulerRot::XYZ);
+    let (_, _, mut rumbo) = tf.rotation.to_euler(EulerRot::XYZ);
     let vuelo = !matches!(ctx.active, ha_shared::WorldContext::Overworld | ha_shared::WorldContext::Luna);
-    multi.enviar(Msg::Est { id: 0, x: tf.translation.x, z: -tf.translation.y, cuerpo, rumbo, vuelo, pts: metas.puntos(), baj: bajas.total });
+    // Al volante: los demás te ven en tu vehículo y con su rumbo (la pose sale de ahí).
+    let mut veh = String::new();
+    if let Some(v) = manejando.auto.and_then(|e| autos.get(e).ok()) {
+        veh = v.clave.to_string();
+        rumbo = v.estado.rumbo;
+    }
+    multi.enviar(Msg::Est { id: 0, x: tf.translation.x, z: -tf.translation.y, cuerpo, rumbo, vuelo, pts: metas.puntos(), baj: bajas.total, veh });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -411,12 +441,12 @@ fn sincronizar_avatares(
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
     mut multi: ResMut<Multi>,
-    mut avatares: Query<(Entity, &JugadorRemoto, &mut Transform, &mut Visibility)>,
+    mut avatares: Query<(Entity, &JugadorRemoto, &mut Transform, &mut Visibility, &mut Sprite, &mut Dibujado)>,
 ) {
     let mi_cuerpo = active_surface_body(&ctx, &planet) as u8;
     let dt = time.delta_secs();
     // Los que ya no están en la tabla se van.
-    for (e, j, _, _) in &avatares {
+    for (e, j, _, _, _, _) in &avatares {
         if !multi.remotos.contains_key(&j.0) {
             commands.entity(e).despawn_recursive();
         }
@@ -444,15 +474,25 @@ fn sincronizar_avatares(
         let visible = r.cuerpo == mi_cuerpo;
         match r.entidad.filter(|e| avatares.get(*e).is_ok()) {
             Some(e) => {
-                if let Ok((_, _, mut tf, mut vis)) = avatares.get_mut(e) {
+                if let Ok((_, _, mut tf, mut vis, mut sprite, mut dib)) = avatares.get_mut(e) {
                     tf.translation = Vec3::new(r.vx, -r.vz, sort_z(r.vz));
                     *vis = if visible { Visibility::Inherited } else { Visibility::Hidden };
+                    // A pie o en vehículo: cambia el sprite sólo cuando cambia la clave/pose.
+                    let (clave, nuevo) = sprite_remoto(&art, r);
+                    if dib.0 != clave {
+                        if let Some(s) = nuevo {
+                            *sprite = s;
+                            dib.0 = clave;
+                        }
+                    }
                 }
             }
             None => {
-                let sprite = art.sprite_or_color(&r.piel, Color::srgb(0.9, 0.6, 0.2), AVATAR);
+                let (clave, nuevo) = sprite_remoto(&art, r);
+                let sprite = nuevo.unwrap_or_else(|| art.sprite_or_color(&r.piel, Color::srgb(0.9, 0.6, 0.2), AVATAR));
                 let mut ent = commands.spawn((
                     sprite,
+                    Dibujado(clave),
                     Transform::from_xyz(r.vx, -r.vz, sort_z(r.vz)),
                     JugadorRemoto(id),
                     Name::new("JugadorRemoto"),

@@ -59,13 +59,15 @@ impl Plugin for VehiculosPlugin {
         app.init_resource::<Manejando>()
             .init_resource::<CacheSuelo>()
             .init_resource::<Transito>()
+            .init_resource::<Reabastecimiento>()
+            .init_resource::<Pedidos>()
             .add_systems(
                 FixedUpdate,
                 fisica_vehiculos.after(crate::sim::tick_sim).run_if(in_state(GamePhase::Playing)),
             )
             .add_systems(
                 Update,
-                (manejar_transito, subir_bajar, dibujar_vehiculos, huir, hud_vehiculo)
+                (atender_pedidos, manejar_transito, subir_bajar, repostar, dibujar_vehiculos, huir, hud_vehiculo, lamparas_semaforo)
                     .chain()
                     .run_if(in_state(GamePhase::Playing)),
             )
@@ -101,11 +103,65 @@ struct Transito {
     semilla: u32,
 }
 
+/// La lámpara de un semáforo: sprite hijo del poste cuyo color sigue a la luz del eje
+/// que gobierna (`rumbo` = octante de quien viaja bajo ese poste).
+#[derive(Component)]
+pub struct LamparaSemaforo {
+    rumbo: u8,
+}
+
+/// Cuelga la lámpara del poste recién sembrado (la llama `world2d`).
+pub fn agregar_lampara(ent: &mut EntityCommands, rumbo: u8) {
+    ent.with_children(|c| {
+        c.spawn((
+            Sprite::from_color(Color::srgb(0.2, 0.9, 0.3), Vec2::splat(0.26)),
+            Transform::from_xyz(0.0, 0.62, 0.05),
+            LamparaSemaforo { rumbo },
+            crate::sim::UnlitSprite,
+        ));
+    });
+}
+
+/// Pinta cada lámpara con la luz de su eje. Una entidad por poste (cuatro por cruce)
+/// y sólo hay las de los chunks cargados: decenas, no miles.
+fn lamparas_semaforo(time: Res<Time<Fixed>>, mut q: Query<(&LamparaSemaforo, &mut Sprite)>) {
+    let t = time.elapsed_secs_f64();
+    for (l, mut s) in &mut q {
+        s.color = match veh::luz_en(t, l.rumbo) {
+            veh::Luz::Verde => Color::srgb(0.25, 0.95, 0.35),
+            veh::Luz::Amarillo => Color::srgb(1.0, 0.85, 0.15),
+            veh::Luz::Rojo => Color::srgb(1.0, 0.18, 0.15),
+        };
+    }
+}
+
+/// Lo que pide la consola (`/auto`, `/nafta`, `/buscado`) y `atender_pedidos` cumple.
+#[derive(Resource, Default)]
+pub struct Pedidos {
+    pub spawn: Option<String>,
+    pub nafta: bool,
+    pub buscado: Option<u8>,
+}
+
+/// Lo que el HUD sabe del combustible: si se está cargando y dónde queda la gasolinera
+/// más cercana (sólo se calcula con el tanque bajo, cada 4 s).
+#[derive(Resource, Default)]
+pub struct Reabastecimiento {
+    pub cargando: bool,
+    pub en_surtidor: bool,
+    chequeo: f32,
+    pista: f32,
+    pub destino: Option<(f32, f32, f32)>,
+    avisado_lleno: bool,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Quien {
     Nadie,
     Jugador,
     Vecino(Conductor),
+    /// Una patrulla en persecución (`policia.rs`).
+    Policia(ha_shared::vehiculos::Persecucion),
 }
 
 #[derive(Component)]
@@ -117,6 +173,8 @@ pub struct Vehiculo {
     pub quien: Quien,
     /// Lo manejó el jugador: no se borra con el tránsito (lo dejaste ahí, ahí está).
     pub usado: bool,
+    /// Se lo robaste a un vecino: la policía lo confisca si te atrapa.
+    pub robado: bool,
     /// Para interpolar el dibujo entre pasos de 20 Hz.
     prev: (f32, f32),
     pose: &'static str,
@@ -145,7 +203,7 @@ pub fn frena_a_pie<'a>(autos: impl Iterator<Item = &'a Vehiculo>, x: f32, z: f32
     })
 }
 
-fn pose_de(rumbo: f32) -> &'static str {
+pub fn pose_de_rumbo(rumbo: f32) -> &'static str {
     let (dx, dz) = (rumbo.cos(), rumbo.sin());
     if dz.abs() >= dx.abs() {
         if dz > 0.0 { "abajo" } else { "arriba" }
@@ -196,10 +254,13 @@ fn fisica_vehiculos(
     npcs: Query<&crate::society::Npc>,
     mut autos: Query<(Entity, &mut Vehiculo)>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
+    mut busqueda: ResMut<crate::policia::Busqueda>,
     (mut sfx, mut shake): (EventWriter<PlaySfxAt>, EventWriter<CameraShakeEvent>),
 ) {
     let _p = crate::debug::probe("fx_vehiculos");
     let dt = crate::game_time::fixed_delta_secs(&time);
+    // El reloj de los semáforos: todos los cruces en fase (`ha_shared::vehiculos::luz_en`).
+    let t_mundo = time.elapsed_secs_f64();
     let body = active_surface_body(&world_ctx, &planet_ctx);
     if cache.cuerpo != body as u8 || cache.mapa.len() > 60_000 {
         cache.mapa.clear();
@@ -224,6 +285,10 @@ fn fisica_vehiculos(
         let mando = match &mut quien {
             Quien::Jugador => veh::mando_desde_stick(&v.estado, intent.move_x, intent.move_z),
             Quien::Nadie => Mando::default(),
+            Quien::Policia(p) => match pj {
+                Some(o) => veh::perseguir(&v.estado, &v.ficha, p, o, dt),
+                None => Mando::default(),
+            },
             Quien::Vecino(c) => {
                 let mut c2 = *c;
                 let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
@@ -249,7 +314,7 @@ fn fisica_vehiculos(
                         mira(x, z, 0.35);
                     }
                 }
-                let m = veh::conducir(&v.estado, &v.ficha, &mut c2, &calzada, libre);
+                let m = veh::conducir(&v.estado, &v.ficha, &mut c2, &calzada, libre, &|r| veh::luz_en(t_mundo, r));
                 *c = c2;
                 m
             }
@@ -268,6 +333,15 @@ fn fisica_vehiculos(
             sfx.send(PlaySfxAt(Sfx::Stamp, r));
             if matches!(v.quien, Quien::Jugador) {
                 shake.send(CameraShakeEvent { trauma: (paso.choque / 25.0).min(0.6) });
+            }
+        }
+        // Atropellar a alguien con el jugador al volante es un delito.
+        if matches!(v.quien, Quien::Jugador) && v.estado.vel.abs() > 5.0 {
+            let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+            let s = v.estado.vel.signum();
+            let (bx, bz) = (v.estado.x + fx * s * v.estado.largo * 0.5, v.estado.z + fz * s * v.estado.largo * 0.5);
+            if peatones.iter().any(|&(px, pz)| (px - bx).powi(2) + (pz - bz).powi(2) < 1.4 * 1.4) {
+                busqueda.delito(1, "¡Atropellaste a alguien!");
             }
         }
         // El paragolpes: tres golpes invisibles a lo ancho, que recorren lo que el
@@ -316,6 +390,41 @@ fn fisica_vehiculos(
     }
 }
 
+/// Cumple lo que pidió la consola: un vehículo 5 m delante del jugador, el tanque
+/// lleno, o el nivel de búsqueda.
+#[allow(clippy::too_many_arguments)]
+fn atender_pedidos(
+    mut commands: Commands,
+    mut pedidos: ResMut<Pedidos>,
+    art: Res<crate::art2d::ArtLibrary>,
+    mut busqueda: ResMut<crate::policia::Busqueda>,
+    player: Query<(&SimState, &PlayerVisual), With<Player>>,
+    mut autos: Query<&mut Vehiculo>,
+) {
+    let Ok((sim, visual)) = player.get_single() else { return };
+    if let Some(n) = pedidos.buscado.take() {
+        busqueda.nivel = n;
+    }
+    if std::mem::take(&mut pedidos.nafta) {
+        let (px, pz) = (sim.body.x, sim.body.z);
+        for mut v in &mut autos {
+            let cerca = ((v.estado.x - px).powi(2) + (v.estado.z - pz).powi(2)).sqrt() < 10.0;
+            if cerca || matches!(v.quien, Quien::Jugador) {
+                v.estado.comb = 1.0;
+            }
+        }
+    }
+    let Some(clave) = pedidos.spawn.take() else { return };
+    let Some(clave) = ha_shared::vehiculos::MODELOS.iter().map(|(k, _)| *k).find(|k| *k == clave) else { return };
+    let Some(clase) = veh::clase_de(clave) else { return };
+    let Some((largo, ancho)) = medidas(&art, clave) else { return };
+    let rumbo = visual.to_rot;
+    let (x, z) = (sim.body.x + rumbo.cos() * (4.0 + largo * 0.5), sim.body.z + rumbo.sin() * (4.0 + largo * 0.5));
+    let ficha = veh::ficha(clase);
+    let estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho);
+    spawn_vehiculo(&mut commands, &art, clave, clase, estado, Quien::Nadie, true, (x * 31.0 + z) as u32);
+}
+
 // ---------------------------------------------------------------------------
 // Tránsito: sembrar y borrar con cupo
 // ---------------------------------------------------------------------------
@@ -346,7 +455,7 @@ fn manejar_transito(
         let tope = if v.usado { LEJOS_USADO } else { LEJOS_TRANSITO };
         if Some(e) != manejando.auto && (d > tope || (!en_superficie && !v.usado)) {
             commands.entity(e).despawn_recursive();
-        } else if !v.usado {
+        } else if !v.usado && !matches!(v.quien, Quien::Policia(_)) {
             vivos += 1;
         }
     }
@@ -391,7 +500,11 @@ fn manejar_transito(
         z += rz as f32 * (al_cordon + 0.5 - ancho_m * 0.5);
     }
     let rumbo = -(o as f32) * std::f32::consts::FRAC_PI_4;
-    let estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho_m);
+    let mut estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho_m);
+    // Cada uno con su tanque: el estacionado puede estar casi en seco (es el que
+    // te hace buscar una gasolinera); el que circula tiene de medio tanque para arriba.
+    let r = (hash(h ^ 0x7a11) % 1000) as f32 / 1000.0;
+    estado.comb = if estacionado { 0.03 + r * 0.87 } else { 0.4 + r * 0.6 };
     let quien = if estacionado { Quien::Nadie } else { Quien::Vecino(Conductor::nuevo(o, h)) };
     spawn_vehiculo(&mut commands, &art, clave, clase, estado, quien, false, h);
 }
@@ -407,7 +520,7 @@ pub fn spawn_vehiculo(
     usado: bool,
     uid: u32,
 ) -> Option<Entity> {
-    let pose = pose_de(estado.rumbo);
+    let pose = pose_de_rumbo(estado.rumbo);
     let ([_, _, w, h], _) = art.pose(clave, pose)?;
     let sprite = art.pose_sprite(clave, pose, Vec2::new(w as f32 / PX_M, h as f32 / PX_M))?;
     let r = render_xy(estado.x, estado.z);
@@ -421,6 +534,7 @@ pub fn spawn_vehiculo(
                     estado,
                     quien,
                     usado,
+                    robado: false,
                     prev: (estado.x, estado.z),
                     pose,
                     uid,
@@ -454,7 +568,7 @@ fn subir_bajar(
     mut manejando: ResMut<Manejando>,
     mut autos: Query<(Entity, &mut Vehiculo)>,
     mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
-    mut sfx: EventWriter<PlaySfxAt>,
+    (mut sfx, mut busqueda): (EventWriter<PlaySfxAt>, ResMut<crate::policia::Busqueda>),
 ) {
     let tecla = keys.just_pressed(KeyCode::KeyG) || keys.just_pressed(KeyCode::Enter);
     let pantalla = if mouse.just_pressed(MouseButton::Left) {
@@ -528,7 +642,7 @@ fn subir_bajar(
     for (e, v) in &autos {
         let c = Vec2::new(v.estado.x, v.estado.z);
         let d = c.distance(yo) - v.estado.largo * 0.5;
-        if d > ALCANCE_SUBIR || v.estado.chatarra() {
+        if d > ALCANCE_SUBIR || v.estado.chatarra() || matches!(v.quien, Quien::Policia(_)) {
             continue;
         }
         if let Some(p) = punto {
@@ -543,6 +657,8 @@ fn subir_bajar(
     let Some((e, _)) = mejor else { return };
     let Ok((_, mut v)) = autos.get_mut(e) else { return };
     if let Quien::Vecino(_) = v.quien {
+        v.robado = true;
+        busqueda.delito(1, "¡Robaste un vehículo!");
         // ROBO: el vecino se baja corriendo para el lado contrario.
         let skin = format!("npc/char_{}", v.uid % 20 + 1);
         let huye = (Vec2::new(v.estado.x, v.estado.z) - yo).normalize_or(Vec2::X);
@@ -597,6 +713,104 @@ fn huir(
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Combustible
+// ---------------------------------------------------------------------------
+
+/// Litros de tanque por segundo (como fracción): vaciar-a-lleno en 10 s.
+const RITMO_REPOSTAJE: f32 = 0.10;
+/// Con menos que esto el HUD avisa y busca una gasolinera.
+const POCO_COMBUSTIBLE: f32 = 0.25;
+
+/// ¿Esta posición cae en una gasolinera? Las generadas por la ciudad
+/// (`ha_shared::vehiculos::gasolinera_en`, el lote entero cuenta como playón) y los
+/// surtidores que colocó el jugador (a 3 m a la redonda de su base).
+fn en_surtidor(body: ha_shared::CelestialBody, est: &crate::structures::BuiltStructures, x: f32, z: f32) -> bool {
+    let (tx, tz) = (x.floor() as i64, z.floor() as i64);
+    if veh::gasolinera_en(body, tx, tz).is_some() {
+        return true;
+    }
+    est.list.iter().any(|s| {
+        s.body == body as u8
+            && veh::es_surtidor(&s.art)
+            && tx >= s.cx - 3
+            && tx < s.cx + s.w + 3
+            && tz >= s.cz - 3
+            && tz < s.cz + s.h + 3
+    })
+}
+
+fn rumbo_en_palabras(dx: f32, dz: f32) -> &'static str {
+    // z crece hacia el sur de la pantalla.
+    let a = (-dz).atan2(dx).to_degrees().rem_euclid(360.0);
+    match ((a + 22.5) / 45.0) as u32 % 8 {
+        0 => "al este",
+        1 => "al noreste",
+        2 => "al norte",
+        3 => "al noroeste",
+        4 => "al oeste",
+        5 => "al sudoeste",
+        6 => "al sur",
+        _ => "al sudeste",
+    }
+}
+
+/// **Repostar.** Con el vehículo casi parado dentro de una gasolinera, el tanque se
+/// llena solo (10 s). Con el tanque bajo calcula, cada 4 s, la gasolinera más
+/// cercana para que el HUD diga hacia dónde ir. El chequeo del surtidor se hace
+/// cuatro veces por segundo, no por cuadro (cuesta un `lot_at`).
+#[allow(clippy::too_many_arguments)]
+fn repostar(
+    time: Res<Time>,
+    world_ctx: Res<WorldContextRuntime>,
+    planet_ctx: Res<ActivePlanet>,
+    estructuras: Res<crate::structures::BuiltStructures>,
+    mut rep: ResMut<Reabastecimiento>,
+    manejando: Res<Manejando>,
+    mut autos: Query<&mut Vehiculo>,
+    mut sfx: EventWriter<PlaySfxAt>,
+) {
+    let dt = time.delta_secs().min(0.1);
+    let Some(mut v) = manejando.auto.and_then(|e| autos.get_mut(e).ok()) else {
+        rep.cargando = false;
+        rep.en_surtidor = false;
+        rep.destino = None;
+        return;
+    };
+    if v.ficha.alcance <= 0.0 {
+        rep.cargando = false;
+        return;
+    }
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+    rep.chequeo -= dt;
+    if rep.chequeo <= 0.0 {
+        rep.chequeo = 0.25;
+        rep.en_surtidor = en_surtidor(body, &estructuras, v.estado.x, v.estado.z);
+    }
+    rep.pista -= dt;
+    if v.estado.comb < POCO_COMBUSTIBLE && !rep.en_surtidor {
+        if rep.pista <= 0.0 {
+            rep.pista = 4.0;
+            rep.destino = veh::gasolinera_cercana(body, v.estado.x, v.estado.z, 320.0);
+        }
+    } else {
+        rep.destino = None;
+    }
+    let parado = v.estado.vel.abs() < 3.5;
+    rep.cargando = rep.en_surtidor && parado && v.estado.comb < 1.0;
+    if rep.cargando {
+        v.estado.comb = (v.estado.comb + RITMO_REPOSTAJE * dt).min(1.0);
+        rep.avisado_lleno = false;
+        if (time.elapsed_secs() * 2.0) as u32 % 2 == 0 && (time.elapsed_secs() * 2.0).fract() < dt * 2.0 {
+            sfx.send(PlaySfxAt(Sfx::Drip, render_xy(v.estado.x, v.estado.z)));
+        }
+    } else if rep.en_surtidor && v.estado.comb >= 1.0 && !rep.avisado_lleno {
+        rep.avisado_lleno = true;
+        sfx.send(PlaySfxAt(Sfx::Pickup, render_xy(v.estado.x, v.estado.z)));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Dibujo
 // ---------------------------------------------------------------------------
@@ -613,7 +827,7 @@ fn dibujar_vehiculos(
         *vis = if tiles.z == 0 { Visibility::Inherited } else { Visibility::Hidden };
         let x = v.prev.0 + (v.estado.x - v.prev.0) * t;
         let z = v.prev.1 + (v.estado.z - v.prev.1) * t;
-        let mut pose = pose_de(v.estado.rumbo);
+        let mut pose = pose_de_rumbo(v.estado.rumbo);
         // La ambulancia con alguien al volante lleva la sirena prendida.
         if v.clase == Clase::Ambulancia && !matches!(v.quien, Quien::Nadie) {
             v.sirena += real.delta_secs();
@@ -657,6 +871,8 @@ fn hud_vehiculo(
     mut commands: Commands,
     manejando: Res<Manejando>,
     layout: Res<TouchLayout>,
+    busqueda: Res<crate::policia::Busqueda>,
+    rep: Res<Reabastecimiento>,
     autos: Query<&Vehiculo>,
     player: Query<&SimState, With<Player>>,
     mut q: Query<(&mut Text, &mut Visibility), With<HudVehiculo>>,
@@ -669,10 +885,10 @@ fn hud_vehiculo(
             TextColor(Color::srgb(0.95, 0.95, 0.85)),
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px((64.0 * k).max(52.0)),
+                top: Val::Px((124.0 * k).max(104.0)),
                 left: Val::Percent(50.0),
-                margin: UiRect::left(Val::Px(-200.0)),
-                width: Val::Px(400.0),
+                margin: UiRect::left(Val::Px(-220.0)),
+                width: Val::Px(440.0),
                 justify_content: JustifyContent::Center,
                 ..default()
             },
@@ -685,36 +901,50 @@ fn hud_vehiculo(
         return;
     }
     let tactil = crate::platform::uses_touch_gameplay_ui();
-    let texto = if let Some(v) = manejando.auto.and_then(|e| autos.get(e).ok()) {
+    let mut lineas: Vec<String> = Vec::new();
+    if busqueda.buscado() {
+        lineas.push(format!("POLICÍA · búsqueda nivel {}", busqueda.nivel));
+    }
+    if let Some((m, _)) = &busqueda.aviso {
+        lineas.push(m.clone());
+    }
+    if let Some(v) = manejando.auto.and_then(|e| autos.get(e).ok()) {
         let kmh = (v.estado.vel.abs() * 3.6).round() as i32;
         let salud = (v.estado.salud / v.ficha.salud * 100.0).max(0.0).round() as i32;
         let bajar = if tactil { "tocá el vehículo para bajar" } else { "G para bajar" };
-        Some(format!("{} · {kmh} km/h · {salud}% · {bajar}", v.ficha.nombre))
-    } else {
-        player.get_single().ok().and_then(|pj| {
-            autos
-                .iter()
-                .filter(|v| !v.estado.chatarra())
-                .find(|v| {
-                    ((v.estado.x - pj.body.x).powi(2) + (v.estado.z - pj.body.z).powi(2)).sqrt() - v.estado.largo * 0.5
-                        < ALCANCE_SUBIR
-                })
-                .map(|v| {
-                    let verbo = if matches!(v.quien, Quien::Vecino(_)) { "robar" } else { "subir" };
-                    let como = if tactil { "Tocalo para" } else { "G para" };
-                    format!("{} · {como} {verbo}", v.ficha.nombre)
-                })
-        })
-    };
-    for (mut t, mut vis) in &mut q {
-        match &texto {
-            Some(s) => {
-                if t.0 != *s {
-                    t.0 = s.clone();
-                }
-                *vis = Visibility::Visible;
+        if v.ficha.alcance > 0.0 {
+            let comb = (v.estado.comb * 100.0).round() as i32;
+            lineas.push(format!("{} · {kmh} km/h · casco {salud}% · combustible {comb}% · {bajar}", v.ficha.nombre));
+            if rep.cargando {
+                lineas.push("Repostando…".to_string());
+            } else if v.estado.comb <= 0.0 {
+                lineas.push("SIN COMBUSTIBLE".to_string());
             }
-            None => *vis = Visibility::Hidden,
+            if let Some((gx, gz, d)) = rep.destino {
+                lineas.push(format!("Gasolinera a {} m {}", d.round() as i32, rumbo_en_palabras(gx - v.estado.x, gz - v.estado.z)));
+            }
+        } else {
+            lineas.push(format!("{} · {kmh} km/h · {bajar}", v.ficha.nombre));
+        }
+    } else if let Ok(pj) = player.get_single() {
+        if let Some(v) = autos.iter().filter(|v| !v.estado.chatarra() && !matches!(v.quien, Quien::Policia(_))).find(|v| {
+            ((v.estado.x - pj.body.x).powi(2) + (v.estado.z - pj.body.z).powi(2)).sqrt() - v.estado.largo * 0.5 < ALCANCE_SUBIR
+        }) {
+            let verbo = if matches!(v.quien, Quien::Vecino(_)) { "robar" } else { "subir" };
+            let como = if tactil { "Tocalo para" } else { "G para" };
+            let nafta = if v.ficha.alcance > 0.0 { format!(" · combustible {}%", (v.estado.comb * 100.0).round() as i32) } else { String::new() };
+            lineas.push(format!("{}{nafta} · {como} {verbo}", v.ficha.nombre));
+        }
+    }
+    for (mut t, mut vis) in &mut q {
+        if lineas.is_empty() {
+            *vis = Visibility::Hidden;
+        } else {
+            let s = lineas.join("\n");
+            if t.0 != s {
+                t.0 = s;
+            }
+            *vis = Visibility::Visible;
         }
     }
 }
@@ -740,9 +970,9 @@ mod tests {
 
     #[test]
     fn la_pose_sigue_al_rumbo() {
-        assert_eq!(pose_de(0.0), "derecha");
-        assert_eq!(pose_de(std::f32::consts::PI), "izquierda");
-        assert_eq!(pose_de(std::f32::consts::FRAC_PI_2), "abajo");
-        assert_eq!(pose_de(-std::f32::consts::FRAC_PI_2), "arriba");
+        assert_eq!(pose_de_rumbo(0.0), "derecha");
+        assert_eq!(pose_de_rumbo(std::f32::consts::PI), "izquierda");
+        assert_eq!(pose_de_rumbo(std::f32::consts::FRAC_PI_2), "abajo");
+        assert_eq!(pose_de_rumbo(-std::f32::consts::FRAC_PI_2), "arriba");
     }
 }
