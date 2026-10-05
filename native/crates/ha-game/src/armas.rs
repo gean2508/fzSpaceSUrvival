@@ -621,6 +621,7 @@ fn apuntar_y_disparar(
                 impacto: def.impacto,
                 rayo,
             },
+            crate::sim::UnlitSprite,
             Sprite { color, custom_size: Some(Vec2::new(largo, grueso)), ..default() },
             Transform {
                 translation: Vec3::new(boca.x, -boca.y, 18.0),
@@ -634,6 +635,9 @@ fn apuntar_y_disparar(
     if let Some(g) = glow.as_ref() {
         commands.spawn((
             Fogonazo(0.06),
+            // Un fogonazo ES luz: sin esto `light2d::attach_ground_shadows` le colgaba una sombra proyectada
+            // (el sprite mide 2 m y está sobre la capa Y-sort) — las manchas negras en el suelo al disparar.
+            crate::sim::UnlitSprite,
             Sprite {
                 image: g.0.clone(),
                 color: Color::srgba(def.estela[0], def.estela[1], (def.estela[2] + 0.2).min(1.0), 0.9),
@@ -810,6 +814,7 @@ pub fn chispa_de_impacto(commands: &mut Commands, en: Vec2, color: Color) {
         let a = k as f32 * 1.7 + en.x * 3.1;
         commands.spawn((
             Chispa { vel: Vec2::new(a.cos(), a.sin()) * 2.2, vida: 0.22 },
+            crate::sim::UnlitSprite,
             Sprite { color, custom_size: Some(Vec2::splat(0.14)), ..default() },
             Transform::from_xyz(en.x, -en.y, 18.2),
         ));
@@ -906,7 +911,7 @@ fn visual_del_arma(
             if let Some((mut sprite, _)) = art.world_sprite(&clave, tam) {
                 sprite.custom_size = Some(tam);
                 sprite.anchor = bevy::sprite::Anchor::Custom(Vec2::new(ag.agarre[0] / ag.tam[0] - 0.5, 0.5 - ag.agarre[1] / ag.tam[1]));
-                commands.spawn((ArmaVisual, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
+                commands.spawn((ArmaVisual, crate::light2d::ShadowChecked, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
             }
         }
     }
@@ -947,7 +952,7 @@ fn visual_del_arma(
     if apuntando || estado.mira_en.is_some() {
         if mira.is_empty() {
             if let Some((sprite, _)) = art.world_sprite("ui/crosshair", Vec2::splat(0.8)) {
-                commands.spawn((MiraDeArma, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
+                commands.spawn((MiraDeArma, crate::sim::UnlitSprite, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
             }
         }
         for (_, mut tf, mut s) in &mut mira {

@@ -1007,7 +1007,7 @@ fn flicker_of(e: Entity, light: &Light2d, t: f32) -> f32 {
 
 /// Ya se le miró si merece sombra (tenga o no) — evita re-escanear cada frame.
 #[derive(Component)]
-struct ShadowChecked;
+pub(crate) struct ShadowChecked;
 
 /// **Este sprite no proyecta sombra, y no hace falta ni mirarlo.**
 ///

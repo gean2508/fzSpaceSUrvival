@@ -930,7 +930,21 @@ fn stream_roofs(
             sprite,
             // Banda de caras exteriores, Y-sorteada por el pie de la casa: la de
             // más al sur tapa a la de atrás. Ver `crate::layers`.
-            Transform::from_xyz(pos.x, pos.y, crate::layers::fachada(z_frente_mundo)),
+            //
+            // **Lo abierto es SUELO, no cara.** La gasolinera y el estacionamiento no tienen paredes ni
+            // interior: se caminan por dentro (surtidores, playa de asfalto). En la banda de fachadas
+            // (siempre por encima de los actores) el dibujo TAPABA al jugador en cuanto pisaba la playa.
+            // Y-sorteados por el borde de ATRÁS de la huella, el jugador que está dentro queda encima y el
+            // que pasa por detrás queda tapado, como con cualquier objeto.
+            Transform::from_xyz(
+                pos.x,
+                pos.y,
+                if es_a_cielo_abierto(art_key) {
+                    crate::layers::ysort(r.min.1 as f32 * TILE_M)
+                } else {
+                    crate::layers::fachada(z_frente_mundo)
+                },
+            ),
         ));
         if let Some(a) = anim {
             ent.insert(a);
@@ -944,6 +958,11 @@ fn stream_roofs(
             spawn_puerta_de_fachada(&mut commands, &art, clave, &r, body, z, pos, size);
         }
     }
+}
+
+/// Lotes sin paredes ni interior: se recorren por dentro.
+fn es_a_cielo_abierto(art_key: Option<&str>) -> bool {
+    matches!(art_key, Some("building/gasolinera" | "lot/estacionamiento"))
 }
 
 /// **La puerta animada de una fachada que se dibuja de UN sprite.**

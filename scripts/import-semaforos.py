@@ -101,8 +101,51 @@ def armar(poste, encima):
     return out
 
 
+#: **Las lámparas de perfil también se prenden.** La cara de frente trae las tres luces
+#: (roja, ámbar, verde) y las de perfil son el mismo poste con la caja ASOMADA: sus tres
+#: vainas salen del lado hacia el que MIRA el semáforo, y en el pack vienen grises. Un cruce
+#: con la cara de frente prendida y las otras tres apagadas se lee como luces que no
+#: respetan la orientación: la lámpara tiene que estar en la vaina que apunta al brazo.
+#: Filas (px, y hacia abajo) de las tres vainas y columnas del lado exterior.
+VAINAS = [((36, 43), (214, 48, 44)), ((50, 57), (240, 190, 36)), ((64, 71), (88, 196, 64))]
+LADO_EXTERIOR = {"road/semaforo_izquierda": range(0, 10), "road/semaforo_derecha": range(22, 32)}
+
+
+def encender_perfil(im, columnas):
+    """Pinta cada vaina con el color de su lámpara conservando el sombreado (luminancia) del pack."""
+    out = im.copy()
+    for (y0, y1), (cr, cg, cb) in VAINAS:
+        for y in range(y0, y1 + 1):
+            for x in columnas:
+                r, g, b, a = out.getpixel((x, y))
+                if a == 0:
+                    continue
+                k = max(0.55, min(1.12, r / 175.0))
+                # el brillo de la vaina sube un poco el color; la sombra lo oscurece sin ensuciarlo
+                out.putpixel((x, y), (min(255, int(cr * k)), min(255, int(cg * k)), min(255, int(cb * k)), a))
+    return out
+
+
+def solo_perfiles():
+    """Modo sin el pack a mano: enciende las vainas de la página que ya está en el repo (idempotente)."""
+    ruta = os.path.join(ASSETS, PAGINA_REL)
+    pagina = Image.open(ruta).convert("RGBA")
+    orden = ["road/semaforo_frente", "road/semaforo_atras", "road/semaforo_izquierda", "road/semaforo_derecha"]
+    for i, clave in enumerate(orden):
+        if clave in LADO_EXTERIOR:
+            celda = pagina.crop((i * CELL, 0, (i + 1) * CELL, ALTO * CELL))
+            pagina.paste(encender_perfil(celda, LADO_EXTERIOR[clave]), (i * CELL, 0))
+    pagina.save(ruta, optimize=True)
+    print("vainas de perfil encendidas en", PAGINA_REL)
+
+
 def main():
+    import sys
+    if "--solo-perfiles" in sys.argv:
+        return solo_perfiles()
     caras = {clave: armar(*fuente) for clave, fuente in CARAS.items()}
+    for clave, cols in LADO_EXTERIOR.items():
+        caras[clave] = encender_perfil(caras[clave], cols)
 
     pagina = Image.new("RGBA", (len(caras) * ANCHO * CELL, ALTO * CELL), (0, 0, 0, 0))
     sitio = {}
