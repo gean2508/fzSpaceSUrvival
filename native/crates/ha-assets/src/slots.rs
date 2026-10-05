@@ -1388,6 +1388,7 @@ const BUILDING_KEYS: &[(&str, &str)] = &[
     ("building/hospital", "Hospital"),
     ("building/hotel", "Hospital"),
     ("building/universidad", "Universidad"),
+    ("building/ayuntamiento", "Ayuntamiento (caserón con torre de reloj)"),
     ("building/escuela", "Escuela"),
     ("building/comisaria", "Comisaría"),
     ("building/bomberos", "Cuartel de bomberos"),

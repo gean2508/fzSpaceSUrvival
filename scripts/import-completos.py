@@ -52,8 +52,10 @@ SLOTS = {
     # justa (el Redmi mataba procesos con 49 MB de fachadas). El barrio varía igual: la variante se sortea por parcela.
     "building/casa_chica": [(A, "Post_Apocalyptic_House_1"), (A, "Terraced_House_1"), (A, "Terraced_House_3")],
     "building/casa_mediana": [(A, "One_Story_House"), (A, "Japanese_House")],
-    "building/casa_grande": [(A, "Country_House"), (A, "Victorian_House_5")],
-    "building/casa_country": [(A, "Modern_House"), (A, "Victorian_House_4")],
+    "building/casa_grande": [(A, "Country_House")],
+    "building/casa_country": [(A, "Modern_House")],
+    # **Los caserones con torre de reloj NO son casas**: son el ayuntamiento (lote cívico propio), no una vivienda de barrio.
+    "building/ayuntamiento": [(A, "Victorian_House_4"), (A, "Victorian_House_5")],
     "building/villa": [(V, "Villa_1"), (V, "Villa_3")],
     "building/duplex": [(G, "Condo_4_38")],
     "building/oficina": [("16_Office_Singles_32x32", "Example_1"), ("16_Office_Singles_32x32", "Example_2")],
@@ -64,6 +66,8 @@ SLOTS = {
     "building/comisaria": [("15_Police_Station_Singles_32x32", "Police_Station_1")],
     "building/tienda": [(G, "Hardware_Store")],
     "building/deposito": [("23_MIlitary_Base_Singles_32x32", f"Dormitory_{i}") for i in (1, 4)],
+    # El granero tenía por arte el escaparate de una tienda: lleva los mismos galpones de madera que el depósito.
+    "building/granero": [("23_MIlitary_Base_Singles_32x32", f"Dormitory_{i}") for i in (1, 4)],
     "building/correo_edificio": [("22_Post_Office_Singles_32x32", "Building_1")],
 }
 

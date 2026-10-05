@@ -33768,6 +33768,15 @@
   },
   "agua/pileta_completa": {
    "label": "Pileta completa (6×4)"
+  },
+  "building/ayuntamiento": {
+   "label": "Ayuntamiento",
+   "variants": [
+    {
+     "id": "1",
+     "label": "Ayuntamiento 1"
+    }
+   ]
   }
  },
  "origen": {
@@ -61635,107 +61644,6 @@
     "w": 23
    }
   },
-  "building/casa_country#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 0,
-      "h": 22,
-      "row": 34,
-      "w": 18
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 544,
-      "h": 80,
-      "row": 288,
-      "w": 32
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 22,
-    "row": 34,
-    "w": 18
-   }
-  },
   "building/casa_cubierta_silla_blanca": {
    "grid": [
     32,
@@ -63226,19 +63134,6 @@
    "png": "art/pack/completos_1.png",
    "rect": {
     "col": 0,
-    "h": 16,
-    "row": 18,
-    "w": 18
-   }
-  },
-  "building/casa_grande#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 30,
     "h": 16,
     "row": 18,
     "w": 18
@@ -78120,19 +78015,6 @@
     "h": 1,
     "row": 20,
     "w": 1
-   }
-  },
-  "building/granero": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/garden_2.png",
-   "rect": {
-    "col": 0,
-    "h": 7,
-    "row": 8,
-    "w": 8
    }
   },
   "building/grieta_1": {
@@ -281280,6 +281162,320 @@
     "row": 0,
     "w": 6,
     "h": 4
+   }
+  },
+  "building/ayuntamiento": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_0.png",
+   "poses": {
+    "base": {
+     "grid": [
+      32,
+      32
+     ],
+     "png": "art/pack/completos_0.png",
+     "rect": {
+      "col": 0,
+      "h": 22,
+      "row": 34,
+      "w": 18
+     }
+    },
+    "closed": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 0,
+      "h": 80,
+      "row": 1630,
+      "w": 32
+     }
+    },
+    "closing": {
+     "anim": {
+      "fps": 28.0,
+      "frames": 7
+     },
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 224,
+      "h": 80,
+      "row": 1630,
+      "w": 32
+     }
+    },
+    "open": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 224,
+      "h": 80,
+      "row": 1630,
+      "w": 32
+     }
+    },
+    "opening": {
+     "anim": {
+      "fps": 27.43,
+      "frames": 8
+     },
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 0,
+      "h": 80,
+      "row": 1630,
+      "w": 32
+     }
+    },
+    "puerta_en_sprite": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 544,
+      "h": 80,
+      "row": 288,
+      "w": 32
+     }
+    }
+   },
+   "rect": {
+    "col": 0,
+    "h": 22,
+    "row": 34,
+    "w": 18
+   }
+  },
+  "building/ayuntamiento#1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_1.png",
+   "rect": {
+    "col": 30,
+    "h": 16,
+    "row": 18,
+    "w": 18
+   }
+  },
+  "building/granero": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_2.png",
+   "rect": {
+    "col": 21,
+    "h": 9,
+    "row": 0,
+    "w": 11
+   }
+  },
+  "building/granero#1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_2.png",
+   "rect": {
+    "col": 21,
+    "h": 9,
+    "row": 0,
+    "w": 11
+   }
+  },
+  "building/granero#2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_1.png",
+   "poses": {
+    "base": {
+     "grid": [
+      32,
+      32
+     ],
+     "png": "art/pack/completos_1.png",
+     "rect": {
+      "col": 42,
+      "h": 12,
+      "row": 49,
+      "w": 11
+     }
+    },
+    "closed": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 0,
+      "h": 64,
+      "row": 1930,
+      "w": 64
+     }
+    },
+    "closing": {
+     "anim": {
+      "fps": 28.0,
+      "frames": 7
+     },
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 448,
+      "h": 64,
+      "row": 1930,
+      "w": 64
+     }
+    },
+    "open": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 448,
+      "h": 64,
+      "row": 1930,
+      "w": 64
+     }
+    },
+    "opening": {
+     "anim": {
+      "fps": 27.43,
+      "frames": 8
+     },
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 0,
+      "h": 64,
+      "row": 1930,
+      "w": 64
+     }
+    },
+    "puerta2_closed": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_1.png",
+     "rect": {
+      "col": 1064,
+      "h": 46,
+      "row": 1066,
+      "w": 62
+     }
+    },
+    "puerta2_closing": {
+     "anim": {
+      "fps": 28.0,
+      "frames": 7
+     },
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_1.png",
+     "rect": {
+      "col": 1498,
+      "h": 46,
+      "row": 1066,
+      "w": 62
+     }
+    },
+    "puerta2_en_sprite": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_1.png",
+     "rect": {
+      "col": 208,
+      "h": 46,
+      "row": 228,
+      "w": 62
+     }
+    },
+    "puerta2_open": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_1.png",
+     "rect": {
+      "col": 1498,
+      "h": 46,
+      "row": 1066,
+      "w": 62
+     }
+    },
+    "puerta2_opening": {
+     "anim": {
+      "fps": 27.43,
+      "frames": 8
+     },
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_1.png",
+     "rect": {
+      "col": 1064,
+      "h": 46,
+      "row": 1066,
+      "w": 62
+     }
+    },
+    "puerta_en_sprite": {
+     "grid": [
+      1,
+      1
+     ],
+     "png": "art/pack/edificios_puertas_0.png",
+     "rect": {
+      "col": 32,
+      "h": 64,
+      "row": 256,
+      "w": 64
+     }
+    }
+   },
+   "rect": {
+    "col": 42,
+    "h": 12,
+    "row": 49,
+    "w": 11
    }
   }
  }

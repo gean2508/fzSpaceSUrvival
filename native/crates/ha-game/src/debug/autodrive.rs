@@ -8422,9 +8422,31 @@ fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
         return;
     }
     let lista = crate::flags::var("HA_VISTATEST").unwrap_or_default();
+    let body0 = ha_shared::CelestialBody::Earth;
     let sitios: Vec<(f32, f32)> = lista
         .split(';')
         .filter_map(|p| {
+            let p = p.trim();
+            // Palabras clave: «puente» = el puente más cercano a Ciudad Central; «agua» = el borde de agua más cercano dentro de un casco.
+            if p == "puente" || p == "agua" {
+                let (cx, cz) = (-15000i64, -7799i64);
+                for r in (0..1800i64).step_by(3) {
+                    for k in (-r..=r).step_by(3) {
+                        for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
+                            let hit = if p == "puente" {
+                                { let t = |a: i64, b: i64| ha_shared::topdown::topdown_tile(body0, 0, x + a, z + b); t(0, 0) == ha_shared::topdown::Tile::Asphalt && (t(0, 3) == ha_shared::topdown::Tile::Water || t(0, -3) == ha_shared::topdown::Tile::Water || t(3, 0) == ha_shared::topdown::Tile::Water || t(-3, 0) == ha_shared::topdown::Tile::Water) && ha_shared::geography::settlement_covering(body0, x, z).is_some() }
+                            } else {
+                                matches!(ha_shared::topdown::topdown_tile(body0, 0, x, z), ha_shared::topdown::Tile::Water)
+                                    && ha_shared::geography::settlement_covering(body0, x, z).is_some()
+                            };
+                            if hit {
+                                return Some((x as f32, z as f32));
+                            }
+                        }
+                    }
+                }
+                return None;
+            }
             let (x, z) = p.split_once(',')?;
             Some((x.trim().parse().ok()?, z.trim().parse().ok()?))
         })
@@ -8459,6 +8481,10 @@ fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
             let dir = flytest_dir();
             shot(world, &format!("{dir}/vista-{}.png", st.i));
             eprintln!("ha-vista: {} en ({x}, {z})", st.i);
+            for dz in -5..=5i64 {
+                let fila: Vec<String> = (-3..=3i64).map(|dx| format!("{:?}", ha_shared::topdown::topdown_tile(ha_shared::CelestialBody::Earth, 0, x as i64 + dx, z as i64 + dz)).chars().take(4).collect()).collect();
+                eprintln!("ha-vista:   {}", fila.join(" "));
+            }
             st.i += 1;
             st.paso = 0;
         }

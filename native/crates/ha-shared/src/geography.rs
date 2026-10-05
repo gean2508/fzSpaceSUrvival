@@ -1256,12 +1256,31 @@ pub fn civil_at(body: CelestialBody, tx: i64, tz: i64) -> Option<Civil> {
     // toda una franja, y la franja de una metrópolis son kilómetros de asfalto
     // sobre las olas. Lo caza `ninguna_calle_ni_vereda_sobre_el_agua`.)
     if settlement_covering(body, tx, tz).is_some() {
+        // **Un canal o un río ANGOSTO dentro de la ciudad se cruza por PUENTE** (como en las láminas del pack: la calle
+        // sigue por encima del agua, con su pretil de piedra). Sólo la calzada, y sólo si el agua es corta en algún eje
+        // (tierra a los dos lados a ≤ [`LUZ_MAX_PUENTE`] celdas): una laguna o el mar no se cruzan.
+        if kind == Civil::Road && luz_de_puente(body, tx, tz) {
+            return Some(Civil::Bridge);
+        }
         return None;
     }
     // Fuera de un casco, la calzada sobre líquido es un PUENTE — que es
     // exactamente cómo terminan unidos dos continentes sin que nadie los haya
     // colocado a mano.
     Some(Civil::Bridge)
+}
+
+/// Luz máxima (celdas de agua) que cruza un puente dentro de una ciudad.
+pub const LUZ_MAX_PUENTE: i64 = 14;
+
+/// ¿La celda de agua `(tx, tz)` está en un cauce corto en algún eje? Se camina hasta tierra en las dos direcciones del eje.
+fn luz_de_puente(body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let agua = |x: i64, z: i64| matches!(natural_tile(body, x, z), Tile::Water | Tile::WaterDeep);
+    let corto = |dx: i64, dz: i64| {
+        let lado = |sg: i64| (1..=LUZ_MAX_PUENTE).any(|k| !agua(tx + dx * k * sg, tz + dz * k * sg));
+        lado(1) && lado(-1)
+    };
+    corto(1, 0) || corto(0, 1)
 }
 
 /// Obra civil **sin mirar el terreno**: la geometría pura de la red (dónde hay
@@ -2271,7 +2290,8 @@ mod tests {
                         continue;
                     }
                     revisadas += 1;
-                    if civil_at(body, x, z).is_some() {
+                    // Un PUENTE sobre un cauce angosto sí cabe dentro del casco; calle o vereda sobre agua abierta, no.
+                    if civil_at(body, x, z).is_some_and(|c| c != Civil::Bridge) {
                         sobre_agua += 1;
                     }
                 }

@@ -321,6 +321,7 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "building/limonada_puesto_1", cells: (6, 6), district: District::Park, weight: 8 },
     // ── Cívico: LOS GRANDES. Ocupan varias manzanas a propósito.
     LotProgram { key: "building/hospital", cells: (28, 22), district: District::Civic, weight: 14 },
+    LotProgram { key: "building/ayuntamiento", cells: (20, 24), district: District::Civic, weight: 6 },
     LotProgram { key: "building/universidad", cells: (32, 32), district: District::Civic, weight: 28 },
     LotProgram { key: "building/escuela", cells: (28, 16), district: District::Civic, weight: 22 },
     LotProgram { key: "building/comisaria", cells: (24, 20), district: District::Civic, weight: 14 },
