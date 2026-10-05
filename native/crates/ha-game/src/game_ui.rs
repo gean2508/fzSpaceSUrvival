@@ -21,7 +21,21 @@ pub struct GameUiRoot;
 /// suelto en una transición para que el gameplay asome — el parpadeo que se veía
 /// al abrir el juego. Apagado, esos frames no tienen nada que mostrar.
 #[derive(Component)]
+#[component(on_add = ocultar_al_nacer)]
 pub struct GameplayUi;
+
+/// **Nace apagada** salvo que ya se esté jugando. `hide_gameplay_ui_outside_playing` corre en `Update`, o sea
+/// DESPUÉS del `Startup` que crea los sticks y el HUD: con el `Visibility` por defecto (heredado = visible) hay
+/// una ventana en la que el gameplay existe encendido mientras el splash todavía no se pintó — el destello de la
+/// UI de juego antes del logo. Con el gancho, ninguna raíz marcada puede dibujarse un solo cuadro antes de su fase.
+fn ocultar_al_nacer(mut world: bevy::ecs::world::DeferredWorld, entity: Entity, _id: bevy::ecs::component::ComponentId) {
+    let jugando = world
+        .get_resource::<State<crate::game_phase::GamePhase>>()
+        .is_some_and(|s| *s.get() == crate::game_phase::GamePhase::Playing);
+    if !jugando {
+        world.commands().entity(entity).insert(Visibility::Hidden);
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct GameUiRootReady(bool);

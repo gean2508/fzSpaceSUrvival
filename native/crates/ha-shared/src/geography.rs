@@ -1324,13 +1324,20 @@ pub fn link_clearance(body: CelestialBody, px: f32, pz: f32) -> Option<f32> {
         }
     }
     // Enlaces de refuerzo (ver `enlaces_de_refuerzo`).
+    let clave = (body as u32) ^ crate::partida::epoca().wrapping_mul(0x85eb_ca6b);
     ENLACES.with(|c| {
         let mut c = c.borrow_mut();
-        let clave = (body as u32) ^ crate::partida::epoca().wrapping_mul(0x85eb_ca6b);
-        if !matches!(&*c, Some((k, x, z, _)) if *k == clave && *x == cx && *z == cz) {
-            *c = Some((clave, cx, cz, enlaces_de_refuerzo(body, cx, cz)));
-        }
-        if let Some((_, _, _, v)) = &*c {
+        let i = match c.iter().position(|e| matches!(e, Some((k, x, z, _)) if *k == clave && *x == cx && *z == cz)) {
+            Some(i) => i,
+            None => {
+                // Reemplazo en anillo: una frontera de celda alterna entre dos o cuatro celdas por fila de
+                // tiles, y recalcular 81 vecinos por consulta sería peor que no tener refuerzo.
+                let i = (hash2(0x7e11_0000, cx, cz) as usize) % ENLACES_MEMO;
+                c[i] = Some((clave, cx, cz, enlaces_de_refuerzo(body, cx, cz)));
+                i
+            }
+        };
+        if let Some((_, _, _, v)) = &c[i] {
             for &(ca, fa, cb, fb) in v {
                 unir(margen_del_enlace(body, p, ca, fa, cb, fb));
             }
@@ -1344,14 +1351,37 @@ const ALCANCE_REFUERZO: i64 = 3;
 
 type EnlaceRef = ((i64, i64), Settlement, (i64, i64), Settlement);
 
+const ENLACES_MEMO: usize = 16;
+
+type MemoEnlaces = [Option<(u32, i64, i64, Vec<EnlaceRef>)>; ENLACES_MEMO];
+
 thread_local! {
-    static ENLACES: std::cell::RefCell<Option<(u32, i64, i64, Vec<EnlaceRef>)>> =
-        const { std::cell::RefCell::new(None) };
+    static ENLACES: std::cell::RefCell<MemoEnlaces> =
+        const { std::cell::RefCell::new([const { None }; ENLACES_MEMO]) };
+    /// Vecino más cercano por núcleo (memo): `(época+cuerpo, ax, az) → vecino`.
+    static VECINOS: std::cell::RefCell<std::collections::HashMap<(u32, i64, i64), Option<(i64, i64)>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// El núcleo más cercano (celdas, distancia al cuadrado y luego coordenadas) de
 /// `(ax, az)` dentro de [`ALCANCE_REFUERZO`], o `None` si está solo.
 fn vecino_mas_cercano(body: CelestialBody, ax: i64, az: i64) -> Option<(i64, i64)> {
+    let clave = (body as u32) ^ crate::partida::epoca().wrapping_mul(0x85eb_ca6b);
+    if let Some(v) = VECINOS.with(|m| m.borrow().get(&(clave, ax, az)).copied()) {
+        return v;
+    }
+    let v = vecino_mas_cercano_sin_memo(body, ax, az);
+    VECINOS.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() > 4096 {
+            m.clear();
+        }
+        m.insert((clave, ax, az), v);
+    });
+    v
+}
+
+fn vecino_mas_cercano_sin_memo(body: CelestialBody, ax: i64, az: i64) -> Option<(i64, i64)> {
     let r = ALCANCE_REFUERZO;
     let mut best: Option<(i64, i64, i64)> = None;
     for dx in -r..=r {
