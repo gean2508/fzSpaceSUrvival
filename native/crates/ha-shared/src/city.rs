@@ -305,6 +305,8 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "lot/cancha_basket", cells: (22, 14), district: District::Park, weight: 14 },
     LotProgram { key: "lot/cancha_tenis", cells: (26, 14), district: District::Park, weight: 9 },
     LotProgram { key: "lot/arboleda", cells: (24, 20), district: District::Park, weight: 16 },
+    // El cementerio de la lámina: pasto y filas de lápidas con flores (`worldgen::prefab_de_lote_at`).
+    LotProgram { key: "lot/cementerio", cells: (22, 18), district: District::Park, weight: 6 },
     // El parque de juegos, con las piezas que el pack dibujó: el patio de
     // juguetes, el tubo modular de la escuela y las hamacas de las villas.
     LotProgram { key: "building/patio_juguete_1", cells: (9, 8), district: District::Park, weight: 13 },
@@ -322,6 +324,9 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     // ── Cívico: LOS GRANDES. Ocupan varias manzanas a propósito.
     LotProgram { key: "building/hospital", cells: (28, 22), district: District::Civic, weight: 14 },
     LotProgram { key: "building/ayuntamiento", cells: (20, 24), district: District::Civic, weight: 6 },
+    // El helipuerto con su helicóptero (lámina de LimeZu: pad pintado + aparato). Es un lote de losa como la
+    // plaza: lo compone `worldgen::prefab_de_lote_at`.
+    LotProgram { key: "lot/helipuerto", cells: (18, 15), district: District::Park, weight: 5 },
     LotProgram { key: "building/universidad", cells: (32, 32), district: District::Civic, weight: 28 },
     LotProgram { key: "building/escuela", cells: (28, 16), district: District::Civic, weight: 22 },
     LotProgram { key: "building/comisaria", cells: (24, 20), district: District::Civic, weight: 14 },
@@ -1138,13 +1143,12 @@ pub fn lot_tile(body: CelestialBody, s: &Settlement, tx: i64, tz: i64) -> Option
 /// Cuántos tiles de andén hay entre el borde del natatorio y el agua. Tres es lo
 /// que hace falta para que quepan las reposeras y para que se pueda caminar
 /// alrededor sin caerse a la pileta en cada paso.
-const ANDEN_NATATORIO: i64 = 3;
 
 /// Parque: losa, cancha, arboleda o natatorio. Nunca paredes.
 fn park_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, _h: u32) -> Option<Tile> {
     match p.key {
         // La arboleda es terreno natural: los árboles los siembra la decoración.
-        "lot/arboleda" => None,
+        "lot/arboleda" | "lot/cementerio" => None,
         // **EL NATATORIO: agua de verdad, no una losa celeste.** El vaso es
         // `Tile::Water` —el líquido de poco fondo que se NADA, el mismo de la
         // pileta del patio de una casa—, así que el natatorio del barrio se USA:
@@ -1153,17 +1157,23 @@ fn park_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, _h: u32) -> Option<Tile
         // reposeras y el trampolín— y el borde exterior marca el recinto igual
         // que en una cancha.
         "lot/natatorio" => {
-            let borde = lx == 0 || lz == 0 || lx == lot.w - 1 || lz == lot.h - 1;
-            if borde {
+            // **Piletas, no un lago**: el vaso es una grilla de piletas de 6×4 (la misma del patio de las casas,
+            // `agua/pileta_completa`: borde de piedra con esquinas coherentes) separadas por baldosa. Un solo
+            // rectángulo de 20×14 de agua se dibujaba con la orilla de un río, y eso no es una pileta.
+            let (w, d) = (lot.w, lot.h);
+            let (nx, nz) = ((w - 6 + 2) / 8, (d - 6 + 2) / 6);
+            let (ox, oz) = (3 + ((w - 6) - (8 * nx - 2)) / 2, 3 + ((d - 6) - (6 * nz - 2)) / 2);
+            let (u, v) = (lx - ox, lz - oz);
+            if u < 0 || v < 0 || u >= 8 * nx - 2 || v >= 6 * nz - 2 || u % 8 >= 6 || v % 6 >= 4 {
                 return Some(Tile::Pavement);
             }
-            let dentro = lx >= ANDEN_NATATORIO
-                && lz >= ANDEN_NATATORIO
-                && lx < lot.w - ANDEN_NATATORIO
-                && lz < lot.h - ANDEN_NATATORIO;
-            Some(if dentro { Tile::Water } else { Tile::Basalt })
+            let (ru, rv) = (u % 8, v % 6);
+            let rim = ru == 0 || rv == 0 || ru == 5 || rv == 3;
+            Some(if rim { Tile::Pavement } else { Tile::Water })
         }
-        // Cancha y plaza: una losa con borde. El borde es lo que la separa del
+        // La plaza de la lámina es de baldosa clara de punta a punta (el basalto oscuro es de las canchas).
+        "lot/plaza" | "lot/helipuerto" => Some(Tile::Pavement),
+        // Cancha: una losa con borde. El borde es lo que la separa del
         // césped y hace que se lea como una cancha y no como un claro.
         _ => {
             let edge = lx == 0 || lz == 0 || lx == lot.w - 1 || lz == lot.h - 1;
@@ -1736,7 +1746,9 @@ fn residential_tile(lot: Lot, lx: i64, lz: i64, h: u32) -> Option<Tile> {
             }
             if medianera || borde {
                 let esquina = medianera && borde;
-                if !esquina && (rx + rz) % 3 == 1 {
+                // Ventanas sólo al frente/fondo y en las cabeceras de la hilera: una MEDIANERA es pared contra la vecina.
+                let cabecera = rx == 0 || rx == house_w - 1;
+                if !esquina && (borde || cabecera) && (rx + rz) % 3 == 1 {
                     return Some(Tile::Window);
                 }
                 return Some(Tile::WoodWall);

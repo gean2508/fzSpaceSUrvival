@@ -366,6 +366,110 @@ fn es_equipamiento_de_parque(key: &str) -> bool {
     ["fuente", "pasto_arco", "pasto_estatua", "banco", "flores_banco"].iter().any(|m| key.contains(m))
 }
 
+// ---------------------------------------------------------------------------
+// PREFABS: lotes compuestos como en las láminas de LimeZu (plaza, natatorio)
+// ---------------------------------------------------------------------------
+
+const P_FUENTE: ExtraDecor = ExtraDecor { key: "nature/fuente", size: [1.90, 2.85], weight: 1 };
+const P_ESTATUA: ExtraDecor = ExtraDecor { key: "nature/pasto_estatua_5", size: [2.85, 2.85], weight: 1 };
+const P_ARCO: ExtraDecor = ExtraDecor { key: "nature/pasto_arco_1", size: [2.85, 2.85], weight: 1 };
+const P_BANCO: ExtraDecor = ExtraDecor { key: "nature/banco_grande_horizontal", size: [2.85, 0.95], weight: 1 };
+const P_FLORES_BANCO: ExtraDecor = ExtraDecor { key: "nature/flores_banco_horizontal", size: [2.85, 2.85], weight: 1 };
+const P_REPOSERA_A: ExtraDecor = ExtraDecor { key: "prop/reposera_14", size: [1.90, 1.90], weight: 1 };
+const P_REPOSERA_B: ExtraDecor = ExtraDecor { key: "prop/reposera_2", size: [1.90, 1.90], weight: 1 };
+const P_SOMBRILLA: ExtraDecor = ExtraDecor { key: "prop/sombrilla_1", size: [2.85, 3.80], weight: 1 };
+const P_PALMERA: ExtraDecor = ExtraDecor { key: "nature/palmera_1", size: [3.80, 4.75], weight: 1 };
+const P_HELIPUERTO: ExtraDecor = ExtraDecor { key: "vehicle/helicoptero_helipuerto", size: [14.25, 11.40], weight: 1 };
+const P_HELICOPTERO: ExtraDecor = ExtraDecor { key: "vehicle/comisaria_helicoptero", size: [9.50, 6.65], weight: 1 };
+const P_LAPIDA_ALTA: ExtraDecor = ExtraDecor { key: "prop/lapida_chica_gris_2", size: [1.90, 2.85], weight: 1 };
+const P_LAPIDA_MARMOL: ExtraDecor = ExtraDecor { key: "prop/marmol_lapida_gris_1", size: [1.90, 1.90], weight: 1 };
+const P_FLORES_BLANCAS: ExtraDecor = ExtraDecor { key: "nature/cementerio_flores_blanco", size: [1.90, 1.90], weight: 1 };
+const P_FLORES_ROJAS: ExtraDecor = ExtraDecor { key: "nature/cementerio_flores_rojo", size: [1.90, 1.90], weight: 1 };
+
+/// **Lo que va en un lote de parque, en su sitio** (pedido del usuario, 5 oct 2026: «así se tienen que
+/// ver las ciudades», láminas de LimeZu). Cada lote se compone con simetría —no se sortea—:
+///
+/// * `lot/plaza`: fuente al centro, estatuas de seto a los lados, un arco de seto en cada entrada del
+///   eje norte-sur y bancos mirando a la fuente.
+/// * `lot/natatorio`: sobre el andén, reposeras y sombrillas alternadas a lo largo del lado norte,
+///   palmeras en las esquinas y el trampolín al sur. Nada sobre el vaso.
+///
+/// Es una función pura de la celda: sin estado, y el sitio devuelve la pieza sólo en SU celda ancla
+/// (el pie del dibujo), igual que `guirnalda_at`.
+pub fn prefab_de_lote_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    let s = crate::geography::settlement_covering(body, tx, tz)?;
+    let lot = crate::city::lot_at(body, &s, tx, tz)?;
+    let (lx, lz) = (tx - lot.min.0, tz - lot.min.1);
+    let (w, h) = (lot.w, lot.h);
+    let (cx, cz) = (w / 2, h / 2);
+    match lot.program().key {
+        "lot/plaza" if w >= 20 && h >= 16 => {
+            let eje = lx == cx;
+            if eje && lz == cz + 1 {
+                return Some(&P_FUENTE);
+            }
+            if lz == cz + 1 && (lx == cx - 6 || lx == cx + 6) {
+                return Some(&P_ESTATUA);
+            }
+            if eje && (lz == 3 || lz == h - 2) {
+                return Some(&P_ARCO);
+            }
+            if (lx == cx - 4 || lx == cx + 4) && (lz == cz - 3 || lz == cz + 5) {
+                return Some(&P_BANCO);
+            }
+            if (lx == 4 || lx == w - 5) && (lz == 4 || lz == h - 3) {
+                return Some(&P_FLORES_BANCO);
+            }
+            None
+        }
+        "lot/cementerio" if w >= 16 && h >= 12 => {
+            // Filas de lápidas cada 5 filas y 4 columnas, con un pasillo central libre y flores en los huecos.
+            if lz < 4 || lz > h - 3 || (lz - 4) % 5 != 0 || lx < 3 || lx > w - 4 || (lx - 3) % 4 > 2 {
+                return None;
+            }
+            if (lx - cx).abs() < 3 {
+                return None;
+            }
+            let fila = (lz - 4) / 5;
+            let col = (lx - 3) / 4;
+            match (lx - 3) % 4 {
+                0 => Some(if (fila + col) % 2 == 0 { &P_LAPIDA_ALTA } else { &P_LAPIDA_MARMOL }),
+                2 => Some(if (fila + col) % 3 == 0 { &P_FLORES_ROJAS } else { &P_FLORES_BLANCAS }),
+                _ => None,
+            }
+        }
+        "lot/helipuerto" if w >= 16 && h >= 13 => {
+            if lx != cx {
+                return None;
+            }
+            // La plataforma va en el piso y el helicóptero (de la comisaría) se posa en su centro.
+            match lz - cz {
+                6 => Some(&P_HELIPUERTO),
+                3 => Some(&P_HELICOPTERO),
+                _ => None,
+            }
+        }
+        "lot/natatorio" if w >= 18 && h >= 14 => {
+            // Fila del pie sobre el andén norte (la 2 es la última baldosa antes del agua).
+            if lz == 2 && lx >= 4 && lx <= w - 5 && (lx - 4) % 4 == 0 {
+                return Some(match ((lx - 4) / 4) % 3 {
+                    1 => &P_SOMBRILLA,
+                    2 => &P_REPOSERA_B,
+                    _ => &P_REPOSERA_A,
+                });
+            }
+            if lz == 2 && (lx == 1 || lx == w - 2) {
+                return Some(&P_PALMERA);
+            }
+            if lz == h - 2 && (lx == 1 || lx == w - 2) {
+                return Some(&P_PALMERA);
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 /// Un florero o una maceta es un objeto de interior/terraza: sobre el pasto
 /// pelado de un descampado no tiene qué hacer.
 fn es_maceta(key: &str) -> bool {
@@ -388,9 +492,9 @@ fn jardin_del_pueblo(
         let r = roll.wrapping_add(i.wrapping_mul(0x9e37_79b1));
         let e = pick_weighted(crate::pack_siembra::PARQUE, r)?;
         if es_equipamiento_de_parque(e.key) {
-            if en_plaza && !e.key.contains("pasto_") {
-                return Some(e);
-            }
+            // El equipamiento de la plaza lo coloca `prefab_de_lote_at` (fuente al centro, estatuas,
+            // arcos, bancos): sorteado se repetía cada pocos pasos y sin simetría.
+            let _ = en_plaza;
             continue;
         }
         if es_maceta(e.key) {
@@ -896,6 +1000,50 @@ pub const TABLAS_SEMBRADAS: &[(&str, &[ExtraDecor])] = &[
 mod tests {
     use super::*;
     use crate::geography::{settlement_in, SettlementTier};
+
+    /// **Los lotes de parque se componen, no se sortean**: toda plaza lleva una fuente en su eje y todo
+    /// natatorio su fila de reposeras, y ninguna pieza cae sobre el agua del vaso.
+    #[test]
+    fn plazas_y_natatorios_llevan_su_composicion() {
+        let b = CelestialBody::Earth;
+        let (mut fuentes, mut plazas, mut reposeras, mut natatorios) = (0, 0, 0, 0);
+        let mut vistos = std::collections::HashSet::new();
+        'todo: for sz in -4..4 {
+            for sx in -4..4 {
+                let Some(s) = settlement_in(b, sx, sz) else { continue };
+                let r = s.radius.min(700);
+                for dz in (-r..r).step_by(2) {
+                    for dx in (-r..r).step_by(2) {
+                        let (tx, tz) = (s.center.0 + dx, s.center.1 + dz);
+                        let Some(lot) = crate::city::lot_at(b, &s, tx, tz) else { continue };
+                        let key = lot.program().key;
+                        if (key == "lot/plaza" || key == "lot/natatorio") && vistos.insert(lot.min) {
+                            if key == "lot/plaza" { plazas += 1 } else { natatorios += 1 }
+                            for lz in 0..lot.h {
+                                for lx in 0..lot.w {
+                                    let (x, z) = (lot.min.0 + lx, lot.min.1 + lz);
+                                    let Some(e) = prefab_de_lote_at(b, x, z) else { continue };
+                                    if e.key == "nature/fuente" { fuentes += 1 }
+                                    if e.key.starts_with("prop/reposera") { reposeras += 1 }
+                                    assert!(
+                                        !crate::topdown::topdown_tile(b, 0, x, z).swim(),
+                                        "{} cayó sobre agua en {x},{z}",
+                                        e.key
+                                    );
+                                }
+                            }
+                        }
+                        if plazas >= 4 && natatorios >= 4 {
+                            break 'todo;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(plazas > 0 && natatorios > 0, "sin muestras: {plazas} plazas, {natatorios} natatorios");
+        assert!(fuentes > 0, "ninguna de {plazas} plazas tiene fuente");
+        assert!(reposeras > 0, "ningún natatorio ({natatorios}) tiene reposeras");
+    }
 
     /// **EN LA NIEVE NO CRECE NADA VERDE.**
     ///

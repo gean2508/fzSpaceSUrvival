@@ -9415,6 +9415,29 @@ Teletransporta, espera el mundo y deja `vista-N.png` en cada sitio. Para mirar f
 * **Orden de pantallas**: `GameplayUi` nace oculta salvo en `Playing` (gancho `on_add`): no puede dibujarse un cuadro antes de su fase.
 * **Mariposas y luciérnagas** mueren a balazos (`ambient::balas_a_bichos`), con reciclaje (no se crean ni destruyen entidades por tiro).
 
+### Láminas de LimeZu → ciudad (5 oct 2026, 2.ª parte)
+
+* **Puentes dentro de la ciudad**: `geography::luz_de_puente` (`LUZ_MAX_PUENTE = 14`) permite que una calle cruce un canal angosto dentro del casco; el pretil
+  es de piedra (`quay/muro`), igual que el muelle (`world2d::spawn_chunk_puentes`). Medidor: `tests/medir_puentes_ciudad.rs` (ignored). ⚠ El mundo del
+  juego (`HA_PARTIDA_NUEVA` + `HA_SEMILLA`) no es el de los tests (semilla 0): para verlo en pantalla hay que buscar el puente en el mundo del juego
+  (`HA_VISTATEST="puente"`; en la semilla 0 no apareció ninguno en r<1800 de la ciudad de prueba — checkpoint de 1 corrida, no veredicto).
+* **Nombres mal puestos**: las «casas» con torre de reloj eran ayuntamientos → `building/ayuntamiento` (lote cívico 20×24) y el granero salió de las casas.
+  Se reproduce con `import-completos.py` (SLOTS) + `scripts/reasignar-lotes.py` (post-fix sobre el manifest). Orden al re-importar: importadores →
+  `recortar-modulares.py` → `cercas-reparar.py` → `reasignar-lotes.py` → `import-casas-medidas.py`.
+* **Prefabs de parque** (`worldgen::prefab_de_lote_at`, función pura de la celda, sitio fijo antes del alumbrado): `lot/plaza` = fuente al centro,
+  estatuas de seto, arcos en el eje, bancos, canteros; `lot/natatorio` = grilla de piletas de 6×4 (las MISMAS `agua/pileta_completa` del patio; un vaso grande de `Tile::Water` salía con orilla de río) sobre baldosa, con reposeras/sombrillas alternadas en el andén norte, palmeras (nada sobre
+  el agua: lo cuida el test `plazas_y_natatorios_llevan_su_composicion`); `lot/helipuerto` (distrito parque —el cívico levanta paredes—, 18×15) = plataforma de azotea (`vehicle/helicoptero_helipuerto`, que NO es un helicóptero: capa piso) + helicóptero de la comisaría posado encima. El equipamiento
+  sorteado ya no cae en la plaza.
+* **Semáforos por fase** (`ha_shared::semaforos`, función pura compartida por el dibujo y la IA de tránsito), sonido de motor/choque/explosión
+  (`vehiculos.rs`, `audio.rs`), pileta como UN rectángulo (`agua/pileta_completa`), cercas por parcela con familias (ladrillo/reja/piedra) y esquinas
+  coherentes: ver las notas de arriba del 5 oct.
+* **Esquinas de cuarto** (`world2d::cara_de_muro` + `spawn_remate_de_esquina`): el kit `Room_Builder_3d_walls` no trae tapa unida al canto, así que las esquinas
+  se arman con `edge_n`/`edge_s` + recorte del canto lateral; las piezas de 1×1 se miden POR POSE (antes se estiraban al alto del slot, 1×2); una T
+  (tabique contra el muro) sigue de largo; las medianeras de la hilera no llevan ventanas. Captura: `HA_VISTATEST="casa"` (también `lote:<programa>`).
+* **Pendiente declarado**: faltan los prefabs de gasolinera/correo+camión/bomberos+camiones/cementerio/escenario/subte/base militar tal cual la lámina
+  (hoy salen como edificios sueltos del pack); entrar/salir de casa por el sistema de escenas (pausado por el usuario); APK y prueba de rendimiento
+  en el Redmi (este contenedor no tiene NDK/adb).
+
 ### Cómo probarlo en la PC (sin GPU)
 
 ```bash

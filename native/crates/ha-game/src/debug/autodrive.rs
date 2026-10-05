@@ -8428,6 +8428,52 @@ fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
         .filter_map(|p| {
             let p = p.trim();
             // Palabras clave: «puente» = el puente más cercano a Ciudad Central; «agua» = el borde de agua más cercano dentro de un casco.
+            if p == "casa" {
+                // Una esquina interior noroeste (piso con pared al oeste y al norte) de la primera casa residencial.
+                let (cx, cz) = (-15000i64, -7799i64);
+                let s = ha_shared::geography::settlement_covering(body0, cx, cz)?;
+                let t = |a: i64, b: i64| ha_shared::topdown::topdown_tile(body0, 0, a, b);
+                for r in (0..900i64).step_by(5) {
+                    for k in (-r..=r).step_by(5) {
+                        for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
+                            let Some(l) = ha_shared::city::lot_at(body0, &s, x, z) else { continue };
+                            if l.program().district != ha_shared::city::District::Residential {
+                                continue;
+                            }
+                            for zz in l.min.1..l.min.1 + l.h {
+                                for xx in l.min.0..l.min.0 + l.w {
+                                    if t(xx, zz) == ha_shared::topdown::Tile::WoodFloor
+                                        && t(xx - 1, zz) == ha_shared::topdown::Tile::WoodWall
+                                        && t(xx, zz - 1) == ha_shared::topdown::Tile::WoodWall
+                                        && t(xx + 3, zz + 2) == ha_shared::topdown::Tile::WoodFloor
+                                    {
+                                        return Some(((xx + 3) as f32, (zz + 2) as f32));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return None;
+            }
+            if let Some(prog) = p.strip_prefix("lote:") {
+                // «lote:plaza» = el centro del lote de ese programa más cercano a Ciudad Central.
+                let (cx, cz) = (-15000i64, -7799i64);
+                let s = ha_shared::geography::settlement_covering(body0, cx, cz)?;
+                let clave = format!("lot/{prog}");
+                for r in (0..1800i64).step_by(4) {
+                    for k in (-r..=r).step_by(4) {
+                        for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
+                            if let Some(l) = ha_shared::city::lot_at(body0, &s, x, z) {
+                                if l.program().key == clave {
+                                    return Some(((l.min.0 + l.w / 2) as f32, (l.min.1 + l.h / 2) as f32));
+                                }
+                            }
+                        }
+                    }
+                }
+                return None;
+            }
             if p == "puente" || p == "agua" {
                 let (cx, cz) = (-15000i64, -7799i64);
                 for r in (0..1800i64).step_by(3) {
@@ -8481,8 +8527,8 @@ fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
             let dir = flytest_dir();
             shot(world, &format!("{dir}/vista-{}.png", st.i));
             eprintln!("ha-vista: {} en ({x}, {z})", st.i);
-            for dz in -5..=5i64 {
-                let fila: Vec<String> = (-3..=3i64).map(|dx| format!("{:?}", ha_shared::topdown::topdown_tile(ha_shared::CelestialBody::Earth, 0, x as i64 + dx, z as i64 + dz)).chars().take(4).collect()).collect();
+            for dz in -8..=8i64 {
+                let fila: Vec<String> = (-8..=8i64).map(|dx| { let n = format!("{:?}", ha_shared::topdown::topdown_tile(ha_shared::CelestialBody::Earth, 0, x as i64 + dx, z as i64 + dz)); let n = n.replace("Wood", "W").replace("Floor", "F"); n.chars().take(4).collect::<String>() }).collect();
                 eprintln!("ha-vista:   {}", fila.join(" "));
             }
             st.i += 1;

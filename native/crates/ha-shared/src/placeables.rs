@@ -420,7 +420,7 @@ pub static PLACEABLES: &[LargeAsset] = &[
     p("building_vehiculos_estacion_de_servicio_2", "Estación de servicio 2", "building/vehiculos_estacion_de_servicio_2", PlaceCat::Edificio, Material::Piedra, 3, 1),
     p("building_vehiculos_estacion_de_servicio_1", "Estación de servicio 1", "building/vehiculos_estacion_de_servicio_1", PlaceCat::Edificio, Material::Piedra, 1, 3),
     p("vehicle_vehiculos_helicoptero", "Helicóptero", "vehicle/vehiculos_helicoptero", PlaceCat::Vehiculo, Material::Metal, 10, 7),
-    p("vehicle_helicoptero_helipuerto", "Helicóptero helipuerto", "vehicle/helicoptero_helipuerto", PlaceCat::Vehiculo, Material::Metal, 14, 11),
+    p("vehicle_helicoptero_helipuerto", "Plataforma de helipuerto", "vehicle/helicoptero_helipuerto", PlaceCat::Vehiculo, Material::Metal, 14, 11),
     p("vehicle_helicoptero_1", "Teléfono público (no es helicóptero)", "vehicle/helicoptero_1", PlaceCat::Vehiculo, Material::Metal, 2, 3),
     p("vehicle_helicoptero_2", "Cartel informativo (no es helicóptero)", "vehicle/helicoptero_2", PlaceCat::Vehiculo, Material::Metal, 2, 3),
     p("vehicle_helicoptero_3", "Cartel informativo (no es helicóptero)", "vehicle/helicoptero_3", PlaceCat::Vehiculo, Material::Metal, 2, 2),

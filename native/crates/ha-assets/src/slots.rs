@@ -2006,7 +2006,7 @@ const PACK_KEYS: &[(&str, &str)] = &[
     ("building/vehiculos_estacion_de_servicio_2", "Estación de servicio 2"),
     ("building/vehiculos_estacion_de_servicio_1", "Estación de servicio 1"),
     ("vehicle/vehiculos_helicoptero", "Helicóptero"),
-    ("vehicle/helicoptero_helipuerto", "Helicóptero helipuerto"),
+    ("vehicle/helicoptero_helipuerto", "Plataforma de helipuerto (sin helicóptero)"),
     ("vehicle/helicoptero_1", "Teléfono público (no es helicóptero)"),
     ("vehicle/helicoptero_2", "Cartel informativo (no es helicóptero)"),
     ("vehicle/helicoptero_3", "Cartel informativo (no es helicóptero)"),

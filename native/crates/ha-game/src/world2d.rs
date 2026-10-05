@@ -3065,6 +3065,8 @@ fn spawn_chunk_small_decor(
                 // La ESQUINA manda sobre la vereda: el semáforo tiene sitio
                 // fijo y no puede perderlo contra un banco sorteado.
                 ha_shared::worldgen::esquina_decor_at(body, tx, tz)
+                    // Y la composición de los lotes de parque (plaza, natatorio): sitio fijo, simétrica.
+                    .or_else(|| ha_shared::worldgen::prefab_de_lote_at(body, tx, tz))
                     // El ALUMBRADO también tiene sitio fijo (el cordón, con
                     // ritmo) y por el mismo motivo va antes del sorteo: una
                     // hilera de faroles con un hueco donde ganó un tacho deja de
@@ -3729,7 +3731,11 @@ fn cara_de_muro(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> Opt
     if oeste {
         return Some("edge_e");
     }
-    // Las esquinas: el cuarto queda en diagonal.
+    // Las esquinas: el cuarto queda en diagonal. **Si el cuarto queda en las DOS diagonales de abajo es una T** (un
+    // tabique que muere contra el muro del fondo): el muro sigue de largo, no hay esquina.
+    if piso(1, 1) && piso(-1, 1) {
+        return Some("edge_n");
+    }
     if piso(1, 1) {
         return Some("corner_nw");
     }
@@ -3738,6 +3744,17 @@ fn cara_de_muro(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> Opt
     }
     if norte {
         return Some("edge_s");
+    }
+    // Las de abajo: el cuarto queda al nordeste / noroeste. (Antes caían en `edge_n` y se dibujaba un muro de fondo
+    // con su cara en la esquina inferior.) En T —un tabique que llega al muro de abajo— sigue el remate de abajo.
+    if piso(1, -1) && piso(-1, -1) {
+        return Some("edge_s");
+    }
+    if piso(1, -1) {
+        return Some("corner_sw");
+    }
+    if piso(-1, -1) {
+        return Some("corner_se");
     }
     Some("edge_n")
 }
@@ -4257,6 +4274,17 @@ fn spawn_chunk_tile_art(
                 let respaldo = Vec2::splat(TILE_M);
                 let m = art.medida_de_obra(&vk, Some(shape), respaldo);
                 if m == respaldo { art.medida_de_obra(key, Some(shape), respaldo) } else { m }
+            } else if let (true, Some(pose)) = (
+                tile.upright() && art.has_pose(key, cara_de_pared.unwrap_or("")),
+                cara_de_pared.map(|c| match c {
+                    "corner_nw" | "corner_ne" => "edge_n",
+                    "corner_sw" | "corner_se" => "edge_s",
+                    o => o,
+                }),
+            ) {
+                // El kit de cuarto mide POR POSE: `edge_n` son 1×2 pero `edge_w/e`, `edge_s` y las esquinas son 1×1.
+                // Con la medida del slot (1×2) salían estiradas al doble: las esquinas «rotas».
+                art.medida_de_obra(key, Some(pose), Vec2::splat(TILE_M))
             } else if tile.upright() {
                 let respaldo = Vec2::splat(TILE_M);
                 let m = art.medida_de_obra(&vk, None, respaldo);
@@ -4298,7 +4326,14 @@ fn spawn_chunk_tile_art(
             // cara, no por vecindad—, así que sin esto `tile_sprite` caía
             // siempre a `center` y las cuatro paredes de la casa salían con el
             // mismo paño. Ver `arte_de_interior`.
-            let shape = cara_de_pared.unwrap_or(shape);
+            // Las esquinas del kit de cuarto no traen la tapa horizontal: se arman con el muro de fondo (`edge_n`/`edge_s`)
+            // y el canto del muro lateral encima (`spawn_remate_de_esquina`).
+            let esquina = cara_de_pared.filter(|c| matches!(*c, "corner_nw" | "corner_ne" | "corner_sw" | "corner_se"));
+            let shape = match esquina {
+                Some("corner_nw" | "corner_ne") => "edge_n",
+                Some(_) => "edge_s",
+                None => cara_de_pared.unwrap_or(shape),
+            };
             let Some((mut sprite, anim)) = art.tile_sprite(&vk, shape, medida) else { continue };
             sprite.flip_x = espejar;
             // La pieza compuesta de 1×3 (el bordillo y la pared de un escalón)
@@ -4359,6 +4394,9 @@ fn spawn_chunk_tile_art(
             // Tiles que iluminan (lava, cristal, un piso de luz). Sólo pagan quad
             // los materiales que el usuario marcó como emisores.
             crate::light2d::attach(&mut ent, &art, &[&vk, key], medida);
+            if let Some(e) = esquina {
+                spawn_remate_de_esquina(commands, art, key, e, r, depth, cx, cz, z);
+            }
         }
     }
     spawn_chunk_piletas(commands, art, tiles, body, z, cx, cz);
@@ -4368,6 +4406,48 @@ fn spawn_chunk_tile_art(
     spawn_chunk_cascadas(commands, art, tiles, body, z, cx, cz);
     spawn_chunk_cliff_urbano(commands, art, tiles, body, z, cx, cz);
     spawn_chunk_lane_marks(commands, art, tiles, body, z, cx, cz);
+}
+
+/// **El remate de una esquina de cuarto.** El kit (`Room_Builder_3d_walls`) no trae una pieza con la tapa horizontal
+/// unida al canto vertical: `corner_*` es un muro lateral solo. La esquina se arma con el muro de fondo (`edge_n` /
+/// `edge_s`, que ya dibujó el llamador) y encima el recorte del canto lateral —su franja blanca y su contorno— que
+/// prolonga el lateral hasta tocar la tapa. Los recortes salen de medir las piezas (`edge_w`/`edge_e`: contorno 0-2 px,
+/// franja blanca 2-12 px; la tapa ocupa las filas 0-12 de su celda).
+#[allow(clippy::too_many_arguments)]
+fn spawn_remate_de_esquina(
+    commands: &mut Commands,
+    art: &ArtLibrary,
+    key: &str,
+    esquina: &str,
+    r: Vec2,
+    depth: f32,
+    cx: i64,
+    cz: i64,
+    z: i32,
+) {
+    // (pose del canto lateral, recorte [x0, y0, x1, y1] en px, celdas hacia arriba donde se pega)
+    let piezas: &[(&str, [f32; 4], f32)] = match esquina {
+        "corner_nw" => &[("edge_w", [0.0, 2.0, 12.0, 32.0], 1.0), ("edge_w", [0.0, 0.0, 12.0, 32.0], 0.0)],
+        "corner_ne" => &[("edge_e", [20.0, 2.0, 32.0, 32.0], 1.0), ("edge_e", [20.0, 0.0, 32.0, 32.0], 0.0)],
+        "corner_sw" => &[("edge_w", [0.0, 0.0, 12.0, 10.0], 0.0)],
+        "corner_se" => &[("edge_e", [20.0, 0.0, 32.0, 10.0], 0.0)],
+        _ => return,
+    };
+    let k = TILE_M / 32.0;
+    for &(pose, [x0, y0, x1, y1], arriba) in piezas {
+        let Some((mut sprite, _)) = art.tile_sprite(key, pose, Vec2::splat(TILE_M)) else { continue };
+        let Some(rect) = sprite.rect else { continue };
+        sprite.rect = Some(Rect::from_corners(rect.min + Vec2::new(x0, y0), rect.min + Vec2::new(x1, y1)));
+        sprite.custom_size = Some(Vec2::new((x1 - x0) * k, (y1 - y0) * k));
+        let pie = r.y - TILE_M * 0.5 + arriba * TILE_M;
+        let centro = Vec2::new(r.x + ((x0 + x1) * 0.5 - 16.0) * k, pie + (32.0 - (y0 + y1) * 0.5) * k);
+        commands.spawn((
+            SurfaceDecor { cx, cz, z, small: false },
+            TileArt,
+            sprite,
+            Transform::from_xyz(centro.x, centro.y, depth + 0.0002),
+        ));
+    }
 }
 
 /// **LA ORILLA DEL SUELO BASE: dónde la tierra, la arena o la nieve muerden el pasto.**

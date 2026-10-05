@@ -50,6 +50,11 @@ def main():
         for k in dep:
             sp[k.replace("building/deposito", "building/granero")] = json.loads(json.dumps(sp[k]))
         movidos += len(dep)
+    # 3) `vehicle/helicoptero_helipuerto` NO es un helicóptero: es la plataforma de azotea con su escalera (15×12 celdas).
+    #    Va en el piso para que el helicóptero (`vehicle/comisaria_helicoptero`) se dibuje encima.
+    if "vehicle/helicoptero_helipuerto" in sp:
+        sp["vehicle/helicoptero_helipuerto"]["layer"] = "Floor"
+        movidos += 1
     print(f"{movidos} entradas reasignadas")
     json.dump(man, open(MANIFEST, "w"), indent=1, ensure_ascii=False)
 

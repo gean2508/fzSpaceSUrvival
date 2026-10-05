@@ -276306,7 +276306,8 @@
     "h": 12,
     "row": 0,
     "w": 15
-   }
+   },
+   "layer": "Floor"
   },
   "vehicle/helicoptero_hoja_de_sierra_atras_costado": {
    "grid": [
