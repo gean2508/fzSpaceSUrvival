@@ -119,6 +119,10 @@ const BUSCA_ORILLA: i64 = 3;
 
 /// **La orilla la manda el terreno que rodea al agua, no el agua.**
 pub fn orilla_de(body: CelestialBody, tx: i64, tz: i64) -> Orilla {
+    // Dentro de un casco urbano la ribera es de pasto (ver `geography::natural_tile`): ni siquiera el mar lleva panal de arena.
+    if crate::geography::settlement_covering(body, tx, tz).is_some() {
+        return Orilla::Pasto;
+    }
     // **EL MAR PRIMERO, Y BARATO.** El nivel viene cacheado; bajo cero es mar
     // abierto y su orilla es playa — el único sitio donde el panal de la arena
     // corresponde. Sin esta salida temprana, cada celda de océano pagaría el

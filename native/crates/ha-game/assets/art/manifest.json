@@ -33765,6 +33765,9 @@
      "label": "Helicóptero 2"
     }
    ]
+  },
+  "agua/pileta_completa": {
+   "label": "Pileta completa (6×4)"
   }
  },
  "origen": {
@@ -121664,12 +121667,102 @@
     32,
     32
    ],
-   "png": "art/pack/additional_houses_11.png",
+   "png": "art/pack/cercas.png",
    "rect": {
-    "col": 15,
-    "h": 1,
-    "row": 25,
-    "w": 1
+    "col": 0,
+    "row": 5,
+    "w": 1,
+    "h": 1
+   },
+   "poses": {
+    "ew": {
+     "rect": {
+      "col": 0,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ew@s": {
+     "rect": {
+      "col": 0,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ew@s#2": {
+     "rect": {
+      "col": 1,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ew@n": {
+     "rect": {
+      "col": 7,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ns": {
+     "rect": {
+      "col": 4,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ns@e": {
+     "rect": {
+      "col": 9,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ns@w": {
+     "rect": {
+      "col": 6,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "sw": {
+     "rect": {
+      "col": 2,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "es": {
+     "rect": {
+      "col": 15,
+      "row": 4,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "ne": {
+     "rect": {
+      "col": 3,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    },
+    "solo": {
+     "rect": {
+      "col": 5,
+      "row": 5,
+      "w": 1,
+      "h": 1
+     }
+    }
    }
   },
   "fence/porton_1": {
@@ -281174,6 +281267,19 @@
     "h": 1,
     "row": 18,
     "w": 1
+   }
+  },
+  "agua/pileta_completa": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/pileta_completa.png",
+   "rect": {
+    "col": 0,
+    "row": 0,
+    "w": 6,
+    "h": 4
    }
   }
  }

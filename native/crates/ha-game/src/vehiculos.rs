@@ -424,7 +424,7 @@ impl Plugin for VehiculosPlugin {
                     .after(crate::input::joystick::smooth_movement_intent)
                     .run_if(in_state(GamePhase::Playing)),
             )
-            .add_systems(Update, (aparecer_trafico, aparecer_otros).run_if(in_state(GamePhase::Playing)))
+            .add_systems(Update, (aparecer_trafico, aparecer_otros, motor_sonido).run_if(in_state(GamePhase::Playing)))
             .add_systems(
                 Update,
                 (atropellar, balas_a_vehiculos)
@@ -792,6 +792,7 @@ fn pensar_ia(
 ) {
     let body = active_surface_body(&ctx, &planet);
     let dt = time.delta_secs();
+    let t_juego = time.elapsed_secs();
     let Ok(ptf) = player.get_single() else { return };
     let jugador = Vec2::new(ptf.translation.x, -ptf.translation.y);
     let otros: Vec<(Entity, Vec2, f32)> = q.iter().map(|(e, v)| (e, v.cuerpo.pos, v.cuerpo.vel)).collect();
@@ -830,6 +831,11 @@ fn pensar_ia(
             }
         }
         let d0 = dir_de(rumbo_obj);
+        // **Semáforo**: a ≤ 7 m de una bocacalle por la que todavía no entró, con rojo o amarillo en su eje, se detiene.
+        let hd = dir_de(v.cuerpo.rumbo);
+        let ew = hd.x.abs() >= hd.y.abs();
+        let ante_cruce = !cruce(body, pos, hd) && (1..=7).any(|k| cruce(body, pos + hd * k as f32, hd));
+        let en_rojo = ante_cruce && !ha_shared::semaforos::hay_paso(t_juego, ew);
         // Velocidad: tope por clase, más lento si va a doblar, y frena ante lo que tiene delante.
         let mut vel = tope * if v.ia.panico > 0.0 { 1.0 } else { v_factor };
         let h = dir_de(v.cuerpo.rumbo);
@@ -838,7 +844,7 @@ fn pensar_ia(
             let adelante = r.dot(h);
             adelante > 0.0 && adelante < 4.0 + v.cuerpo.vel.abs() * 0.9 && (r - h * adelante).length() < f.ancho * 0.5 + 1.1
         };
-        let mut bloqueado = bloqueo(jugador);
+        let mut bloqueado = bloqueo(jugador) || en_rojo;
         for (oe, op, _) in &otros {
             if *oe != e && bloqueo(*op) {
                 bloqueado = true;
@@ -1113,7 +1119,7 @@ fn mover_vehiculos(
                     v.choque_cd = 0.4;
                     let en = c.pos + dir_de(c.rumbo) * f.largo * 0.5;
                     crate::armas::chispa_de_impacto(&mut commands, en, Color::srgb(1.0, 0.8, 0.3));
-                    sfx.send(PlaySfxAt(Sfx::Crumble, Vec2::new(c.pos.x, -c.pos.y)));
+                    sfx.send(PlaySfxAt(Sfx::CarCrash, Vec2::new(c.pos.x, -c.pos.y)));
                     if v.conductor == Conductor::Jugador {
                         shake.send(CameraShakeEvent { trauma: (vi / 20.0).clamp(0.1, 0.6) });
                     }
@@ -1163,7 +1169,7 @@ fn destruir(
         let a = k as f32 * 2.1;
         crate::armas::chispa_de_impacto(commands, v.cuerpo.pos + Vec2::new(a.cos(), a.sin()) * 0.8, Color::srgb(1.0, 0.45, 0.1));
     }
-    sfx.send(PlaySfxAt(Sfx::Crumble, Vec2::new(v.cuerpo.pos.x, -v.cuerpo.pos.y)));
+    sfx.send(PlaySfxAt(Sfx::CarBoom, Vec2::new(v.cuerpo.pos.x, -v.cuerpo.pos.y)));
     shake.send(CameraShakeEvent { trauma: 0.7 });
 }
 
@@ -1201,7 +1207,7 @@ fn choques_entre_coches(
             if rel > V_CHOQUE {
                 let medio = (a.1 + b.1) * 0.5;
                 crate::armas::chispa_de_impacto(&mut commands, medio, Color::srgb(1.0, 0.8, 0.3));
-                sfx.send(PlaySfxAt(Sfx::Crumble, Vec2::new(medio.x, -medio.y)));
+                sfx.send(PlaySfxAt(Sfx::CarCrash, Vec2::new(medio.x, -medio.y)));
                 if cond.vehiculo == Some(a.0) || cond.vehiculo == Some(b.0) {
                     shake.send(CameraShakeEvent { trauma: (rel / 20.0).clamp(0.1, 0.6) });
                 }
@@ -1407,6 +1413,48 @@ fn humo_y_fuego(
                     ));
                 }
             }
+        }
+    }
+}
+
+#[derive(Component)]
+struct MotorLoop;
+
+/// **El motor del coche en el que vas**: un loop cuya velocidad de reproducción sigue a la marcha (ralentí → a fondo). Un solo
+/// loop como mucho (el `AudioSink` aparece un cuadro después: ver `weather::sync_weather_audio`).
+fn motor_sonido(
+    mut commands: Commands,
+    cond: Res<Conduccion>,
+    coches: Query<&Vehiculo>,
+    bank: Res<crate::audio::SfxBank>,
+    settings: Res<crate::audio::AudioSettings>,
+    loops: Query<(Entity, Option<&AudioSink>), With<MotorLoop>>,
+) {
+    let activo = cond.vehiculo.and_then(|e| coches.get(e).ok()).filter(|v| !v.destruido);
+    let Some(v) = activo else {
+        for (e, _) in &loops {
+            commands.entity(e).despawn();
+        }
+        return;
+    };
+    let f = v.clase.ficha();
+    let marcha = (v.cuerpo.vel.abs() / f.v_max.max(1.0)).clamp(0.0, 1.3);
+    let (mut hay, mut primero) = (false, true);
+    for (e, sink) in &loops {
+        if !primero {
+            commands.entity(e).despawn();
+            continue;
+        }
+        primero = false;
+        hay = true;
+        if let Some(s) = sink {
+            s.set_speed(0.6 + marcha * 1.3);
+            s.set_volume(settings.sfx * (0.30 + 0.5 * marcha.min(1.0)));
+        }
+    }
+    if !hay {
+        if let Some(h) = bank.seco(Sfx::Motor) {
+            commands.spawn((MotorLoop, AudioPlayer::new(h), PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::new(settings.sfx * 0.3))));
         }
     }
 }

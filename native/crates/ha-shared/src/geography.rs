@@ -1591,6 +1591,11 @@ pub fn natural_tile(body: CelestialBody, tx: i64, tz: i64) -> Tile {
     if matches!(t, Tile::Water | Tile::WaterDeep) && !mojada(body, tx, tz, RESTO_DEL_CORTE) {
         return tile_seco(body, tx, tz);
     }
+    // **Playa dentro de la ciudad, no**: la arena es de la costa abierta; dentro del casco urbano la orilla es de pasto
+    // (reporte del usuario: «trozos de playa cortando la ciudad»).
+    if t == Tile::Sand && settlement_covering(body, tx, tz).is_some() {
+        return Tile::Grass;
+    }
     t
 }
 

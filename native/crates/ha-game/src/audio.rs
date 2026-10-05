@@ -157,6 +157,12 @@ pub enum Sfx {
     DryFire,
     BulletHit,
     BulletWall,
+    /// Choque de chapa.
+    CarCrash,
+    /// Explosión de un vehículo.
+    CarBoom,
+    /// Motor (loop: lo maneja `vehiculos`).
+    Motor,
     RayHit,
 }
 
@@ -215,11 +221,14 @@ impl Sfx {
             Sfx::DryFire => "dry_fire",
             Sfx::BulletHit => "bullet_hit",
             Sfx::BulletWall => "bullet_wall",
+            Sfx::CarCrash => "car_crash",
+            Sfx::CarBoom => "car_boom",
+            Sfx::Motor => "engine",
             Sfx::RayHit => "ray_hit",
         }
     }
 
-    const ALL: [Sfx; 52] = [
+    const ALL: [Sfx; 55] = [
         Sfx::Click, Sfx::Dig, Sfx::Chop, Sfx::Place, Sfx::Stamp,
         Sfx::StepSoft1, Sfx::StepSoft2, Sfx::StepHard1, Sfx::StepHard2,
         Sfx::BagOpen, Sfx::BagClose, Sfx::Craft, Sfx::Eat, Sfx::Drink,
@@ -231,7 +240,7 @@ impl Sfx {
         Sfx::Goal, Sfx::Deny, Sfx::Splash, Sfx::Groan, Sfx::Bite,
         Sfx::ShotPistol, Sfx::ShotSmg, Sfx::ShotRifle, Sfx::ShotShotgun, Sfx::ShotRay,
         Sfx::ReloadOut, Sfx::ReloadIn, Sfx::ReloadBolt, Sfx::DryFire,
-        Sfx::BulletHit, Sfx::BulletWall, Sfx::RayHit,
+        Sfx::BulletHit, Sfx::BulletWall, Sfx::RayHit, Sfx::CarCrash, Sfx::CarBoom, Sfx::Motor,
     ];
 }
 
@@ -277,6 +286,14 @@ pub struct SfxBank {
     /// Loop de empuje del cohete/vuelo (PlaybackSettings::LOOP).
     thrust: Option<Handle<AudioSource>>,
 }
+
+impl SfxBank {
+    /// Sonido seco de un efecto, para reproducirlo en loop desde otro módulo (el motor).
+    pub fn seco(&self, s: Sfx) -> Option<Handle<AudioSource>> {
+        self.sounds.get(&s).map(|h| h[0].clone())
+    }
+}
+
 
 /// Las "orejas" del jugador: entidad con `SpatialListener` que seguimos a su
 /// posición cada frame. Sin ella rodio panea respecto del origen del mundo.

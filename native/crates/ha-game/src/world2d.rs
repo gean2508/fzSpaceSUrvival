@@ -3144,6 +3144,12 @@ fn spawn_chunk_small_decor(
                 // (musgo, charco, hojas caídas) no debe taparte los pies.
                 Transform::from_xyz(r.x, y, capa),
             ));
+            // Semáforo de esquina: lámparas con fase (`semaforos`).
+            if e.key.starts_with("road/semaforo_") {
+                if let Some(rumbo) = ha_shared::roads::semaforo_at(body, tx, tz) {
+                    crate::semaforos::equipar(&mut ent, e.key, rumbo % 4 == 0, e.size.into());
+                }
+            }
             // **TODO prop es tocable** (15 ago 2026). Hasta acá el dedo sólo
             // encontraba árboles, rocas, vetas y lo que vos hubieras colocado: el
             // banco de la vereda, el farol, el cajón y las 7.821 claves del pack
@@ -3974,11 +3980,17 @@ fn spawn_chunk_tile_art(
             // tierra la casa de arriba conserva su arte y sólo tu galería se abre.
             let tile = tiles.render_tile(body, tx, tz);
             let Some(generic) = tile_art_key(tile) else { continue };
+            // La pileta se dibuja con las piezas de pileta del pack (`spawn_chunk_piletas`), no con la orilla de un lago.
+            if tile == Tile::Water && es_agua_de_pileta(tiles, body, tx, tz) {
+                continue;
+            }
             // El relieve elige su arte por BIOMA: la misma pared es roca desnuda
             // en la sierra, arena en el desierto y nieve en la cumbre. Si esa
             // variante no está curada todavía, cae a la genérica y se ve igual que
             // antes — nunca queda una celda sin dibujar por falta de arte.
             let key = terrain_art_key(art, body, tile, tx, tz).unwrap_or(generic);
+            // **El tipo de cerca es de la PARCELA**, no de la celda: reja con base de ladrillo o murete de piedra.
+            let key = if tile == Tile::Fence { cerca_de_la_parcela(body, tx, tz).unwrap_or(key) } else { key };
             // **Una casa se dibuja con SU estilo**: su paño, su losa y sus arcos.
             // Se resuelve acá, con la clave, porque de esto depende también qué
             // cara se pide más abajo (`cara_de_pared`).
@@ -4191,6 +4203,26 @@ fn spawn_chunk_tile_art(
                     // que se veía antes de tener el kit orientado, no una regresión.
                     .unwrap_or_default()
             });
+            // **Los tramos verticales se alinean con los codos.** En el kit de reja la línea vertical de los codos va pegada al
+            // borde de la celda, y la del tramo `ns@e`/`ns@w` simple va en el medio: en la esquina de la parcela el lado quedaba
+            // corrido medio tile. Las variantes `#2` (con poste) traen la línea en el borde correcto, pero cruzadas: el lado
+            // este usa la `ns@w#2` y el oeste la `ns@e#2` (medido contra las poses `sw`/`es`).
+            let mut espejar = false;
+            let cerca = cerca.map(|p| {
+                // Las dos caras verticales salen de la MISMA pieza (`ns@e#2`, línea pegada al borde izquierdo): el lado este
+                // la usa espejada, así la línea cae exactamente donde la dibujan los codos `sw`/`es`.
+                let (cruzada, flip) = match p.as_str() {
+                    "ns@e" => ("ns@e#2", true),
+                    "ns@w" => ("ns@e#2", false),
+                    _ => return p,
+                };
+                if art.has_pose(&vk, cruzada) || art.has_pose(key, cruzada) {
+                    espejar = flip;
+                    cruzada.to_string()
+                } else {
+                    p
+                }
+            });
             let shape = match &cerca {
                 Some(p) if !p.is_empty() => p.as_str(),
                 _ => shape,
@@ -4267,7 +4299,8 @@ fn spawn_chunk_tile_art(
             // siempre a `center` y las cuatro paredes de la casa salían con el
             // mismo paño. Ver `arte_de_interior`.
             let shape = cara_de_pared.unwrap_or(shape);
-            let Some((sprite, anim)) = art.tile_sprite(&vk, shape, medida) else { continue };
+            let Some((mut sprite, anim)) = art.tile_sprite(&vk, shape, medida) else { continue };
+            sprite.flip_x = espejar;
             // La pieza compuesta de 1×3 (el bordillo y la pared de un escalón)
             // lleva UN color, y va el del CANTO: el anillo se ve arriba, donde la
             // meseta del recorte toca la meseta de la malla. Abajo el recorte es
@@ -4328,6 +4361,7 @@ fn spawn_chunk_tile_art(
             crate::light2d::attach(&mut ent, &art, &[&vk, key], medida);
         }
     }
+    spawn_chunk_piletas(commands, art, tiles, body, z, cx, cz);
     spawn_chunk_orilla(commands, art, tiles, body, z, cx, cz);
     spawn_chunk_canto_concavo(commands, art, tiles, body, z, cx, cz);
     spawn_chunk_hombros_de_garganta(commands, art, body, z, cx, cz);
@@ -5701,6 +5735,64 @@ fn agua_de_verdad(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> b
         }
     }
     false
+}
+
+
+/// Qué familia de cerca lleva la parcela de esta celda (determinista por la esquina del lote).
+fn cerca_de_la_parcela(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static str> {
+    let s = ha_shared::geography::settlement_covering(body, tx, tz)?;
+    let lot = ha_shared::city::lot_at(body, &s, tx, tz)?;
+    let h = ha_shared::worldgen::hash_cell(0x0ce2_ca00, lot.min.0, lot.min.1);
+    Some(if h % 3 == 0 { "fence/piedra" } else { "fence/madera" })
+}
+
+/// ¿Esta celda de agua es de una PILETA de patio (y no de un lago, un río o el mar)? Hay vereda a ≤ 2 celdas y el agua
+/// de alrededor no llega a [`agua_de_verdad`]. Sólo dentro de un casco urbano.
+fn es_agua_de_pileta(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let mut vereda = false;
+    'b: for dz in -2..=2i64 {
+        for dx in -2..=2i64 {
+            if tiles.tile_at(body, tx + dx, tz + dz) == Tile::Pavement {
+                vereda = true;
+                break 'b;
+            }
+        }
+    }
+    vereda && ha_shared::geography::settlement_covering(body, tx, tz).is_some() && !agua_de_verdad(tiles, body, tx, tz)
+}
+
+/// **La pileta: UN rectángulo del pack** (`agua/pileta_completa`, armado con las piezas `agua/pileta_N` —borde, esquinas,
+/// azulejo de agua— y espejado abajo, para que el marco cierre simétrico). La parcela la genera de 6×4 con la vereda de borde
+/// (`city::residential_tile`): se dibuja una vez, desde su esquina noroeste.
+fn spawn_chunk_piletas(commands: &mut Commands, art: &ArtLibrary, tiles: &TileWorld, body: CelestialBody, z: i32, cx: i64, cz: i64) {
+    if z != 0 || !art.has_art("agua/pileta_completa") {
+        return;
+    }
+    let centro = (cx * CHUNK + CHUNK / 2, cz * CHUNK + CHUNK / 2);
+    if ha_shared::geography::settlement_covering(body, centro.0, centro.1).is_none() {
+        return;
+    }
+    for lz in 0..CHUNK {
+        for lx in 0..CHUNK {
+            let (tx, tz) = (cx * CHUNK + lx, cz * CHUNK + lz);
+            let t = |dx: i64, dz: i64| tiles.tile_at(body, tx + dx, tz + dz);
+            // Esquina noroeste: vereda con el agua en diagonal y sin agua al este ni al sur, y la esquina opuesta del marco.
+            if t(0, 0) != Tile::Pavement || t(1, 1) != Tile::Water || t(1, 0) == Tile::Water || t(0, 1) == Tile::Water {
+                continue;
+            }
+            if t(5, 3) != Tile::Pavement || t(4, 2) != Tile::Water || !es_agua_de_pileta(tiles, body, tx + 1, tz + 1) {
+                continue;
+            }
+            let sprite = art.sprite_or_color("agua/pileta_completa", Color::srgb(0.2, 0.55, 0.65), Vec2::new(6.55 * TILE_M, 4.55 * TILE_M));
+            let r = render_xy((tx as f32 + 3.0) * TILE_M, (tz as f32 + 2.0) * TILE_M);
+            commands.spawn((
+                SurfaceDecor { cx, cz, z, small: true },
+                TileArt,
+                sprite,
+                Transform::from_xyz(r.x, r.y, crate::layers::FLOOR + 0.03),
+            ));
+        }
+    }
 }
 
 /// Slot de la línea pintada de la calzada. Ver `spawn_chunk_lane_marks`.

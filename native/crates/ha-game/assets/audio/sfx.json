@@ -5,6 +5,8 @@
   "bite": "8132ae8e",
   "bullet_hit": "9a0dced5",
   "bullet_wall": "0c178d9c",
+  "car_boom": "6d400e96",
+  "car_crash": "17146c33",
   "chop": "34781e93",
   "click": "7eb18110",
   "climb_ledge": "8fb53139",
@@ -21,6 +23,7 @@
   "drop_ledge": "c3dc7ada",
   "dry_fire": "58f40ce1",
   "eat": "31dd1381",
+  "engine": "5cbd7e3b",
   "fizzle": "ffeca5c3",
   "goal": "93e3caa3",
   "groan": "84d88095",
@@ -50,7 +53,7 @@
   "step_snow": "9fe5caa9",
   "step_soft1": "9d7d6d5e",
   "step_soft2": "84fdd24b",
-  "step_wood1": "4e7ba9d8",
-  "step_wood2": "79ef57b4",
+  "step_wood1": "fa905368",
+  "step_wood2": "fd7bd46c",
   "touchdown": "b2f7d1c7"
 }

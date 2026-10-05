@@ -2525,6 +2525,7 @@ const PACK_KEYS: &[(&str, &str)] = &[
     ("nature/palmera_2", "Palmera 2"),
     ("nature/palmera_3", "Palmera 3"),
     ("agua/pileta_9", "Pileta 9"),
+    ("agua/pileta_completa", "Pileta completa (6×4)"),
     ("agua/pileta_11", "Pileta 11"),
     ("agua/pileta_19", "Pileta 19"),
     ("agua/pileta_37", "Pileta 37"),

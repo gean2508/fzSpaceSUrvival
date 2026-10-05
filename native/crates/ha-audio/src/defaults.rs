@@ -142,7 +142,7 @@ impl AudioSpec {
             put(k, sfx(0.16, vec![
                 ToneOp { curve: 3.2, attack: 0.02, ..op(Pluck, 0.0, 0.14, f, f, 0.55) },
                 ToneOp { curve: 4.0, cutoff0: 3500.0, cutoff1: 1200.0, ..op(Pink, 0.0, 0.03, 0.0, 0.0, 0.3) },
-            ], vec![nivel(0.09)]));
+            ], vec![nivel(0.10)]));
         }
         put("step_snow", sfx(0.2, vec![
             ToneOp { attack: 0.1, curve: 3.0, cutoff0: 7000.0, cutoff1: 2500.0, ..op(Pink, 0.0, 0.06, 0.0, 0.0, 0.5) },
@@ -327,6 +327,27 @@ impl AudioSpec {
             ToneOp { curve: 2.6, fm_ratio: 3.1, fm_index: 4.0, ..op(Sine, 0.01, 0.22, 2400.0, 1700.0, 0.35) },
             ToneOp { curve: 2.4, attack: 0.04, ..op(Bell, 0.02, 0.26, 3100.0, 3100.0, 0.18) },
         ], vec![Effect::Reverb { size: 0.3, mix: 0.12 }, nivel(RMS_MUNDO)]));
+        // Vehículos: choque de chapa, explosión y el motor (loop de 0,5 s; el juego le cambia la velocidad de reproducción con la marcha).
+        put("car_crash", sfx(0.7, vec![
+            ToneOp { curve: 4.0, ..op(Noise, 0.0, 0.03, 0.0, 0.0, 0.55) },
+            ToneOp { curve: 3.2, attack: 0.02, cutoff0: 1800.0, cutoff1: 300.0, ..op(Brown, 0.0, 0.3, 0.0, 0.0, 0.8) },
+            ToneOp { curve: 3.0, ..op(Sine, 0.0, 0.22, 130.0, 52.0, 0.6) },
+            ToneOp { curve: 2.2, attack: 0.01, ..op(Bell, 0.0, 0.5, 640.0, 640.0, 0.22) },
+            ToneOp { curve: 2.6, attack: 0.02, ..op(Bell, 0.03, 0.45, 1430.0, 1430.0, 0.16) },
+            ToneOp { curve: 3.5, cutoff0: 7000.0, cutoff1: 2500.0, ..op(Pink, 0.05, 0.3, 0.0, 0.0, 0.25) },
+        ], vec![Effect::Reverb { size: 0.3, mix: 0.15 }, nivel(RMS_IMPACTO)]));
+        put("car_boom", sfx(1.3, vec![
+            ToneOp { curve: 2.2, attack: 0.01, cutoff0: 2200.0, cutoff1: 160.0, ..op(Brown, 0.0, 1.0, 0.0, 0.0, 0.9) },
+            ToneOp { curve: 2.4, ..op(Sine, 0.0, 0.8, 95.0, 32.0, 0.8) },
+            ToneOp { curve: 3.0, ..op(Noise, 0.0, 0.05, 0.0, 0.0, 0.5) },
+            ToneOp { curve: 2.0, attack: 0.05, cutoff0: 6000.0, cutoff1: 900.0, ..op(Pink, 0.1, 0.9, 0.0, 0.0, 0.3) },
+            ToneOp { curve: 2.4, ..op(Bell, 0.06, 0.6, 520.0, 520.0, 0.12) },
+        ], vec![Effect::Reverb { size: 0.55, mix: 0.25 }, nivel(RMS_IMPACTO)]));
+        put("engine", sfx(0.5, vec![
+            ToneOp { curve: 1.0, sustain: 1.0, attack: 0.0, detune: 14.0, cutoff0: 380.0, cutoff1: 380.0, ..op(Saw, 0.0, 0.5, 60.0, 60.0, 0.55) },
+            ToneOp { curve: 1.0, sustain: 1.0, attack: 0.0, detune: 18.0, cutoff0: 700.0, cutoff1: 700.0, ..op(Saw, 0.0, 0.5, 120.0, 120.0, 0.28) },
+            ToneOp { curve: 1.0, sustain: 1.0, attack: 0.0, cutoff0: 500.0, cutoff1: 500.0, ..op(Brown, 0.0, 0.5, 0.0, 0.0, 0.3) },
+        ], vec![nivel(0.10)]));
         put("ray_hit", sfx(0.45, vec![
             ToneOp { curve: 2.6, fm_ratio: 1.7, fm_index: 5.0, ..op(Sine, 0.0, 0.3, 1500.0, 500.0, 0.5) },
             ToneOp { curve: 3.0, attack: 0.05, cutoff0: 8000.0, cutoff1: 2000.0, ..op(Noise, 0.0, 0.2, 0.0, 0.0, 0.35) },

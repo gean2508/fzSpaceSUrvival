@@ -5,6 +5,7 @@ mod art2d;
 mod vehiculos;
 mod trenes;
 mod pandemia;
+mod semaforos;
 mod manos;
 mod flags;
 mod fuente;
@@ -391,6 +392,7 @@ fn run_app_inner() {
         .add_plugins(vehiculos::VehiculosPlugin)
         .add_plugins(trenes::TrenesPlugin)
         .add_plugins(pandemia::PandemiaPlugin)
+        .add_plugins(semaforos::SemaforosPlugin)
         // **Herramientas de la compu, no del teléfono** (reporte del 29 sep 2026:
         // "las pruebas que hagas, que se queden para la compu"). La sonda de
         // etapas mete siete schedules extra en CADA frame; la ablación y el

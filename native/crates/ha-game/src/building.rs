@@ -169,6 +169,65 @@ pub(crate) fn door_transition<'a>(
     Some((pose, secs))
 }
 
+/// **La flecha de la puerta**: invita a entrar. Rebota sobre la entrada de la casa y se ve a menos de [`MARCA_VISIBLE_M`]
+/// tiles, mientras el jugador está afuera (adentro el techo se funde y la flecha se esconde).
+#[derive(Component)]
+pub struct MarcaDePuerta {
+    /// Centro de la puerta, en tiles.
+    pub tx: f32,
+    pub tz: f32,
+}
+
+const MARCA_VISIBLE_M: f32 = 9.0;
+
+/// Spawnea la flecha de una puerta. `tx` es el centro de la puerta en tiles; `tz` la fila de la puerta.
+fn spawn_marca_de_puerta(commands: &mut Commands, r: &RoofRect, body: CelestialBody, z: i32, tx: f32, tz: f32) {
+    let c = render_xy(tx * TILE_M, tz * TILE_M);
+    let z_w = crate::layers::fachada((r.min.1 + r.h) as f32 * TILE_M) + 0.02;
+    let barra = |lado: f32| {
+        (
+            Sprite { color: Color::srgb(1.0, 0.86, 0.25), custom_size: Some(Vec2::new(0.95, 0.24)), ..default() },
+            Transform::from_xyz(lado * 0.30, 0.0, 0.0).with_rotation(Quat::from_rotation_z(-lado * 0.62)),
+            crate::sim::UnlitSprite,
+        )
+    };
+    commands
+        .spawn((
+            BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
+            MarcaDePuerta { tx, tz },
+            Sprite { color: Color::srgba(0.0, 0.0, 0.0, 0.0), custom_size: Some(Vec2::splat(0.1)), ..default() },
+            Transform::from_xyz(c.x, c.y + 1.6 * TILE_M, z_w),
+            Visibility::Hidden,
+        ))
+        .with_children(|p| {
+            p.spawn(barra(1.0));
+            p.spawn(barra(-1.0));
+        });
+}
+
+/// Rebote y visibilidad de las flechas de puerta.
+fn animar_marcas_de_puerta(
+    time: Res<Time>,
+    actual: Res<CasaActual>,
+    player: Query<&Transform, (With<Player>, Without<MarcaDePuerta>)>,
+    mut q: Query<(&MarcaDePuerta, &mut Transform, &mut Visibility)>,
+) {
+    let Ok(p) = player.get_single() else { return };
+    let (px, pz) = (p.translation.x / TILE_M, -p.translation.y / TILE_M);
+    let t = time.elapsed_secs();
+    for (m, mut tf, mut vis) in &mut q {
+        let cerca = (m.tx - px).hypot(m.tz - pz) < MARCA_VISIBLE_M;
+        let quiero = if cerca && actual.0.is_none() { Visibility::Visible } else { Visibility::Hidden };
+        if *vis != quiero {
+            *vis = quiero;
+        }
+        if cerca {
+            let base = render_xy(m.tx * TILE_M, m.tz * TILE_M).y;
+            tf.translation.y = base + 1.6 * TILE_M + (t * 4.0).sin() * 0.14;
+        }
+    }
+}
+
 pub struct BuildingPlugin;
 
 impl Plugin for BuildingPlugin {
@@ -181,6 +240,7 @@ impl Plugin for BuildingPlugin {
                 (
                     stream_roofs,
                     fade_roofs,
+                    animar_marcas_de_puerta,
                     animate_doors,
                     animar_puertas_de_fachada,
                     debounced_roofs_save,
@@ -585,6 +645,7 @@ fn spawn_fachada_apilada(
     }
     for m in 0..modulos {
         let mx = x0 + m * MODULO;
+        spawn_marca_de_puerta(commands, r, body, z, (mx + 3) as f32, (r.min.1 + r.h) as f32 - 0.5);
         let mut alto = 0i64;
         let pila = std::iter::once((plantas_bajas, ALTO_PLANTA_BAJA))
             .chain((0..pisos as i64).map(|_| (crate::edificios::PISOS, ALTO_PISO)))
@@ -921,8 +982,30 @@ fn stream_roofs(
             .unwrap_or(0.0);
         let pos = Vec2::new(pos.x + corrimiento, pos.y + sube_real * 0.5);
         let (sprite, anim) = roof_sprite(&art, clave.as_deref(), size);
+        if let Some(lote) = art_key.filter(|k| es_vivienda(k)) {
+            let _ = lote;
+            let (p0, p1) = ha_shared::city::portal_del_frente(r.min.0, r.w);
+            let tx = (p0 + p1) as f32 * 0.5;
+            spawn_marca_de_puerta(&mut commands, &r, body, z, tx, (r.min.1 + r.h) as f32 - 0.5);
+        }
         if clave.is_some() {
-            spawn_azotea_de_respaldo(&mut commands, &r, body, z, Color::srgb(0.60, 0.58, 0.54));
+            // Césped, no gris: lo que el dibujo no tapa de la huella se lee como jardín (el interior sólo se ve al entrar).
+            let pasto = ha_shared::geography::superficie_de_tile(
+                body,
+                ha_shared::topdown::Tile::Grass,
+                r.min.0 + r.w / 2,
+                r.min.1 + r.h / 2,
+            )
+            .pasto;
+            // Medido de capturas: el pasto de referencia (70,148,85) y el seco (131,142,87); el resto, en proporción.
+            let rgb = match pasto {
+                ha_shared::geography::Pasto::Seco => (131.0, 142.0, 87.0),
+                ha_shared::geography::Pasto::Bosque => (60.0, 130.0, 75.0),
+                ha_shared::geography::Pasto::Pantano => (84.0, 124.0, 82.0),
+                ha_shared::geography::Pasto::Sierra => (100.0, 138.0, 92.0),
+                _ => (70.0, 148.0, 85.0),
+            };
+            spawn_azotea_de_respaldo(&mut commands, &r, body, z, Color::srgb(rgb.0 / 255.0, rgb.1 / 255.0, rgb.2 / 255.0));
         }
         let mut ent = commands.spawn((
             BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },

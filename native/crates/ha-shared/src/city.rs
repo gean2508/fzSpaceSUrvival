@@ -1599,7 +1599,7 @@ fn tabique_de_planta(rx: i64, rz: i64, w: i64, d: i64, semilla: u32) -> Option<T
 /// existía. Como la casa se sortea corrida dentro de su terreno
 /// (`partes_de_la_parcela`), el portón caía cinco tiles al costado de la puerta y
 /// entre los dos había pasto — es "los caminos de la casa están mal puestos".
-fn portal_del_frente(house_x: i64, house_w: i64) -> (i64, i64) {
+pub fn portal_del_frente(house_x: i64, house_w: i64) -> (i64, i64) {
     let ancho = (house_w / 4).clamp(2, 6);
     let desde = house_x + (house_w - ancho) / 2;
     (desde, desde + ancho)

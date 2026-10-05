@@ -29,6 +29,13 @@ def main():
         e["poses"] = poses
         e["rect"] = dict(poses["ew"]["rect"])
         print(f"{clave}: {len(poses)} poses")
+    # El murete de piedra (Wall_1): una pose por celda de la hoja, leídas de `cercas.png` fila 5 (y la 15 de la fila 4).
+    pg = reja["png"]
+    R = lambda c, r: {"rect": {"col": c, "row": r, "w": 1, "h": 1}}
+    poses = {"ew": R(0, 5), "ew@s": R(0, 5), "ew@s#2": R(1, 5), "ew@n": R(7, 5), "ns": R(4, 5), "ns@e": R(9, 5),
+             "ns@w": R(6, 5), "sw": R(2, 5), "es": R(15, 4), "ne": R(3, 5), "solo": R(5, 5)}
+    e = sp["fence/piedra"]
+    e["png"], e["poses"], e["rect"] = pg, poses, dict(poses["ew"]["rect"])
     json.dump(man, open(MANIFEST, "w"), indent=1, ensure_ascii=False)
 
 
