@@ -202,10 +202,8 @@ fn touch_is_world(
     layout: &TouchLayout,
     blocks: &TouchBlockRects,
     buttons: &ActionButtonRects,
-    aim: &super::aim_stick::AimStick,
 ) -> bool {
-    !aim.cubre(pos)
-        && !actions::touch_hits_action_button(pos, buttons)
+    !actions::touch_hits_action_button(pos, buttons)
         && !layout::touch_blocked(pos, &blocks.0)
         && !layout::touch_in_move_zone(pos, layout)
 }
@@ -217,7 +215,6 @@ fn track_world_touch(
     layout: Res<TouchLayout>,
     blocks: Res<TouchBlockRects>,
     buttons: Res<ActionButtonRects>,
-    aim_stick: Res<super::aim_stick::AimStick>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
     pinch: Res<PinchActive>,
@@ -227,6 +224,7 @@ fn track_world_touch(
     camera: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
     player: Query<&crate::sim::SimState, With<crate::sim::Player>>,
     mut touches: EventReader<TouchInput>,
+    todos: Res<bevy::input::touch::Touches>,
     mut runtime: ResMut<WorldTouchRuntime>,
     mut cursor: ResMut<AimCursor>,
 ) {
@@ -246,8 +244,20 @@ fn track_world_touch(
     }
     // Pellizco de zoom: los dos dedos del gesto son de la cámara, no del mundo.
     let in_pinch = |id: u64| pinch.ids.map(|(a, b)| id == a || id == b).unwrap_or(false);
+    // Dos dedos LIBRES en pantalla (ni sobre un botón de acción ni en la zona del stick) son un
+    // pellizco de zoom, no un toque del mundo. Antes el primer dedo empezaba a cavar o a apuntar
+    // (y disparar) antes de que el segundo llegara a `PinchActive`, así que el zoom y el cavado
+    // se pisaban. Ahora el mundo no arranca nada con dos libres, y si ya había arrancado, se suelta.
+    let libres = todos
+        .iter()
+        .filter(|t| {
+            let p = t.position();
+            !actions::touch_hits_action_button(p, &buttons) && !layout::touch_in_move_zone(p, &layout)
+        })
+        .count();
+    let pellizco = libres >= 2;
     if let Some(id) = runtime.pointer {
-        if in_pinch(id) {
+        if in_pinch(id) || pellizco {
             release(&mut runtime, &mut cursor);
         }
     }
@@ -258,10 +268,10 @@ fn track_world_touch(
         let pos = ev.position;
         match ev.phase {
             TouchPhase::Started => {
-                if runtime.pointer.is_some() || in_pinch(ev.id) {
+                if runtime.pointer.is_some() || in_pinch(ev.id) || pellizco {
                     continue;
                 }
-                if !touch_is_world(pos, &layout, &blocks, &buttons, &aim_stick) {
+                if !touch_is_world(pos, &layout, &blocks, &buttons) {
                     continue;
                 }
                 runtime.pointer = Some(ev.id);

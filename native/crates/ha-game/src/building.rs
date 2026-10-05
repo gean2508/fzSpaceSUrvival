@@ -1031,6 +1031,18 @@ fn stream_roofs(
         if let Some(a) = anim {
             ent.insert(a);
         }
+        // Las ventanas medidas de la fachada: de noche se prenden las de los cuartos ocupados.
+        if let (Some(k), Some(lote)) = (clave.as_deref(), art_key) {
+            let l = ha_shared::interiores::Lote {
+                body: body as u8,
+                x: r.min.0,
+                z: r.min.1,
+                w: r.w,
+                h: r.h,
+                clave: ha_shared::interiores::clave_estatica(lote),
+            };
+            crate::luces_ventanas::colgar(&mut ent, k, size, l);
+        }
         // **Y su puerta, si el pack la dibujó animada.** Vale para las casas
         // ENTERAS igual que para la hilera: `import-casas.py` mide dónde está el
         // batiente dentro del recorte y lo publica en `puerta_en_sprite`. Sin

@@ -214,7 +214,6 @@ fn update_look_target(
     tiles: Res<TileWorld>,
     equipped: Res<EquippedItem>,
     build_mode: Res<crate::input::BuildModeActive>,
-    conduccion: Res<crate::vehiculos::Conduccion>,
     player: Query<(&Transform, &SimState), With<Player>>,
     targets: Query<(
         Entity,
@@ -226,11 +225,6 @@ fn update_look_target(
     mut current: ResMut<LookTarget>,
 ) {
     if current.locked {
-        return;
-    }
-    // Al volante (coche o tren) no hay objetivo bajo el dedo: el mundo pasa por debajo.
-    if conduccion.activa() {
-        *current = LookTarget::default();
         return;
     }
     // Con un arma de fuego en la mano el mundo no se talla ni se cosecha: se apunta y se dispara (`armas.rs`).
@@ -493,7 +487,11 @@ fn update_look_target(
             let px = (sim.body.x / TILE_M).floor() as i64;
             let pz = (sim.body.z / TILE_M).floor() as i64;
             let overlaps_player = tx == px && tz == pz;
-            if (build_mode.active || adjacent_solid) && !overlaps_player {
+            // Un pozo que cavaste (`Air`) se puede tapar aunque no tenga pared al lado: si no,
+            // cavar por error dejaba un agujero que no se podía cerrar, porque sus vecinos son
+            // tierra y no sólido. Lo único que no se tapa es la celda donde estás parado.
+            let es_hueco = tiles.tile_at(body, tx, tz) == ha_shared::topdown::Tile::Air;
+            if (build_mode.active || adjacent_solid || es_hueco) && !overlaps_player {
                 *current = LookTarget {
                     entity: None,
                     kind: None,

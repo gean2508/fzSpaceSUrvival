@@ -136,6 +136,10 @@ impl Escaleras {
         if let Some(&i) = self.por_celda.get(&(body as u8, z, tx, tz)) {
             return Some(self.list[i]);
         }
+        // Los interiores de los edificios traen sus escaleras (`interiores`); luego las cuevas naturales.
+        if ha_shared::interiores::es_interior(z) {
+            return ha_shared::interiores::tramo_en(body, z, tx, tz);
+        }
         ha_shared::cuevas::tramo_natural(body, z, tx, tz)
     }
 
@@ -184,6 +188,7 @@ impl Plugin for EscalerasPlugin {
             .init_resource::<Subida>()
             .init_resource::<Trepada>()
             .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), cargar)
+            .add_systems(Update, dibujar_escalones.run_if(crate::game_phase::world_active))
             .add_systems(
                 Update,
                 (caminar_tramo, guardar).run_if(crate::game_phase::world_active),
@@ -660,6 +665,103 @@ mod tests {
         for _ in 0..100 {
             let s = escaleras::progreso(&t, 42.0, 40.5);
             assert!(s > escaleras::PIE && s < escaleras::CIMA);
+        }
+    }
+}
+
+/// Un escalón dibujado por `dibujar_escalones`.
+#[derive(Component)]
+struct EscalonArt;
+
+/// **Los escalones se dibujan girados según hacia dónde sube el tramo.** El arte del pack
+/// (`stairs/up`, `stairs/down`) tiene los peldaños en horizontal, o sea que sube de norte a sur;
+/// un tramo que sube de izquierda a derecha (dir 1 y 3) tiene que verse con los peldaños en
+/// vertical. Antes todos salían iguales y cuatro escalones en fila apuntaban «de arriba para abajo».
+fn dibujar_escalones(
+    mut commands: Commands,
+    escaleras: Res<Escaleras>,
+    tiles: Res<crate::world2d::TileWorld>,
+    art: Res<crate::art2d::ArtLibrary>,
+    viejos: Query<Entity, With<EscalonArt>>,
+    mut visto: Local<(i32, usize, u64)>,
+) {
+    // Dentro de un edificio: UNA escalera dibujada entera (2 de ancho × 4 de largo) por tramo doble.
+    if let Some((slot, piso)) = ha_shared::interiores::de_z(tiles.z) {
+        let clave = (tiles.z, usize::MAX, tiles.version);
+        if *visto == clave && !viejos.is_empty() {
+            return;
+        }
+        *visto = clave;
+        for e in &viejos {
+            commands.entity(e).despawn_recursive();
+        }
+        let Some(plano) = ha_shared::interiores::plano_de(slot) else { return };
+        let arte = "building/escalera_1";
+        let mut hechas: Vec<(i32, i64)> = Vec::new();
+        for t in plano.tramos.iter().filter(|t| t.piso == piso || t.piso + 1 == piso) {
+            // El par de columnas empieza en la menor `tx` de los dos tramos del mismo piso.
+            let tx0 = plano.tramos.iter().filter(|u| u.piso == t.piso && u.tz == t.tz).map(|u| u.tx).min().unwrap_or(t.tx);
+            if hechas.contains(&(t.piso, tx0)) {
+                continue;
+            }
+            hechas.push((t.piso, tx0));
+            let largo = ha_shared::escaleras::PASOS as f32;
+            // Centro del bloque 2 × PASOS: las celdas van de tz-(PASOS-1) a tz.
+            let (cx, cz) = (tx0 as f32 + 1.0, t.tz as f32 + 1.0 - largo * 0.5);
+            let r = crate::world2d::render_xy(cx, cz);
+            let mut sprite = art.sprite_or_color(arte, Color::srgb(0.62, 0.50, 0.32), Vec2::new(2.0, largo));
+            sprite.custom_size = Some(Vec2::new(2.0, largo));
+            // Vista desde arriba (el hueco por el que se baja) se oscurece un poco.
+            if piso == t.piso + 1 {
+                sprite.color = Color::srgb(0.72, 0.72, 0.78);
+            }
+            commands.spawn((
+                sprite,
+                Transform::from_xyz(r.x, r.y, crate::layers::FLOOR + crate::layers::SOBRE_EL_PISO),
+                EscalonArt,
+                Name::new("Escalera"),
+            ));
+        }
+        return;
+    }
+    let clave = (tiles.z, escaleras.list.len(), tiles.version);
+    if *visto == clave && !viejos.is_empty() || (escaleras.list.is_empty() && viejos.is_empty()) {
+        *visto = clave;
+        return;
+    }
+    *visto = clave;
+    for e in &viejos {
+        commands.entity(e).despawn_recursive();
+    }
+    for t in escaleras.list.iter() {
+        // Abajo se ve el escalón; arriba, el hueco por el que se baja.
+        let arte = if tiles.z == t.z {
+            "stairs/up"
+        } else if tiles.z == t.z + 1 {
+            "stairs/down"
+        } else {
+            continue;
+        };
+        if !art.tile_has_art(arte) {
+            continue;
+        }
+        let giro = match t.dir {
+            0 => 0.0,
+            2 => std::f32::consts::PI,
+            1 => -std::f32::consts::FRAC_PI_2,
+            _ => std::f32::consts::FRAC_PI_2,
+        };
+        for (cx, cz, _) in t.celdas() {
+            let (wx, wz) = (cx as f32 * TILE_M + 0.5, cz as f32 * TILE_M + 0.5);
+            let r = crate::world2d::render_xy(wx, wz);
+            let mut sprite = art.sprite_or_color(arte, Color::srgb(0.62, 0.50, 0.32), Vec2::splat(TILE_M));
+            sprite.custom_size = Some(Vec2::splat(TILE_M));
+            commands.spawn((
+                sprite,
+                Transform { translation: Vec3::new(r.x, r.y, crate::layers::FLOOR + crate::layers::SOBRE_EL_PISO), rotation: Quat::from_rotation_z(giro), ..default() },
+                EscalonArt,
+                Name::new("Escalon"),
+            ));
         }
     }
 }

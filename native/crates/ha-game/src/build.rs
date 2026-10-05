@@ -417,6 +417,15 @@ fn build_tab_select(
     mut build_mode: ResMut<BuildModeActive>,
     mut bag: ResMut<BagPanelState>,
     mut pendiente: Local<Option<(usize, f32)>>,
+    (editor, mut inv, mut persist): (
+        Res<crate::ui_editor::UiEditorState>,
+        ResMut<crate::inventory_persist::PlayerInventory>,
+        ResMut<crate::inventory_persist::InventoryPersistState>,
+    ),
+    (mut inv_ui, mut equipped): (
+        ResMut<crate::hud::inventory_ui::InventoryUiState>,
+        ResMut<crate::input::EquippedItem>,
+    ),
 ) {
     for (interaction, button, mut bg) in &mut buttons {
         if *interaction == Interaction::Pressed {
@@ -441,7 +450,42 @@ fn build_tab_select(
         return;
     }
     // Soltó: toque si no arrastró más que el umbral.
-    if *recorrido <= crate::hud::BAG_UMBRAL {
+    if *recorrido <= crate::hud::BAG_UMBRAL && *pieza >= crate::armas::ARMAS_PALETTE_BASE {
+        // Una carta de ARMAS: no se coloca, se lleva. Gratis en creativo; si no, se paga en oro.
+        if let Some(item) = crate::armas::items_de_arma().get(*pieza - crate::armas::ARMAS_PALETTE_BASE) {
+            let precio = crate::armas::precio_en_oro(item);
+            if editor.creative || inv.qty("gold_ingot") >= precio {
+                if !editor.creative {
+                    inv.remove("gold_ingot", precio);
+                }
+                inv.add(item, 1);
+                persist.mark_dirty();
+                // **Elegir un arma la deja EN LA MANO** (pedido del usuario, 4 oct 2026: «selecciono un arma pero no veo
+                // el inventario ni me deja usarla»): va a la barra, queda elegida y equipada, y la mochila se cierra.
+                use crate::hud::inventory_ui::{add_item_to_slots, SlotId, Stack, HOTBAR_ITEM_SLOTS};
+                add_item_to_slots(&mut inv_ui, item, 1);
+                let idx = match inv_ui.hotbar.iter().position(|s| s.item_id.as_deref() == Some(item)) {
+                    Some(i) => i,
+                    None => {
+                        // Cayó en la grilla: se cambia por el primer hueco de la barra (o la última casilla).
+                        let hueco = inv_ui.hotbar.iter().position(|s| s.is_empty()).unwrap_or(HOTBAR_ITEM_SLOTS - 1);
+                        let viejo = std::mem::take(&mut inv_ui.hotbar[hueco]);
+                        if let Some(gi) = inv_ui.grid.iter().position(|g| g.item_id.as_deref() == Some(item)) {
+                            let nuevo = std::mem::replace(&mut inv_ui.grid[gi], viejo);
+                            inv_ui.hotbar[hueco] = nuevo;
+                        } else {
+                            inv_ui.hotbar[hueco] = Stack { item_id: Some(item.to_string()), qty: 1 };
+                        }
+                        hueco
+                    }
+                };
+                inv_ui.selected = Some(SlotId::Hotbar(idx));
+                equipped.item_id = item.to_string();
+                build_mode.active = false;
+                bag.open = false;
+            }
+        }
+    } else if *recorrido <= crate::hud::BAG_UMBRAL {
         selected.0 = *pieza;
         build_mode.active = true;
         bag.open = false;
@@ -700,7 +744,10 @@ fn sync_floor_indicator(
             continue;
         }
         // ASCII-only: la fuente del juego no dibuja acentos ni flechas.
-        let line = if z > 0 {
+        let line = if let Some((_, piso)) = ha_shared::interiores::de_z(z) {
+            // Dentro de un edificio la planta es relativa a ese edificio (PB, 1, 2…), no el nivel absoluto.
+            if piso == 0 { "PLANTA BAJA".to_string() } else { format!("PISO {piso}") }
+        } else if z > 0 {
             format!("PISO {}", z + 1)
         } else if let Some(b) = bioma {
             b.to_string()

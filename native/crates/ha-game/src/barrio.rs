@@ -191,9 +191,6 @@ fn morder_vecinos(
     mut memoria: ResMut<Memoria>,
     mut speech: ResMut<SpeechQueue>,
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
-    art: Res<crate::art2d::ArtLibrary>,
-    mut pandemia: ResMut<crate::pandemia::Pandemia>,
-    contagiados: Query<(), With<crate::pandemia::Contagiado>>,
 ) {
     let (px, pz) = player.get_single().map(|t| (t.translation.x, -t.translation.y)).unwrap_or((1.0e9, 1.0e9));
     let mut muertos: Vec<Entity> = Vec::new();
@@ -225,11 +222,6 @@ fn morder_vecinos(
             muertos.push(e);
         } else {
             say_from(&mut speech, e, n.x, n.z, "¡Aaay! ¡Me mordió!", Color::srgb(1.0, 0.55, 0.5), true);
-            // **Contagio**: la mordida que no mata puede dejarlo incubando (ver `pandemia`).
-            if contagiados.get(e).is_err() && azar(n.uid, (n.x * 7.0 + n.z * 13.0) as u64 ^ 0x9a7d) < crate::pandemia::PROB_CONTAGIO_VECINO {
-                commands.entity(e).insert(crate::pandemia::Contagiado::nuevo());
-                pandemia.contagios += 1;
-            }
         }
     }
     for e in muertos {
@@ -240,11 +232,6 @@ fn morder_vecinos(
         despedir_npc(&mut commands, &mut soc, e, &n);
         memoria.tocar(tx, tz).muertes += 1;
         crate::causal::registrar("muerte", format!("{nombre} murió a manos de los infectados en ({x:.0},{z:.0})"));
-        // **Y se levanta**: con [`crate::pandemia::PROB_LEVANTARSE`] el cuerpo vuelve como infectado (el brote se sostiene solo).
-        if azar(uid, 0x1e7a ^ (x * 3.0 + z * 5.0) as u64) < crate::pandemia::PROB_LEVANTARSE {
-            crate::infectados::levantar(&mut commands, &art, x, z, uid as u32);
-            pandemia.levantados += 1;
-        }
         say(&mut speech, x, z, format!("¡Mataron a {nombre}!"), Color::srgb(1.0, 0.45, 0.4));
         // Los testigos lo viven: quedan sin seguridad, y se acuerdan.
         for (we, mut w) in &mut npcs {

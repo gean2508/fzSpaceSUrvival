@@ -127,12 +127,13 @@ pub(crate) fn tick_sim(
     planet_ctx: Res<ActivePlanet>,
     obs: crate::obstaculos::Obstaculos,
     editor: Res<crate::ui_editor::UiEditorState>,
-    conduccion: Res<crate::vehiculos::Conduccion>,
+    manejando: Res<crate::vehiculos::Manejando>,
+    autos: Query<&crate::vehiculos::Vehiculo>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     let _p = crate::debug::probe("fx_tick_sim");
-    // Al volante el cuerpo no camina: `vehiculos` lo lleva pegado al coche.
-    if flight.blocks_walking() || conduccion.activa() {
+    // Al volante, el que se mueve es el vehículo (`vehiculos::fisica_vehiculos`).
+    if flight.blocks_walking() || manejando.activo() {
         return;
     }
     let dt = fixed_delta_secs(&time);
@@ -186,7 +187,10 @@ pub(crate) fn tick_sim(
                 // en metros y no en el grid. Un farol delgado frena en su poste y
                 // rozar un árbol deja de sentirse un choque fantasma.
                 let r = ha_shared::topdown::PLAYER_RADIUS;
-                let wall_hit = |x: f32, z: f32| obs.caja_frena(body_surface, x, z, r);
+                // Los vehículos también frenan a quien camina: un auto es una pared con ruedas.
+                let wall_hit = |x: f32, z: f32| {
+                    obs.caja_frena(body_surface, x, z, r) || crate::vehiculos::frena_a_pie(autos.iter(), x, z, r)
+                };
                 // Nadar: el bajío no frena, pero se cruza a media velocidad y con
                 // la pose de natación. Sale del TILE (que ya incluye tus ediciones),
                 // así que rellenar un charco con bloques deja de mojarte.
@@ -507,7 +511,7 @@ pub(crate) fn face_player_sprite(
         // Con blanco, mira al blanco. Sin él, la cardinal sale de `dir` (con histéresis), no del cuadrante crudo:
         // así el pulgar en la diagonal no hace parpadear la pose; la diagonal sólo se usa si el pack la trae y
         // es del mismo lado.
-        let (diag, card) = match en_curso.and_then(|(_, r)| r).or(accion.rumbo_apuntado()) {
+        let (diag, card) = match en_curso.and_then(|(_, r)| r) {
             Some(rumbo) => {
                 let [d, c] = pose_directions(rumbo);
                 (d, c)

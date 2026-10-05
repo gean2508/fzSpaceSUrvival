@@ -39,14 +39,16 @@ impl Plugin for BootUiPlugin {
             .init_resource::<MenuShot>()
             .init_resource::<SonoSplash>()
             .init_resource::<RehacerMenu>()
+            .init_resource::<SplashArmada>()
             .add_systems(Startup, load_menu_bg)
-            .add_systems(OnEnter(GamePhase::Splash), spawn_splash)
+            .add_systems(OnEnter(GamePhase::Splash), desarmar_splash)
+            .add_systems(Update, armar_splash.run_if(in_state(GamePhase::Splash)))
             .add_systems(OnExit(GamePhase::Splash), despawn_boot)
             .add_systems(OnEnter(GamePhase::MainMenu), spawn_main_menu)
             .add_systems(OnExit(GamePhase::MainMenu), despawn_boot)
             .add_systems(
                 Update,
-                (tick_splash, animar_splash, sonar_splash, splash_screenshot).run_if(in_state(GamePhase::Splash)),
+                (tick_splash, animar_splash, sonar_splash, splash_screenshot).run_if(in_state(GamePhase::Splash).and(splash_armada)),
             )
             .add_systems(
                 Update,
@@ -517,6 +519,54 @@ fn sombrear_mancha(px: &mut [u8], lado: usize, base: [u8; 4]) {
 /// corto al aterrizar, y el logo aparece cuando ya hay pintura debajo. El sonido
 /// —los ocho pops y el acorde final— es el WAV que ya viene en el APK, y arranca
 /// atrasado [`RETARDO_AUDIO`] para que cada golpe caiga sobre su mancha.
+/// La splash ya está armada en pantalla. Sin esto el reloj de la splash arrancaba antes de que
+/// la ventana del celu tuviera tamaño: el logo quedaba con la escala de 1280×720 (3 oct 2026).
+#[derive(Resource, Default)]
+pub struct SplashArmada(pub bool);
+
+fn desarmar_splash(mut armada: ResMut<SplashArmada>) {
+    armada.0 = false;
+}
+
+fn splash_armada(armada: Res<SplashArmada>) -> bool {
+    armada.0
+}
+
+/// Arma la splash **cuando la ventana ya fue medida** y el layout la siguió. En escritorio pasa
+/// en el primer cuadro; en Android la ventana llega unos cuadros después.
+fn armar_splash(
+    mut commands: Commands,
+    touch: Res<TouchLayout>,
+    timer: ResMut<SplashTimer>,
+    sono: ResMut<SonoSplash>,
+    images: ResMut<Assets<Image>>,
+    mut armada: ResMut<SplashArmada>,
+    ventana: Query<&Window, With<PrimaryWindow>>,
+    real: Res<Time<bevy::time::Real>>,
+    mut espera: Local<f32>,
+) {
+    if armada.0 {
+        return;
+    }
+    let Ok(w) = ventana.get_single() else { return };
+    *espera += real.delta_secs();
+    // En Android la ventana arranca con el tamaño por defecto de Bevy (1280×720) y recién unos
+    // cuadros después trae el real (el log del celu decía `layout=1280x720`): iguales layout y
+    // ventana NO prueba que esté medida. Se espera a que el tamaño deje de ser el de fábrica, o a
+    // 1,5 s (escritorio con una ventana que de verdad mide 1280×720).
+    let de_fabrica = (w.width() - 1280.0).abs() < 0.5 && (w.height() - 720.0).abs() < 0.5;
+    let medida = w.width() >= 1.0
+        && w.height() >= 1.0
+        && (touch.width - w.width()).abs() < 0.5
+        && (touch.height - w.height()).abs() < 0.5
+        && (!de_fabrica || *espera > 1.5);
+    if !medida {
+        return;
+    }
+    spawn_splash(commands.reborrow(), touch, timer, sono, images);
+    armada.0 = true;
+}
+
 fn spawn_splash(
     mut commands: Commands,
     touch: Res<TouchLayout>,
@@ -527,6 +577,7 @@ fn spawn_splash(
     timer.0 = 0.0;
     sono.0 = false;
     let k = crate::ui_pack::k(&touch);
+    eprintln!("ha-splash: k={k:.3} layout={}x{} escala={:.2}", touch.width, touch.height, touch.scale_factor);
 
     commands
         .spawn((

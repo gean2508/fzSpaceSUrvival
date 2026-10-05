@@ -194,7 +194,7 @@ pub fn recompensa_pase(nivel: u32) -> (String, String) {
         return (g.to_string(), p.to_string());
     }
     let gratis = format!("monedas:{}", 100 + 20 * nivel);
-    let premium = if nivel % 3 == 0 { "gemas:100".to_string() } else { format!("monedas:{}", 300 + 30 * nivel) };
+    let premium = if nivel % 3 == 0 { "gemas:200".to_string() } else { format!("monedas:{}", 300 + 30 * nivel) };
     (gratis, premium)
 }
 

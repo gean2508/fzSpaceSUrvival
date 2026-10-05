@@ -8630,6 +8630,7 @@ Investigación de diseño (sandbox/survival): el bucle que engancha es *recolect
 herramienta mejor → recolectar más profundo*, con metas visibles que enseñan el circuito,
 peligro que obliga a prepararse, y eventos que ocurren aunque el jugador no los busque.
 Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§20**.
+Cantera de ideas sacada de 25+ juegos de 2000 a hoy, con prioridad: **§19**.
 
 **Hecho**
 * `metas.rs`: cadena de 13 metas (madera → pico → piedra → antorcha → cuero → ropa → hierro →
@@ -9074,9 +9075,67 @@ renderizados en el APK** (`assets/audio/musica/*.wav`, `assets/audio/sfx/<clave>
 huella `musica.json` y `sfx.json`). Regenerar todo: `bash scripts/regenerar-audio.sh` (exporta `audio.json`, renderiza, audita con
 `sfx-lab.py`). Si un diseño se edita en el estudio y su huella ya no coincide, ese efecto/pista cae al camino viejo (sintetizar).
 
+### §21 Vehículos terrestres (3 oct 2026)
+
+Pedido: *«carros, motos, buses… como en GTA: que los NPC manejen y se los pueda robar; las carreteras con sentido, sin quedar
+cortadas; y que se pueda manejar fuera de la calle como en San Andreas»*.
+
+**Arte** (`scripts/import-vehiculos.py`, medido): 38 modelos del pack con CUATRO poses de rumbo cada uno (`abajo/arriba/izquierda/
+derecha`; la ambulancia suma `*_luz` con la sirena): 26 autos (`vehicle/coche_1..26`, cuatro carrocerías; el 11 es el taxi; NO `auto_N`: esas claves ya existían del importador masivo y son otra cosa), 6 colectivos, casa rodante,
+ambulancia, lancha, camión de reparto (`Delivery_Truck`), de basura y autobomba. Moto y bici no vienen en el pack: las dibuja
+`scripts/dibujar-vehiculos.py`. Todo en `art/pack/vehiculos.png`, slots `VEHICULO_KEYS` en `slots.rs`.
+⚠ el `vehicle/camion_*` del importador masivo es una autobomba sin escalera, no un camión.
+**Sim** (`ha-shared/vehiculos.rs`, puro, con tests): catálogo (`Clase`, `ficha`, `MODELOS`), física arcade (`paso`) y conductor
+(`conducir`). El **suelo manda** (`Suelo::tope/agarre`): asfalto 100 %, pasto ~62 %, arena ~42 %, hielo resbala, el agua honda no se entra
+(salvo la lancha, que sólo anda en agua); la moto rinde +15 % en el campo. Se choca contra lo mismo que frena a quien camina (relieve:
+las rampas se suben, un acantilado es pared). El stick apunta el rumbo (`mando_desde_stick`); apuntar atrás frena y da marcha atrás.
+**Conductor**: sigue la mano de la calle con la MISMA regla que pinta la línea divisoria (`roads::carril_con`, extraída de `lane_at`),
+en un cruce sigue derecho o dobla a la derecha (`roads::cruce_con`), da la vuelta en una calle sin salida, mantiene distancia y frena
+ante autos y peatones. Multi-semilla y multi-mano en `el_vecino_maneja_bien_con_cualquier_semilla_y_desde_cualquier_mano`.
+**Cliente** (`ha-game/vehiculos.rs`): tránsito con cupo (`CUPO_TRANSITO` = 10, un intento de siembra por cuadro, fuera de cámara, sólo en
+calles de 5+ tiles; uno de cada cinco nace estacionado contra el cordón). Subir/bajar con **G** (o tocar el vehículo); si lo maneja un
+vecino, **se lo robás**: se baja corriendo y es tuyo. Mientras manejás, el `SimState` del jugador sigue al vehículo (cámara, chunks y
+todo lo demás lo siguen sin saberlo); a pie los vehículos frenan (`frena_a_pie`); despegar volando te baja. **Atropello**: el
+paragolpes deja tres `Bala` invisibles por paso, así vecinos, fauna e infectados reciben el golpe con sus testigos y su muerte sin código
+nuevo. Choque a más de 4 m/s abolla; a 0 queda chatarra.
+**Carreteras** — qué garantiza el mundo: sin acantilados sobre la calzada (`no_road_is_ever_blocked_by_a_cliff`), rampa donde cruza una
+terraza, puente donde cruza agua, circunvalación donde desemboca en un casco, y ahora **`de_cada_nucleo_se_llega_en_auto_al_vecino`**
+(inundación desde un núcleo hasta el siguiente por celdas transitables). Un callejón (3 tiles) no lleva tránsito.
+**Probar**: `cargo test -p ha-shared vehiculos`, `cargo test -p ha-shared tests_conectividad`, `cargo test -p ha-game vehiculos`.
+#### Semáforos, policía, combustible y multijugador (3 oct 2026, 2.ª tanda)
+
+**Semáforos** (`vehiculos::luz_en`): ciclo de 34 s función del reloj (norte-sur verde 14 s, amarillo 2, todo rojo 1; luego este-oeste), todos
+los cruces en fase, sin estado. `conducir` mira hasta 30 m: con luz no verde y espacio para frenar (`distancia_de_frenado`, al 60 % del
+freno) el borde del cruce cuenta como obstáculo; con amarillo tardío sigue de largo. Lo clava `el_vecino_maneja_bien_con_cualquier_semilla…`
+(6 semillas × 4 manos, 0 cruces con rojo de más de 1,5 s). **Las lámparas se ven**: cada poste (`road/semaforo_*`) cuelga una lámpara hija (`vehiculos::agregar_lampara`, llamada desde `world2d`) que `lamparas_semaforo` pinta de verde/amarillo/rojo con la misma `luz_en` (la posición de la lámpara sobre el poste es un número a ojo, `Transform` en `agregar_lampara`: afinar mirando una captura).
+**Combustible**: `Ficha.alcance` (m con tanque lleno: auto 12 km, moto 18, colectivo 9, bici/sin motor 0) y `Estado.comb` (0..1). Gasta por metro
+más un goteo con el pie en el acelerador; en 0 el motor no responde y el vehículo rueda hasta frenar. Los estacionados nacen entre 3 % y 90 %,
+el tránsito entre 40 % y 100 %. **Repostar** (`vehiculos::repostar`): casi parado dentro de una gasolinera, 10 s a tanque lleno. Cuenta la
+gasolinera generada (el lote `building/gasolinera` entero, `vehiculos::gasolinera_en`) y los surtidores colocados (`es_surtidor`: gasolinera,
+surtidor, estación de servicio, `fuel_source`, a 3 m de su base). Con menos de 25 % el HUD dice «Gasolinera a N m al noreste»
+(`gasolinera_cercana`, cada 4 s, radio 320). Gratis: todavía no hay moneda.
+**Policía** (`ha-game/policia.rs`): `Busqueda` 0-3. Robar un vehículo o atropellar a alguien (con el jugador al volante, > 5 m/s) sube un nivel
+(enfriamiento 4 s). Con nivel > 0 hay tantas patrullas como niveles (`vehicle/coche_13` con barra de luces roja/azul), una cada 6 s, a 70-110 m
+fuera de cámara; persiguen con `vehiculos::perseguir` (control del stick hacia el objetivo, marcha atrás si se atascan). A < 14 m disparan cada
+0,9 s (60 % de acierto, 4 de vida por patrulla, sujeto a la armadura). Si una te alcanza (< 4,5 m) y vas casi parado 3,5 s: multa de 15 de vida y,
+si el vehículo era robado, lo confiscan. 25 s sin que ninguna te vea (> 60 m) bajan un nivel. Sin nivel, las patrullas se quedan quietas y el
+tránsito las borra al alejarse.
+**Multijugador**: `Msg::Est` lleva `veh` (clave del vehículo que manejás, vacío = a pie; compatible con clientes viejos por `serde(default)`),
+el hub LAN (`red.rs`) y el relay (`relay.ts`) lo reenvían sanitizado, y el avatar remoto se dibuja con el sprite y la pose del vehículo
+(`multijugador::sprite_remoto`). ⚠ lo que NO se comparte: el tránsito, los estacionados, la búsqueda ni el tanque — cada cliente simula el suyo
+(el mundo compartido sólo replica ediciones, §15). Dos jugadores ven al otro en su auto, no el mismo auto.
+**Consola**: `/auto [modelo]` (delante tuyo; `taxi`, `colectivo`, `moto`, `bici`, `lancha`, `patrulla`, `coche_7`…), `/nafta` (tanque lleno),
+`/buscado <0-3>`. **Probar en la compu**: `HA_AUTOTEST=1 HA_AUTOPLAY=1 HA_SHOTDIR=<dir> ./target/qa/ha-game` (va a una ciudad, pide un auto, se
+sube, comete un delito, maneja 12 s, vacía el tanque y comprueba que se frena; capturas `auto-0/1`; log `ha-auto:`).
+**Falta (honesto)** — todo lo de esta tanda está escrito pero **sin compilar ni probar** (el usuario hace los builds y los tests): policía a pie y comisarías; gasto de dinero al repostar; lanchas en el tránsito;
+peatones que esquiven autos; sincronizar tránsito y búsqueda entre jugadores; prueba en el Redmi.
+
 ---
 
 ## §20 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)
+---
+
+## §19 Lluvia de ideas: qué hizo grandes a los juegos de 2000 a hoy, y cómo traerlo a Ki (3 oct 2026)
 
 Pedido del usuario: *«buscar en internet los juegos desde el 2000 hasta la actualidad y armar una
 lluvia de ideas de lo que los hizo divertidos, un boom, aceptados por la gente; llevarlo a mi juego
@@ -9266,6 +9325,8 @@ todo a la más vulnerable. **Regla de Ki**: la gente vuelve porque quiere, no po
    (1.º, 5.º y cada 10.º). Al abrir el menú de un vecino (`te_reconocen`, una vez por vecino) te
    reconoce; PREGUNTAR suma «vos solo acabaste con N acá» a las noticias y **el último hecho de la
    crónica de su pueblo** (`SaberNpc::rumor`). Tests: `barrio::tests::el_barrio_te_recuerda_…`.
+1. **Jugo del golpe y de la carga de Ki** — barato, mejora cada segundo de juego.
+2. **El diario del pueblo + vecinos que recuerdan** — la sim ya existe; sólo hay que contarla.
 3. **Técnicas de Ki + aura personal** — la identidad del juego; nadie más la tiene.
 4. **Torneo de las Artes Marciales** — evento recurrente con rivales, público y premio.
 5. **Fuego que se propaga** (química al mundo, reusa `materia.rs`).
@@ -9301,7 +9362,67 @@ prueba multi-semilla (§2) y arte del pack o dibujado con la skill `pixel-art` a
 [Wordle](https://www.newswise.com/articles/the-word-on-wordle) ·
 [patrones oscuros](https://deceptive.design/articles/level-up-or-game-over-exploring-how-dark-patterns-shape-mobile-games).
 
-## §21 Vehículos, trenes y puntería con stick (5 oct 2026)
+## §21 La pandemia: virus que se descubre, se propaga y se detiene (4 oct 2026)
+
+Código: `ha-game/src/pandemia.rs` (historia, focos, jefes, cura, terreno enfermo, HUD), `oleadas.rs` (clases y puntos),
+`infectados.rs` (spawn por focos, roles), `policia_pie.rs` (agentes a pie). **No hay rondas**: el pedido del usuario era
+la sensación de Black Ops 2 (matar a lo loco, esquivar, que te sigan) con una historia, en mundo abierto.
+
+* **Historia:** rumor (días 0-1, nada) → desde el día 2, de noche, aparece el **paciente cero** (rojizo) → al abatirlo suelta
+  `virus_sample` (queda en el cadáver) → **analizarla** en una comisaría (laboratorio, `city::comisaria_cercana`, 4 s quieto a < 14 m)
+  → nacen **3 alfas** (rol 2, 3× vida) en tres focos → al caer los tres vuelve a la comisaría por el `antidoto` → llevarlo al
+  **foco principal** y quedarse 5 s: pandemia curada (infectados desaparecen, 15 lingotes). **Easter egg:** cortar el brote antes del día 7 da 3 gemas más.
+* **Se propaga:** el avance (0-100) sube 10 por día; cada día nace un foco nuevo a 150-300 m del anterior (hasta 8). Los infectados
+  sueltos salen alrededor de los focos (cupo `2 + avance/8`, tope 12 + 2 por jugador); con avance ≥ 60 salen también por el borde.
+  Clases: común / corredor (avance ≥ 25) / tanque (≥ 60). Puntos por baja (`oleadas::puntos_de`).
+* **Jefes de foco** (rol 3, `infectados::crear_jefe`): 14× la vida de un infectado × jugadores conectados (coop), botín raro; salen al acercarse a un foco (avance ≥ 20).
+* **Terreno enfermo:** mancha verde en el suelo de cada foco y los árboles/plantas a < 55 m se tiñen (a 1 Hz). Sin textura nueva: tinte.
+* Persistencia: `pandemia.json` por partida. Items: `virus_sample` y `antidoto` (icono procedural + etiqueta en `hud::item_label`).
+* **Policía a pie:** con búsqueda salen `nivel + 1` agentes a pie desde la comisaría más cercana (< 140 m) o por el borde; disparan a < 12 m; si uno te alcanza 2,5 s quieto, multa y fin de la búsqueda.
+* **Lanchas:** `Quien::Navegante` + `vehiculos::transito_maritimo` (hasta 3, sólo en agua honda, fuera de cámara). IA en `ha_shared::vehiculos::navegar` con prueba.
+* **Gasolina** cuesta oro (1 lingote por cuarto de tanque, sumidero); **creativo**: munición infinita; peatones esquivan autos (`AutosCaja`).
+* **Escalones** se dibujan girados según el tramo (`escaleras::dibujar_escalones`).
+* **Decidido:** la búsqueda y el tránsito son locales a cada cliente (cada jugador tiene su propia búsqueda); los vehículos de otros jugadores ya se ven (`Msg::Est.veh`).
+* **Falta:** probar todo en el Redmi (fps con 12 infectados + manchas + teñido), dibujar arte propio de infectados si se quiere más que un tinte, integrar la rama `phaser-arena-ui`.
+
+## §22 Interiores como espacio aparte (4 oct 2026) — reemplaza TODO el sistema de construcción por piezas
+
+Pedido del usuario (estilo GTA San Andreas): entrar a un edificio cambia a un espacio interior; el exterior no se ve ni se
+atenúa; se construye la fachada entera y el interior se decide solo. Lo construido por piezas (paredes, pisos, techos, prefabs,
+edificio modular) ya NO está en el menú CONSTRUIR (el código queda para partidas viejas y drivers).
+
+* **Dónde viven** (`ha_shared::interiores`): banda de pisos `z >= Z0 (20000)`, una por edificio (`z_de(slot, piso)`, 8 pisos por
+  banda), en el borde este del mundo (`origen(body)`, franja de agua sin nada): lo de afuera queda a ~30 km. `topdown_tile` delega
+  en `interiores::tile`. Registro de slots en memoria (`registrar`); el interior sale del lote, no se guarda.
+* **Plano generado** (`generar`, puro): hasta 1,5× la huella (tope 56 tiles), BSP de ambientes con vanos, ventanas en las paredes
+  de afuera, puerta del frente (sur), hall con escalera de 2 columnas que SUBE HACIA ARRIBA DE LA PANTALLA (`building/escalera_1`
+  dibujada entera, `escaleras::dibujar_escalones`). Sin lugar para el hall → un solo piso (nunca un piso inalcanzable).
+  `arquetipo_de(clave)` cubre todo el pack por palabra (vivienda, comercio, gasolinera, hospital, escuela, comisaría, bomberos,
+  correo, estación, industrial, granero, búnker, iglesia, restaurante…) y `worldgen::tabla_interior` da a cada uno su mobiliario.
+* **Muebles/camas/cofres**: el amueblado de siempre, ahora con nivel (`casa_en_z`, `muebles_de_z`, `mueble_anclado_z`).
+* **Cliente** (`ha-game/interiores.rs`): flecha amarilla sobre la puerta (`ui_pack`/`ic_flecha_arriba`), botón propio ENTRAR/SALIR,
+  LLAVE, REFORZAR y REPONER. **Puerta con vida**: madera 40 → reforzada 120 (10 madera) → hierro 400 (6 hierro) → blindada
+  irrompible (10 hierro + 5 oro). Los infectados y la policía a pie se juntan en la puerta de afuera (`ObjetivoHostil`) y la golpean
+  (3/s, tanque ×2,5, jefe ×6; policía 6/s); rota o abierta, entran tras de vos. Rota, la fachada queda sin hoja hasta reponerla.
+  Estado de puertas en `puertas_edificios.json`. Encerrado no te alcanzan los tiros ni te atrapan; la búsqueda no baja por esconderte.
+* **Gente adentro**: `residentes(lote)`; despiertos de día, durmiendo en sus camas de madrugada (`despierto`).
+* **Ventanas de la fachada** (`luces_ventanas.rs`, `scripts/medir-ventanas.py` → `art/ventanas.json`, 557 edificios): de noche se
+  prenden las de los cuartos ocupados (`ventana_prendida`): las casas, hoteles y guardias velan distinto.
+* **Casas colocadas** (jugador o vecinos constructores, `society::constructor_obra`): son enterables (`es_edificio_enterable`);
+  el interior se genera solo. **Multijugador**: `Msg::Est.nivel`; sólo se ven los que comparten nivel.
+* **Adentro**: sin lluvia ni relámpago, la lluvia se oye apagada (0,18×), luz propia (`interior::objetivo_de_nivel`), sin fauna ni
+  infectados ambientales nuevos.
+* Pruebas: `cargo test -p ha-shared --lib interiores` (8: arquetipos, tope 1,5×, conectividad de las 30 claves, escalera, ventanas,
+  sueño) y el driver `HA_INTERIORTEST=1` (entra, sube caminando, cierra con llave, sale; capturas en `HA_SHOTDIR`).
+* **Falta**: tiendas con mostrador y NPC vendedor, llaves de otros jugadores, interiores de los buildings no enterables, probar
+  todo en el Redmi, apagar/prender luces del interior por habitante.
+
+
+## §23 Sesión paralela (rama claude/task-vx5pv8): ciudades, casas modulares y láminas de LimeZu (5 oct 2026)
+
+> ⚠ Esta sección viene de otra sesión que **reimplementó en paralelo** vehículos, trenes y pandemia. En el merge del 5 oct **ganó la versión de la
+> integración** (`vehiculos.rs`, `trenes.rs`, `pandemia.rs`, interiores con flecha); lo que sigue sobre esos tres módulos es histórico. Lo vigente de esta
+> sesión: fachadas modulares (7), plataforma de ciudad, parcelas/cercas/pileta, prefabs de parque, esquinas de cuarto, puentes de ciudad, ayuntamiento.
 
 Pedido del usuario: «ya deja el sistema de vehículos completamente hecho… todos los coches manejables, físicas,
 colisiones», «que cada ciudad tenga una estación funcional, que los trenes vayan y regresen cada uno por su vía», «un

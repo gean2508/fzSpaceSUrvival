@@ -81,6 +81,10 @@ pub struct Infectado {
     botin: Vec<(&'static str, u32)>,
     /// Custodia un alijo: no se quema de día.
     pub guardia: bool,
+    /// Clase de la oleada (`oleadas::Clase`): define velocidad, vida y lo que vale.
+    pub(crate) clase: crate::oleadas::Clase,
+    /// 0 = infectado común, 1 = paciente cero, 2 = alfa (los focos de la pandemia, `pandemia.rs`).
+    pub rol: u8,
 }
 
 /// El cuerpo que queda: se abre como un cofre (`chests.rs`) y se descompone solo.
@@ -102,6 +106,14 @@ const VIDA_PARED_MADERA: f32 = 3.0;
 #[derive(Resource, Default)]
 pub struct Bajas {
     pub total: u32,
+    /// Puntos de la partida por rondas (`oleadas`): se suman en cada baja según la clase.
+    pub puntos: u32,
+    /// Avance de la pandemia (0-100), copiado de `pandemia::Pandemia` cada cuadro para valorar la baja.
+    pub avance: f32,
+    /// El «paciente cero» cayó (lo lee `pandemia` y lo apaga).
+    pub paciente_cero_muerto: bool,
+    /// Alfas abatidos desde la última lectura de `pandemia`.
+    pub alfas_muertos: u32,
     /// Dónde (x, z) cayeron los que mataste desde la última pasada del barrio (`barrio::el_barrio_te_ve`
     /// las vacía). Tope 32: si nadie las lee (ningún pueblo cargado), no crecen sin fin.
     pub recientes: Vec<(f32, f32)>,
@@ -177,6 +189,8 @@ pub fn spawn_guardia(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x:
             bloqueado: 0.0,
             botin: botin_de(n.wrapping_mul(2654435761)),
             guardia: true,
+            clase: crate::oleadas::Clase::Comun,
+            rol: 0,
         },
         Name::new("Guardia"),
     ));
@@ -228,26 +242,35 @@ fn aparecer(
     multi: Res<crate::multijugador::Multi>,
     obst: Obstaculos,
     player: Query<&Transform, With<Player>>,
-    existentes: Query<(), With<Infectado>>,
+    existentes: Query<&Infectado>,
+    pand: Res<crate::pandemia::Pandemia>,
+    objetivo: Res<crate::interiores::ObjetivoHostil>,
 ) {
-    let horda_ahora = es_horda(day.day_index()) && day.daylight() <= NOCHE_MAX_LUZ;
+    // Encerrado en un edificio no nace nadie nuevo (los de afuera ya están asediando).
+    if objetivo.activo {
+        return;
+    }
+    // Sin pandemia (todavía no se descubrió el virus, o ya se curó) no hay infectados sueltos.
+    if !pand.activa() {
+        return;
+    }
     acc.spawn += time.delta_secs();
-    if acc.spawn < if horda_ahora { SPAWN_CADA * 0.4 } else { SPAWN_CADA } {
+    if acc.spawn < SPAWN_CADA * (1.0 - 0.6 * pand.avance / 100.0) {
         return;
     }
     acc.spawn = 0.0;
-    if !en_superficie(&ctx) || day.daylight() > NOCHE_MAX_LUZ {
+    // Con la pandemia avanzada salen también al atardecer.
+    let limite = if pand.avance >= 50.0 { AMANECER_LUZ } else { NOCHE_MAX_LUZ };
+    if !en_superficie(&ctx) || day.daylight() > limite {
         return;
     }
     let Ok(pt) = player.get_single() else { return };
-    let horda = es_horda(day.day_index());
-    let cupo = tope(day.day_index(), multi.remotos.len()) * if horda { 2 } else { 1 };
-    if existentes.iter().count() >= cupo {
+    let cupo = pand.cupo(multi.remotos.len());
+    if existentes.iter().filter(|i| !i.guardia).count() >= cupo {
         return;
     }
     let body = active_surface_body(&ctx, &planet);
     let (px, pz) = (pt.translation.x, -pt.translation.y);
-    // Un ángulo y una distancia al azar; si cae en pared o agua, se pierde el intento.
     let s = time.elapsed().as_micros() as u64;
     let h = |k: u64| {
         let mut x = s ^ k.wrapping_mul(0x9E37_79B9_7F4A_7C15);
@@ -255,42 +278,112 @@ fn aparecer(
         x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
         ((x >> 40) as f32) / (1u64 << 24) as f32
     };
-    let ang = h(1) * std::f32::consts::TAU;
-    let dist = ANILLO_MIN + h(2) * (ANILLO_MAX - ANILLO_MIN);
-    let (x, z) = (px + ang.cos() * dist, pz + ang.sin() * dist);
-    if obst.caja_frena(body, x, z, RADIO_CUERPO) || obst.solido(body, x.floor() as i64, z.floor() as i64) {
+    // **La pandemia se propaga por focos**: salen alrededor de un foco cercano (a menos de 130 m);
+    // sin foco a la vista sólo salen por el borde si la pandemia ya está extendida (avance >= 60).
+    let foco = pand.focos.iter().copied().filter(|&(fx, fz)| (fx - px).hypot(fz - pz) < 130.0).min_by(|a, b| (a.0 - px).hypot(a.1 - pz).total_cmp(&(b.0 - px).hypot(b.1 - pz)));
+    let (x, z) = match foco {
+        Some((fx, fz)) => {
+            let ang = h(1) * std::f32::consts::TAU;
+            let r = 6.0 + h(2) * 22.0;
+            (fx + ang.cos() * r, fz + ang.sin() * r)
+        }
+        None if pand.avance >= 60.0 => {
+            let ang = h(1) * std::f32::consts::TAU;
+            let dist = ANILLO_MIN + h(2) * (ANILLO_MAX - ANILLO_MIN);
+            (px + ang.cos() * dist, pz + ang.sin() * dist)
+        }
+        None => return,
+    };
+    // Que no nazca a la vista: el anillo mínimo es el mismo de siempre.
+    if (x - px).hypot(z - pz) < ANILLO_MIN || obst.caja_frena(body, x, z, RADIO_CUERPO) || obst.solido(body, x.floor() as i64, z.floor() as i64) {
         return;
     }
-    let skin = format!("npc/char_{}", 1 + (h(3) * 20.0) as u32 % 20);
-    let mut sprite = art.sprite_or_color(&skin, Color::srgb(0.5, 0.7, 0.5), TAMANO);
-    sprite.color = Color::srgb(0.55, 0.78, 0.55);
-    commands.spawn((
-        sprite,
-        Transform::from_xyz(x, -z, sort_z(z)),
-        Infectado { x, z, vida: VIDA, ataque_cd: 0.0, destello: 0.0, desvio: (h(4) - 0.5) * 0.9, bloqueado: 0.0, botin: botin_de((h(5) * 1.0e6) as u32), guardia: false },
-        Name::new("Infectado"),
-    ));
+    let clase = crate::oleadas::clase_de(pand.avance, h(6));
+    crear_infectado(&mut commands, &art, x, z, clase, (h(3), h(4), h(5)));
 }
 
-/// **Un infectado nuevo en `(x, z)`**: el mismo cuerpo que el que sale de noche (`aparecer`). Lo usa la pandemia
-/// (`pandemia::avanzar_contagio`, y el vecino que muere de una mordida) para levantar a quien cayó.
-pub(crate) fn levantar(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, semilla: u32) {
-    let skin = format!("npc/char_{}", 1 + semilla % 20);
+/// El color de un infectado en reposo según su clase y su rol (lo mismo con que nace).
+fn color_base(clase: crate::oleadas::Clase, rol: u8) -> Color {
+    match rol {
+        3 => Color::srgb(0.75, 0.35, 0.55),
+        1 | 2 => Color::srgb(0.85, 0.45, 0.45),
+        _ => match clase {
+            crate::oleadas::Clase::Comun => Color::srgb(0.55, 0.78, 0.55),
+            crate::oleadas::Clase::Corredor => Color::srgb(0.85, 0.95, 0.70),
+            crate::oleadas::Clase::Tanque => Color::srgb(0.40, 0.55, 0.42),
+        },
+    }
+}
+
+/// Un infectado de la oleada en `(x, z)`, de una clase dada. `sorteos` = tres números en [0, 1).
+fn crear_infectado(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, clase: crate::oleadas::Clase, sorteos: (f32, f32, f32)) {
+    crear_infectado_con_rol(commands, art, x, z, clase, sorteos, 0);
+}
+
+/// **Jefe de foco** (rol 3): tanque enorme cuya vida crece con los jugadores conectados `n` (coop: solo
+/// cuesta; con amigos se puede). Suelta botín raro (oro, gemas).
+pub fn crear_jefe(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, n_jugadores: u32, sorteos: (f32, f32, f32)) {
+    let (a, b, c) = sorteos;
+    let skin = format!("npc/char_{}", 1 + (a * 20.0) as u32 % 20);
     let mut sprite = art.sprite_or_color(&skin, Color::srgb(0.5, 0.7, 0.5), TAMANO);
-    sprite.color = Color::srgb(0.55, 0.78, 0.55);
+    sprite.color = Color::srgb(0.75, 0.35, 0.55);
+    sprite.custom_size = Some(TAMANO * 1.6);
     commands.spawn((
         sprite,
         Transform::from_xyz(x, -z, sort_z(z)),
         Infectado {
             x,
             z,
-            vida: VIDA,
-            ataque_cd: 1.0,
+            vida: VIDA * 14.0 * n_jugadores.max(1) as f32,
+            ataque_cd: 0.0,
             destello: 0.0,
-            desvio: ((semilla % 90) as f32 / 100.0) - 0.45,
+            desvio: (b - 0.5) * 0.9,
             bloqueado: 0.0,
-            botin: botin_de(semilla.wrapping_mul(2_654_435_761)),
+            botin: vec![("gold_ingot", 6), ("gem_blue", 2), ("iron_ingot", 4)].into_iter().chain(botin_de((c * 1.0e6) as u32)).collect(),
+            guardia: true, // no se quema con el sol ni cuenta para el cupo
+            clase: crate::oleadas::Clase::Tanque,
+            rol: 3,
+        },
+        crate::pandemia::Jefe,
+        Name::new("JefeInfectado"),
+    ));
+}
+
+/// Igual que [`crear_infectado`] pero con un rol (1 = paciente cero, 2 = alfa).
+pub fn crear_infectado_con_rol(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, clase: crate::oleadas::Clase, sorteos: (f32, f32, f32), rol: u8) {
+    let (a, b, c) = sorteos;
+    let skin = format!("npc/char_{}", 1 + (a * 20.0) as u32 % 20);
+    let mut sprite = art.sprite_or_color(&skin, Color::srgb(0.5, 0.7, 0.5), TAMANO);
+    sprite.color = match clase {
+        crate::oleadas::Clase::Comun => Color::srgb(0.55, 0.78, 0.55),
+        // El corredor se ve más pálido y el tanque más oscuro, para leerlos de lejos.
+        crate::oleadas::Clase::Corredor => Color::srgb(0.85, 0.95, 0.70),
+        crate::oleadas::Clase::Tanque => Color::srgb(0.40, 0.55, 0.42),
+    };
+    let mut escala = TAMANO;
+    if clase == crate::oleadas::Clase::Tanque || rol == 2 {
+        escala *= 1.15;
+    }
+    if rol != 0 {
+        // El paciente cero y los alfas se leen de lejos: tinte rojizo.
+        sprite.color = Color::srgb(0.85, 0.45, 0.45);
+    }
+    sprite.custom_size = Some(escala);
+    commands.spawn((
+        sprite,
+        Transform::from_xyz(x, -z, sort_z(z)),
+        Infectado {
+            x,
+            z,
+            vida: VIDA * clase.vida() * if rol == 2 { 3.0 } else if rol == 1 { 1.5 } else { 1.0 },
+            ataque_cd: 0.0,
+            destello: 0.0,
+            desvio: (b - 0.5) * 0.9,
+            bloqueado: 0.0,
+            botin: botin_de((c * 1.0e6) as u32),
             guardia: false,
+            clase,
+            rol,
         },
         Name::new("Infectado"),
     ));
@@ -309,7 +402,7 @@ fn mover_y_morder(
     mut sfx: EventWriter<crate::audio::PlaySfx>,
     mut sim: Query<&mut SimState, With<Player>>,
     ruido_de_arma: Res<crate::armas::RuidoDeArma>,
-    mut fiebre: ResMut<crate::pandemia::Infeccion>,
+    objetivo: Res<crate::interiores::ObjetivoHostil>,
     mut q: Query<(&mut Infectado, &mut Transform, &mut Sprite)>,
     mut ultimo: Local<f32>,
     mut ultimo_z: Local<f32>,
@@ -326,9 +419,18 @@ fn mover_y_morder(
     // Un disparo se oye desde mucho más lejos que unos pasos.
     let olfato = if ruido_de_arma.0 > 0.0 { olfato * crate::armas::OIDO_DE_TIRO } else { olfato };
     let mut mordidas = 0u32;
+    let (jug_x, jug_z) = (px, pz);
     for (mut i, mut tf, mut sprite) in &mut q {
         i.ataque_cd = (i.ataque_cd - dt).max(0.0);
         i.destello = (i.destello - dt).max(0.0);
+        // Con el jugador encerrado, los de afuera NO usan la colisión de este nivel (es la del interior, todo
+        // pared): `interiores::asedio_de_puertas` los acerca a la puerta. Acá sólo se dibujan.
+        if objetivo.activo && !objetivo.esta_adentro(i.x, i.z) {
+            tf.translation = Vec3::new(i.x, -i.z, sort_z(i.z));
+            continue;
+        }
+        let (px, pz) = objetivo.objetivo(i.x, i.z, (jug_x, jug_z));
+        let hacia_jugador = (px, pz) == (jug_x, jug_z);
         // Persigue a quien tenga más cerca: vos o un vecino (que se defiende, ver `barrio.rs`).
         let (mut tx, mut tz) = (px, pz);
         let mut d_jug = ((px - i.x).powi(2) + (pz - i.z).powi(2)).sqrt().max(1e-3);
@@ -342,7 +444,7 @@ fn mover_y_morder(
         let (dx, dz) = (tx - i.x, tz - i.z);
         let d = d_jug;
         if d < olfato.max(if a_un_vecino { OLFATO_VECINO } else { 0.0 }) {
-            let v = if d < 8.0 { VEL_CERCA } else { VEL };
+            let v = if d < 8.0 { VEL_CERCA } else { VEL } * i.clase.velocidad();
             // Rumbo al jugador con un desvío fijo que se apaga al acercarse.
             let a = dz.atan2(dx) + i.desvio * (d / olfato).min(1.0);
             let (sx, sz) = (a.cos() * v * dt, a.sin() * v * dt);
@@ -369,19 +471,24 @@ fn mover_y_morder(
                 }
             }
         }
-        if d < ATAQUE_RADIO && i.ataque_cd <= 0.0 && !a_un_vecino {
+        if d < ATAQUE_RADIO && i.ataque_cd <= 0.0 && !a_un_vecino && hacia_jugador {
             i.ataque_cd = ATAQUE_CD;
             mordidas += 1;
         }
         tf.translation = Vec3::new(i.x, -i.z, sort_z(i.z));
-        sprite.color = if i.destello > 0.0 { Color::srgb(1.0, 0.35, 0.35) } else { Color::srgb(0.55, 0.78, 0.55) };
+        // Destello: blanco los primeros ~⅓ del golpe y después rojo (receta de `disparo-y-apuntado`).
+        sprite.color = if i.destello > 0.10 {
+            Color::WHITE
+        } else if i.destello > 0.0 {
+            Color::srgb(1.0, 0.35, 0.35)
+        } else {
+            color_base(i.clase, i.rol)
+        };
         // Mira hacia donde va.
         tf.scale.x = if dx < 0.0 { -1.0 } else { 1.0 };
     }
     if mordidas > 0 {
         sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Bite));
-        // La mordida puede contagiar (fiebre): ver `pandemia`.
-        fiebre.mordida((time.elapsed().as_micros() as u32).wrapping_mul(2_654_435_761) >> 8);
         if let Ok(mut s) = sim.get_single_mut() {
             s.hp = (s.hp - DANO * mordidas as f32 * (1.0 - s.armadura)).max(0.0);
         }
@@ -520,7 +627,7 @@ fn herir(
     empuje: f32,
 ) {
     i.vida -= dano;
-    i.destello = 0.15;
+    i.destello = 0.20;
     // Retroceso: lo empuja lejos de quien pegó.
     let (dx, dz) = (i.x - desde.x, i.z - desde.y);
     let d = (dx * dx + dz * dz).sqrt().max(1e-3);
@@ -529,6 +636,16 @@ fn herir(
     if i.vida <= 0.0 {
         let (x, z) = (i.x, i.z);
         bajas.total += 1;
+        bajas.puntos += crate::oleadas::puntos_de(i.clase, bajas.avance);
+        match i.rol {
+            1 => {
+                // El paciente cero siempre deja la muestra del virus.
+                bajas.paciente_cero_muerto = true;
+                i.botin.push(("virus_sample", 1));
+            }
+            2 => bajas.alfas_muertos += 1,
+            _ => {}
+        }
         if bajas.recientes.len() < 32 {
             bajas.recientes.push((x, z));
         }
@@ -564,6 +681,7 @@ pub(crate) fn balas_a_infectados(
     planet: Res<ActivePlanet>,
     mut sfx: EventWriter<crate::audio::PlaySfxAt>,
     mut q: Query<(Entity, &mut Infectado, &Sprite)>,
+    mut jugo: EventWriter<crate::jugo::Golpe>,
 ) {
     const RADIO_BLANCO: f32 = 0.55;
     for mut b in &mut balas {
@@ -580,7 +698,12 @@ pub(crate) fn balas_a_infectados(
             }
             let dano = b.dano_ahora();
             let desde = b.origen;
+            // Hitstop y número de daño SOLO en la baja (receta: nunca por bala, una ráfaga tartamudearía).
+            let letal = i.vida - dano <= 0.0;
             herir(&mut commands, &mut bajas, &mut chests, &ctx, &planet, e, &mut i, sprite, dano, desde, 0.25);
+            if letal {
+                jugo.send(crate::jugo::Golpe { en: pos, dano, letal: true, color: Color::srgb(0.75, 0.15, 0.12) });
+            }
             crate::armas::chispa_de_impacto(&mut commands, pos, if b.rayo { Color::srgb(0.4, 1.0, 0.6) } else { Color::srgb(0.75, 0.15, 0.12) });
             sfx.send(crate::audio::PlaySfxAt(b.impacto, Vec2::new(pos.x, -pos.y)));
             b.registrar(e);

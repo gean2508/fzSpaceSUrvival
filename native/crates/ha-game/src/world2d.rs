@@ -824,7 +824,7 @@ pub fn decor_hits_box(
     // Celdas ancla candidatas: las que toca la caja, más el alcance de las huellas
     // multi-celda (un asset anclado lejos puede tener una caja acá). Sin huellas
     // declaradas el escaneo es la vecindad inmediata — el costo de antes.
-    if z == 0 && muebles_frenan(flora, body, aabb) {
+    if (z == 0 || ha_shared::interiores::es_interior(z)) && muebles_frenan(flora, body, z, aabb) {
         return true;
     }
     // **El alcance depende de QUIÉN se siembra.** Lo procedural (árboles y rocas) casi no tiene
@@ -880,8 +880,8 @@ fn pisa_un_edificio(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64, si
 /// **Los muebles frenan** (29 sep 2026): su pie, medido por `amueblado`. Antes no
 /// tenían colisión y se atravesaban camas y roperos. Lo que el jugador levantó ya
 /// no está y no frena.
-fn muebles_frenan(flora: Option<&FloraHarvest>, body: CelestialBody, aabb: [f32; 4]) -> bool {
-    ha_shared::amueblado::muebles_cerca(body, aabb).iter().any(|m| {
+fn muebles_frenan(flora: Option<&FloraHarvest>, body: CelestialBody, z: i32, aabb: [f32; 4]) -> bool {
+    ha_shared::amueblado::muebles_cerca_z(body, z, aabb).iter().any(|m| {
         let (ax, az) = m.ancla();
         let (kx, kz) = crate::targeting::PROP_REMOVED_KEY;
         let levantado = flora.is_some_and(|f| f.is_removed(body, kx, kz, pack_cell(ax, az)));
@@ -3034,7 +3034,8 @@ fn spawn_chunk_small_decor(
                 continue;
             }
             let (tile, nivel, atenuar) = suelo_a_la_vista(tiles, body, tx, tz);
-            if nivel != 0 {
+            // Lo que se ve tiene que ser ESTE nivel: planta baja de la calle, o la planta de un interior.
+            if nivel != 0 && !ha_shared::interiores::es_interior(nivel) {
                 continue;
             }
             // EL AGUA TAMBIÉN SE DECORA. Antes esta puerta era "sólo suelo firme",
@@ -3053,7 +3054,7 @@ fn spawn_chunk_small_decor(
             // aparecían arbustos, fuentes y arcos de seto. El piso de una casa
             // lo decide `ha_shared::amueblado` y nadie más.
             let mueble = (tile == Tile::WoodFloor)
-                .then(|| ha_shared::amueblado::mueble_anclado(body, tx, tz))
+                .then(|| ha_shared::amueblado::mueble_anclado_z(body, z, tx, tz))
                 .flatten();
             let e = if tile.swim() {
                 ha_shared::agua::decor_at(body, tx, tz)
@@ -3146,10 +3147,13 @@ fn spawn_chunk_small_decor(
                 // (musgo, charco, hojas caídas) no debe taparte los pies.
                 Transform::from_xyz(r.x, y, capa),
             ));
-            // Semáforo de esquina: lámparas con fase (`semaforos`).
+            // **El semáforo muestra su luz**: una lámpara hija que `vehiculos::lamparas_semaforo`
+            // pinta de verde, amarillo o rojo según el reloj del mundo (la misma
+            // `luz_en` con la que frena el tránsito). El poste mira contra el tránsito
+            // de su brazo, así que gobierna a quien viaja en sentido opuesto.
             if e.key.starts_with("road/semaforo_") {
                 if let Some(rumbo) = ha_shared::roads::semaforo_at(body, tx, tz) {
-                    crate::semaforos::equipar(&mut ent, e.key, rumbo % 4 == 0, e.size.into());
+                    crate::vehiculos::agregar_lampara(&mut ent, (rumbo + 4) % 8);
                 }
             }
             // **TODO prop es tocable** (15 ago 2026). Hasta acá el dedo sólo
@@ -3643,8 +3647,15 @@ fn arte_de_interior(
             (mx, mz, mw, mh, e)
         }
         _ => {
-            let s = ha_shared::geography::settlement_covering(body, tx, tz)?;
-            let (x, z0, w, h, _) = ha_shared::city::roofed_rect(body, &s, tx, tz)?;
+            // Un interior (banda de pisos propia) trae su rectángulo del plano; una casa del mapa, de la ciudad.
+            let (x, z0, w, h) = if ha_shared::interiores::es_interior(tiles.z) {
+                let r = ha_shared::interiores::rect_de_z(tiles.z)?;
+                (r.0, r.1, r.2, r.3)
+            } else {
+                let s = ha_shared::geography::settlement_covering(body, tx, tz)?;
+                let (x, z0, w, h, _) = ha_shared::city::roofed_rect(body, &s, tx, tz)?;
+                (x, z0, w, h)
+            };
             let idx = ha_shared::worldgen::hash_cell(0x1_7ee2, x, z0) as usize % estilos.len();
             memo.rect = Some((x, z0, w, h));
             memo.estilo = Some(estilos[idx]);
@@ -3677,7 +3688,9 @@ fn arte_de_interior(
     // ve la tapa, no el paño, así que ahí va la pieza del muro. Sólo el muro que
     // enseña su paño (`edge_n`, el del fondo del cuarto) lleva el vidrio; el que
     // da a la calle lo dibuja la fachada.
-    if tile == Tile::Window && cara == "edge_n" {
+    // (En un interior la ventana del muro del fondo SÍ lleva el paño con su borde: el vidrio se le pone encima,
+    // `interiores::vidrios_de_adentro`; sin paño quedaba un hueco sin el borde de la pared.)
+    if tile == Tile::Window && cara == "edge_n" && !ha_shared::interiores::es_interior(tiles.z) {
         return None;
     }
     Some((clave, cara))
@@ -4080,6 +4093,11 @@ fn spawn_chunk_tile_art(
                     continue;
                 }
             }
+            // Los escalones los dibuja `escaleras::dibujar_escalones` orientados al tramo (el arte del
+            // pack sube de norte a sur; un tramo que sube de izquierda a derecha necesita girarlo).
+            if matches!(tile, Tile::Step | Tile::Stairwell) {
+                continue;
+            }
             if !art.tile_has_art(key) {
                 continue;
             }
@@ -4352,7 +4370,8 @@ fn spawn_chunk_tile_art(
                 Some(l) => crate::layers::depth(Some(l), wz),
                 // La rampa TAMBIÉN cuelga sobre la terraza de abajo, así que
                 // también Y-sortea: es la misma pared del acantilado, abierta.
-                None if tile.upright() || relieve => crate::layers::ysort(wz),
+                None if relieve => crate::layers::relieve(wz),
+                None if tile.upright() => crate::layers::ysort(wz),
                 None => crate::layers::FLOOR,
             };
             // **Una pared crece hacia arriba; un ACANTILADO cuelga hacia abajo.**
@@ -4764,7 +4783,7 @@ fn pared_apilada(
     // El Y-sort es el de la celda del CANTO para TODAS las filas: la pared es un
     // solo objeto y tiene que ordenarse como uno, o el que camina por la terraza
     // de abajo se mete entre dos de sus filas.
-    let orden = crate::layers::ysort(tz as f32 * TILE_M + 0.5);
+    let orden = crate::layers::relieve(tz as f32 * TILE_M + 0.5);
     // **Y SE CORTA CONTRA EL CANTO DE MÁS ABAJO.** En una ladera escarpada la
     // terraza siguiente empieza antes de que el muro termine de caer; si el
     // dibujo siguiera, taparía la meseta de abajo con roca por la que se camina.
@@ -5328,7 +5347,7 @@ fn spawn_chunk_hombros_de_garganta(
             let medida = Vec2::splat(TILE_M);
             // Un hombro es UN objeto: todas sus filas se ordenan por el canto, o
             // el que camina por la terraza de abajo se mete entre dos de ellas.
-            let orden = crate::layers::ysort(fila as f32 * TILE_M + 0.5);
+            let orden = crate::layers::relieve(fila as f32 * TILE_M + 0.5);
             let mut poner = |pose: &'static str, f: i64| {
                 let r = render_xy(tx as f32 * TILE_M + 0.5, f as f32 * TILE_M + 0.5);
                 if let Some((sprite, anim)) = art.tile_sprite(key, pose, medida) {

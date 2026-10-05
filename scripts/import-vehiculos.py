@@ -30,7 +30,7 @@ cambia solo; si DESAPARECE una, el script se planta (`falta`).
 
 | clave | piezas | qué es |
 |---|---|---|
-| `vehicle/auto_1..26` | `Car_{Dir}_N` | 4 carrocerías × 6-7 colores (el 11 es el taxi) |
+| `vehicle/coche_1..26` | `Car_{Dir}_N` | 4 carrocerías × 6-7 colores (el 11 es el taxi) |
 | `vehicle/colectivo_1..6` | `Bus_{Dir}_N` | colectivos urbanos |
 | `vehicle/casa_rodante` | `Camper_{Dir}_1` | la casa rodante |
 | `vehicle/ambulancia` | `Ambulance_{Dir}_1/2` | con sirena (`*_luz`) |
@@ -136,8 +136,8 @@ def modelos_del_pack():
     out = []
     for n in range(1, 27):
         forma = next(nombre for r, nombre in CARROCERIA if n in r)
-        etiqueta = "Taxi" if n == 11 else f"Auto {forma.lower()} {n}"
-        out.append((f"auto_{n}", etiqueta, {v: single(f"Car_{k}_{n}") for k, v in DIRS.items()}))
+        etiqueta = "Taxi (manejable)" if n == 11 else f"Coche {forma.lower()} {n}"
+        out.append((f"coche_{n}", etiqueta, {v: single(f"Car_{k}_{n}") for k, v in DIRS.items()}))
     for n in range(1, 7):
         out.append((f"colectivo_{n}", f"Colectivo {n}", {v: single(f"Bus_{k}_{n}") for k, v in DIRS.items()}))
     out.append(("casa_rodante", "Casa rodante", {v: single(f"Camper_{k}_1") for k, v in DIRS.items()}))

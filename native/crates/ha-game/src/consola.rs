@@ -104,6 +104,12 @@ pub enum Orden {
     Causal,
     /// Conteo de eventos y de tipos distintos (`causal.rs`).
     Actividad,
+    /// Poner un vehículo delante (`/auto taxi`; sin nombre, un auto cualquiera).
+    Auto { modelo: Option<String> },
+    /// Llenar el tanque del vehículo que manejás (y de los que tenés al lado).
+    Nafta,
+    /// Fijar el nivel de búsqueda de la policía (0 a 3).
+    Buscado { nivel: u8 },
     /// Mostrar la ayuda.
     Ayuda,
     /// No era un comando: el texto es el motivo.
@@ -127,6 +133,12 @@ pub fn parsear(linea: &str) -> Orden {
         "depurar" => Orden::Depurar,
         "causal" => Orden::Causal,
         "actividad" => Orden::Actividad,
+        "nafta" => Orden::Nafta,
+        "auto" => Orden::Auto { modelo: partes.next().map(|s| s.to_ascii_lowercase()) },
+        "buscado" => match partes.next().map(str::parse::<u8>) {
+            Some(Ok(n)) if n <= 3 => Orden::Buscado { nivel: n },
+            _ => Orden::Error("buscado cuánto. probá /buscado 2 (0 a 3)".into()),
+        },
         "dar" => {
             let Some(item) = partes.next() else {
                 return Orden::Error("dar qué. probá /dar madera 10".into());
@@ -370,6 +382,7 @@ fn teclas(
     mut editor: ResMut<crate::ui_editor::UiEditorState>,
     mut bolsa: ResMut<crate::hud::inventory_ui::InventoryUiState>,
     mut jugador: Query<(&mut crate::sim::SimState, &mut crate::sim::PlayerVisual), With<crate::sim::Player>>,
+    mut pedidos: ResMut<crate::vehiculos::Pedidos>,
 ) {
     for (interaccion, tecla) in &botones {
         if *interaccion != Interaction::Pressed {
@@ -390,7 +403,7 @@ fn teclas(
             Tecla::Enviar => {
                 let linea = std::mem::take(&mut consola.linea);
                 let orden = parsear(&linea);
-                let respuesta = ejecutar(orden, &mut editor, &mut bolsa, &mut jugador);
+                let respuesta = ejecutar(orden, &mut editor, &mut bolsa, &mut jugador, &mut pedidos);
                 consola.responder(respuesta);
             }
         }
@@ -403,9 +416,29 @@ fn ejecutar(
     editor: &mut crate::ui_editor::UiEditorState,
     bolsa: &mut crate::hud::inventory_ui::InventoryUiState,
     jugador: &mut Query<(&mut crate::sim::SimState, &mut crate::sim::PlayerVisual), With<crate::sim::Player>>,
+    pedidos: &mut crate::vehiculos::Pedidos,
 ) -> String {
     match orden {
-        Orden::Ayuda => "/creativo · /dar <item> <n> · /ir <x> <z> · /depurar · /causal · /actividad".into(),
+        Orden::Ayuda => "/creativo · /dar <item> <n> · /ir <x> <z> · /auto <modelo> · /nafta · /buscado <0-3> · /depurar · /causal · /actividad".into(),
+        Orden::Auto { modelo } => {
+            let clave = match modelo.as_deref() {
+                None => "vehicle/coche_1",
+                Some(n) => match ha_shared::vehiculos::modelo_por_nombre(n) {
+                    Some(k) => k,
+                    None => return format!("no conozco el vehículo `{n}`. probá auto, taxi, colectivo, camion, moto, bici, lancha, ambulancia, bomberos, patrulla"),
+                },
+            };
+            pedidos.spawn = Some(clave.to_string());
+            format!("{clave} delante tuyo")
+        }
+        Orden::Nafta => {
+            pedidos.nafta = true;
+            "tanque lleno".into()
+        }
+        Orden::Buscado { nivel } => {
+            pedidos.buscado = Some(nivel);
+            format!("búsqueda en nivel {nivel}")
+        }
         Orden::Causal => {
             let u = crate::causal::ultimos(4);
             if u.is_empty() { "todavía no pasó nada anotable".into() } else { u.join(" | ") }
@@ -489,6 +522,11 @@ mod tests {
         // La cantidad es opcional.
         assert_eq!(parsear("/dar madera"), Orden::Dar { item: "madera".into(), cantidad: 1 });
         assert_eq!(parsear("/ir 100 -40"), Orden::Ir { x: 100.0, z: -40.0 });
+        assert_eq!(parsear("/auto"), Orden::Auto { modelo: None });
+        assert_eq!(parsear("/auto Taxi"), Orden::Auto { modelo: Some("taxi".into()) });
+        assert_eq!(parsear("/nafta"), Orden::Nafta);
+        assert_eq!(parsear("/buscado 2"), Orden::Buscado { nivel: 2 });
+        assert!(matches!(parsear("/buscado 9"), Orden::Error(_)));
     }
 
     /// Un comando mal escrito CONTESTA. Quedarse callado en una consola es lo

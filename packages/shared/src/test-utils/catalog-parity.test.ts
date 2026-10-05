@@ -20,7 +20,7 @@ function loadSnapshot(): CatalogParitySnapshot {
 describe("catalog parity (TS snapshot)", () => {
   it("registry covers expected modules", () => {
     const ids = CATALOG_PARITY_MODULES.map((m) => m.id).sort();
-    expect(ids).toEqual(["assets", "items", "machines", "ui_icons"]);
+    expect(ids).toEqual(["assets", "items", "machines", "tienda", "ui_icons"]);
   });
 
   it("each module has unique entry ids", () => {

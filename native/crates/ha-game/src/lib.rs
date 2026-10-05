@@ -2,10 +2,6 @@
 //! + Terraria-style diggable surfaces (rewrite-2d).
 
 mod art2d;
-mod vehiculos;
-mod trenes;
-mod pandemia;
-mod semaforos;
 mod manos;
 mod flags;
 mod fuente;
@@ -47,7 +43,19 @@ pub mod red;
 pub mod metas;
 pub mod habilidades;
 pub mod infectados;
+pub mod oleadas;
+pub mod autotecho;
+pub mod pandemia;
+pub mod policia_pie;
+pub mod interiores;
+pub mod barrio;
+pub mod incendios;
+pub mod trenes;
+pub mod brujula;
+pub mod luces_ventanas;
 pub mod armas;
+pub mod vehiculos;
+pub mod policia;
 mod pose_jugador;
 mod descanso;
 pub mod jugo;
@@ -59,7 +67,6 @@ pub mod experimentos;
 pub mod casas_npc;
 pub mod saber_vivo;
 pub mod planet_art;
-pub mod barrio;
 pub mod multijugador;
 mod ambient;
 mod consola;
@@ -389,10 +396,6 @@ fn run_app_inner() {
         // el parallax de los menús está aparte).
         .add_plugins(render::fireworks::FireworksPlugin)
         .add_plugins(jugo::JugoPlugin)
-        .add_plugins(vehiculos::VehiculosPlugin)
-        .add_plugins(trenes::TrenesPlugin)
-        .add_plugins(pandemia::PandemiaPlugin)
-        .add_plugins(semaforos::SemaforosPlugin)
         // **Herramientas de la compu, no del teléfono** (reporte del 29 sep 2026:
         // "las pruebas que hagas, que se queden para la compu"). La sonda de
         // etapas mete siete schedules extra en CADA frame; la ablación y el
@@ -410,10 +413,12 @@ fn run_app_inner() {
         .add_plugins(granja::GranjaPlugin)
         .add_plugins(textos_mundo::TextosMundoPlugin)
         .add_plugins(armas::ArmasPlugin)
+        .add_plugins((vehiculos::VehiculosPlugin, policia::PoliciaPlugin))
         .add_plugins((pose_jugador::PoseJugadorPlugin, descanso::DescansoPlugin))
         .add_plugins((tirados::TiradosPlugin, bautizo::BautizoPlugin, salir::SalirPlugin, cubo::CuboPlugin, frutales::FrutalesPlugin, i18n::IdiomaPlugin, multijugador::MultijugadorPlugin, metas::MetasPlugin, habilidades::HabilidadesPlugin, infectados::InfectadosPlugin, estados::EstadosPlugin, alijos::AlijosPlugin, causal::CausalPlugin, equipo::EquipoPlugin, fps_tope::FpsTopePlugin))
         .add_plugins((experimentos::ExperimentosPlugin, casas_npc::CasasNpcPlugin, saber_vivo::SaberVivoPlugin, barrio::BarrioPlugin))
         // Aparte: la tupla de `add_plugins` topa en 16 elementos.
+        .add_plugins((pandemia::PandemiaPlugin, policia_pie::PoliciaPiePlugin, autotecho::AutoTechoPlugin, interiores::InterioresPlugin, luces_ventanas::LucesVentanasPlugin, incendios::IncendiosPlugin, trenes::TrenesPlugin, brujula::BrujulaPlugin))
         .add_plugins(RenderLodPlugin)
         .add_plugins(render::scale::RenderScalePlugin)
         .add_plugins(layers::LayersPlugin)

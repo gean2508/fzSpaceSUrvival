@@ -1037,8 +1037,9 @@ fn sync_menu_companero(
     };
     let estado = c.estado();
     let orden = match order.0 {
+        CompanionTask::Libre => "hace su vida por acá",
         CompanionTask::Follow => "te sigue",
-        CompanionTask::Gather => "explora por la zona",
+        CompanionTask::Gather => "trabaja la zona y te trae recursos",
         CompanionTask::Pray => "reza cerca del ídolo",
     };
     commands
@@ -1080,8 +1081,9 @@ fn sync_menu_companero(
             })
             .with_children(|row| {
                 for (label, task) in [
+                    ("VIVÍ TU VIDA", CompanionTask::Libre),
                     ("SEGUIRME", CompanionTask::Follow),
-                    ("EXPLORAR", CompanionTask::Gather),
+                    ("TRABAJAR", CompanionTask::Gather),
                     ("REZAR", CompanionTask::Pray),
                 ] {
                     let elegida = order.0 == task;
@@ -1135,8 +1137,9 @@ fn menu_companero(
             if let Ok((e, c, _)) = companion.get_single() {
                 let (x, z) = c.pos();
                 let frase = match a.0 {
+                    CompanionTask::Libre => "Dale, me quedo por acá.",
                     CompanionTask::Follow => "Voy con vos.",
-                    CompanionTask::Gather => "Voy a mirar por ahí.",
+                    CompanionTask::Gather => "Voy a trabajar la zona.",
                     CompanionTask::Pray => "Rezo un rato.",
                 };
                 say_from(&mut speech, e, x, z, frase, Color::srgb(0.7, 1.0, 0.9), true);

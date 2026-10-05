@@ -448,7 +448,8 @@ fn update_rain(
     let _probe = crate::debug::probe("update_rain");
     // A gran encuadre (volando alto, órbita) la gota mide menos de un píxel y son
     // 160 transformes por frame para nada.
-    let on = w.rain > 0.02 && zoom.live_view_h < 90.0;
+    // Adentro de un edificio no llueve (el techo está; el sonido llega apagado, ver `sync_weather_audio`).
+    let on = w.rain > 0.02 && zoom.live_view_h < 90.0 && !ha_shared::interiores::es_interior(tiles.z);
     if !on {
         for (_, _, _, mut vis) in &mut drops {
             if *vis != Visibility::Hidden {
@@ -742,10 +743,11 @@ fn spawn_flash_overlay(mut commands: Commands) {
     ));
 }
 
-fn sync_flash(w: Res<Weather>, mut q: Query<&mut BackgroundColor, With<LightningFlash>>) {
+fn sync_flash(w: Res<Weather>, tiles: Res<TileWorld>, mut q: Query<&mut BackgroundColor, With<LightningFlash>>) {
     // Doble parpadeo: el fogonazo tiene un rebote a mitad de camino, que es lo
     // que separa un rayo de "alguien encendió la luz".
-    let f = w.flash;
+    // Un relámpago adentro entra apenas por las ventanas.
+    let f = w.flash * if ha_shared::interiores::es_interior(tiles.z) { 0.25 } else { 1.0 };
     let a = (f * f * 0.5 + if f > 0.55 && f < 0.75 { 0.10 } else { 0.0 }).min(0.6);
     for mut bg in &mut q {
         *bg = BackgroundColor(Color::srgba(0.85, 0.90, 1.0, a));
@@ -812,32 +814,34 @@ fn sync_weather_audio(
     w: Res<Weather>,
     bank: Res<WeatherAudio>,
     settings: Res<crate::audio::AudioSettings>,
-    loops: Query<(Entity, Option<&AudioSink>), With<RainLoop>>,
+    tiles: Res<TileWorld>,
+    loops: Query<(Entity, &AudioSink), With<RainLoop>>,
 ) {
+    // Adentro, la lluvia se oye apagada: el edificio filtra el ruido de afuera.
+    let adentro = if ha_shared::interiores::es_interior(tiles.z) { 0.18 } else { 1.0 };
     if crate::platform::is_app_paused() {
         return;
     }
     let want = w.rain > 0.05;
-    // **Un loop como mucho**: el `AudioSink` aparece un cuadro DESPUÉS (y nunca si no hay dispositivo de audio); pedirlo
-    // en la consulta hacía que, sin sink, se creara un loop nuevo por cuadro (1.700 en 8 minutos de lluvia).
-    let mut hay = false;
-    for (e, sink) in &loops {
-        if !want || hay {
-            commands.entity(e).despawn();
-            continue;
+    match loops.get_single() {
+        Ok((e, sink)) => {
+            if !want {
+                commands.entity(e).despawn();
+            } else {
+                sink.set_volume(settings.sfx * 0.55 * w.rain * adentro);
+            }
         }
-        hay = true;
-        if let Some(sink) = sink {
-            sink.set_volume(settings.sfx * 0.55 * w.rain);
-        }
-    }
-    if !hay && want {
-        if let Some(h) = bank.rain.as_ref() {
-            commands.spawn((
-                RainLoop,
-                AudioPlayer::new(h.clone()),
-                PlaybackSettings::LOOP.with_volume(Volume::new(settings.sfx * 0.55 * w.rain)),
-            ));
+        Err(_) => {
+            if want {
+                if let Some(h) = bank.rain.as_ref() {
+                    commands.spawn((
+                        RainLoop,
+                        AudioPlayer::new(h.clone()),
+                        PlaybackSettings::LOOP
+                            .with_volume(Volume::new(settings.sfx * 0.55 * w.rain * adentro)),
+                    ));
+                }
+            }
         }
     }
 }

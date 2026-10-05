@@ -27,11 +27,7 @@ impl Plugin for AutoDrivePlugin {
         app.init_resource::<DriverActuation>().add_systems(
             Update,
             aplicar_actuacion_del_driver
-                .after(crate::input::actions::poll_action_buttons_held)
-                .after(crate::input::joystick::smooth_movement_intent)
-                // Los vehículos y los trenes leen la intención y el flanco de USAR: tienen que verlos ya escritos.
-                .before(crate::vehiculos::buscar_cercano)
-                .before(crate::trenes::actualizar_red),
+                .after(crate::input::actions::poll_action_buttons_held),
         );
         // Creative-fly visual test: enable creative, hold JUMP, screenshot the
         // whole ascent so we can SEE it (HA_FLYTEST=1 HA_AUTOPLAY=1). Ordered
@@ -154,6 +150,20 @@ impl Plugin for AutoDrivePlugin {
             );
             return;
         }
+        // **Una foto en cada sitio.** HA_VISTATEST="x,z;x,z|puente|agua|casa|lote:plaza" — ver `vista_test_drive`.
+        if crate::flags::var("HA_VISTATEST").is_ok() {
+            app.add_systems(Update, vista_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        if crate::flags::var("HA_AUTOTEST").is_ok() {
+            app.init_resource::<FlyTestState>();
+            app.add_systems(
+                Update,
+                auto_test_drive
+                    .before(aplicar_actuacion_del_driver)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            return;
+        }
         if crate::flags::var("HA_BARRIOTEST").is_ok() {
             app.init_resource::<FlyTestState>().init_resource::<BarrioTestState>();
             app.add_systems(
@@ -227,6 +237,14 @@ impl Plugin for AutoDrivePlugin {
                     .before(aplicar_actuacion_del_driver)
                     .after(crate::creative_fly::sync_flight_mirror),
             );
+            return;
+        }
+        // **Entrar a un edificio** (espacio interior aparte): entra por el botón, comprueba el piso, sube la
+        // escalera CAMINANDO hasta el segundo piso, vuelve a bajar y sale. Deja capturas de cada paso.
+        // HA_INTERIORTEST=1 (con HA_FORCE_TOUCH=1). `HA_INTERIORTEST=<n>` salta a la n-ésima casa encontrada.
+        if crate::flags::var("HA_INTERIORTEST").is_ok() {
+            app.init_resource::<InteriorTestState>();
+            app.add_systems(Update, interior_test_drive.before(aplicar_actuacion_del_driver));
             return;
         }
         // Construcción por BORDES (LDoE): levanta un cuarto real por el mismo
@@ -318,38 +336,6 @@ impl Plugin for AutoDrivePlugin {
             return;
         }
         // **El cubo: lago, pasto y vaca.** HA_CUBOTEST=1 — ver `cubo_test_drive`.
-        // **Los trenes: red, andén, subir, viajar, bajar.** HA_TRENTEST=1 — ver `tren_test_drive`.
-        if crate::flags::var("HA_TRENTEST").is_ok() {
-            app.add_systems(Update, tren_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **La pandemia: contagio de un vecino y fiebre del jugador.** HA_PANDEMIATEST=1 — ver `pandemia_test_drive`.
-        if crate::flags::var("HA_PANDEMIATEST").is_ok() {
-            app.add_systems(Update, pandemia_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **Entidades por arquetipo, parado en la ciudad.** HA_ENTSTEST=segundos — ver `ents_test_drive`.
-        if crate::flags::var("HA_ENTSTEST").is_ok() {
-            app.add_systems(Update, ents_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **La pileta y la cerca de una parcela real.** HA_POOLTEST=1 — ver `pileta_test_drive`.
-        if crate::flags::var("HA_POOLTEST").is_ok() {
-            app.add_systems(Update, pileta_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **Entrar y salir de las casas por la puerta.** HA_ENTRARTEST=1 — ver `entrar_test_drive`.
-        if crate::flags::var("HA_ENTRARTEST").is_ok() {
-            app.add_systems(Update, entrar_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **Una foto en cada sitio.** HA_VISTATEST="x,z;x,z" — ver `vista_test_drive`.
-        if crate::flags::var("HA_VISTATEST").is_ok() {
-            app.add_systems(Update, vista_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **Todas las clases de vehículo (ambulancia, camión, basura, helicóptero, lancha).** HA_VEHTEST=1.
-        if crate::flags::var("HA_VEHTEST").is_ok() {
-            app.add_systems(Update, veh_test_drive.before(aplicar_actuacion_del_driver));
-        }
-        // **Los coches: tránsito, entrar, manejar, balas.** HA_COCHETEST=1 — ver `coche_test_drive`.
-        if crate::flags::var("HA_COCHETEST").is_ok() {
-            app.add_systems(Update, coche_test_drive.before(aplicar_actuacion_del_driver));
-        }
         if crate::flags::var("HA_CUBOTEST").is_ok() {
             app.add_systems(Update, cubo_test_drive.before(aplicar_actuacion_del_driver));
             return;
@@ -2218,6 +2204,151 @@ fn armas_test_drive(world: &mut World) {
         eprintln!("ha-armas: infectados vivos {vivos}/5 · balas en vuelo {balas} · cargadas {cargadas:?} · reserva {reserva}");
         eprintln!("ha-armas: DONE");
         std::process::exit(0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HA_AUTOTEST — sube a un auto en una ciudad y lo maneja con policía, combustible y semáforos
+// ---------------------------------------------------------------------------
+
+/// `HA_AUTOTEST=1`: va al centro de la primera ciudad con calzada, pide un auto (`vehicle/coche_5`), se sube, comete un
+/// delito (la policía nace y persigue), maneja 12 s al este, deja capturas (`auto-0-manejando`, `auto-1-policia`),
+/// vacía el tanque y comprueba que el auto se frena solo. Informa por el log (`ha-auto:`) y termina con exit 0.
+fn auto_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 4.0 || !player_ready(world) {
+        return;
+    }
+    let stage = world.resource::<FlyTestState>().stage;
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    let t = now - entered;
+    let body = ha_shared::CelestialBody::Earth;
+    match stage {
+        0 => {
+            // La primera ciudad con calzada cerca del origen.
+            let mut destino = None;
+            'b: for sx in -2..=2i64 {
+                for sz in -2..=2i64 {
+                    let Some(c) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    for r in 0..40i64 {
+                        for dz in -r..=r {
+                            for dx in -r..=r {
+                                if dx.abs().max(dz.abs()) == r && ha_shared::roads::is_drivable_at(body, c.center.0 + dx, c.center.1 + dz) {
+                                    destino = Some((c.center.0 + dx, c.center.1 + dz));
+                                    break 'b;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let (x, z) = destino.map(|(x, z)| (x as f32 + 0.5, z as f32 + 0.5)).unwrap_or((0.0, 0.0));
+            {
+                let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+                let (mut sim, mut vis) = q.single_mut(world);
+                sim.body.x = x;
+                sim.body.z = z;
+                vis.from_x = x;
+                vis.to_x = x;
+                vis.from_z = z;
+                vis.to_z = z;
+                vis.to_rot = 0.0;
+            }
+            eprintln!("ha-auto: en la ciudad, calzada ({x:.0},{z:.0})");
+            advance_stage(world, now);
+        }
+        1 if t > 6.0 => {
+            world.resource_mut::<crate::vehiculos::Pedidos>().spawn = Some("vehicle/coche_5".into());
+            advance_stage(world, now);
+        }
+        2 if t > 1.0 => {
+            let mut q = world.query::<(Entity, &crate::vehiculos::Vehiculo)>();
+            let Some(e) = q.iter(world).find(|(_, v)| matches!(v.quien, crate::vehiculos::Quien::Nadie) && v.usado).map(|(e, _)| e) else {
+                eprintln!("ha-auto: FALLO · el pedido no creó el vehículo");
+                std::process::exit(2);
+            };
+            world.resource_mut::<crate::vehiculos::Manejando>().auto = Some(e);
+            {
+                let mut v = world.get_mut::<crate::vehiculos::Vehiculo>(e).unwrap();
+                v.quien = crate::vehiculos::Quien::Jugador;
+                v.robado = true;
+                eprintln!("ha-auto: al volante de {} · combustible {:.0}%", v.ficha.nombre, v.estado.comb * 100.0);
+            }
+            world.resource_mut::<crate::policia::Busqueda>().delito(1, "¡Robaste un vehículo!");
+            advance_stage(world, now);
+        }
+        3 => {
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
+            let shots = world.resource::<FlyTestState>().shots;
+            if shots == 0 && t > 3.0 {
+                shot(world, &format!("{}/auto-0-manejando.png", flytest_dir()));
+                world.resource_mut::<FlyTestState>().shots += 1;
+            }
+            if shots == 1 && t > 10.0 {
+                shot(world, &format!("{}/auto-1-policia.png", flytest_dir()));
+                world.resource_mut::<FlyTestState>().shots += 1;
+            }
+            if t > 12.0 {
+                let (vel, comb, x, z) = {
+                    let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+                    let v = world.get::<crate::vehiculos::Vehiculo>(e).unwrap();
+                    (v.estado.vel, v.estado.comb, v.estado.x, v.estado.z)
+                };
+                let patrullas = world.query::<&crate::vehiculos::Vehiculo>().iter(world).filter(|v| matches!(v.quien, crate::vehiculos::Quien::Policia(_))).count();
+                let nivel = world.resource::<crate::policia::Busqueda>().nivel;
+                let transito = world.query::<&crate::vehiculos::Vehiculo>().iter(world).filter(|v| matches!(v.quien, crate::vehiculos::Quien::Vecino(_))).count();
+                eprintln!("ha-auto: tras 12 s · vel {vel:.1} m/s · pos ({x:.0},{z:.0}) · combustible {:.1}% · patrullas {patrullas} · búsqueda {nivel} · tránsito {transito}", comb * 100.0);
+                let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+                world.get_mut::<crate::vehiculos::Vehiculo>(e).unwrap().estado.comb = 0.0;
+                advance_stage(world, now);
+            }
+        }
+        4 => {
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
+            if t > 8.0 {
+                let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+                let vel = world.get::<crate::vehiculos::Vehiculo>(e).unwrap().estado.vel;
+                let ok = vel.abs() < 2.0;
+                eprintln!("ha-auto: sin combustible a los 8 s · vel {vel:.2} m/s · {}", if ok { "OK se frenó solo" } else { "FALLO sigue andando" });
+                if !ok {
+                    std::process::exit(3);
+                }
+                advance_stage(world, now);
+            }
+        }
+        5 => {
+            // A la gasolinera más cercana: el auto queda parado adentro con el tanque casi vacío.
+            let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+            let (x, z) = {
+                let v = world.get::<crate::vehiculos::Vehiculo>(e).unwrap();
+                (v.estado.x, v.estado.z)
+            };
+            match ha_shared::vehiculos::gasolinera_cercana(body, x, z, 900.0) {
+                Some((gx, gz, d)) => {
+                    let mut v = world.get_mut::<crate::vehiculos::Vehiculo>(e).unwrap();
+                    v.estado.x = gx;
+                    v.estado.z = gz;
+                    v.estado.vel = 0.0;
+                    v.estado.comb = 0.1;
+                    eprintln!("ha-auto: gasolinera a {d:.0} m en ({gx:.0},{gz:.0}) · tanque al 10%");
+                    advance_stage(world, now);
+                }
+                None => {
+                    eprintln!("ha-auto: sin gasolinera a 900 m (repostaje omitido)");
+                    eprintln!("ha-auto: DONE");
+                    std::process::exit(0);
+                }
+            }
+        }
+        6 if t > 6.0 => {
+            let e = world.resource::<crate::vehiculos::Manejando>().auto.unwrap();
+            let comb = world.get::<crate::vehiculos::Vehiculo>(e).unwrap().estado.comb;
+            let ok = comb > 0.6;
+            eprintln!("ha-auto: tras 6 s en la gasolinera · tanque {:.0}% · {}", comb * 100.0, if ok { "OK repostó" } else { "FALLO no repostó" });
+            eprintln!("ha-auto: DONE");
+            std::process::exit(if ok { 0 } else { 4 });
+        }
+        _ => {}
     }
 }
 
@@ -6464,11 +6595,21 @@ fn granja_test_drive(world: &mut World) {
         6 => {
             world.resource_mut::<crate::sky2d::DayClock>().t = crate::sky2d::DAY_SECS * 0.45;
             let (px, pz) = player_cell(world);
+            // Una celda con una roca, un árbol o un arbusto encima no se siembra (el objetivo es la
+            // roca): el driver las descarta con la misma colisión que el jugador.
+            let candidatas: Vec<(i64, i64)> = [(2, 0), (2, 1), (2, -1), (-2, 0), (-2, 1), (-2, -1), (0, 2), (1, 2), (-1, 2), (3, 0), (-3, 0), (0, 3), (0, -3), (2, 2), (-2, 2)]
+                .iter()
+                .map(|&(dx, dz)| (px + dx, pz + dz))
+                .collect();
+            let libres: Vec<bool> = {
+                let mut st = bevy::ecs::system::SystemState::<crate::obstaculos::Obstaculos>::new(world);
+                let obs = st.get(world);
+                candidatas.iter().map(|&(x, z)| !obs.caja_frena(body, x as f32 + 0.5, z as f32 + 0.5, 0.45)).collect()
+            };
             let tiles = world.resource::<TileWorld>();
             let mut celdas = Vec::new();
-            for (dx, dz) in [(2, 0), (2, 1), (2, -1), (-2, 0), (-2, 1), (-2, -1), (0, 2), (1, 2), (-1, 2)] {
-                let (x, z) = (px + dx, pz + dz);
-                if crate::granja::suelo_sembrable(tiles.tile_at(body, x, z)) && !tiles.solid_at(body, x, z) {
+            for (i, &(x, z)) in candidatas.iter().enumerate() {
+                if libres[i] && crate::granja::suelo_sembrable(tiles.tile_at(body, x, z)) && !tiles.solid_at(body, x, z) {
                     celdas.push((x, z));
                 }
             }
@@ -7254,642 +7395,6 @@ fn salir_test_drive(world: &mut World, mut paso: Local<u32>, mut t0: Local<f32>,
     }
 }
 
-
-
-// ---------------------------------------------------------------------------
-// HA_TRENTEST — la estación funcional: red calculada, andén, subir al tren, viajar y bajar
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct TrenTest {
-    paso: u32,
-    t0: f32,
-    fallo: bool,
-    x0: f32,
-    linea: Option<ha_shared::rail::Linea>,
-    paradas_vistas: u32,
-    /// El tren ya salió de la parada donde subí (hay que esperar a que llegue a la siguiente).
-    espera_salida: bool,
-}
-
-fn tren_falla(st: &mut TrenTest, inv: &str, detalle: &str) {
-    report_bug("tren", inv, detalle);
-    st.fallo = true;
-}
-
-/// **El tren, por los sistemas de verdad** (`trenes.rs` + `ha_shared::rail`):
-///
-/// 1. La red se calcula (hilo de fondo) y la ciudad más cercana tiene línea.
-/// 2. Parado en el andén de la estación, aparece un tren por su vía y se detiene a la puerta (`tren_cerca`).
-/// 3. USAR sube; viaja hasta la parada siguiente (≥ 300 m) con el jugador pegado al tren.
-/// 4. USAR parado en esa parada baja al jugador al andén.
-///
-/// Capturas en `HA_SHOTDIR` (`tren-*.png`).
-fn tren_test_drive(world: &mut World, mut st: Local<TrenTest>) {
-    use crate::vehiculos::Conduccion;
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    let dir = flytest_dir();
-    let body = ha_shared::CelestialBody::Earth;
-    match st.paso {
-        0 => {
-            // La ciudad más cercana al origen (cualquier ciudad sirve) y a esperar la red.
-            let mut best: Option<(i64, ha_shared::geography::Settlement)> = None;
-            for sx in -12..12 {
-                for sz in -12..12 {
-                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
-                    if s.tier != ha_shared::geography::SettlementTier::City {
-                        continue;
-                    }
-                    let d = s.center.0.abs() + s.center.1.abs();
-                    if best.as_ref().map_or(true, |(bd, _)| d < *bd) {
-                        best = Some((d, s));
-                    }
-                }
-            }
-            let Some((_, s)) = best else {
-                eprintln!("ha-verify: TRENTEST FAIL (no hay ciudad)");
-                std::process::exit(1);
-            };
-            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-            // Cerca del centro para que el hilo de red arranque con esta ciudad.
-            teleport_a_celda(world, s.center.0 as f32, s.center.1 as f32);
-            eprintln!("ha-trentest: ciudad en {:?}", s.center);
-            st.linea = None;
-            st.paso = 1;
-            st.t0 = now;
-        }
-        1 => {
-            // Esperar a que la red incluya la línea de esta ciudad.
-            let (lineas, _) = crate::trenes::lineas();
-            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
-            let mejor = lineas.iter().min_by_key(|l| (l.ciudad.0 - px as i64).abs() + (l.ciudad.1 - pz as i64).abs()).copied();
-            if let Some(l) = mejor {
-                eprintln!("ha-trentest: línea lista tras {:.0} s: z={} paradas={:?}", now - st.t0, l.z, l.paradas);
-                st.linea = Some(l);
-                // A la estación: sobre el andén, entre las dos vías.
-                teleport_a_celda(world, l.paradas[1] as f32 + 0.5, l.z as f32 + 2.5);
-                st.paso = 2;
-                st.t0 = now;
-            } else if now - st.t0 > 400.0 {
-                tren_falla(&mut st, "la_red_se_calcula", "en 400 s no hay ninguna línea");
-                st.paso = 99;
-            }
-        }
-        2 => {
-            if !mundo_listo(world) {
-                st.t0 = now;
-                return;
-            }
-            if now - st.t0 < 4.0 {
-                return;
-            }
-            shot(world, &format!("{dir}/tren-0-anden.png"));
-            st.paso = 3;
-            st.t0 = now;
-        }
-        3 => {
-            // Esperar un tren parado en la estación.
-            if world.resource::<Conduccion>().tren_cerca {
-                eprintln!("ha-trentest: hay un tren a la puerta tras {:.0} s", now - st.t0);
-                shot(world, &format!("{dir}/tren-1-en-la-estacion.png"));
-                let (px, _) = posicion_del_jugador(world).unwrap_or_default();
-                st.x0 = px;
-                world.resource_mut::<DriverActuation>().usar = true;
-                st.paso = 4;
-                st.t0 = now;
-            } else if now - st.t0 > 420.0 {
-                tren_falla(&mut st, "llega_un_tren", "en 420 s ningún tren se paró en la estación");
-                st.paso = 99;
-            }
-        }
-        4 => {
-            if world.resource::<Conduccion>().en_tren.is_some() {
-                eprintln!("ha-trentest: a bordo");
-                st.paso = 5;
-                st.t0 = now;
-            } else if now - st.t0 > 3.0 {
-                tren_falla(&mut st, "se_puede_subir", "USAR con el tren a la puerta no subió");
-                st.paso = 99;
-            }
-        }
-        5 => {
-            // Viajando: el jugador va pegado al tren; esperar a que pare en la parada siguiente.
-            let c = world.resource::<Conduccion>();
-            let (en_tren, parado) = (c.en_tren.is_some(), c.tren_parado);
-            let (px, _) = posicion_del_jugador(world).unwrap_or_default();
-            if !en_tren {
-                tren_falla(&mut st, "sigue_a_bordo", "se bajó solo");
-                st.paso = 99;
-                return;
-            }
-            if (px - st.x0).abs() > 300.0 && st.paradas_vistas < 2 {
-                shot(world, &format!("{dir}/tren-2-viajando.png"));
-                st.paradas_vistas = 2;
-            }
-            if !parado {
-                st.paradas_vistas = st.paradas_vistas.max(1);
-                st.espera_salida = true;
-            }
-            if parado && st.espera_salida {
-                eprintln!("ha-trentest: llegó a la parada siguiente tras {:.0} s: recorrió {:.0} m", now - st.t0, (px - st.x0).abs());
-                if (px - st.x0).abs() < 300.0 {
-                    let detalle = format!("sólo {:.0} m entre paradas", (px - st.x0).abs());
-                    tren_falla(&mut st, "el_tren_viaja", &detalle);
-                }
-                shot(world, &format!("{dir}/tren-3-llegada.png"));
-                world.resource_mut::<DriverActuation>().usar = true;
-                st.paso = 6;
-                st.t0 = now;
-            } else if now - st.t0 > 160.0 {
-                tren_falla(&mut st, "el_tren_llega", "en 160 s no paró en la parada siguiente");
-                st.paso = 99;
-            }
-        }
-        6 => {
-            if world.resource::<Conduccion>().en_tren.is_none() {
-                eprintln!("ha-trentest: bajó al andén");
-                shot(world, &format!("{dir}/tren-4-bajo.png"));
-                st.paso = 99;
-                st.t0 = now;
-            } else if now - st.t0 > 3.0 {
-                tren_falla(&mut st, "se_puede_bajar", "USAR en la parada no bajó");
-                st.paso = 99;
-            }
-        }
-        _ => {
-            if st.t0 == 0.0 {
-                st.t0 = now;
-                return;
-            }
-            if now - st.t0 > 3.0 {
-                eprintln!("ha-verify: TRENTEST {}", if st.fallo { "FAIL" } else { "DONE" });
-                std::process::exit(if st.fallo { 1 } else { 0 });
-            }
-        }
-    }
-}
-
-
-// ---------------------------------------------------------------------------
-// HA_VEHTEST — cada clase de vehículo: aparece, se dibuja, se maneja y se destruye a balazos
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct VehTest {
-    paso: u32,
-    clase: usize,
-    t0: f32,
-    fallo: bool,
-    inicio: Vec2,
-    id: Option<Entity>,
-    agua: Option<(i64, i64)>,
-    plantado: bool,
-    visto: (usize, u32),
-    espera: f32,
-}
-
-fn veh_falla(st: &mut VehTest, inv: &str, detalle: &str) {
-    report_bug("vehiculo", inv, detalle);
-    st.fallo = true;
-}
-
-/// **Cada clase, por los sistemas de verdad**: la ambulancia, el camión de bomberos, el de basura, el helicóptero y la lancha.
-/// Para cada una: se crea junto al jugador (la lancha, en el agua más cercana), se dibuja (captura), el jugador se sube, la maneja
-/// con el stick hacia el este (≥ 5 m), se baja y una ráfaga la destruye.
-fn veh_test_drive(world: &mut World, mut st: Local<VehTest>) {
-    use crate::vehiculos::{Clase, Conduccion, Conductor, Vehiculo};
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    const CLASES: [(Clase, &str); 5] = [(Clase::Ambulancia, "ambulancia"), (Clase::Camion, "camion"), (Clase::Basura, "basura"), (Clase::Helicoptero, "helicoptero"), (Clase::Lancha, "lancha")];
-    let dir = flytest_dir();
-    let body = ha_shared::CelestialBody::Earth;
-    if st.clase >= CLASES.len() {
-        if st.t0 == 0.0 {
-            st.t0 = now;
-            return;
-        }
-        if now - st.t0 > 3.0 {
-            eprintln!("ha-verify: VEHTEST {}", if st.fallo { "FAIL" } else { "DONE" });
-            std::process::exit(if st.fallo { 1 } else { 0 });
-        }
-        return;
-    }
-    let (clase, nombre) = CLASES[st.clase];
-    // `HA_VEHTEST=helicoptero,lancha` prueba sólo esas clases (con el render por software cada clase cuesta minutos).
-    if st.paso == 0 {
-        let filtro = crate::flags::var("HA_VEHTEST").unwrap_or_default();
-        if filtro != "1" && !filtro.is_empty() && !filtro.split(',').any(|f| f.trim() == nombre) {
-            st.clase += 1;
-            return;
-        }
-    }
-    if st.visto != (st.clase, st.paso) {
-        st.visto = (st.clase, st.paso);
-        eprintln!("ha-vehtest: {nombre} paso {}", st.paso);
-    }
-    match st.paso {
-        0 => {
-            // Plantarse en una ciudad (para la lancha, junto al agua más cercana).
-            if st.clase == 0 || !st.plantado {
-                let mut best: Option<(i64, (i64, i64))> = None;
-                for sx in -25..25 {
-                    for sz in -25..25 {
-                        let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
-                        if s.tier != ha_shared::geography::SettlementTier::City {
-                            continue;
-                        }
-                        let d = s.center.0.abs() + s.center.1.abs();
-                        if best.map_or(true, |(bd, _)| d < bd) {
-                            best = Some((d, s.center));
-                        }
-                    }
-                }
-                let Some((_, (cx, cz))) = best else {
-                    eprintln!("ha-verify: VEHTEST FAIL (no hay ciudad)");
-                    std::process::exit(1);
-                };
-                world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-                teleport_a_celda(world, cx as f32, cz as f32);
-                st.plantado = true;
-            }
-            if clase == Clase::Lancha {
-                let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
-                let (px, pz) = (px.floor() as i64, pz.floor() as i64);
-                let tiles = world.resource::<TileWorld>();
-                let mut mejor: Option<(i64, (i64, i64))> = None;
-                for dz in (-300..=300i64).step_by(2) {
-                    for dx in (-300..=300i64).step_by(2) {
-                        let (x, z) = (px + dx, pz + dz);
-                        let agua = |a: i64, b: i64| matches!(tiles.tile_at(body, a, b), ha_shared::topdown::Tile::Water | ha_shared::topdown::Tile::WaterDeep);
-                        if agua(x, z) && agua(x + 3, z) && agua(x - 3, z) && agua(x, z + 3) && agua(x, z - 3) {
-                            let d = dx * dx + dz * dz;
-                            if mejor.map_or(true, |m| d < m.0) {
-                                mejor = Some((d, (x, z)));
-                            }
-                        }
-                    }
-                }
-                let Some((_, (x, z))) = mejor else {
-                    eprintln!("ha-vehtest: no hay agua a 300 m: se omite la lancha");
-                    st.clase += 1;
-                    st.paso = 0;
-                    return;
-                };
-                st.agua = Some((x, z));
-                teleport_a_celda(world, x as f32 + 0.5, z as f32 + 0.5);
-            }
-            st.paso = 1;
-            st.t0 = now;
-        }
-        1 => {
-            // Con el render por software el anillo de chunks tarda minutos: a los 90 s se sigue igual.
-            if st.espera == 0.0 {
-                st.espera = now;
-            }
-            if !mundo_listo(world) && now - st.espera < 90.0 {
-                st.t0 = now;
-                return;
-            }
-            if now - st.t0 < 3.0 {
-                return;
-            }
-            st.espera = 0.0;
-            let Some((px, pz)) = posicion_del_jugador(world) else { return };
-            // En tierra, sobre un carril este de la calzada con 12 m libres a cada lado (no sobre la vereda, llena de faroles).
-            let calle = (0..=60i64)
-                .flat_map(|d| (-d..=d).flat_map(move |k| [(k, -d), (k, d), (-d, k), (d, k)]))
-                .map(|(dx, dz)| (px.floor() as i64 + dx, pz.floor() as i64 + dz))
-                .find(|&(x, z)| [0i64, 12, -12].iter().all(|o| ha_shared::roads::lane_at(body, x + o, z) == Some(0)));
-            let pos = if let Some((x, z)) = st.agua.filter(|_| clase == Clase::Lancha) {
-                Vec2::new(x as f32 + 0.5, z as f32 + 0.5)
-            } else if let Some((x, z)) = calle {
-                Vec2::new(x as f32 + 0.5, z as f32 + 0.5)
-            } else {
-                Vec2::new(px + 7.0, pz + 5.0)
-            };
-            let nuevo = world.resource_scope::<crate::art2d::ArtLibrary, _>(|_, art| Vehiculo::nuevo(&art, clase, pos, 0.0, Conductor::Nadie, 77 + st.clase as u32));
-            let Some(v) = nuevo else {
-                veh_falla(&mut st, "hay_arte", &format!("el pack no trae el dibujo de {nombre}"));
-                st.clase += 1;
-                st.paso = 0;
-                return;
-            };
-            let e = world.spawn((v, Sprite::default(), Transform::from_xyz(pos.x, -pos.y, 3.5), Visibility::Hidden)).id();
-            st.id = Some(e);
-            st.inicio = pos;
-            st.paso = 2;
-            st.t0 = now;
-        }
-        2 => {
-            if now - st.t0 < 2.0 {
-                return;
-            }
-            shot(world, &format!("{dir}/veh-{nombre}.png"));
-            // Junto al vehículo y USAR.
-            let p = world.get::<Vehiculo>(st.id.unwrap()).map(|v| v.cuerpo.pos).unwrap_or_default();
-            teleport_a_celda(world, p.x - 3.0 - clase.ficha().largo * 0.5, p.y);
-            st.paso = 3;
-            st.t0 = now;
-        }
-        3 => {
-            if world.resource::<Conduccion>().cerca.is_some() || now - st.t0 > 1.0 {
-                world.resource_mut::<DriverActuation>().usar = true;
-                st.paso = 4;
-                st.t0 = now;
-            }
-        }
-        4 => {
-            if world.resource::<Conduccion>().vehiculo.is_some() {
-                st.paso = 5;
-                st.t0 = now;
-            } else if now - st.t0 > 3.0 {
-                veh_falla(&mut st, "se_puede_entrar", &format!("no se pudo subir a {nombre}"));
-                st.clase += 1;
-                st.paso = 0;
-            }
-        }
-        5 => {
-            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
-            if now - st.t0 > 6.0 {
-                let p = world.get::<Vehiculo>(st.id.unwrap()).map(|v| v.cuerpo.pos).unwrap_or_default();
-                let d = p.distance(st.inicio);
-                eprintln!("ha-vehtest: {nombre} manejado {d:.0} m");
-                if d < 5.0 {
-                    veh_falla(&mut st, "se_maneja", &format!("{nombre} recorrió sólo {d:.1} m en 6 s"));
-                }
-                shot(world, &format!("{dir}/veh-{nombre}-manejando.png"));
-                st.paso = 6;
-                st.t0 = now;
-            }
-        }
-        6 => {
-            world.resource_mut::<DriverActuation>().usar = true;
-            st.paso = 7;
-            st.t0 = now;
-        }
-        7 => {
-            if world.resource::<Conduccion>().vehiculo.is_none() {
-                let v = world.get::<Vehiculo>(st.id.unwrap()).cloned().unwrap();
-                for k in 0..40 {
-                    let a = Vec2::new(v.cuerpo.pos.x - 6.0, v.cuerpo.pos.y + (k as f32 - 20.0) * 0.02);
-                    world.spawn(crate::armas::Bala {
-                        pos: v.cuerpo.pos,
-                        prev: a,
-                        vel: Vec2::ZERO,
-                        dano: 60.0,
-                        origen: a,
-                        alcance: 30.0,
-                        atraviesa: 1,
-                        golpeados: Vec::new(),
-                        viva: true,
-                        impacto: crate::audio::Sfx::BulletHit,
-                        rayo: false,
-                    });
-                }
-                st.paso = 8;
-                st.t0 = now;
-            } else if now - st.t0 > 3.0 {
-                veh_falla(&mut st, "se_puede_salir", &format!("no se pudo bajar de {nombre}"));
-                st.clase += 1;
-                st.paso = 0;
-            }
-        }
-        _ => {
-            if now - st.t0 > 1.5 {
-                let destruido = world.get::<Vehiculo>(st.id.unwrap()).map(|v| v.destruido).unwrap_or(true);
-                if !destruido {
-                    veh_falla(&mut st, "las_balas_destruyen", &format!("40 balas de 60 no destruyeron {nombre}"));
-                }
-                shot(world, &format!("{dir}/veh-{nombre}-destruido.png"));
-                st.clase += 1;
-                st.paso = 0;
-                st.agua = None;
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// HA_COCHETEST — el tránsito: aparece, circula, se le sube el jugador, maneja y lo destruyen a balazos
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct CocheTest {
-    paso: u32,
-    t0: f32,
-    fallo: bool,
-    inicio: Vec2,
-    id: Option<Entity>,
-}
-
-fn coche_falla(st: &mut CocheTest, inv: &str, detalle: &str) {
-    report_bug("coche", inv, detalle);
-    st.fallo = true;
-}
-
-/// **Los vehículos, por los sistemas de verdad** (`vehiculos.rs`):
-///
-/// 1. En una ciudad, el tránsito aparece solo (≥ 1 coche con conductor NPC en 40 s) y AVANZA por su carril.
-/// 2. El jugador se para junto a uno y toca USAR: queda al volante (`Conduccion::vehiculo`).
-/// 3. Con el stick hacia el este, el coche acelera y recorre ≥ 15 m.
-/// 4. USAR de nuevo lo baja, y una ráfaga de balas sobre el coche abandonado lo destruye.
-///
-/// Capturas en `HA_SHOTDIR` (`coche-*.png`).
-fn coche_test_drive(world: &mut World, mut st: Local<CocheTest>) {
-    use crate::vehiculos::{Conduccion, Conductor as Conducto, Vehiculo};
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    let dir = flytest_dir();
-    let body = ha_shared::CelestialBody::Earth;
-    match st.paso {
-        0 => {
-            let mut best: Option<(i64, (i64, i64))> = None;
-            for sx in -25..25 {
-                for sz in -25..25 {
-                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
-                    if s.tier != ha_shared::geography::SettlementTier::City {
-                        continue;
-                    }
-                    let d = s.center.0.abs() + s.center.1.abs();
-                    if best.map_or(true, |(bd, _)| d < bd) {
-                        best = Some((d, s.center));
-                    }
-                }
-            }
-            let Some((_, (cx, cz))) = best else {
-                eprintln!("ha-verify: COCHETEST FAIL (no hay ciudad)");
-                std::process::exit(1);
-            };
-            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-            teleport_a_celda(world, cx as f32, cz as f32);
-            eprintln!("ha-cochetest: ciudad en ({cx}, {cz})");
-            st.paso = 1;
-            st.t0 = now;
-        }
-        1 => {
-            if !mundo_listo(world) {
-                st.t0 = now;
-                return;
-            }
-            if now - st.t0 < 3.0 {
-                return;
-            }
-            st.paso = 2;
-            st.t0 = now;
-        }
-        2 => {
-            // Esperar el tránsito.
-            let mut q = world.query::<(Entity, &Vehiculo)>();
-            let mut coches: Vec<(Entity, Vec2, f32)> = q.iter(world).filter(|(_, v)| v.conductor == Conducto::Npc).map(|(e, v)| (e, v.cuerpo.pos, v.cuerpo.vel.abs())).collect();
-            // Se sigue al que más rápido va: uno parado en un callejón sin salida o detrás de otro no dice nada del tránsito.
-            coches.sort_by(|a, b| b.2.total_cmp(&a.2));
-            let coches: Vec<(Entity, Vec2)> = coches.into_iter().map(|(e, p, _)| (e, p)).collect();
-            if let Some(&(e, p)) = coches.first() {
-                st.id = Some(e);
-                st.inicio = p;
-                eprintln!("ha-cochetest: {} coche(s) de tránsito; sigo a uno en ({:.0},{:.0})", coches.len(), p.x, p.y);
-                shot(world, &format!("{dir}/coche-0-transito.png"));
-                st.paso = 3;
-                st.t0 = now;
-            } else if now - st.t0 > 60.0 {
-                coche_falla(&mut st, "aparece_el_transito", "en 60 s ningún coche con conductor NPC");
-                st.paso = 99;
-            }
-        }
-        3 => {
-            // Avanza por su carril (o espera si el semáforo/obstáculo lo frena: se le da tiempo).
-            let Some(e) = st.id else { st.paso = 99; return };
-            let Some(v) = world.get::<Vehiculo>(e).cloned() else {
-                // Se retiró (fin de calle o lejos): se busca otro.
-                st.paso = 2;
-                st.t0 = now;
-                return;
-            };
-            let recorrido = v.cuerpo.pos.distance(st.inicio);
-            if recorrido > 25.0 {
-                eprintln!("ha-cochetest: el coche avanzó {recorrido:.0} m solo");
-                st.paso = 4;
-                st.t0 = now;
-            } else if now - st.t0 > 45.0 {
-                coche_falla(&mut st, "el_transito_avanza", &format!("sólo {recorrido:.1} m en 45 s (vel {:.1})", v.cuerpo.vel));
-                st.paso = 99;
-            }
-        }
-        4 => {
-            // Junto al coche: se planta el jugador a 2 m y toca USAR.
-            let Some(e) = st.id else { st.paso = 99; return };
-            let Some(v) = world.get::<Vehiculo>(e).cloned() else { st.paso = 2; st.t0 = now; return };
-            teleport_a_celda(world, v.cuerpo.pos.x + 2.0, v.cuerpo.pos.y + 2.0);
-            if world.resource::<Conduccion>().cerca.is_some() || now - st.t0 > 1.0 {
-                world.resource_mut::<DriverActuation>().usar = true;
-                st.paso = 5;
-                st.t0 = now;
-            }
-        }
-        5 => {
-            if world.resource::<Conduccion>().vehiculo.is_some() {
-                eprintln!("ha-cochetest: al volante");
-                shot(world, &format!("{dir}/coche-1-al-volante.png"));
-                let p = world.get::<Vehiculo>(world.resource::<Conduccion>().vehiculo.unwrap()).map(|v| v.cuerpo.pos).unwrap_or_default();
-                st.inicio = p;
-                st.paso = 6;
-                st.t0 = now;
-            } else if now - st.t0 > 3.0 {
-                coche_falla(&mut st, "se_puede_entrar", "USAR junto al coche no lo subió");
-                st.paso = 99;
-            }
-        }
-        6 => {
-            // Stick hacia el este durante 8 s.
-            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
-            let Some(e) = world.resource::<Conduccion>().vehiculo else {
-                coche_falla(&mut st, "sigue_al_volante", "se bajó solo");
-                st.paso = 99;
-                return;
-            };
-            let v = world.get::<Vehiculo>(e).cloned().unwrap();
-            if now - st.t0 > 8.0 {
-                let d = v.cuerpo.pos.distance(st.inicio);
-                eprintln!("ha-cochetest: manejado {d:.0} m, vel {:.1} m/s, vida {:.0}", v.cuerpo.vel, v.vida);
-                shot(world, &format!("{dir}/coche-2-manejando.png"));
-                if d < 15.0 && v.vida >= 119.0 {
-                    coche_falla(&mut st, "el_jugador_maneja", &format!("el coche recorrió sólo {d:.1} m en 8 s con el stick al este"));
-                }
-                st.paso = 7;
-                st.t0 = now;
-            }
-        }
-        7 => {
-            world.resource_mut::<DriverActuation>().usar = true;
-            st.paso = 8;
-            st.t0 = now;
-        }
-        8 => {
-            if world.resource::<Conduccion>().vehiculo.is_none() {
-                // Una ráfaga sobre el coche abandonado.
-                let p = posicion_del_jugador(world).unwrap_or_default();
-                let pa = Vec2::new(p.0, p.1);
-                let mut q = world.query::<(Entity, &Vehiculo)>();
-                let objetivo = q
-                    .iter(world)
-                    .filter(|(_, v)| !v.destruido)
-                    .min_by(|a, b| a.1.cuerpo.pos.distance(pa).total_cmp(&b.1.cuerpo.pos.distance(pa)));
-                let Some((e, v)) = objetivo.map(|(e, v)| (e, v.clone())) else { coche_falla(&mut st, "hay_a_quien_disparar", "no hay coches"); st.paso = 99; return };
-                st.id = Some(e);
-                for k in 0..30 {
-                    let a = Vec2::new(v.cuerpo.pos.x - 8.0, v.cuerpo.pos.y + (k as f32 - 15.0) * 0.02);
-                    world.spawn(crate::armas::Bala {
-                        pos: v.cuerpo.pos,
-                        prev: a,
-                        vel: Vec2::ZERO,
-                        dano: 40.0,
-                        origen: a,
-                        alcance: 30.0,
-                        atraviesa: 1,
-                        golpeados: Vec::new(),
-                        viva: true,
-                        impacto: crate::audio::Sfx::BulletHit,
-                        rayo: false,
-                    });
-                }
-                st.paso = 9;
-                st.t0 = now;
-            } else if now - st.t0 > 3.0 {
-                coche_falla(&mut st, "se_puede_salir", "USAR al volante no lo bajó");
-                st.paso = 99;
-            }
-        }
-        9 => {
-            if now - st.t0 > 1.5 {
-                let destruido = st.id.and_then(|e| world.get::<Vehiculo>(e)).map(|v| v.destruido).unwrap_or(true);
-                shot(world, &format!("{dir}/coche-3-destruido.png"));
-                if !destruido {
-                    coche_falla(&mut st, "las_balas_destruyen", "30 balas de 40 no destruyeron el coche");
-                }
-                st.paso = 99;
-                st.t0 = now;
-            }
-        }
-        _ => {
-            if now - st.t0 > 3.0 || st.t0 == 0.0 {
-                if st.t0 == 0.0 {
-                    st.t0 = now;
-                    return;
-                }
-                eprintln!("ha-verify: COCHETEST {}", if st.fallo { "FAIL" } else { "DONE" });
-                std::process::exit(if st.fallo { 1 } else { 0 });
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // HA_CUBOTEST — el cubo: llenar en el lago, volcar en el pasto, ordeñar
 // ---------------------------------------------------------------------------
@@ -8406,6 +7911,276 @@ fn descanso_test_drive(world: &mut World) {
 
 
 // ---------------------------------------------------------------------------
+// HA_INTERIORTEST — entrar a un edificio, recorrerlo, subir y salir
+// ---------------------------------------------------------------------------
+
+#[derive(Resource, Default)]
+struct InteriorTestState {
+    step: u32,
+    next_t: f32,
+    lote: Option<ha_shared::interiores::Lote>,
+    puerta: (f32, f32),
+    retries: u32,
+    empuje_hasta: f32,
+    empuje: Vec2,
+    failed: bool,
+}
+
+/// Busca una casa con puerta en el frente cerca de la primera ciudad: `(lote, celda de la puerta)`.
+fn interior_test_buscar(skip: usize) -> Option<(ha_shared::interiores::Lote, (i64, i64))> {
+    let body = ha_shared::CelestialBody::Earth;
+    let mut vistas = Vec::new();
+    for sx in -6..6 {
+        for sz in -6..6 {
+            let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+            let (cx, cz) = s.center;
+            for dz in (-60..60).step_by(5) {
+                for dx in (-60..60).step_by(5) {
+                    let Some((x, z, w, h, clave)) = ha_shared::amueblado::casa_en(body, cx + dx, cz + dz) else { continue };
+                    if vistas.contains(&(x, z)) {
+                        continue;
+                    }
+                    vistas.push((x, z));
+                    // Casas con piso alto, para probar la escalera: casa grande, villa, hotel…
+                    let candidato = ha_shared::interiores::Lote { body: body as u8, x, z, w, h, clave };
+                    if ha_shared::interiores::generar(&candidato).pisos < 2 {
+                        continue;
+                    }
+                    let puerta = (x..x + w).find(|&px| ha_shared::topdown::topdown_tile(body, 0, px, z + h - 1) == ha_shared::topdown::Tile::Door);
+                    if let Some(px) = puerta {
+                        if vistas.len() > skip {
+                            return Some((ha_shared::interiores::Lote { body: body as u8, x, z, w, h, clave }, (px, z + h - 1)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn interior_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 2.0 || !player_ready(world) {
+        return;
+    }
+    {
+        let st = world.resource::<InteriorTestState>();
+        if st.empuje != Vec2::ZERO && now < st.empuje_hasta {
+            let e = st.empuje;
+            actuar(world, Accion::Mover(e));
+        }
+    }
+    let (step, next_t) = {
+        let st = world.resource::<InteriorTestState>();
+        (st.step, st.next_t)
+    };
+    if now < next_t {
+        return;
+    }
+    let dir = flytest_dir();
+    let skip: usize = crate::flags::var("HA_INTERIORTEST").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let body = ha_shared::CelestialBody::Earth;
+    let proximo = |world: &mut World, dt: f32| world.resource_mut::<InteriorTestState>().next_t = now + dt;
+    match step {
+        // 0. Buscar una casa y plantarse frente a su puerta.
+        0 => {
+            let Some((lote, puerta)) = interior_test_buscar(skip) else {
+                report_bug("interiores", "hay_una_casa_con_piso_alto", "no se encontró ninguna");
+                eprintln!("ha-verify: INTERIORTEST FAIL — sin casa");
+                world.resource_mut::<InteriorTestState>().step = 99;
+                return;
+            };
+            let c = (puerta.0 as f32 + 0.5, puerta.1 as f32 + 1.6);
+            eprintln!("ha-interior: casa {} {}x{} en ({}, {}), puerta {:?}", lote.clave, lote.w, lote.h, lote.x, lote.z, puerta);
+            teleport_a_celda(world, c.0, c.1);
+            let mut st = world.resource_mut::<InteriorTestState>();
+            st.lote = Some(lote);
+            st.puerta = (puerta.0 as f32 + 0.5, puerta.1 as f32 + 0.5);
+            st.step = 1;
+            st.next_t = now + 2.0;
+        }
+        // 1. Esperar el mundo armado y sacar la fachada.
+        1 => {
+            if !mundo_listo(world) && now < 60.0 {
+                return;
+            }
+            shot(world, &format!("{dir}/interior-0-fachada.png"));
+            world.resource_mut::<InteriorTestState>().step = 2;
+            proximo(world, 1.0);
+        }
+        // 2. Pulsar ENTRAR.
+        2 => {
+            let (lote, puerta) = {
+                let st = world.resource::<InteriorTestState>();
+                (st.lote.expect("lote"), st.puerta)
+            };
+            crate::interiores::debug_pulsar(world, Some(crate::interiores::Cerca::Entrada { lote, puerta }), "pasar");
+            world.resource_mut::<InteriorTestState>().step = 3;
+            proximo(world, 2.5);
+        }
+        // 3. ¿Entramos?
+        3 => {
+            let (dentro, z) = {
+                let int = world.resource::<crate::interiores::Interiores>();
+                (int.dentro, world.resource::<TileWorld>().z)
+            };
+            let Some(d) = dentro else {
+                report_bug("interiores", "entrar_cambia_de_espacio", "pulsar ENTRAR no te metió");
+                world.resource_mut::<InteriorTestState>().failed = true;
+                world.resource_mut::<InteriorTestState>().step = 99;
+                return;
+            };
+            if z != ha_shared::interiores::z_de(d.slot, 0) {
+                report_bug("interiores", "entrar_pone_la_planta_baja", &format!("z={z}"));
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            eprintln!(
+                "ha-interior: adentro, {}x{} (exterior {}x{}), {} pisos, {} ventanas, {} tramos",
+                plano.w, plano.h, d.lote.w, d.lote.h, plano.pisos, plano.ventanas.len(), plano.tramos.len()
+            );
+            if plano.w as f32 > d.lote.w as f32 * 1.5 + 12.0 {
+                report_bug("interiores", "el_interior_respeta_el_tope", "pasa de 1,5x");
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            {
+                let zc = world.resource::<TileWorld>().z;
+                let mut q = world.query::<(&crate::world2d::SurfaceDecor, &Transform)>();
+                let n = q.iter(world).filter(|(d, _)| d.z == zc).count();
+                let cerca = q.iter(world).filter(|(d, t)| d.z == zc && (t.translation.x - plano.entrada.0).abs() < 20.0).count();
+                eprintln!("ha-interior: decor del nivel {zc}: {n} (cerca de la entrada: {cerca})");
+            }
+            shot(world, &format!("{dir}/interior-1-adentro.png"));
+            world.resource_mut::<InteriorTestState>().step = 4;
+            proximo(world, 2.0);
+        }
+        // 4. Al pie de la escalera.
+        4 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            let Some(t) = plano.tramos.first().copied() else {
+                eprintln!("ha-interior: sin escalera (un solo piso); se salta");
+                world.resource_mut::<InteriorTestState>().step = 8;
+                return;
+            };
+            // Un paso antes del pie (al sur), subiendo hacia el norte.
+            teleport_a_celda_nivel(world, t.tx as f32 + 0.5, t.tz as f32 + 1.6);
+            let mut st = world.resource_mut::<InteriorTestState>();
+            st.empuje = Vec2::new(0.0, -1.0);
+            st.empuje_hasta = now + 6.0;
+            st.step = 5;
+            st.retries = 0;
+            st.next_t = now + 1.0;
+        }
+        // 5. Subió?
+        5 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let z = world.resource::<TileWorld>().z;
+            if z == ha_shared::interiores::z_de(d.slot, 1) {
+                eprintln!("ha-interior: subió al piso 1 CAMINANDO");
+                shot(world, &format!("{dir}/interior-2-segundo-piso.png"));
+                let mut st = world.resource_mut::<InteriorTestState>();
+                st.empuje = Vec2::ZERO;
+                st.step = 6;
+                st.next_t = now + 2.0;
+                return;
+            }
+            let mut st = world.resource_mut::<InteriorTestState>();
+            st.retries += 1;
+            if st.retries > 8 {
+                drop(st);
+                report_bug("interiores", "la_escalera_se_camina", &format!("z={z}: andar el tramo no subió de planta"));
+                world.resource_mut::<InteriorTestState>().failed = true;
+                world.resource_mut::<InteriorTestState>().step = 8;
+            } else {
+                st.empuje = Vec2::new(0.0, -1.0);
+                st.empuje_hasta = now + 2.0;
+                st.next_t = now + 1.0;
+            }
+        }
+        // 6. Muebles en el segundo piso (tiene que haber algo de piso alto).
+        6 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            let z1 = ha_shared::interiores::z_de(d.slot, 1);
+            let casa = (plano.x0, plano.z0, plano.w, plano.h, plano.clave);
+            let n1 = ha_shared::amueblado::muebles_de_z(body, z1, casa).len();
+            let n0 = ha_shared::amueblado::muebles_de_z(body, ha_shared::interiores::z_de(d.slot, 0), casa).len();
+            eprintln!("ha-interior: muebles piso0={n0} piso1={n1}");
+            if n0 == 0 {
+                report_bug("interiores", "la_casa_tiene_muebles", "piso 0 vacío");
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            world.resource_mut::<InteriorTestState>().step = 7;
+            proximo(world, 0.5);
+        }
+        // 7. Volver a la planta baja (teleport interno) y a la puerta.
+        7 => {
+            let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+            let plano = ha_shared::interiores::plano_de(d.slot).expect("plano");
+            {
+                let mut tiles = world.resource_mut::<TileWorld>();
+                tiles.z = ha_shared::interiores::z_de(d.slot, 0);
+                tiles.version = tiles.version.wrapping_add(1);
+            }
+            bt_teleport(world, plano.puerta.0 as f32 + 0.5, plano.puerta.1 as f32 - 0.6);
+            world.resource_mut::<InteriorTestState>().step = 8;
+            proximo(world, 1.5);
+        }
+        // 8. Cerrar con llave, probar el botón de salida.
+        8 => {
+            let ya_dentro = world.resource::<crate::interiores::Interiores>().dentro.is_some();
+            if ya_dentro {
+                crate::interiores::debug_pulsar(world, Some(crate::interiores::Cerca::Salida), "llave");
+                world.resource_mut::<InteriorTestState>().step = 9;
+                proximo(world, 1.0);
+            } else {
+                world.resource_mut::<InteriorTestState>().step = 10;
+            }
+        }
+        9 => {
+            let cerrada = {
+                let d = world.resource::<crate::interiores::Interiores>().dentro.expect("dentro");
+                world.resource_mut::<crate::interiores::Interiores>().puerta_de(&d.lote).cerrada
+            };
+            if !cerrada {
+                report_bug("interiores", "la_llave_cierra", "la puerta no quedó cerrada");
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            shot(world, &format!("{dir}/interior-3-puerta.png"));
+            crate::interiores::debug_pulsar(world, Some(crate::interiores::Cerca::Salida), "pasar");
+            world.resource_mut::<InteriorTestState>().step = 10;
+            proximo(world, 2.5);
+        }
+        // 10. Veredicto.
+        10 => {
+            let dentro = world.resource::<crate::interiores::Interiores>().dentro.is_some();
+            let z = world.resource::<TileWorld>().z;
+            if dentro || z != 0 {
+                report_bug("interiores", "salir_vuelve_al_exterior", &format!("dentro={dentro} z={z}"));
+                world.resource_mut::<InteriorTestState>().failed = true;
+            }
+            shot(world, &format!("{dir}/interior-4-afuera.png"));
+            let failed = world.resource::<InteriorTestState>().failed;
+            eprintln!("ha-verify: INTERIORTEST {}", if failed { "FAIL" } else { "DONE" });
+            world.resource_mut::<InteriorTestState>().step = 99;
+            proximo(world, 2.0);
+        }
+        _ => {
+            if now > next_t + 1.0 {
+                world.send_event(AppExit::Success);
+            }
+        }
+    }
+}
+
+/// Teletransporta sin tocar el nivel (para moverse DENTRO de un interior).
+fn teleport_a_celda_nivel(world: &mut World, x: f32, z: f32) {
+    bt_teleport(world, x, z);
+}
+
+// ---------------------------------------------------------------------------
 // HA_VISTATEST — una captura en cada coordenada pedida (fachadas, acantilados, calles): `HA_VISTATEST="9607,2405;6819,4384"`
 // ---------------------------------------------------------------------------
 
@@ -8538,371 +8313,3 @@ fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
 }
 
 
-// ---------------------------------------------------------------------------
-// HA_ENTRARTEST — tres edificios REALES de la ciudad: se camina de la vereda a adentro por la puerta, y de vuelta
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct EntrarTest {
-    sitios: Vec<ha_shared::geography::BuildingSite>,
-    i: usize,
-    paso: u32,
-    t0: f32,
-    espera: f32,
-    fallo: bool,
-}
-
-fn entrar_test_drive(world: &mut World, mut st: Local<EntrarTest>) {
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    let body = ha_shared::CelestialBody::Earth;
-    let dir = flytest_dir();
-    if st.sitios.is_empty() && st.paso == 0 {
-        // Tres edificios con puerta de verdad (celda `Door`), de tamaños distintos, cerca del centro de Ciudad Central.
-        let (cx, cz) = (9600i64, 2400i64);
-        let mut vistos = std::collections::BTreeSet::new();
-        let mut halladas: Vec<ha_shared::geography::BuildingSite> = Vec::new();
-        'busca: for r in (0..600i64).step_by(3) {
-            for k in (-r..=r).step_by(3) {
-                for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
-                    let Some(b) = ha_shared::geography::building_at(body, x, z) else { continue };
-                    if !vistos.insert(b.min) {
-                        continue;
-                    }
-                    if ha_shared::topdown::topdown_tile(body, 0, b.door.0, b.door.1) != ha_shared::topdown::Tile::Door {
-                        continue;
-                    }
-                    if halladas.iter().any(|h| h.w == b.w) {
-                        continue;
-                    }
-                    halladas.push(b);
-                    if halladas.len() == 3 {
-                        break 'busca;
-                    }
-                }
-            }
-        }
-        if halladas.is_empty() {
-            eprintln!("ha-verify: ENTRARTEST FAIL (no hay edificios con puerta)");
-            std::process::exit(1);
-        }
-        eprintln!("ha-entrartest: {} edificios: {:?}", halladas.len(), halladas.iter().map(|b| (b.min, b.w, b.h, b.door)).collect::<Vec<_>>());
-        st.sitios = halladas;
-    }
-    if st.i >= st.sitios.len() {
-        if st.paso != 99 {
-            st.paso = 99;
-            st.t0 = now;
-        } else if now - st.t0 > 3.0 {
-            eprintln!("ha-verify: ENTRARTEST {}", if st.fallo { "FAIL" } else { "DONE" });
-            std::process::exit(if st.fallo { 1 } else { 0 });
-        }
-        return;
-    }
-    let b = st.sitios[st.i];
-    let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
-    match st.paso {
-        0 => {
-            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-            teleport_a_celda(world, b.door.0 as f32 + 0.5, b.door.1 as f32 + 4.5);
-            st.paso = 1;
-            st.t0 = now;
-            st.espera = now;
-        }
-        1 => {
-            if !mundo_listo(world) && now - st.espera < 90.0 {
-                st.t0 = now;
-                return;
-            }
-            if now - st.t0 < 3.0 {
-                return;
-            }
-            shot(world, &format!("{dir}/entrar-{}-0-afuera.png", st.i));
-            st.paso = 2;
-            st.t0 = now;
-        }
-        2 => {
-            // Hacia el norte (adentro), derecho por la puerta.
-            let dx = (b.door.0 as f32 + 0.5 - px).clamp(-1.0, 1.0);
-            world.resource_mut::<DriverActuation>().mover = Vec2::new(dx, -1.0);
-            if pz < b.door.1 as f32 - 1.5 {
-                eprintln!("ha-entrartest: edificio {} — entró ({px:.1}, {pz:.1}), puerta {:?}", st.i, b.door);
-                shot(world, &format!("{dir}/entrar-{}-1-adentro.png", st.i));
-                st.paso = 3;
-                st.t0 = now;
-            } else if now - st.t0 > 12.0 {
-                report_bug("casa", "se_entra", &format!("edificio {:?}: en 12 s no pasó la puerta {:?} (quedó en {px:.1},{pz:.1})", b.min, b.door));
-                st.fallo = true;
-                st.i += 1;
-                st.paso = 0;
-            }
-        }
-        3 => {
-            if now - st.t0 < 2.0 {
-                return;
-            }
-            let dx = (b.door.0 as f32 + 0.5 - px).clamp(-1.0, 1.0);
-            world.resource_mut::<DriverActuation>().mover = Vec2::new(dx, 1.0);
-            if pz > b.door.1 as f32 + 2.5 {
-                eprintln!("ha-entrartest: edificio {} — salió", st.i);
-                shot(world, &format!("{dir}/entrar-{}-2-salio.png", st.i));
-                st.i += 1;
-                st.paso = 0;
-            } else if now - st.t0 > 14.0 {
-                report_bug("casa", "se_sale", &format!("edificio {:?}: no pudo volver a salir por {:?} (quedó en {px:.1},{pz:.1})", b.min, b.door));
-                st.fallo = true;
-                st.i += 1;
-                st.paso = 0;
-            }
-        }
-        _ => {}
-    }
-}
-
-
-// ---------------------------------------------------------------------------
-// HA_PANDEMIATEST — un vecino contagiado se convierte en infectado; una mordida le da fiebre al jugador
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct PandemiaTest {
-    paso: u32,
-    t0: f32,
-    vecino: Option<Entity>,
-    infectados_antes: usize,
-    hp_antes: f32,
-}
-
-fn pandemia_test_drive(world: &mut World, mut st: Local<PandemiaTest>) {
-    use crate::pandemia::{Contagiado, Infeccion, Pandemia};
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    let fallar = |what: &str, detalle: &str| {
-        report_bug("pandemia", what, detalle);
-        eprintln!("ha-verify: PANDEMIATEST FAIL ({what}: {detalle})");
-        std::process::exit(1);
-    };
-    match st.paso {
-        0 => {
-            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-            teleport_a_celda(world, 9600.0, 2400.0);
-            st.paso = 1;
-            st.t0 = now;
-        }
-        1 => {
-            if now - st.t0 < 4.0 {
-                return;
-            }
-            // El vecino más cercano al jugador.
-            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
-            let mut q = world.query::<(Entity, &crate::society::Npc)>();
-            let mejor = q
-                .iter(world)
-                .map(|(e, n)| (e, (n.x - px).hypot(n.z - pz)))
-                .min_by(|a, b| a.1.total_cmp(&b.1));
-            match mejor {
-                Some((e, d)) if d < 120.0 => {
-                    eprintln!("ha-pandemiatest: vecino a {d:.0} m: se le pega el contagio");
-                    let mut c = Contagiado::nuevo();
-                    c.t = 1.0;
-                    st.infectados_antes = world.query::<&crate::infectados::Infectado>().iter(world).count();
-                    world.entity_mut(e).insert(c);
-                    st.vecino = Some(e);
-                    st.paso = 2;
-                    st.t0 = now;
-                }
-                _ => {
-                    if now - st.t0 > 90.0 {
-                        fallar("hay_vecinos", "en 90 s ningún vecino a menos de 120 m");
-                    }
-                }
-            }
-        }
-        2 => {
-            if now - st.t0 < 3.0 {
-                return;
-            }
-            let vivo = st.vecino.map_or(false, |e| world.get_entity(e).is_ok());
-            let ahora = world.query::<&crate::infectados::Infectado>().iter(world).count();
-            let conv = world.resource::<Pandemia>().convertidos;
-            eprintln!("ha-pandemiatest: vecino vivo={vivo} infectados {} → {ahora} convertidos={conv}", st.infectados_antes);
-            // De día los infectados se queman (`infectados::amanecer`): el recuento no sirve, vale el contador de la pandemia.
-            if vivo || conv < 1 {
-                fallar("se_contagia", &format!("vivo={vivo} convertidos={conv} infectados {} → {ahora}", st.infectados_antes));
-            }
-            // La fiebre.
-            st.hp_antes = world.query_filtered::<&SimState, With<Player>>().single(world).hp;
-            world.resource_mut::<Infeccion>().mordida(0);
-            st.paso = 3;
-            st.t0 = now;
-        }
-        3 => {
-            if now - st.t0 < 4.0 {
-                return;
-            }
-            let hp = world.query_filtered::<&SimState, With<Player>>().single(world).hp;
-            let t = world.resource::<Infeccion>().t;
-            eprintln!("ha-pandemiatest: fiebre t={t:.0} s, hp {:.2} → {hp:.2}", st.hp_antes);
-            if t <= 0.0 || hp >= st.hp_antes {
-                fallar("da_fiebre", &format!("t={t} hp {} → {hp}", st.hp_antes));
-            }
-            eprintln!("ha-verify: PANDEMIATEST DONE");
-            std::process::exit(0);
-        }
-        _ => {}
-    }
-}
-
-
-// ---------------------------------------------------------------------------
-// HA_ENTSTEST — ¿de qué se llena el mundo con el jugador parado en la ciudad? Cada 30 s imprime los arquetipos más poblados.
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct EntsTest {
-    paso: u32,
-    t0: f32,
-    ultimo: f32,
-}
-
-fn ents_test_drive(world: &mut World, mut st: Local<EntsTest>) {
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    if st.paso == 0 {
-        world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-        teleport_a_celda(world, 9600.0, 2400.0);
-        st.paso = 1;
-        st.t0 = now;
-        st.ultimo = now - 100.0;
-        return;
-    }
-    let total: f32 = crate::flags::var("HA_ENTSTEST").ok().and_then(|v| v.parse().ok()).unwrap_or(300.0);
-    if now - st.ultimo >= 30.0 {
-        st.ultimo = now;
-        let mut filas: Vec<(usize, String)> = Vec::new();
-        let infos = world.components();
-        for a in world.archetypes().iter() {
-            let n = a.len();
-            if n < 50 {
-                continue;
-            }
-            let nombres: Vec<String> = a
-                .components()
-                .filter_map(|c| infos.get_info(c))
-                .map(|i| i.name().rsplit("::").next().unwrap_or("").to_string())
-                .filter(|n| !matches!(n.as_str(), "Transform" | "GlobalTransform" | "InheritedVisibility" | "ViewVisibility" | "Visibility" | "TransformTreeChanged" | "Sprite" | "SyncToRenderWorld"))
-                .take(7)
-                .collect();
-            filas.push((n, nombres.join("+")));
-        }
-        filas.sort_by(|a, b| b.0.cmp(&a.0));
-        let todo = world.entities().len();
-        eprintln!("ha-ents t={:.0}s total={todo}: {}", now - st.t0, filas.iter().take(7).map(|(n, s)| format!("{n}×[{s}]")).collect::<Vec<_>>().join(" | "));
-    }
-    if now - st.t0 > total {
-        eprintln!("ha-verify: ENTSTEST DONE");
-        std::process::exit(0);
-    }
-}
-
-
-// ---------------------------------------------------------------------------
-// HA_POOLTEST — foto de una pileta real (borde, cerca) y de la casa de al lado por dentro
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct PiletaTest {
-    paso: u32,
-    t0: f32,
-    espera: f32,
-    sitio: Option<(i64, i64)>,
-}
-
-fn pileta_test_drive(world: &mut World, mut st: Local<PiletaTest>) {
-    let now = world.resource::<Time>().elapsed_secs();
-    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
-        return;
-    }
-    let body = ha_shared::CelestialBody::Earth;
-    let dir = flytest_dir();
-    match st.paso {
-        0 => {
-            let mut mejor: Option<(i64, (i64, i64))> = None;
-            for sx in -25..25 {
-                for sz in -25..25 {
-                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
-                    if s.tier != ha_shared::geography::SettlementTier::City {
-                        continue;
-                    }
-                    let d = s.center.0.abs() + s.center.1.abs();
-                    if mejor.map_or(true, |(bd, _)| d < bd) {
-                        mejor = Some((d, s.center));
-                    }
-                }
-            }
-            let (cx, cz) = mejor.map(|m| m.1).unwrap_or((9600, 2400));
-            let mut hallado = None;
-            'b: for r in (0..900i64).step_by(2) {
-                for k in (-r..=r).step_by(2) {
-                    for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
-                        if ha_shared::topdown::topdown_tile(body, 0, x, z) == ha_shared::topdown::Tile::Water
-                            && ha_shared::geography::settlement_covering(body, x, z).is_some()
-                            && ha_shared::topdown::topdown_tile(body, 0, x + 2, z) == ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x, z + 1) == ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x - 1, z) != ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x + 6, z) != ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x, z + 4) != ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x + 12, z) != ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x - 8, z) != ha_shared::topdown::Tile::Water
-                            && ha_shared::topdown::topdown_tile(body, 0, x, z + 9) != ha_shared::topdown::Tile::Water
-                        {
-                            hallado = Some((x, z));
-                            break 'b;
-                        }
-                    }
-                }
-            }
-            let Some((x, z)) = hallado else {
-                eprintln!("ha-verify: POOLTEST FAIL (no hay pileta)");
-                std::process::exit(1);
-            };
-            eprintln!("ha-pooltest: pileta en ({x}, {z})");
-            for dz in -2..7i64 {
-                let fila: Vec<String> = (-3..10i64).map(|dx| format!("{:?}", ha_shared::topdown::topdown_tile(body, 0, x + dx, z + dz)).chars().take(4).collect()).collect();
-                eprintln!("ha-pooltest:   {}", fila.join(" "));
-            }
-            st.sitio = Some((x, z));
-            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
-            teleport_a_celda(world, x as f32 + 0.5, z as f32 + 6.5);
-            st.paso = 1;
-            st.t0 = now;
-            st.espera = now;
-        }
-        1 => {
-            let tope: f32 = crate::flags::var("HA_ESPERA").ok().and_then(|v| v.parse().ok()).unwrap_or(90.0);
-            if !mundo_listo(world) && now - st.espera < tope {
-                st.t0 = now;
-                return;
-            }
-            if now - st.t0 < 4.0 {
-                return;
-            }
-            shot(world, &format!("{dir}/pileta-0.png"));
-            st.paso = 2;
-            st.t0 = now;
-        }
-        2 => {
-            if now - st.t0 > 4.0 {
-                eprintln!("ha-verify: POOLTEST DONE");
-                std::process::exit(0);
-            }
-        }
-        _ => {}
-    }
-}

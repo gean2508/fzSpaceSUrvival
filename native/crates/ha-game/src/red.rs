@@ -122,6 +122,14 @@ pub enum Msg {
         pts: u32,
         #[serde(default)]
         baj: u32,
+        /// Clave del vehículo que maneja (`vehicle/coche_3`), o vacío si va a pie.
+        /// Un cliente viejo no la manda y los demás lo ven caminar: compatible.
+        #[serde(default)]
+        veh: String,
+        /// Nivel en el que está (`TileWorld::z`): 0 en la calle, la banda de pisos de un edificio adentro.
+        /// Dos jugadores sólo se ven si comparten nivel. Un cliente viejo no lo manda: 0.
+        #[serde(default)]
+        nivel: i32,
     },
     #[serde(rename = "chat")]
     Chat {
@@ -368,11 +376,11 @@ fn atender(s: TcpStream, vivo: Arc<AtomicBool>, estado: Arc<Mutex<EstadoHub>>) {
                 }
                 mi_id = Some(id);
             }
-            (Msg::Est { x, z, cuerpo, rumbo, vuelo, pts, baj, .. }, Some(id)) => {
+            (Msg::Est { x, z, cuerpo, rumbo, vuelo, pts, baj, veh, nivel, .. }, Some(id)) => {
                 if !(x.is_finite() && z.is_finite() && rumbo.is_finite()) {
                     continue;
                 }
-                let m = Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj };
+                let m = Msg::Est { id, x, z, cuerpo, rumbo, vuelo, pts, baj, veh: limpiar(&veh, 40), nivel };
                 if let Some(p) = e.pares.get_mut(&id) {
                     p.ultimo = Some(m.clone());
                 }
@@ -658,7 +666,7 @@ mod tests {
         let dir = format!("127.0.0.1:{}", hub.puerto);
         let a = Cliente::conectar(dir.clone(), hola("Ana", "p1", 0, ""));
         let id_a = esperar(&a.rx, |m| if let Msg::Id { id, semilla, arbitro } = m { assert_eq!(*semilla, 4242); assert_eq!(*arbitro, *id); Some(*id) } else { None });
-        a.enviar(Msg::Est { id: 0, x: 3.0, z: 4.0, cuerpo: 0, rumbo: 1.0, vuelo: false, pts: 0, baj: 0 });
+        a.enviar(Msg::Est { id: 0, x: 3.0, z: 4.0, cuerpo: 0, rumbo: 1.0, vuelo: false, pts: 0, baj: 0, veh: "vehicle/coche_3".into(), nivel: 20003 });
         std::thread::sleep(Duration::from_millis(150));
 
         let b = Cliente::conectar(dir, hola("Beto\n", "p2", 4242, ""));
@@ -666,7 +674,7 @@ mod tests {
         assert_ne!(id_a, id_b);
         // Beto recibe a Ana y su último estado, aunque llegó tarde.
         esperar(&b.rx, |m| matches!(m, Msg::Ent { id, nombre, .. } if *id == id_a && nombre == "Ana").then_some(()));
-        esperar(&b.rx, |m| matches!(m, Msg::Est { id, x, .. } if *id == id_a && *x == 3.0).then_some(()));
+        esperar(&b.rx, |m| matches!(m, Msg::Est { id, x, veh, nivel, .. } if *id == id_a && *x == 3.0 && veh == "vehicle/coche_3" && *nivel == 20003).then_some(()));
         // Ana ve entrar a Beto (con el nombre limpio) y le llega su chat.
         esperar(&a.rx, |m| matches!(m, Msg::Ent { id, nombre, .. } if *id == id_b && nombre == "Beto").then_some(()));
         b.enviar(Msg::Chat { id: 999, msg: "hola".into() });

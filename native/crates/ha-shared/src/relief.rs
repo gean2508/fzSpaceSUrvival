@@ -331,7 +331,70 @@ fn campo_crudo(body: CelestialBody, tx: i64, tz: i64) -> f32 {
         }
         None => base,
     };
-    rellenar_pueblo(body, tx, tz, h).clamp(0.0, 1.0)
+    rellenar_pueblo(body, tx, tz, explanada_de_ciudad(body, tx, tz, h)).clamp(0.0, 1.0)
+}
+
+/// **UNA CIUDAD ES UN SOLO ESCALÓN DEL TERRENO** (pedido del usuario, 4 oct 2026). El mundo se parte en pisos
+/// (acantilados), pero el mapa es enorme y una ciudad entera cabe en UNO: sin cortes a mitad de calle, y con
+/// vías que pueden unir ciudades. Adentro del casco de un pueblo grande o una ciudad el campo se aplana a la
+/// cota media del casco; el borde se mezcla en 8 tiles, así el escalón natural queda ALREDEDOR de la ciudad.
+/// Los parques conservan casi todo su relieve (ahí se apilan terrazas chicas, para dar profundidad) y el valle
+/// de un río también (la ciudad se parte por el agua, no por una pared).
+fn explanada_de_ciudad(body: CelestialBody, tx: i64, tz: i64, h: f32) -> f32 {
+    let Some(s) = crate::geography::settlement_covering(body, tx, tz) else { return h };
+    if s.tier == crate::geography::SettlementTier::Hamlet {
+        return h;
+    }
+    if crate::rios::perfil_del_cauce(body, tx, tz).is_some() {
+        return h;
+    }
+    // El agua se queda: una ciudad costera sigue terminando en su orilla (la explanada no rellena el mar ni los lagos).
+    let sea = sea_level(body);
+    if sea > 0.0 && h < sea + 0.02 {
+        return h;
+    }
+    let r = s.radius as f32;
+    let d = (tx - s.center.0).abs().max((tz - s.center.1).abs()) as f32;
+    let t = ((r - d) / 8.0).clamp(0.0, 1.0);
+    let mut w = t * t * (3.0 - 2.0 * t);
+    // Parques y naturaleza: casi todo el relieve se queda.
+    let block = crate::roads::block_size(s.style, s.tier);
+    let (bx, bz) = ((tx - s.center.0).div_euclid(block), (tz - s.center.1).div_euclid(block));
+    if crate::city::district_at(body, &s, bx, bz) == crate::city::District::Park {
+        w *= 0.35;
+    }
+    if w <= 0.0 {
+        return h;
+    }
+    h * (1.0 - w) + cota_de_ciudad(body, &s) * w
+}
+
+/// La cota media del casco: el promedio de la plataforma y el ruido en nueve puntos (centro y mitad del radio).
+fn cota_de_ciudad(body: CelestialBody, s: &crate::geography::Settlement) -> f32 {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static C: OnceLock<Mutex<HashMap<(u8, i64, i64), f32>>> = OnceLock::new();
+    let cache = C.get_or_init(|| Mutex::new(HashMap::new()));
+    let clave = (body as u8, s.center.0, s.center.1);
+    if let Some(&v) = cache.lock().ok().and_then(|c| c.get(&clave).cloned()).as_ref() {
+        return v;
+    }
+    let mitad = s.radius / 2;
+    let mut suma = 0.0f32;
+    let mut n = 0.0f32;
+    for dz in [-1i64, 0, 1] {
+        for dx in [-1i64, 0, 1] {
+            let (x, z) = (s.center.0 + dx * mitad, s.center.1 + dz * mitad);
+            let f = crate::world_map::platform(body, x, z) + (terrain_noise(body, x, z) - 0.5) * crate::world_map::RELIEF_AMPLITUDE;
+            suma += f;
+            n += 1.0;
+        }
+    }
+    let v = (suma / n).clamp(0.0, 1.0);
+    if let Ok(mut c) = cache.lock() {
+        c.insert(clave, v);
+    }
+    v
 }
 
 /// **NINGÚN HUECO DE MAR ADENTRO DE UN PUEBLO** (27 sep 2026).
@@ -1751,6 +1814,40 @@ fn near_step_boundary(body: CelestialBody, h: f32) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// Una ciudad es un solo escalón: en el núcleo del casco casi no hay acantilados (salvo los parques y el
+    /// agua). Antes cada ciudad estaba cortada por farallones a mitad de calle.
+    #[test]
+    fn el_nucleo_de_una_ciudad_es_una_explanada() {
+        use crate::geography::{settlement_in, SettlementTier};
+        let body = CelestialBody::Earth;
+        let (mut celdas, mut muros, mut ciudades) = (0u32, 0u32, 0u32);
+        for sx in -6..6 {
+            for sz in -6..6 {
+                let Some(s) = settlement_in(body, sx, sz) else { continue };
+                if s.tier == SettlementTier::Hamlet {
+                    continue;
+                }
+                ciudades += 1;
+                let r = (s.radius as f32 * 0.7) as i64;
+                for dz in (-r..r).step_by(9) {
+                    for dx in (-r..r).step_by(9) {
+                        let (x, z) = (s.center.0 + dx, s.center.1 + dz);
+                        if crate::rios::perfil_del_cauce(body, x, z).is_some() {
+                            continue;
+                        }
+                        celdas += 1;
+                        if matches!(relief_cell(body, x, z), ReliefCell::Cliff | ReliefCell::Pared) {
+                            muros += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(ciudades > 0 && celdas > 200, "muestra chica: {ciudades} ciudades, {celdas} celdas");
+        let frac = muros as f32 / celdas as f32;
+        assert!(frac < 0.03, "{muros} de {celdas} celdas del núcleo son pared ({:.1} %)", frac * 100.0);
+    }
+
     use super::*;
     use crate::celestial_bodies::body_walk_radius;
 

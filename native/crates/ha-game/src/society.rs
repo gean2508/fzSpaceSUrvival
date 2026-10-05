@@ -1376,6 +1376,8 @@ fn aplicar_humor(v: &mut Vida, humor: f32) {
 const OBRA_CADA_S: f32 = 8.0;
 /// Tope de piezas por planeta: el mundo no se llena de mobiliario sin fin.
 const OBRAS_MAX: u16 = 24;
+/// Lo que cuesta una casa de vecinos (en madera del pueblo).
+const CASA_WOOD_COST: f32 = 60.0;
 /// Lo que un constructor sabe hacer: mobiliario de parque, por id del catálogo de colocables.
 const OBRAS_ID: [&str; 4] = ["calle_banco", "calle_mesa_picnic", "calle_barril", "calle_farol"];
 
@@ -1405,22 +1407,38 @@ fn constructor_obra(
     if stock.wood < BUILD_WOOD_COST || stock.obras >= OBRAS_MAX || obs.capa() != 0 {
         return;
     }
+    let costo = |casa: bool| if casa { CASA_WOOD_COST } else { BUILD_WOOD_COST };
     let Some(constructor) = npcs.iter().find(|n| n.role == Role::Builder && n.vida.plan.map_or(true, |p| p.act != Actividad::Dormir)) else {
         return;
     };
     let centro = constructor.vivienda.parque.unwrap_or((constructor.town_x + 3.0, constructor.town_z + 4.0));
     let k = stock.obras as u32 + constructor.uid as u32;
-    let id = OBRAS_ID[k as usize % OBRAS_ID.len()];
+    // **Cada tanto el Constructor levanta una CASA** (refugio de los vecinos): la fachada entera por fuera, y el
+    // interior se genera solo cuando alguien entra (`ha_shared::interiores`). Cuesta bastante más que un banco.
+    let casa = stock.wood >= CASA_WOOD_COST && k % 4 == 3;
+    let id = if casa { "edif_casa_chica" } else { OBRAS_ID[k as usize % OBRAS_ID.len()] };
     let Some(a) = ha_shared::topdown::LARGE_ASSETS.iter().find(|a| a.id == id) else {
         return;
     };
     // Espiral alrededor del centro: se prueban 16 sitios y se toma el primero libre.
     for i in 0..16u32 {
         let ang = (k + i) as f32 * 2.399_963_2;
-        let r = 2.5 + ((k + i) % 5) as f32 * 1.6;
+        let r = if casa { 12.0 + ((k + i) % 5) as f32 * 2.5 } else { 2.5 + ((k + i) % 5) as f32 * 1.6 };
         let min = ((centro.0 + ang.cos() * r).floor() as i64, (centro.1 + ang.sin() * r).floor() as i64);
         let celdas = || (0..a.w).flat_map(|dx| (0..a.h).map(move |dz| (min.0 + dx, min.1 + dz)));
         if celdas().any(|(tx, tz)| obs.solido(body, tx, tz)) {
+            continue;
+        }
+        // **Nada en la calzada.** Un Constructor puso un mantel de picnic en mitad de la carretera
+        // (4 oct 2026): el mobiliario va en parque o vereda, nunca sobre asfalto ni puente, ni
+        // pegado a ellos (un celda de margen para que el auto no roce la pieza).
+        let sobre_calzada = |tx: i64, tz: i64| matches!(ha_shared::geography::civil_at(body, tx, tz), Some(ha_shared::geography::Civil::Road | ha_shared::geography::Civil::Bridge));
+        if celdas().any(|(tx, tz)| (-1..=1).any(|dz| (-1..=1).any(|dx| sobre_calzada(tx + dx, tz + dz)))) {
+            continue;
+        }
+        // Mesas y barriles son de parque: tampoco sobre la vereda (sólo el banco y el farol).
+        let es_de_vereda = matches!(id, "calle_banco" | "calle_farol");
+        if !es_de_vereda && celdas().any(|(tx, tz)| ha_shared::geography::civil_at(body, tx, tz).is_some()) {
             continue;
         }
         let (mx, mz) = (min.0 as f32 + a.w as f32 * 0.5, min.1 as f32 + a.h as f32 * 0.5);
@@ -1443,7 +1461,7 @@ fn constructor_obra(
             rot: 0,
         };
         commands.queue(move |w: &mut World| w.resource_mut::<crate::structures::BuiltStructures>().add(pieza));
-        stock.wood -= BUILD_WOOD_COST;
+        stock.wood -= costo(casa);
         stock.obras += 1;
         soc.stock.insert(body_u8, stock);
         return;

@@ -1,1748 +1,1108 @@
-//! **VEHÍCULOS** (5 oct 2026): coches y colectivos que se manejan, chocan, se rompen, explotan y circulan solos por
-//! las calles — el tránsito de la ciudad.
+//! **Vehículos en el mundo: tránsito, estacionados, manejar y robar.**
 //!
-//! * **Física** (`paso`): modelo cinemático de bicicleta, la receta de los juegos cenitales (GTA 1/2, Micro Machines):
-//!   aceleración con tope, resistencia, freno más fuerte que el motor, giro que se cierra con la velocidad y marcha
-//!   atrás. Sin integrador de fuerzas: estable a cualquier `dt` y sin rebotes raros.
-//! * **Control táctil**: el MISMO stick de caminar. La dirección del stick es hacia dónde se quiere ir y su recorrido la
-//!   velocidad (*twin-stick*): no hay volante ni pedales que ocupen el pulgar derecho, que sigue libre para el stick de
-//!   puntería (tirar desde el coche). Stick hacia atrás = marcha atrás. En escritorio, WASD.
-//! * **Entrar y salir**: el botón USAR dice ENTRAR cuando hay un coche a menos de [`ALCANCE_ENTRAR`] y SALIR adentro.
-//!   Subirse a uno con conductor se lo roba (el conductor huye, no hay consecuencias).
-//! * **Choques**: contra el mundo (las mismas cajas que frenan al jugador, `Obstaculos`), contra otros coches y contra
-//!   el jugador a pie. Por encima de [`V_CHOQUE`] el golpe cuesta vida al coche; a 0 explota, queda el chasis y el
-//!   conductor sale despedido con daño.
-//! * **Atropellos**: un coche rápido le pasa por encima a infectados, animales y aldeanos con el MISMO camino que las balas
-//!   (un `Bala` de un solo cuadro delante del capó): cada módulo aplica su propia muerte, sin duplicar reglas.
-//! * **Tránsito** (`trafico`): coches que circulan solos por el carril de `roads::lane_at` (mano derecha), centrados en
-//!   su mitad de calzada, que frenan ante lo que tienen delante, doblan en las bocacalles y dan la vuelta donde la calle
-//!   se acaba. Aparecen en un anillo alrededor del jugador (nunca a la vista) y se retiran al alejarse.
-//! * **Balas**: se les puede disparar; la carrocería aguanta y se incendia, y los NPC al volante aceleran y huyen.
+//! La física, el catálogo y el conductor son de `ha_shared::vehiculos` (puros y con
+//! tests). Acá vive lo que es del cliente:
 //!
-//! Costo (regla 2): hay un tope de coches vivos (4 en Android, 8 en escritorio); el pensamiento de la IA corre a 8 Hz y
-//! la consulta de carril es de unas decenas de celdas por coche y por vez.
+//! - **Tránsito con cupo** ([`manejar_transito`]): hasta [`CUPO_TRANSITO`] vehículos
+//!   alrededor del jugador, sembrados en una calzada con mano FUERA de cámara —
+//!   uno por cuadro como mucho (checklist §2: materialización con cupo)—, y
+//!   borrados al quedar lejos. Uno de cada cinco nace **estacionado** contra el
+//!   cordón: es el auto que se toma sin robárselo a nadie.
+//! - **Subir, bajar, robar** ([`subir_bajar`]): E, o tocar el vehículo estando al
+//!   lado. Si lo maneja un vecino, se baja corriendo y el auto es tuyo — en el
+//!   momento, como en GTA.
+//! - **Manejar** ([`fisica_vehiculos`]): el stick apunta el rumbo
+//!   (`mando_desde_stick`). Mientras manejás, el jugador ES el auto para el resto
+//!   del juego: su `SimState` sigue al vehículo, así que la cámara, la carga de
+//!   chunks y todo lo que pregunta "¿dónde está el jugador?" lo siguen sin saber
+//!   que existe un auto.
+//! - **Atropellar**: el paragolpes deja tres [`crate::armas::Bala`] invisibles por
+//!   paso; los que ya saben recibir un balazo (vecinos, fauna, infectados) reciben
+//!   el golpe con sus testigos y su muerte, sin una línea nueva de su lado.
+//!
+//! El suelo se consulta por un caché por celda ([`CacheSuelo`]): `topdown_tile`
+//! recalcula ruido en cada pregunta y un conductor pregunta unas cien veces por
+//! paso.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::prelude::*;
-use ha_shared::topdown::TILE_M;
+use bevy::window::PrimaryWindow;
+use ha_shared::vehiculos::{self as veh, Clase, Conductor, Estado, Ficha, Mando, Suelo};
 
 use crate::audio::{PlaySfxAt, Sfx};
-use crate::camera::CameraShakeEvent;
+use crate::camera::{CameraShakeEvent, GameCamera};
 use crate::game_phase::GamePhase;
-use crate::input::{MovementIntent, TouchActions};
+use crate::input::{touch_blocked, touch_in_move_zone, MovementIntent, TouchBlockRects, TouchLayout};
 use crate::scene::WorldContextRuntime;
 use crate::sim::{Player, PlayerVisual, SimState};
-use crate::world2d::{active_surface_body, ActivePlanet};
+use crate::world2d::{active_surface_body, render_xy, sort_z, ActivePlanet, TileWorld};
 
-// ── Números ──────────────────────────────────────────────────────────────────────────────────────────────────────
-/// A qué distancia (m) del jugador se puede entrar a un coche.
-pub const ALCANCE_ENTRAR: f32 = 3.2;
-/// Por debajo de esta velocidad (m/s) un roce no cuenta como choque.
-pub const V_CHOQUE: f32 = 3.0;
-/// Radio de los círculos de colisión contra el mundo (m).
-const R_COCHE: f32 = 0.8;
-/// m por pixel del dibujo del pack (32 px = 1 tile = 1 m).
-const M_POR_PX: f32 = 1.0 / 32.0;
-/// Cuántos coches a la vez.
-const TOPE_TRAFICO: usize = if cfg!(target_os = "android") { 4 } else { 8 };
-/// Anillo de aparición (m): lejos de lo que se ve (a pie se ven ~25 m).
-const ANILLO: (f32, f32) = (42.0, 90.0);
-/// Más lejos que esto el coche del tránsito se retira.
-const RETIRO: f32 = 140.0;
-/// Segundos entre intentos de aparición.
-const CADA_APARICION: f32 = 1.2;
-/// Segundos que un chasis quemado sigue en el mundo.
-const VIDA_CHASIS: f32 = 150.0;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Clase {
-    Auto,
-    Colectivo,
-    Ambulancia,
-    /// Camión de bomberos (en el pack, `vehicle/camion_*`).
-    Camion,
-    Basura,
-    /// Bote inflable (`vehicle/lancha`): navega, no pisa tierra.
-    Lancha,
-    Helicoptero,
-}
-
-/// Por dónde se mueve una clase.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Terreno {
-    Tierra,
-    Agua,
-    Aire,
-}
-
-/// Lo que cambia entre clases: tamaño de la caja de choque, motor, vida.
-#[derive(Clone, Copy, Debug)]
-pub struct Ficha {
-    /// Largo y ancho de la huella en el suelo (m).
-    pub largo: f32,
-    pub ancho: f32,
-    pub v_max: f32,
-    pub v_atras: f32,
-    pub acel: f32,
-    pub freno: f32,
-    pub vida: f32,
-    /// Resistencia del medio (1/s): el agua frena más que el asfalto.
-    pub drag: f32,
-    pub terreno: Terreno,
-}
-
-impl Clase {
-    pub fn ficha(self) -> Ficha {
-        let t = |largo, ancho, v_max, v_atras, acel, freno, vida| Ficha { largo, ancho, v_max, v_atras, acel, freno, vida, drag: 0.12, terreno: Terreno::Tierra };
-        match self {
-            Clase::Auto => t(3.6, 1.7, 20.0, 5.0, 7.0, 16.0, 120.0),
-            Clase::Colectivo => t(7.0, 2.2, 13.0, 3.0, 3.6, 11.0, 280.0),
-            Clase::Ambulancia => t(6.2, 2.3, 23.0, 5.0, 6.5, 15.0, 170.0),
-            Clase::Camion => t(8.2, 3.0, 16.0, 4.0, 3.6, 12.0, 340.0),
-            Clase::Basura => t(7.2, 2.7, 14.0, 3.5, 3.2, 11.0, 280.0),
-            Clase::Lancha => Ficha { largo: 3.0, ancho: 1.7, v_max: 13.0, v_atras: 3.0, acel: 5.0, freno: 7.0, vida: 90.0, drag: 0.45, terreno: Terreno::Agua },
-            Clase::Helicoptero => Ficha { largo: 8.0, ancho: 3.0, v_max: 34.0, v_atras: 10.0, acel: 6.0, freno: 9.0, vida: 220.0, drag: 0.25, terreno: Terreno::Aire },
-        }
-    }
-
-    /// Clases que circulan solas por las calles, con su peso en el tránsito.
-    pub const TRANSITO: [(Clase, u32); 5] = [(Clase::Auto, 70), (Clase::Colectivo, 10), (Clase::Ambulancia, 7), (Clase::Camion, 6), (Clase::Basura, 7)];
-}
-
-/// De dónde sale el dibujo de una clase.
-enum Arte {
-    /// Un slot con las cuatro poses (`derecha`, `arriba`, `izquierda`, `abajo`); hay varios para elegir.
-    Poses(&'static [&'static str]),
-    /// Una clave por dirección `[derecha, arriba, izquierda, abajo]`; `true` = la izquierda es la derecha espejada.
-    Claves([&'static str; 4], bool),
-}
-
-fn arte(clase: Clase) -> Arte {
-    match clase {
-        Clase::Auto => Arte::Poses(AUTOS),
-        Clase::Colectivo => Arte::Poses(COLECTIVOS),
-        Clase::Lancha => Arte::Poses(&["vehicle/lancha"]),
-        Clase::Ambulancia => Arte::Claves(
-            ["vehicle/ambulancia_derecha_1", "vehicle/ambulancia_arriba", "vehicle/ambulancia_izquierda_1", "vehicle/ambulancia_abajo"],
-            false,
-        ),
-        Clase::Camion => Arte::Claves(["vehicle/camion_derecha", "vehicle/camion_arriba", "vehicle/camion_izquierda", "vehicle/camion_abajo"], false),
-        Clase::Basura => Arte::Claves(
-            [
-                "vehicle/camion_de_basura_verde_derecha",
-                "vehicle/camion_de_basura_verde_arriba",
-                "vehicle/camion_de_basura_verde_izquierda",
-                "vehicle/camion_de_basura_verde_abajo",
-            ],
-            false,
-        ),
-        // El helicóptero del pack: de costado (hacia la derecha; a la izquierda, espejado) y de arriba (nariz abajo / nariz arriba).
-        Clase::Helicoptero => Arte::Claves(
-            ["vehicle/helicoptero_base_costado", "vehicle/helicoptero_atras_costado", "vehicle/helicoptero_base_costado", "vehicle/helicoptero_frente_costado"],
-            true,
-        ),
-    }
-}
-
-/// ¿El pack trae todo el dibujo de esta clase? (Si no, la clase no aparece.)
-fn arte_disponible(art: &crate::art2d::ArtLibrary, clase: Clase) -> bool {
-    match arte(clase) {
-        Arte::Poses(l) => l.iter().any(|k| tiene_poses(art, k)),
-        Arte::Claves(k, _) => k.iter().all(|c| art.has_art(c)),
-    }
-}
-
-/// Sorteo del slot de una clase con `Poses` (o `""` si es de `Claves`).
-fn elegir_clave(art: &crate::art2d::ArtLibrary, clase: Clase, s: &mut u32) -> Option<String> {
-    match arte(clase) {
-        Arte::Poses(l) => {
-            let ok: Vec<&&str> = l.iter().filter(|k| tiene_poses(art, k)).collect();
-            if ok.is_empty() {
-                None
-            } else {
-                Some((**ok[(azar01(s) * ok.len() as f32) as usize % ok.len()]).to_string())
-            }
-        }
-        Arte::Claves(..) => arte_disponible(art, clase).then(String::new),
-    }
-}
-
-// ── Física pura (probada sin Bevy) ───────────────────────────────────────────────────────────────────────────────
-
-/// Estado cinemático de un coche.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Cuerpo {
-    pub pos: Vec2,
-    /// Rumbo (rad): `atan2(z, x)` — 0 = este, π/2 = sur (pantalla abajo).
-    pub rumbo: f32,
-    /// m/s con signo (negativo = marcha atrás).
-    pub vel: f32,
-}
-
-/// Lo que quiere el conductor: hacia dónde apuntar el coche y a qué velocidad (con signo).
-#[derive(Clone, Copy, Debug)]
-pub struct Mando {
-    pub rumbo: f32,
-    pub v_obj: f32,
-}
-
-/// Ángulo envuelto a (-π, π].
-pub fn envolver(a: f32) -> f32 {
-    let mut a = a % std::f32::consts::TAU;
-    if a > std::f32::consts::PI {
-        a -= std::f32::consts::TAU;
-    } else if a <= -std::f32::consts::PI {
-        a += std::f32::consts::TAU;
-    }
-    a
-}
-
-pub fn dir_de(rumbo: f32) -> Vec2 {
-    Vec2::new(rumbo.cos(), rumbo.sin())
-}
-
-/// **Del stick al mando** (twin-stick): la dirección del stick es hacia dónde ir. Si apunta casi hacia atrás del coche
-/// se maneja en reversa hacia ese lado (el rumbo objetivo se da vuelta), así el pulgar nunca tiene que "dar la
-/// vuelta" a mano para retroceder.
-pub fn mando_de_stick(rumbo_actual: f32, stick: Vec2, f: &Ficha) -> Mando {
-    let mag = stick.length().clamp(0.0, 1.0);
-    if mag < 0.12 {
-        return Mando { rumbo: rumbo_actual, v_obj: 0.0 };
-    }
-    let objetivo = stick.y.atan2(stick.x);
-    let d = envolver(objetivo - rumbo_actual);
-    if d.abs() > 2.2 {
-        // Hacia atrás: el coche apunta al lado contrario y retrocede.
-        Mando { rumbo: envolver(objetivo + std::f32::consts::PI), v_obj: -mag * f.v_atras }
-    } else {
-        Mando { rumbo: objetivo, v_obj: mag * f.v_max }
-    }
-}
-
-/// Un paso de física SIN colisión. Devuelve la nueva posición deseada (el llamador la prueba contra el mundo).
-pub fn paso(c: &mut Cuerpo, m: Mando, f: &Ficha, dt: f32) -> Vec2 {
-    let dt = dt.min(0.05);
-    // Acelerador/freno: lo que falta de velocidad, saturado.
-    let falta = m.v_obj - c.vel;
-    let frena = c.vel * falta < 0.0 || (m.v_obj == 0.0 && c.vel != 0.0);
-    let a = if frena { f.freno } else { f.acel };
-    let dv = (falta.signum() * a * dt).clamp(-falta.abs(), falta.abs());
-    c.vel += dv;
-    // Resistencia (el coche rueda y se frena solo).
-    c.vel -= c.vel * f.drag * dt;
-    if m.v_obj == 0.0 && c.vel.abs() < 0.15 {
-        c.vel = 0.0;
-    }
-    c.vel = c.vel.clamp(-f.v_atras, f.v_max);
-    // Giro: ángulo de volante que se cierra con la velocidad. Con el coche casi parado puede girar poco.
-    let d = envolver(m.rumbo - c.rumbo);
-    let sentido = if c.vel < -0.05 { -1.0 } else { 1.0 };
-    let volante = (d * 2.2).clamp(-1.0, 1.0) * sentido * 0.62 / (1.0 + c.vel.abs() / 14.0);
-    let base = (f.largo * 0.62).max(1.0);
-    c.rumbo = envolver(c.rumbo + c.vel / base * volante.tan() * dt);
-    c.pos + dir_de(c.rumbo) * c.vel * dt
-}
-
-/// ¿El segmento `a→b` toca la caja orientada `(centro, rumbo, largo, ancho)`? (Liang–Barsky en el marco del coche.)
-pub fn segmento_toca_caja(a: Vec2, b: Vec2, centro: Vec2, rumbo: f32, largo: f32, ancho: f32) -> bool {
-    let (c, s) = (rumbo.cos(), rumbo.sin());
-    let local = |p: Vec2| {
-        let d = p - centro;
-        Vec2::new(d.x * c + d.y * s, -d.x * s + d.y * c)
-    };
-    let (p0, p1) = (local(a), local(b));
-    let d = p1 - p0;
-    let (mut t0, mut t1) = (0.0f32, 1.0f32);
-    for (p, q, lim) in [(p0.x, d.x, largo * 0.5), (p0.y, d.y, ancho * 0.5)] {
-        if q.abs() < 1e-6 {
-            if p.abs() > lim {
-                return false;
-            }
-        } else {
-            let (mut ta, mut tb) = ((-lim - p) / q, (lim - p) / q);
-            if ta > tb {
-                std::mem::swap(&mut ta, &mut tb);
-            }
-            t0 = t0.max(ta);
-            t1 = t1.min(tb);
-            if t0 > t1 {
-                return false;
-            }
-        }
-    }
-    true
-}
-
-/// Octante de `roads::lane_at` → dirección en el suelo `(x, z)` (norte = z negativo).
-pub fn octante_a_vec(o: u8) -> Vec2 {
-    match o {
-        0 => Vec2::new(1.0, 0.0),
-        2 => Vec2::new(0.0, -1.0),
-        4 => Vec2::new(-1.0, 0.0),
-        _ => Vec2::new(0.0, 1.0),
-    }
-}
-
-/// Giro a la derecha (en pantalla, con z hacia abajo) de un vector.
-pub fn derecha_de(v: Vec2) -> Vec2 {
-    Vec2::new(-v.y, v.x)
-}
-
-// ── Componentes ──────────────────────────────────────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Conductor {
-    Nadie,
-    Jugador,
-    Npc,
-}
-
-impl Vehiculo {
-    /// Un vehículo nuevo de `clase` en `pos`, sorteando su dibujo (`None` si el pack no trae el de esa clase).
-    pub fn nuevo(art: &crate::art2d::ArtLibrary, clase: Clase, pos: Vec2, rumbo: f32, conductor: Conductor, semilla: u32) -> Option<Self> {
-        let mut s = semilla | 1;
-        let clave = elegir_clave(art, clase, &mut s)?;
-        Some(Vehiculo {
-            clase,
-            clave,
-            chasis: None,
-            cuerpo: Cuerpo { pos, rumbo, vel: 0.0 },
-            vida: clase.ficha().vida,
-            conductor,
-            destruido: false,
-            edad_chasis: 0.0,
-            dir4: 255,
-            pose: (255, false),
-            humo_t: 0.0,
-            atropello_cd: 0.0,
-            choque_cd: 0.0,
-            ia: Ia { rumbo_obj: rumbo, v_obj: 0.0, mem: Rumbo { semilla: s, ..default() }, ..default() },
-        })
-    }
-}
-
-#[derive(Component, Clone, Debug)]
-pub struct Vehiculo {
-    pub clase: Clase,
-    pub clave: String,
-    pub chasis: Option<String>,
-    pub cuerpo: Cuerpo,
-    pub vida: f32,
-    pub conductor: Conductor,
-    pub destruido: bool,
-    /// Segundos desde la explosión (el chasis se retira solo).
-    pub edad_chasis: f32,
-    /// Dirección del dibujo (0=D, 1=A, 2=I, 3=Ab), con histéresis.
-    dir4: u8,
-    /// Pose y tamaño con el que está dibujado ahora (para no rehacer el sprite cada cuadro).
-    pose: (u8, bool),
-    humo_t: f32,
-    atropello_cd: f32,
-    choque_cd: f32,
-    ia: Ia,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct Ia {
-    rumbo_obj: f32,
-    v_obj: f32,
-    piensa_en: f32,
-    bloqueado: f32,
-    perdido: f32,
-    mem: Rumbo,
-    /// Huye (le dispararon): más rápido y sin respetar nada.
-    panico: f32,
-    semilla: u32,
-}
-
-/// Quién maneja y a qué coche está cerca.
-#[derive(Resource, Default)]
-pub struct Conduccion {
-    pub vehiculo: Option<Entity>,
-    pub cerca: Option<Entity>,
-    /// Texto del medidor (velocidad y vida), para el HUD.
-    pub medidor: String,
-    /// Hay un tren parado junto al jugador (lo escribe `trenes`).
-    pub tren_cerca: bool,
-    /// Viajando en la línea de tren con esa id.
-    pub en_tren: Option<u32>,
-    /// El tren en el que viaja está parado en una estación (se puede bajar).
-    pub tren_parado: bool,
-}
-
-impl Conduccion {
-    /// El jugador va dentro de algo (coche o tren): el cuerpo no camina.
-    pub fn activa(&self) -> bool {
-        self.vehiculo.is_some() || self.en_tren.is_some()
-    }
-
-    /// El botón USAR se ocupa de entrar/salir.
-    pub fn boton_activo(&self) -> bool {
-        self.vehiculo.is_some() || self.cerca.is_some() || self.tren_cerca || (self.en_tren.is_some() && self.tren_parado)
-    }
-
-    pub fn etiqueta(&self) -> &'static str {
-        if self.vehiculo.is_some() || self.en_tren.is_some() { "SALIR" } else { "ENTRAR" }
-    }
-}
-
-#[derive(Component)]
-struct Humo {
-    vida: f32,
-    sube: f32,
-}
-
-#[derive(Component)]
-struct MedidorHud;
-
-#[derive(Resource, Default)]
-struct Trafico {
-    acc: f32,
-    tick: u32,
-}
+/// Cuántos vehículos de tránsito hay a la vez alrededor del jugador. Cada uno es
+/// un sprite y un conductor a 20 Hz: diez se pagan holgado en el Redmi.
+pub const CUPO_TRANSITO: usize = 10;
+/// Más allá de esto el tránsito se borra (y el que usaste, a [`LEJOS_USADO`]).
+const LEJOS_TRANSITO: f32 = 120.0;
+const LEJOS_USADO: f32 = 400.0;
+/// Desde cuán cerca se sube (del centro del vehículo, más su medio largo).
+const ALCANCE_SUBIR: f32 = 2.2;
+/// Píxeles por metro del pack (1 tile = 32 px = 1 m).
+const PX_M: f32 = 32.0;
+const TAM_VECINO: Vec2 = Vec2::new(0.95, 1.9);
 
 pub struct VehiculosPlugin;
 
+/// Las cajas de los autos (círculos `(x, z, r)`) del cuadro de física, para que los PEATONES también
+/// los esquiven (`obstaculos::Obstaculos::caja_frena`). Es un recurso y no una consulta a `Vehiculo`:
+/// esa consulta pelearía con los sistemas que escriben los autos y Bevy no arrancaría.
+#[derive(Resource, Default)]
+pub struct AutosCaja(pub Vec<(f32, f32, f32)>);
+
+fn publicar_autos(autos: Query<&Vehiculo>, mut caja: ResMut<AutosCaja>) {
+    caja.0.clear();
+    for v in &autos {
+        let (ps, n, rv) = v.estado.probes(v.estado.x, v.estado.z, v.estado.rumbo);
+        for &(px, pz) in ps.iter().take(n) {
+            caja.0.push((px, pz, rv));
+        }
+    }
+}
+
 impl Plugin for VehiculosPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Conduccion>()
-            .init_resource::<Trafico>()
+        app.init_resource::<AutosCaja>()
+            .init_resource::<Manejando>()
+            .init_resource::<CacheSuelo>()
+            .init_resource::<Transito>()
+            .init_resource::<Reabastecimiento>()
+            .init_resource::<Pedidos>()
             .add_systems(
-                Update,
-                (
-                    buscar_cercano,
-                    entrar_o_salir,
-                    pensar_ia,
-                    mover_vehiculos,
-                    choques_entre_coches,
-                    dibujar_vehiculos,
-                    humo_y_fuego,
-                    medidor,
-                )
-                    .chain()
-                    // Al volante se lee la intención YA suavizada (y, en los drivers de QA, ya escrita): sin este orden la
-                    // lectura caía a veces antes y el coche se quedaba sin stick ese cuadro.
-                    .after(crate::input::joystick::smooth_movement_intent)
+                FixedUpdate,
+                (fisica_vehiculos.after(crate::sim::tick_sim), publicar_autos.after(fisica_vehiculos))
                     .run_if(in_state(GamePhase::Playing)),
             )
-            .add_systems(Update, (aparecer_trafico, aparecer_otros, motor_sonido).run_if(in_state(GamePhase::Playing)))
             .add_systems(
                 Update,
-                (atropellar, balas_a_vehiculos)
+                (atender_pedidos, manejar_transito, transito_maritimo, subir_bajar, repostar, dibujar_vehiculos, huir, hud_vehiculo, lamparas_semaforo)
                     .chain()
-                    .after(crate::armas::ArmasSet::Mover)
-                    .before(crate::armas::ArmasSet::Impactos)
                     .run_if(in_state(GamePhase::Playing)),
             )
-            .add_systems(OnExit(GamePhase::Playing), limpiar);
+            .add_systems(
+                PostUpdate,
+                ocultar_al_conductor
+                    .before(bevy::render::view::VisibilitySystems::VisibilityPropagate)
+                    .run_if(in_state(GamePhase::Playing)),
+            );
     }
 }
 
-fn limpiar(
-    mut commands: Commands,
-    mut cond: ResMut<Conduccion>,
-    q: Query<Entity, Or<(With<Vehiculo>, With<Humo>, With<MedidorHud>)>>,
-    mut player: Query<&mut Visibility, With<Player>>,
-) {
-    for e in &q {
-        commands.entity(e).despawn_recursive();
-    }
-    *cond = Conduccion::default();
-    for mut v in &mut player {
-        *v = Visibility::Inherited;
+/// El vehículo que maneja el jugador, si alguno.
+#[derive(Resource, Default)]
+pub struct Manejando {
+    pub auto: Option<Entity>,
+}
+
+impl Manejando {
+    pub fn activo(&self) -> bool {
+        self.auto.is_some()
     }
 }
 
-fn hash(mut s: u32) -> u32 {
-    s ^= s << 13;
-    s ^= s >> 17;
-    s ^= s << 5;
-    s.wrapping_mul(2_654_435_761)
+#[derive(Resource, Default)]
+pub struct CacheSuelo {
+    cuerpo: u8,
+    mapa: HashMap<(i64, i64), Suelo>,
 }
 
-fn azar01(s: &mut u32) -> f32 {
-    *s = hash(*s | 1);
-    (*s >> 8) as f32 / 16_777_216.0
+#[derive(Resource, Default)]
+struct Transito {
+    semilla: u32,
 }
 
-// ── Aparición del tránsito ───────────────────────────────────────────────────────────────────────────────────────
-
-const AUTOS: &[&str] = &[
-    "vehicle/auto_1", "vehicle/auto_2", "vehicle/auto_3", "vehicle/auto_4", "vehicle/auto_5", "vehicle/auto_6",
-    "vehicle/auto_7", "vehicle/auto_8", "vehicle/auto_9", "vehicle/auto_10", "vehicle/auto_11", "vehicle/auto_12",
-    "vehicle/auto_13", "vehicle/auto_14", "vehicle/auto_15", "vehicle/auto_16", "vehicle/auto_17", "vehicle/auto_18",
-    "vehicle/auto_19", "vehicle/auto_20", "vehicle/auto_21", "vehicle/auto_22", "vehicle/auto_23", "vehicle/auto_24",
-    "vehicle/auto_25", "vehicle/auto_26",
-];
-const COLECTIVOS: &[&str] = &["vehicle/colectivo_1", "vehicle/colectivo_2", "vehicle/colectivo_3", "vehicle/colectivo_4", "vehicle/colectivo_5", "vehicle/colectivo_6"];
-const POSES: [&str; 4] = ["derecha", "arriba", "izquierda", "abajo"];
-
-fn tiene_poses(art: &crate::art2d::ArtLibrary, clave: &str) -> bool {
-    POSES.iter().all(|p| art.has_pose(clave, p))
+/// La lámpara de un semáforo: sprite hijo del poste cuyo color sigue a la luz del eje
+/// que gobierna (`rumbo` = octante de quien viaja bajo ese poste).
+#[derive(Component)]
+pub struct LamparaSemaforo {
+    rumbo: u8,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn aparecer_trafico(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut tr: ResMut<Trafico>,
-    ctx: Res<WorldContextRuntime>,
-    planet: Res<ActivePlanet>,
-    art: Res<crate::art2d::ArtLibrary>,
-    obs: crate::obstaculos::Obstaculos,
-    player: Query<&Transform, With<Player>>,
-    coches: Query<&Vehiculo>,
-) {
-    tr.acc += time.delta_secs();
-    if tr.acc < CADA_APARICION {
-        return;
-    }
-    tr.acc = 0.0;
-    tr.tick = tr.tick.wrapping_add(1);
-    if !matches!(ctx.active, ha_shared::WorldContext::Overworld) {
-        return;
-    }
-    let body = active_surface_body(&ctx, &planet);
-    if !ha_shared::geography::has_civilisation(body) {
-        return;
-    }
-    let vivos = coches.iter().filter(|v| !v.destruido && v.conductor != Conductor::Jugador).count();
-    if vivos >= TOPE_TRAFICO {
-        return;
-    }
-    let Ok(ptf) = player.get_single() else { return };
-    let p = Vec2::new(ptf.translation.x, -ptf.translation.y);
-    let mut s = hash(tr.tick.wrapping_mul(0x9e37_79b9) ^ (p.x as i32 as u32) ^ ((p.y as i32 as u32) << 7));
-    for _ in 0..14 {
-        let ang = azar01(&mut s) * std::f32::consts::TAU;
-        let rad = ANILLO.0 + azar01(&mut s) * (ANILLO.1 - ANILLO.0);
-        let q = p + dir_de(ang) * rad;
-        let (tx, tz) = (q.x.floor() as i64, q.y.floor() as i64);
-        let Some(oct) = ha_shared::roads::lane_at(body, tx, tz) else { continue };
-        let centro = Vec2::new(tx as f32 + 0.5, tz as f32 + 0.5);
-        if coches.iter().any(|v| v.cuerpo.pos.distance(centro) < 14.0) {
-            continue;
-        }
-        if !obs.libre(body, centro.x, centro.y, R_COCHE) {
-            continue;
-        }
-        // Qué clase: sorteo con peso entre las que el pack dibuja completas.
-        let total: u32 = Clase::TRANSITO.iter().filter(|(c, _)| arte_disponible(&art, *c)).map(|(_, w)| *w).sum();
-        if total == 0 {
-            return;
-        }
-        let mut r = (azar01(&mut s) * total as f32) as u32;
-        let mut clase = Clase::Auto;
-        for (c, w) in Clase::TRANSITO {
-            if !arte_disponible(&art, c) {
-                continue;
-            }
-            if r < w {
-                clase = c;
-                break;
-            }
-            r -= w;
-        }
-        let Some(clave) = elegir_clave(&art, clase, &mut s) else { return };
-        let rumbo = octante_a_vec(oct).to_angle();
-        let f = clase.ficha();
-        commands.spawn((
-            Vehiculo {
-                clase,
-                clave,
-                chasis: None,
-                cuerpo: Cuerpo { pos: centro, rumbo, vel: 0.0 },
-                vida: f.vida,
-                conductor: Conductor::Npc,
-                destruido: false,
-                edad_chasis: 0.0,
-                dir4: 255,
-                pose: (255, false),
-                humo_t: 0.0,
-                atropello_cd: 0.0,
-                choque_cd: 0.0,
-                ia: Ia { rumbo_obj: rumbo, v_obj: 0.0, mem: Rumbo { semilla: s, ..default() }, ..default() },
-            },
-            Sprite::default(),
-            Transform::from_xyz(centro.x, -centro.y, crate::layers::ysort(centro.y)),
-            Visibility::Hidden,
-            Name::new("Vehiculo"),
+/// Cuelga la lámpara del poste recién sembrado (la llama `world2d`).
+pub fn agregar_lampara(ent: &mut EntityCommands, rumbo: u8) {
+    ent.with_children(|c| {
+        c.spawn((
+            Sprite::from_color(Color::srgb(0.2, 0.9, 0.3), Vec2::splat(0.26)),
+            Transform::from_xyz(0.0, 0.62, 0.05),
+            LamparaSemaforo { rumbo },
+            crate::sim::UnlitSprite,
         ));
-        return;
-    }
+    });
 }
 
-/// **Lanchas y helicópteros**: no circulan por las calles. Una lancha flota en el agua cercana (hasta 2) y un helicóptero espera
-/// posado en un claro de la ciudad (hasta 1), los dos sin conductor, para que el jugador se suba (y para que las balas los
-/// destruyan, como a un coche).
-#[allow(clippy::too_many_arguments)]
-fn aparecer_otros(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut acc: Local<f32>,
-    mut tick: Local<u32>,
-    ctx: Res<WorldContextRuntime>,
-    planet: Res<ActivePlanet>,
-    art: Res<crate::art2d::ArtLibrary>,
-    obs: crate::obstaculos::Obstaculos,
-    player: Query<&Transform, With<Player>>,
-    coches: Query<&Vehiculo>,
-) {
-    *acc += time.delta_secs();
-    if *acc < 2.5 {
-        return;
-    }
-    *acc = 0.0;
-    *tick = tick.wrapping_add(1);
-    if !matches!(ctx.active, ha_shared::WorldContext::Overworld) {
-        return;
-    }
-    let body = active_surface_body(&ctx, &planet);
-    if !ha_shared::geography::has_civilisation(body) {
-        return;
-    }
-    let Ok(ptf) = player.get_single() else { return };
-    let p = Vec2::new(ptf.translation.x, -ptf.translation.y);
-    let n_lanchas = coches.iter().filter(|v| v.clase == Clase::Lancha && !v.destruido).count();
-    let n_heli = coches.iter().filter(|v| v.clase == Clase::Helicoptero && !v.destruido).count();
-    let mut s = hash(tick.wrapping_mul(0x85eb_ca6b) ^ (p.x as i32 as u32).rotate_left(5) ^ (p.y as i32 as u32));
-    let agua = |x: f32, z: f32| matches!(obs.tiles().tile_at(body, x.floor() as i64, z.floor() as i64), ha_shared::topdown::Tile::Water | ha_shared::topdown::Tile::WaterDeep);
-    for (clase, hay) in [(Clase::Lancha, n_lanchas < 2), (Clase::Helicoptero, n_heli < 1)] {
-        if !hay || !arte_disponible(&art, clase) {
-            continue;
-        }
-        for _ in 0..24 {
-            let ang = azar01(&mut s) * std::f32::consts::TAU;
-            let rad = 28.0 + azar01(&mut s) * 55.0;
-            let q = p + dir_de(ang) * rad;
-            let libre = match clase {
-                // Lancha: agua alrededor (un palmo de orilla no alcanza).
-                Clase::Lancha => [(0.0, 0.0), (2.5, 0.0), (-2.5, 0.0), (0.0, 2.5), (0.0, -2.5)].iter().all(|(dx, dz)| agua(q.x + dx, q.y + dz)),
-                // Helicóptero: un claro firme DENTRO de una ciudad y lejos de las calles.
-                _ => {
-                    let (tx, tz) = (q.x.floor() as i64, q.y.floor() as i64);
-                    ha_shared::geography::settlement_covering(body, tx, tz).is_some()
-                        && ha_shared::geography::civil_at(body, tx, tz).is_none()
-                        && obs.libre(body, q.x, q.y, 4.5)
-                }
-            };
-            if !libre || coches.iter().any(|v| v.cuerpo.pos.distance(q) < 12.0) {
-                continue;
-            }
-            let Some(clave) = elegir_clave(&art, clase, &mut s) else { break };
-            let f = clase.ficha();
-            commands.spawn((
-                Vehiculo {
-                    clase,
-                    clave,
-                    chasis: None,
-                    cuerpo: Cuerpo { pos: q, rumbo: azar01(&mut s) * std::f32::consts::TAU, vel: 0.0 },
-                    vida: f.vida,
-                    conductor: Conductor::Nadie,
-                    destruido: false,
-                    edad_chasis: 0.0,
-                    dir4: 255,
-                    pose: (255, false),
-                    humo_t: 0.0,
-                    atropello_cd: 0.0,
-                    choque_cd: 0.0,
-                    ia: Ia::default(),
-                },
-                Sprite::default(),
-                Transform::from_xyz(q.x, -q.y, crate::layers::ysort(q.y)),
-                Visibility::Hidden,
-                Name::new("Vehiculo"),
-            ));
-            break;
-        }
-    }
-}
-
-// ── Cercanía, entrar y salir ─────────────────────────────────────────────────────────────────────────────────────
-
-pub(crate) fn buscar_cercano(
-    mut cond: ResMut<Conduccion>,
-    flight: Res<crate::flight::Flight>,
-    fly: Res<crate::creative_fly::CreativeFlight>,
-    player: Query<&Transform, With<Player>>,
-    coches: Query<(Entity, &Vehiculo)>,
-) {
-    if cond.vehiculo.is_some() || cond.en_tren.is_some() {
-        cond.cerca = None;
-        return;
-    }
-    let Ok(ptf) = player.get_single() else { return };
-    if flight.active || fly.flying() {
-        cond.cerca = None;
-        return;
-    }
-    let p = Vec2::new(ptf.translation.x, -ptf.translation.y);
-    let mut mejor: Option<(Entity, f32)> = None;
-    for (e, v) in &coches {
-        if v.destruido {
-            continue;
-        }
-        let f = v.clase.ficha();
-        // Distancia al borde de la caja, no al centro: un colectivo mide 7 m.
-        let d = (v.cuerpo.pos.distance(p) - f.largo * 0.5).max(0.0);
-        if d <= ALCANCE_ENTRAR && mejor.map_or(true, |(_, m)| d < m) {
-            mejor = Some((e, d));
-        }
-    }
-    let nuevo = mejor.map(|(e, _)| e);
-    if cond.cerca != nuevo {
-        cond.cerca = nuevo;
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn entrar_o_salir(
-    mut cond: ResMut<Conduccion>,
-    actions: Res<TouchActions>,
-    gameplay_block: Res<crate::game_ui::UiGameplayBlock>,
-    ctx: Res<WorldContextRuntime>,
-    planet: Res<ActivePlanet>,
-    obs: crate::obstaculos::Obstaculos,
-    mut player: Query<(&mut SimState, &mut PlayerVisual, &mut Visibility), With<Player>>,
-    mut coches: Query<&mut Vehiculo>,
-) {
-    if gameplay_block.blocked || !actions.use_edge || cond.en_tren.is_some() || cond.tren_cerca {
-        return;
-    }
-    let Ok((mut sim, mut visual, mut vis)) = player.get_single_mut() else { return };
-    let body = active_surface_body(&ctx, &planet);
-    if let Some(e) = cond.vehiculo {
-        // SALIR: por el costado libre, o por detrás, o encima.
-        let Ok(mut v) = coches.get_mut(e) else {
-            cond.vehiculo = None;
-            *vis = Visibility::Inherited;
-            return;
+/// Pinta cada lámpara con la luz de su eje. Una entidad por poste (cuatro por cruce)
+/// y sólo hay las de los chunks cargados: decenas, no miles.
+fn lamparas_semaforo(time: Res<Time<Fixed>>, mut q: Query<(&LamparaSemaforo, &mut Sprite)>) {
+    let t = time.elapsed_secs_f64();
+    for (l, mut s) in &mut q {
+        s.color = match veh::luz_en(t, l.rumbo) {
+            veh::Luz::Verde => Color::srgb(0.25, 0.95, 0.35),
+            veh::Luz::Amarillo => Color::srgb(1.0, 0.85, 0.15),
+            veh::Luz::Rojo => Color::srgb(1.0, 0.18, 0.15),
         };
-        let f = v.clase.ficha();
-        let d = dir_de(v.cuerpo.rumbo);
-        let lado = derecha_de(d);
-        let salida = [lado, -lado, -d, d]
-            .into_iter()
-            .map(|dir| v.cuerpo.pos + dir * (f.ancho * 0.5 + 0.9 + if dir == d || dir == -d { f.largo * 0.5 - f.ancho * 0.5 } else { 0.0 }))
-            .find(|p| obs.libre(body, p.x, p.y, ha_shared::topdown::PLAYER_RADIUS))
-            .unwrap_or(v.cuerpo.pos + lado * (f.ancho * 0.5 + 0.9));
-        v.conductor = Conductor::Nadie;
-        sim.body.x = salida.x;
-        sim.body.z = salida.y;
-        visual.from_x = salida.x;
-        visual.to_x = salida.x;
-        visual.from_z = salida.y;
-        visual.to_z = salida.y;
-        *vis = Visibility::Inherited;
-        cond.vehiculo = None;
-        return;
-    }
-    let Some(e) = cond.cerca else { return };
-    let Ok(mut v) = coches.get_mut(e) else { return };
-    if v.destruido {
-        return;
-    }
-    // Entrar: si tenía conductor, lo bajamos (se lo roba).
-    v.conductor = Conductor::Jugador;
-    v.ia.perdido = 0.0;
-    cond.vehiculo = Some(e);
-    cond.cerca = None;
-    *vis = Visibility::Hidden;
-}
-
-// ── IA del tránsito ──────────────────────────────────────────────────────────────────────────────────────────────
-
-fn celda(p: Vec2) -> (i64, i64) {
-    (p.x.floor() as i64, p.y.floor() as i64)
-}
-
-fn lane(body: ha_shared::CelestialBody, p: Vec2) -> Option<u8> {
-    let (tx, tz) = celda(p);
-    ha_shared::roads::lane_at(body, tx, tz)
-}
-
-/// Centro del carril: cuántas celdas seguidas del mismo sentido hay a cada lado (perpendicular a la marcha) y el
-/// punto medio, como desplazamiento con signo a lo largo de `perp`.
-fn centro_de_carril(body: ha_shared::CelestialBody, p: Vec2, oct: u8, perp: Vec2) -> f32 {
-    let mut lado = |signo: f32| {
-        let mut n = 0.0;
-        for k in 1..=8 {
-            if lane(body, p + perp * signo * k as f32) == Some(oct) {
-                n = k as f32;
-            } else {
-                break;
-            }
-        }
-        n
-    };
-    let (a, b) = (lado(1.0), lado(-1.0));
-    // Medio del carril respecto del CENTRO DE LA CELDA, menos lo que el coche ya está corrido dentro de su celda:
-    // continuo (sin escalón al cruzar de celda), que es lo que evita que el coche serpentee.
-    let centro_celda = Vec2::new(p.x.floor() + 0.5, p.y.floor() + 0.5);
-    (a - b) * 0.5 - (p - centro_celda).dot(perp)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn pensar_ia(
-    time: Res<Time>,
-    ctx: Res<WorldContextRuntime>,
-    planet: Res<ActivePlanet>,
-    player: Query<&Transform, With<Player>>,
-    mut commands: Commands,
-    mut q: Query<(Entity, &mut Vehiculo)>,
-) {
-    let body = active_surface_body(&ctx, &planet);
-    let dt = time.delta_secs();
-    let t_juego = time.elapsed_secs();
-    let Ok(ptf) = player.get_single() else { return };
-    let jugador = Vec2::new(ptf.translation.x, -ptf.translation.y);
-    let otros: Vec<(Entity, Vec2, f32)> = q.iter().map(|(e, v)| (e, v.cuerpo.pos, v.cuerpo.vel)).collect();
-    for (e, mut v) in &mut q {
-        if v.conductor != Conductor::Npc || v.destruido {
-            continue;
-        }
-        v.ia.piensa_en -= dt;
-        v.ia.panico = (v.ia.panico - dt).max(0.0);
-        if v.ia.piensa_en > 0.0 {
-            continue;
-        }
-        v.ia.piensa_en = 0.125;
-        let pos = v.cuerpo.pos;
-        let f = v.clase.ficha();
-        let tope = if v.ia.panico > 0.0 { f.v_max } else { f.v_max * 0.45 };
-        let Some(oct) = lane(body, pos) else {
-            // Se salió de la calzada (choque, empujón): frena y, si no vuelve, se retira.
-            v.ia.v_obj = 0.0;
-            v.ia.perdido += 0.125;
-            if v.ia.perdido > 8.0 {
-                commands.entity(e).despawn_recursive();
-            }
-            continue;
-        };
-        v.ia.perdido = 0.0;
-        let vel_abs = v.cuerpo.vel.abs();
-        let (rumbo_obj, v_factor) = decidir_rumbo(body, pos, v.cuerpo.rumbo, oct, vel_abs, 0.125, &mut v.ia.mem);
-        v.ia.rumbo_obj = rumbo_obj;
-        if v.ia.mem.sin_salida {
-            // Fin de calle: si nadie lo ve se retira ya; si no, espera unos segundos y se va.
-            v.ia.bloqueado += 0.125;
-            if pos.distance(jugador) > 35.0 || v.ia.bloqueado > 6.0 {
-                commands.entity(e).despawn_recursive();
-                continue;
-            }
-        }
-        let d0 = dir_de(rumbo_obj);
-        // **Semáforo**: a ≤ 7 m de una bocacalle por la que todavía no entró, con rojo o amarillo en su eje, se detiene.
-        let hd = dir_de(v.cuerpo.rumbo);
-        let ew = hd.x.abs() >= hd.y.abs();
-        let ante_cruce = !cruce(body, pos, hd) && (1..=7).any(|k| cruce(body, pos + hd * k as f32, hd));
-        let en_rojo = ante_cruce && !ha_shared::semaforos::hay_paso(t_juego, ew);
-        // Velocidad: tope por clase, más lento si va a doblar, y frena ante lo que tiene delante.
-        let mut vel = tope * if v.ia.panico > 0.0 { 1.0 } else { v_factor };
-        let h = dir_de(v.cuerpo.rumbo);
-        let bloqueo = |otro: Vec2| {
-            let r = otro - pos;
-            let adelante = r.dot(h);
-            adelante > 0.0 && adelante < 4.0 + v.cuerpo.vel.abs() * 0.9 && (r - h * adelante).length() < f.ancho * 0.5 + 1.1
-        };
-        let mut bloqueado = bloqueo(jugador) || en_rojo;
-        for (oe, op, _) in &otros {
-            if *oe != e && bloqueo(*op) {
-                bloqueado = true;
-            }
-        }
-        if bloqueado && v.ia.panico <= 0.0 {
-            vel = 0.0;
-            v.ia.bloqueado += 0.125;
-        } else {
-            v.ia.bloqueado = 0.0;
-        }
-        v.ia.v_obj = vel;
     }
 }
 
-
-/// Punto central del carril de la celda de `p` (sobre el eje `perp`; a lo largo, el centro de la celda).
-fn centro_carril_abs(body: ha_shared::CelestialBody, p: Vec2, oct: u8, perp: Vec2) -> Vec2 {
-    let centro_celda = Vec2::new(p.x.floor() + 0.5, p.y.floor() + 0.5);
-    centro_celda + perp * (centro_de_carril(body, centro_celda, oct, perp))
+/// Lo que pide la consola (`/auto`, `/nafta`, `/buscado`) y `atender_pedidos` cumple.
+#[derive(Resource, Default)]
+pub struct Pedidos {
+    pub spawn: Option<String>,
+    pub nafta: bool,
+    pub buscado: Option<u8>,
 }
 
-/// Un giro decidido: se sigue derecho hasta el comienzo de una curva de Bézier cuadrática (entrada en el carril propio,
-/// vértice en el cruce de los dos ejes de carril, salida en el carril nuevo) y se recorre por persecución pura. Una
-/// curva y no un rumbo crudo: el coche tiene radio de giro y apuntar «a la calle nueva» lo hacía pasarse del carril.
+/// Lo que el HUD sabe del combustible: si se está cargando y dónde queda la gasolinera
+/// más cercana (sólo se calcula con el tanque bajo, cada 4 s).
+#[derive(Resource, Default)]
+pub struct Reabastecimiento {
+    pub cargando: bool,
+    pub en_surtidor: bool,
+    chequeo: f32,
+    pista: f32,
+    pub destino: Option<(f32, f32, f32)>,
+    avisado_lleno: bool,
+    /// Nivel de tanque ya pagado en esta carga (cada cuarto cuesta un lingote de oro).
+    pagado_hasta: f32,
+    /// Se cortó la carga porque no hay oro en la mochila: el tanque no se llena gratis.
+    pub sin_oro: bool,
+}
+
+/// Un cuarto de tanque = un lingote de oro (`gold_ingot`). El oro se gasta: es un sumidero, no un
+/// activo, así que no aparece dinero de la nada al repostar (regla de contabilidad conservada).
+pub const PRECIO_CUARTO_TANQUE: f32 = 0.25;
+
 #[derive(Clone, Copy, Debug)]
-pub struct Giro {
-    pub oct_t: u8,
-    pub resta: f32,
-    /// Dirección de la calle de la que viene y hacia la que va.
-    pub d0: Vec2,
-    pub c: Vec2,
-    /// Vértice de la curva: donde se cruzan los ejes de los dos carriles.
-    pub apice: Vec2,
-    /// Largo (m) de la entrada y de la salida de la curva.
-    pub radio: f32,
-}
-
-impl Giro {
-    pub fn entrada(&self) -> Vec2 {
-        self.apice - self.d0 * self.radio
-    }
-    pub fn salida(&self) -> Vec2 {
-        self.apice + self.c * self.radio
-    }
-    pub fn punto(&self, t: f32) -> Vec2 {
-        let (p0, p2) = (self.entrada(), self.salida());
-        p0 * (1.0 - t) * (1.0 - t) + self.apice * 2.0 * (1.0 - t) * t + p2 * t * t
-    }
-    /// Parámetro de la curva más cercano a `pos`.
-    pub fn progreso(&self, pos: Vec2) -> f32 {
-        (0..=16)
-            .map(|k| k as f32 / 16.0)
-            .min_by(|a, b| self.punto(*a).distance_squared(pos).total_cmp(&self.punto(*b).distance_squared(pos)))
-            .unwrap_or(0.0)
-    }
-}
-
-/// Radio (m) al que se empieza a doblar a la velocidad de giro (3,6 m/s).
-const RADIO_GIRO: f32 = 5.0;
-
-/// Memoria del conductor entre dos pensamientos.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Rumbo {
-    pub giro_cd: f32,
-    pub semilla: u32,
-    /// Giro en curso: octante de la calle a la que va, segundos que le quedan y el punto del carril nuevo al que
-    /// apunta (persecución pura: el coche traza el arco hacia el CENTRO del carril, no hacia el rumbo crudo). **Se compromete**: en medio de la
-    /// bocacalle el carril de la celda sigue siendo el de la calle de donde viene, y sin esto el coche se arrepentía
-    /// del giro a cada pensamiento y terminaba en el cantero.
-    pub compromiso: Option<Giro>,
-    /// Último sentido de marcha confiable: dentro de una bocacalle el carril de la celda no dice nada útil (la
-    /// retícula le da el de la calle cruzada), así que ahí se conserva el de antes.
-    pub ultimo_oct: Option<u8>,
-    /// Eligió dar la vuelta porque la calle se acaba: quien maneja la IA puede retirar el coche si nadie lo ve.
-    pub sin_salida: bool,
-}
-
-fn octante_de(d: Vec2) -> u8 {
-    if d.x > 0.5 { 0 } else if d.y < -0.5 { 2 } else if d.x < -0.5 { 4 } else { 6 }
-}
-
-/// **Hacia dónde conduce la IA desde `pos`**, que está en un carril de octante `oct`. Devuelve `(rumbo objetivo,
-/// factor de velocidad 0..1)`. Sólo mira el mapa: se prueba sobre calles reales sin abrir el juego.
-///
-/// Sigue el sentido del carril, se centra en su mitad de calzada, dobla en las bocacalles (a veces, y sólo hacia carriles
-/// que van PARA donde dobla), da la vuelta donde la calle se acaba y llega despacio a todo lo anterior.
-pub fn decidir_rumbo(body: ha_shared::CelestialBody, pos: Vec2, rumbo_actual: f32, oct: u8, vel_abs: f32, dt: f32, st: &mut Rumbo) -> (f32, f32) {
-    st.giro_cd = (st.giro_cd - dt).max(0.0);
-    st.sin_salida = false;
-    // **El sentido de marcha es el del PROPIO coche** (cardinal más cercana a su rumbo), no el que diga la celda: dentro de
-    // una bocacalle la retícula le da a cada celda el sentido de la calle que cruza (medido: el carril este de una
-    // avenida muestra «<<<<<» al pasar por un cruce), y seguirlo hacía dar media vuelta al coche en pleno cruce.
-    // El octante de la celda sólo se usa para arrancar (`aparecer_trafico`) y para centrarse en el carril.
-    let _ = oct;
-    let oct = octante_de(dir_de(rumbo_actual));
-    st.ultimo_oct = Some(oct);
-    // 1) Giro en curso: derecho hasta el punto de giro, arco hacia el carril nuevo, y listo al estar en él.
-    if let Some(mut g) = st.compromiso {
-        g.resta -= dt;
-        // Terminó cuando está EN el carril nuevo y ya apunta hacia donde va (si no, el arco se cortaba a medias).
-        let alineado = envolver(rumbo_actual - octante_a_vec(g.oct_t).to_angle()).abs() < 0.45;
-        if (oct == g.oct_t && alineado && g.progreso(pos) >= 0.9) || g.resta <= 0.0 {
-            st.compromiso = None;
-        } else {
-            st.compromiso = Some(g);
-            let falta = (g.apice - pos).dot(g.d0);
-            let rumbo = if falta > g.radio + 0.5 {
-                // Aún no: sigue su carril (centrado) hasta el comienzo de la curva.
-                let perp = derecha_de(g.d0);
-                let desvio = centro_de_carril(body, pos, oct, perp);
-                let corrige = if desvio.abs() < 0.25 { 0.0 } else { (desvio * 0.22).clamp(-0.45, 0.45) };
-                envolver(g.d0.to_angle() + corrige)
-            } else {
-                let t = g.progreso(pos);
-                if t >= 0.97 {
-                    g.c.to_angle()
-                } else {
-                    (g.punto((t + 0.22).min(1.0)) - pos).to_angle()
-                }
-            };
-            return (rumbo, 0.28);
-        }
-    }
-    let d0 = octante_a_vec(oct);
-    let perp = derecha_de(d0);
-    let oct_act = oct;
-    let adelante = |d: Vec2, m: f32| lane(body, pos + d * m);
-    let largo_vista = 3.5 + vel_abs * 0.3;
-    // Velocidad: a un fin de calle o a una bocacalle se llega despacio (el radio de giro crece con la velocidad).
-    let v_factor = if adelante(d0, 13.0).is_none() || cruce(body, pos + d0 * 10.0, d0) || cruce(body, pos, d0) { 0.4 } else { 1.0 };
-    let (tx, tz) = celda(pos);
-    let quiere_doblar = st.giro_cd <= 0.0 && cruce(body, pos + d0 * 9.0, d0) && hash(st.semilla ^ (tx as u32).wrapping_mul(31) ^ tz as u32) % 100 < 28;
-    if adelante(d0, largo_vista.max(12.0)).is_none() || quiere_doblar {
-        let der = derecha_de(d0);
-        let candidatos = [der, -der];
-        let orden = if azar01(&mut st.semilla) < 0.5 { [0usize, 1] } else { [1, 0] };
-        // Para cada lado: ¿hay adelante (6..14 m, y si no más cerca) un carril de esa calle que vaya PARA donde se
-        // dobla? Se mira desde cada celda de la calle propia hacia la calle nueva, a 4 m: ahí cae el carril.
-        for i in orden {
-            let c = candidatos[i];
-            let oct_t = octante_de(c);
-            let hallado = (6..=14).chain(1..6).map(|m| pos + d0 * m as f32).find_map(|q| {
-                let probe = q + c * 4.0;
-                (lane(body, probe) == Some(oct_t)).then(|| centro_carril_abs(body, probe, oct_t, derecha_de(c)))
-            });
-            if let Some(nl) = hallado {
-                // Vértice: sobre el eje de MI carril (lateral actual) a la altura del eje del carril nuevo.
-                let lat = centro_carril_abs(body, pos, oct, perp).dot(perp);
-                let apice = d0 * nl.dot(d0) + perp * lat;
-                let radio = if c == der { 5.5 } else { 6.5 };
-                st.giro_cd = 4.0;
-                st.compromiso = Some(Giro { oct_t, resta: 8.0, d0, c, apice, radio });
-                return (d0.to_angle(), 0.4);
-            }
-        }
-        // Nada a los costados: si además la calle se acaba, es un callejón sin salida. Un coche no gira 180° en una
-        // calle de 7 m: se detiene y quien maneja la IA lo retira (a la vista, tras unos segundos; si no, ya).
-        if adelante(d0, largo_vista).is_none() {
-            st.sin_salida = true;
-            return (d0.to_angle(), 0.0);
-        }
-    }
-    // Centrado en el carril: corrige según cuánto se desvió del medio de su mitad de calzada.
-    let desvio = if en_bocacalle(body, pos, d0) { 0.0 } else { centro_de_carril(body, pos, oct_act, perp) };
-    let corrige = if desvio.abs() < 0.25 { 0.0 } else { (desvio * 0.22).clamp(-0.45, 0.45) };
-    (envolver(d0.to_angle() + corrige), v_factor)
-}
-
-/// ¿Estoy DENTRO de una bocacalle? Hay calzada a los dos costados y de frente muy cerca.
-fn en_bocacalle(body: ha_shared::CelestialBody, pos: Vec2, d: Vec2) -> bool {
-    let der = derecha_de(d);
-    lane(body, pos + der * 3.0).is_some() && lane(body, pos - der * 3.0).is_some() && lane(body, pos + d * 3.0).is_some() && lane(body, pos - d * 3.0).is_some() && {
-        // y la calle cruzada llega lejos (no es sólo el ensanche de una avenida)
-        lane(body, pos + der * 7.0).is_some() || lane(body, pos - der * 7.0).is_some()
-    }
-}
-
-/// ¿Hay bocacalle acá? Calzada a los dos costados y de frente.
-fn cruce(body: ha_shared::CelestialBody, pos: Vec2, d: Vec2) -> bool {
-    let der = derecha_de(d);
-    lane(body, pos + der * 5.0).is_some() && lane(body, pos - der * 5.0).is_some() && lane(body, pos + d * 5.0).is_some()
-}
-
-// ── Movimiento, choques y daño ───────────────────────────────────────────────────────────────────────────────────
-
-/// ¿El cuerpo `c`, puesto en `pos`, choca con algo según por dónde se mueve su clase? Tierra: las cajas que frenan al que camina;
-/// agua: todo lo que no sea agua; aire: nada.
-fn choca(obs: &crate::obstaculos::Obstaculos, body: ha_shared::CelestialBody, c: &Cuerpo, f: &Ficha, pos: Vec2) -> bool {
-    match f.terreno {
-        Terreno::Aire => false,
-        Terreno::Tierra => bola_choca(obs, body, c, f, pos),
-        Terreno::Agua => {
-            let d = dir_de(c.rumbo);
-            let sep = (f.largo * 0.5 - 0.6).max(0.0);
-            [-sep, 0.0, sep].into_iter().any(|o| {
-                let q = pos + d * o;
-                !matches!(obs.tiles().tile_at(body, q.x.floor() as i64, q.y.floor() as i64), ha_shared::topdown::Tile::Water | ha_shared::topdown::Tile::WaterDeep)
-            })
-        }
-    }
-}
-
-fn bola_choca(obs: &crate::obstaculos::Obstaculos, body: ha_shared::CelestialBody, c: &Cuerpo, f: &Ficha, pos: Vec2) -> bool {
-    let d = dir_de(c.rumbo);
-    // El círculo de choque sigue el ANCHO del vehículo (una ambulancia de 2,3 m no cabe en círculos de 0,8) y se reparten a lo largo.
-    let r = (f.ancho * 0.5 - 0.15).clamp(0.55, 1.2);
-    let sep = (f.largo * 0.5 - r).max(0.0);
-    [-sep, 0.0, sep].into_iter().any(|o| {
-        let q = pos + d * o;
-        !obs.libre(body, q.x, q.y, r)
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn mover_vehiculos(
-    mut commands: Commands,
-    time: Res<Time>,
-    intent: Res<MovementIntent>,
-    cond: Res<Conduccion>,
-    ctx: Res<WorldContextRuntime>,
-    planet: Res<ActivePlanet>,
-    obs: crate::obstaculos::Obstaculos,
-    mut sfx: EventWriter<PlaySfxAt>,
-    mut shake: EventWriter<CameraShakeEvent>,
-    mut player: Query<(&mut SimState, &mut PlayerVisual, &mut Visibility), With<Player>>,
-    mut coches: Query<(Entity, &mut Vehiculo)>,
-) {
-    let dt = time.delta_secs().min(0.05);
-    let body = active_surface_body(&ctx, &planet);
-    for (e, mut v) in &mut coches {
-        v.choque_cd = (v.choque_cd - dt).max(0.0);
-        v.atropello_cd = (v.atropello_cd - dt).max(0.0);
-        if v.destruido {
-            v.edad_chasis += dt;
-            if v.edad_chasis > VIDA_CHASIS && cond.vehiculo != Some(e) {
-                commands.entity(e).despawn_recursive();
-            }
-            continue;
-        }
-        let f = v.clase.ficha();
-        let mando = match v.conductor {
-            Conductor::Jugador => mando_de_stick(v.cuerpo.rumbo, Vec2::new(intent.move_x, intent.move_z), &f),
-            Conductor::Npc => Mando { rumbo: v.ia.rumbo_obj, v_obj: v.ia.v_obj },
-            Conductor::Nadie => Mando { rumbo: v.cuerpo.rumbo, v_obj: 0.0 },
-        };
-        let mut c = v.cuerpo;
-        let destino = paso(&mut c, mando, &f, dt);
-        // Prueba el movimiento; si choca, no avanza y pierde velocidad. Un coche ya encimado (cargaste partida,
-        // te empujaron) puede moverse hasta salir: el choque sólo cuenta si el paso EMPEORA la situación.
-        let ya_trabado = choca(&obs, body, &c, &f, v.cuerpo.pos);
-        if ya_trabado || !choca(&obs, body, &c, &f, destino) {
-            c.pos = destino;
-        } else {
-            // **Deslizar antes de chocar**: los postes y faroles son finos y un coche pegado a uno no tiene que quedar clavado
-            // (con círculos de choque redondos, medio paso de más es un tope). Se prueba medio paso y corrimientos laterales de
-            // unos decímetros; recién si nada cabe es un choque.
-            let d = dir_de(c.rumbo);
-            let perp = derecha_de(d);
-            let avance = (destino - c.pos).dot(d);
-            let salida = [(0.5, 0.0), (1.0, 0.1), (1.0, -0.1), (1.0, 0.22), (1.0, -0.22)]
-                .into_iter()
-                .map(|(frac, lat)| c.pos + d * avance * frac + perp * lat)
-                .find(|q| !choca(&obs, body, &c, &f, *q));
-            if let Some(q) = salida {
-                c.pos = q;
-            } else {
-                let vi = c.vel.abs();
-                if vi > V_CHOQUE && v.choque_cd <= 0.0 {
-                    let dano = (vi - V_CHOQUE + 1.0) * 6.0;
-                    v.vida -= dano;
-                    v.choque_cd = 0.4;
-                    let en = c.pos + dir_de(c.rumbo) * f.largo * 0.5;
-                    crate::armas::chispa_de_impacto(&mut commands, en, Color::srgb(1.0, 0.8, 0.3));
-                    sfx.send(PlaySfxAt(Sfx::CarCrash, Vec2::new(c.pos.x, -c.pos.y)));
-                    if v.conductor == Conductor::Jugador {
-                        shake.send(CameraShakeEvent { trauma: (vi / 20.0).clamp(0.1, 0.6) });
-                    }
-                }
-                // Despacio no rebota (sería un temblor): se frena.
-                c.vel = if vi > V_CHOQUE { -c.vel * 0.25 } else { 0.0 };
-            }
-        }
-        v.cuerpo = c;
-        if v.vida <= 0.0 {
-            destruir(&mut commands, e, &mut v, &mut sfx, &mut shake);
-            if cond.vehiculo == Some(e) {
-                if let Ok((mut sim, _, mut vis)) = player.get_single_mut() {
-                    sim.hp = (sim.hp - 30.0).max(1.0);
-                    *vis = Visibility::Inherited;
-                }
-            }
-        }
-        if v.conductor == Conductor::Jugador {
-            if let Ok((mut sim, mut visual, _)) = player.get_single_mut() {
-                sim.body.x = c.pos.x;
-                sim.body.z = c.pos.y;
-                visual.from_x = c.pos.x;
-                visual.to_x = c.pos.x;
-                visual.from_z = c.pos.y;
-                visual.to_z = c.pos.y;
-                visual.to_rot = c.rumbo;
-                visual.from_rot = c.rumbo;
-            }
-        }
-    }
-}
-
-fn destruir(
-    commands: &mut Commands,
-    _e: Entity,
-    v: &mut Vehiculo,
-    sfx: &mut EventWriter<PlaySfxAt>,
-    shake: &mut EventWriter<CameraShakeEvent>,
-) {
-    v.destruido = true;
-    v.vida = 0.0;
-    v.cuerpo.vel = 0.0;
-    v.conductor = Conductor::Nadie;
-    v.edad_chasis = 0.0;
-    for k in 0..3 {
-        let a = k as f32 * 2.1;
-        crate::armas::chispa_de_impacto(commands, v.cuerpo.pos + Vec2::new(a.cos(), a.sin()) * 0.8, Color::srgb(1.0, 0.45, 0.1));
-    }
-    sfx.send(PlaySfxAt(Sfx::CarBoom, Vec2::new(v.cuerpo.pos.x, -v.cuerpo.pos.y)));
-    shake.send(CameraShakeEvent { trauma: 0.7 });
-}
-
-fn choques_entre_coches(
-    mut commands: Commands,
-    mut sfx: EventWriter<PlaySfxAt>,
-    mut shake: EventWriter<CameraShakeEvent>,
-    cond: Res<Conduccion>,
-    mut q: Query<(Entity, &mut Vehiculo)>,
-) {
-    let mut v: Vec<(Entity, Vec2, f32, f32, f32, bool)> = q
-        .iter()
-        .map(|(e, c)| (e, c.cuerpo.pos, c.cuerpo.rumbo, c.cuerpo.vel, c.clase.ficha().largo, c.destruido))
-        .collect();
-    let terreno: Vec<Terreno> = q.iter().map(|(_, c)| c.clase.ficha().terreno).collect();
-    let mut cambios: Vec<(Entity, Vec2, f32, f32)> = Vec::new(); // (coche, empuje, dvel, dano)
-    for i in 0..v.len() {
-        for j in (i + 1)..v.len() {
-            if terreno[i] != terreno[j] {
-                continue; // un helicóptero no choca con un coche, ni una lancha con un camión
-            }
-            let (a, b) = (v[i], v[j]);
-            let r = (a.4.min(b.4)) * 0.38 + 0.6;
-            let d = b.1.distance(a.1);
-            if d >= r || d < 1e-3 {
-                continue;
-            }
-            let n = (b.1 - a.1) / d;
-            let solape = r - d;
-            let rel = (dir_de(a.2) * a.3 - dir_de(b.2) * b.3).dot(n).abs();
-            let (ma, mb): (f32, f32) = (if a.5 { 0.0 } else { 1.0 }, if b.5 { 0.0 } else { 1.0 });
-            let tot = (ma + mb).max(1e-3);
-            cambios.push((a.0, -n * solape * (ma / tot).max(0.15), -a.3 * 0.3, if rel > V_CHOQUE { (rel - V_CHOQUE + 1.0) * 5.0 } else { 0.0 }));
-            cambios.push((b.0, n * solape * (mb / tot).max(0.15), -b.3 * 0.3, if rel > V_CHOQUE { (rel - V_CHOQUE + 1.0) * 5.0 } else { 0.0 }));
-            if rel > V_CHOQUE {
-                let medio = (a.1 + b.1) * 0.5;
-                crate::armas::chispa_de_impacto(&mut commands, medio, Color::srgb(1.0, 0.8, 0.3));
-                sfx.send(PlaySfxAt(Sfx::CarCrash, Vec2::new(medio.x, -medio.y)));
-                if cond.vehiculo == Some(a.0) || cond.vehiculo == Some(b.0) {
-                    shake.send(CameraShakeEvent { trauma: (rel / 20.0).clamp(0.1, 0.6) });
-                }
-            }
-            v[i].1 -= n * solape * 0.5;
-            v[j].1 += n * solape * 0.5;
-        }
-    }
-    for (e, empuje, dvel, dano) in cambios {
-        if let Ok((_, mut c)) = q.get_mut(e) {
-            if c.destruido {
-                continue;
-            }
-            c.cuerpo.pos += empuje;
-            if dano > 0.0 {
-                c.cuerpo.vel += dvel;
-                c.vida -= dano;
-                if c.conductor == Conductor::Npc {
-                    c.ia.panico = c.ia.panico.max(3.0);
-                }
-            }
-        }
-    }
-}
-
-// ── Atropellos y balas ───────────────────────────────────────────────────────────────────────────────────────────
-
-/// El capó como una bala de UN cuadro: la matan `mover_balas` al día siguiente (alcance ≈ 0) y mientras tanto la
-/// prueban `balas_a_infectados` / `balas_a_fauna` / `balas_a_aldeanos`, que son quienes saben matar a su gente.
-#[allow(clippy::too_many_arguments)]
-fn atropellar(mut commands: Commands, mut coches: Query<(Entity, &mut Vehiculo)>) {
-    for (e, mut v) in &mut coches {
-        if v.destruido || v.cuerpo.vel.abs() < 3.5 || v.atropello_cd > 0.0 || v.clase.ficha().terreno != Terreno::Tierra {
-            continue;
-        }
-        let f = v.clase.ficha();
-        let d = dir_de(v.cuerpo.rumbo) * v.cuerpo.vel.signum();
-        let lado = derecha_de(d) * (f.ancho * 0.45);
-        let frente = v.cuerpo.pos + d * f.largo * 0.5;
-        v.atropello_cd = 0.3;
-        commands.spawn(crate::armas::Bala {
-            pos: frente + lado,
-            prev: frente - lado,
-            vel: Vec2::ZERO,
-            dano: v.cuerpo.vel.abs() * 5.0,
-            origen: frente,
-            alcance: 0.01,
-            atraviesa: 8,
-            golpeados: vec![e],
-            viva: true,
-            impacto: Sfx::BulletHit,
-            rayo: false,
-        });
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn balas_a_vehiculos(
-    mut commands: Commands,
-    mut balas: Query<&mut crate::armas::Bala>,
-    mut sfx: EventWriter<PlaySfxAt>,
-    mut shake: EventWriter<CameraShakeEvent>,
-    mut coches: Query<(Entity, &mut Vehiculo)>,
-) {
-    for mut b in &mut balas {
-        if !b.viva {
-            continue;
-        }
-        for (e, mut v) in &mut coches {
-            if b.ya_golpeo(e) || v.conductor == Conductor::Jugador {
-                continue;
-            }
-            let f = v.clase.ficha();
-            if !segmento_toca_caja(b.prev, b.pos, v.cuerpo.pos, v.cuerpo.rumbo, f.largo, f.ancho) {
-                continue;
-            }
-            let dano = b.dano_ahora() * 0.7;
-            let en = b.pos;
-            crate::armas::chispa_de_impacto(&mut commands, en, if b.rayo { Color::srgb(0.4, 1.0, 0.6) } else { Color::srgb(1.0, 0.85, 0.4) });
-            sfx.send(PlaySfxAt(Sfx::BulletWall, Vec2::new(en.x, -en.y)));
-            b.registrar(e);
-            if v.destruido {
-                continue;
-            }
-            v.vida -= dano;
-            if v.conductor == Conductor::Npc {
-                v.ia.panico = 8.0;
-            }
-            if v.vida <= 0.0 {
-                destruir(&mut commands, e, &mut v, &mut sfx, &mut shake);
-            }
-            if !b.viva {
-                break;
-            }
-        }
-    }
-}
-
-// ── Dibujo ───────────────────────────────────────────────────────────────────────────────────────────────────────
-
-fn dibujar_vehiculos(
-    art: Res<crate::art2d::ArtLibrary>,
-    mut q: Query<(&mut Vehiculo, &mut Sprite, &mut Transform, &mut Visibility)>,
-) {
-    for (mut v, mut sprite, mut tf, mut vis) in &mut q {
-        let previa = if v.dir4 == 255 { None } else { Some(v.dir4) };
-        let dir = crate::sim::dir4_de_rumbo(v.cuerpo.rumbo, previa);
-        let f = v.clase.ficha();
-        let lateral = dir == 0 || dir == 2;
-        let chasis = v.destruido;
-        if v.dir4 != dir || v.pose.1 != chasis || v.pose.0 == 255 {
-            v.dir4 = dir;
-            v.pose = (dir, chasis);
-            let oscuro = Color::srgb(0.18, 0.17, 0.17);
-            let nuevo: Option<Sprite> = match arte(v.clase) {
-                Arte::Poses(_) => {
-                    // El chasis quemado del pack (`auto_chocado`) sólo para los autos; si no, el mismo dibujo ennegrecido.
-                    let chocado = (chasis && v.clase == Clase::Auto)
-                        .then(|| {
-                            let clave = v.chasis.get_or_insert_with(|| "vehicle/auto_chocado_1".to_string()).clone();
-                            art.world_sprite(&clave, Vec2::new(4.0, 3.0)).map(|(s, _)| s)
-                        })
-                        .flatten();
-                    chocado.or_else(|| {
-                        let pose = POSES[dir as usize];
-                        let (rect, _) = art.pose(&v.clave, pose)?;
-                        let tam = Vec2::new(rect[2] as f32, rect[3] as f32) * M_POR_PX;
-                        let mut s = art.pose_sprite(&v.clave, pose, tam)?;
-                        if chasis {
-                            s.color = oscuro;
-                        }
-                        Some(s)
-                    })
-                }
-                Arte::Claves(claves, espejar) => {
-                    let clave = claves[dir as usize];
-                    let tam = art.celdas_de(clave, None).unwrap_or(Vec2::new(f.largo, f.ancho * 1.5));
-                    art.world_sprite(clave, tam).map(|(mut s, _)| {
-                        s.flip_x = espejar && dir == 2;
-                        if chasis {
-                            s.color = oscuro;
-                        }
-                        s
-                    })
-                }
-            };
-            if let Some(s) = nuevo {
-                *sprite = s;
-            }
-        }
-        // El dibujo se apoya con su base sobre el borde de adelante de la huella (3/4 cenital).
-        let prof = if lateral { f.ancho } else { f.largo } * 0.5;
-        let alto = sprite.custom_size.map_or(2.0, |s| s.y);
-        tf.translation.x = v.cuerpo.pos.x;
-        let vuelo = if f.terreno == Terreno::Aire && !v.destruido { 1.6 } else { 0.0 };
-        tf.translation.y = -(v.cuerpo.pos.y + prof) + alto * 0.5 + vuelo;
-        tf.translation.z = crate::layers::ysort(v.cuerpo.pos.y + prof * 0.5);
-        if *vis != Visibility::Inherited {
-            *vis = Visibility::Inherited;
-        }
-    }
-}
-
-fn humo_y_fuego(
-    mut commands: Commands,
-    time: Res<Time>,
-    glow: Option<Res<crate::light2d::GlowTexture>>,
-    mut coches: Query<&mut Vehiculo>,
-    mut humos: Query<(Entity, &mut Humo, &mut Transform, &mut Sprite)>,
-) {
-    let dt = time.delta_secs();
-    for (e, mut h, mut tf, mut s) in &mut humos {
-        h.vida -= dt;
-        if h.vida <= 0.0 {
-            commands.entity(e).despawn();
-            continue;
-        }
-        tf.translation.y += h.sube * dt;
-        s.color = s.color.with_alpha((h.vida / 1.2).clamp(0.0, 0.55));
-    }
-    let Some(glow) = glow else { return };
-    for mut v in &mut coches {
-        let f = v.clase.ficha();
-        let frac = v.vida / f.vida;
-        if v.destruido || frac < 0.4 {
-            v.humo_t -= dt;
-            if v.humo_t <= 0.0 {
-                v.humo_t = if v.destruido { 0.12 } else { 0.22 };
-                let capo = v.cuerpo.pos + dir_de(v.cuerpo.rumbo) * f.largo * 0.3;
-                let (color, tam) = if v.destruido { (Color::srgba(0.12, 0.1, 0.1, 0.5), 1.3) } else { (Color::srgba(0.45, 0.45, 0.45, 0.45), 0.9) };
-                commands.spawn((
-                    Humo { vida: 1.2, sube: 1.4 },
-                    crate::sim::UnlitSprite,
-                    Sprite { image: glow.0.clone(), color, custom_size: Some(Vec2::splat(tam)), ..default() },
-                    Transform::from_xyz(capo.x, -capo.y, crate::layers::ysort(capo.y) + 0.01),
-                ));
-                if v.destruido {
-                    commands.spawn((
-                        Humo { vida: 0.5, sube: 0.6 },
-                        crate::sim::UnlitSprite,
-                        Sprite { image: glow.0.clone(), color: Color::srgba(1.0, 0.5, 0.12, 0.55), custom_size: Some(Vec2::splat(0.9)), ..default() },
-                        Transform::from_xyz(capo.x, -capo.y, crate::layers::ysort(capo.y) + 0.02),
-                    ));
-                }
-            }
-        }
-    }
+pub enum Quien {
+    Nadie,
+    Jugador,
+    Vecino(Conductor),
+    /// Una patrulla en persecución (`policia.rs`).
+    Policia(ha_shared::vehiculos::Persecucion),
+    /// Una lancha del tránsito marítimo: navega por agua libre y esquiva la costa.
+    Navegante(ha_shared::vehiculos::Navegante),
+    /// Una autobomba que va a un incendio (`incendios.rs`): persigue ese punto, no al jugador.
+    Bombero(ha_shared::vehiculos::Persecucion, (f32, f32)),
 }
 
 #[derive(Component)]
-struct MotorLoop;
+pub struct Vehiculo {
+    pub clave: &'static str,
+    pub clase: Clase,
+    pub ficha: Ficha,
+    pub estado: Estado,
+    pub quien: Quien,
+    /// Lo manejó el jugador: no se borra con el tránsito (lo dejaste ahí, ahí está).
+    pub usado: bool,
+    /// Se lo robaste a un vecino: la policía lo confisca si te atrapa.
+    pub robado: bool,
+    /// Para interpolar el dibujo entre pasos de 20 Hz.
+    prev: (f32, f32),
+    pose: &'static str,
+    uid: u32,
+    sirena: f32,
+}
 
-/// **El motor del coche en el que vas**: un loop cuya velocidad de reproducción sigue a la marcha (ralentí → a fondo). Un solo
-/// loop como mucho (el `AudioSink` aparece un cuadro después: ver `weather::sync_weather_audio`).
-fn motor_sonido(
+/// El vecino al que le robaste el auto, corriendo.
+#[derive(Component)]
+struct Huyendo {
+    dir: Vec2,
+    vida: f32,
+    skin: String,
+    pose: String,
+}
+
+#[derive(Component)]
+struct HudVehiculo;
+
+/// ¿Un círculo a pie choca con algún vehículo? Lo usa `sim::tick_sim` para que el
+/// jugador no atraviese los autos.
+pub fn frena_a_pie<'a>(autos: impl Iterator<Item = &'a Vehiculo>, x: f32, z: f32, r: f32) -> bool {
+    autos.into_iter().any(|v| {
+        let (ps, n, rv) = v.estado.probes(v.estado.x, v.estado.z, v.estado.rumbo);
+        ps.iter().take(n).any(|&(px, pz)| (px - x).powi(2) + (pz - z).powi(2) < (rv + r).powi(2))
+    })
+}
+
+pub fn pose_de_rumbo(rumbo: f32) -> &'static str {
+    let (dx, dz) = (rumbo.cos(), rumbo.sin());
+    if dz.abs() >= dx.abs() {
+        if dz > 0.0 { "abajo" } else { "arriba" }
+    } else if dx < 0.0 {
+        "izquierda"
+    } else {
+        "derecha"
+    }
+}
+
+/// Largo y ancho en metros, MEDIDOS del sprite de frente (`abajo`): el pack
+/// dibujó el auto de 2,3 × 4,1 m y así choca.
+fn medidas(art: &crate::art2d::ArtLibrary, clave: &str) -> Option<(f32, f32)> {
+    let ([_, _, w, h], _) = art.pose(clave, "abajo")?;
+    Some((h as f32 / PX_M, w as f32 / PX_M))
+}
+
+fn suelo_cacheado(cache: &RefCell<&mut CacheSuelo>, tiles: &TileWorld, body: ha_shared::CelestialBody, tx: i64, tz: i64) -> Suelo {
+    if let Some(s) = cache.borrow().mapa.get(&(tx, tz)) {
+        return *s;
+    }
+    let s = veh::suelo_de(tiles.tile_at(body, tx, tz));
+    cache.borrow_mut().mapa.insert((tx, tz), s);
+    s
+}
+
+fn hash(a: u32) -> u32 {
+    let mut x = a.wrapping_mul(0x9E37_79B9) ^ 0x85EB_CA6B;
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x2C1B_3C6D);
+    x ^ (x >> 12)
+}
+
+// ---------------------------------------------------------------------------
+// Física (20 Hz)
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+fn fisica_vehiculos(
     mut commands: Commands,
-    cond: Res<Conduccion>,
-    coches: Query<&Vehiculo>,
-    bank: Res<crate::audio::SfxBank>,
-    settings: Res<crate::audio::AudioSettings>,
-    loops: Query<(Entity, Option<&AudioSink>), With<MotorLoop>>,
+    time: Res<Time<Fixed>>,
+    intent: Res<MovementIntent>,
+    mut manejando: ResMut<Manejando>,
+    world_ctx: Res<WorldContextRuntime>,
+    planet_ctx: Res<ActivePlanet>,
+    obs: crate::obstaculos::Obstaculos,
+    mut cache: ResMut<CacheSuelo>,
+    npcs: Query<&crate::society::Npc>,
+    mut autos: Query<(Entity, &mut Vehiculo)>,
+    mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
+    mut busqueda: ResMut<crate::policia::Busqueda>,
+    (mut sfx, mut shake): (EventWriter<PlaySfxAt>, EventWriter<CameraShakeEvent>),
 ) {
-    let activo = cond.vehiculo.and_then(|e| coches.get(e).ok()).filter(|v| !v.destruido);
-    let Some(v) = activo else {
-        for (e, _) in &loops {
-            commands.entity(e).despawn();
+    let _p = crate::debug::probe("fx_vehiculos");
+    let dt = crate::game_time::fixed_delta_secs(&time);
+    // El reloj de los semáforos: todos los cruces en fase (`ha_shared::vehiculos::luz_en`).
+    let t_mundo = time.elapsed_secs_f64();
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+    if cache.cuerpo != body as u8 || cache.mapa.len() > 60_000 {
+        cache.mapa.clear();
+        cache.cuerpo = body as u8;
+    }
+    if manejando.auto.is_some_and(|e| autos.get(e).is_err()) {
+        manejando.auto = None;
+    }
+    let pj = player.get_single().map(|(s, _)| (s.body.x, s.body.z)).ok();
+    // Quién está dónde, para que nadie se coma al de adelante.
+    let fotos: Vec<(Entity, f32, f32, f32)> =
+        autos.iter().map(|(e, v)| (e, v.estado.x, v.estado.z, v.estado.ancho * 0.5)).collect();
+    let peatones: Vec<(f32, f32)> = npcs.iter().map(|n| (n.x, n.z)).collect();
+    let cache = RefCell::new(&mut *cache);
+    let tiles = obs.tiles();
+    let suelo = |tx: i64, tz: i64| suelo_cacheado(&cache, tiles, body, tx, tz);
+    let calzada = |tx: i64, tz: i64| suelo(tx, tz) == Suelo::Asfalto;
+
+    for (e, mut v) in &mut autos {
+        v.prev = (v.estado.x, v.estado.z);
+        let mut quien = v.quien;
+        let mando = match &mut quien {
+            Quien::Jugador => veh::mando_desde_stick(&v.estado, intent.move_x, intent.move_z),
+            Quien::Nadie => Mando::default(),
+            Quien::Navegante(n) => {
+                let agua = |tx: i64, tz: i64| matches!(suelo(tx, tz), Suelo::Hondo | Suelo::Bajio);
+                let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+                let mut libre = f32::INFINITY;
+                for &(o, x, z, r) in &fotos {
+                    let (dx, dz) = (x - v.estado.x, z - v.estado.z);
+                    let ad = dx * fx + dz * fz;
+                    if o != e && ad > 0.0 && (dz * fx - dx * fz).abs() < v.estado.ancho * 0.5 + r + 0.5 {
+                        libre = libre.min(ad - r);
+                    }
+                }
+                let mut n2 = *n;
+                let m = veh::navegar(&v.estado, &v.ficha, &mut n2, &agua, libre);
+                *n = n2;
+                m
+            }
+            Quien::Policia(p) => match pj {
+                Some(o) => veh::perseguir(&v.estado, &v.ficha, p, o, dt),
+                None => Mando::default(),
+            },
+            Quien::Bombero(p, objetivo) => veh::perseguir(&v.estado, &v.ficha, p, *objetivo, dt),
+            Quien::Vecino(c) => {
+                let mut c2 = *c;
+                let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+                let mut libre = f32::INFINITY;
+                let mut mira = |x: f32, z: f32, r: f32| {
+                    let (dx, dz) = (x - v.estado.x, z - v.estado.z);
+                    let ad = dx * fx + dz * fz;
+                    let lat = (dz * fx - dx * fz).abs();
+                    if ad > 0.0 && lat < v.estado.ancho * 0.5 + r + 0.3 {
+                        libre = libre.min(ad - r);
+                    }
+                };
+                for &(o, x, z, r) in &fotos {
+                    if o != e {
+                        mira(x, z, r);
+                    }
+                }
+                for &(x, z) in &peatones {
+                    mira(x, z, 0.35);
+                }
+                if let Some((x, z)) = pj {
+                    if !manejando.activo() {
+                        mira(x, z, 0.35);
+                    }
+                }
+                let m = veh::conducir(&v.estado, &v.ficha, &mut c2, &calzada, libre, &|r| veh::luz_en(t_mundo, r));
+                *c = c2;
+                m
+            }
+        };
+        v.quien = quien;
+        let ficha = v.ficha;
+        let yo = e;
+        let choca = |x: f32, z: f32, r: f32| {
+            obs.solido(body, x.floor() as i64, z.floor() as i64)
+                || obs.caja_frena(body, x, z, r)
+                || fotos.iter().any(|&(o, ox, oz, or)| o != yo && (ox - x).powi(2) + (oz - z).powi(2) < (or + r).powi(2))
+        };
+        let paso = veh::paso(&mut v.estado, mando, &ficha, dt, &suelo, &choca);
+        let r = render_xy(v.estado.x, v.estado.z);
+        if paso.choque > veh::CHOQUE_QUE_DANIA {
+            sfx.send(PlaySfxAt(Sfx::Stamp, r));
+            if matches!(v.quien, Quien::Jugador) {
+                shake.send(CameraShakeEvent { trauma: (paso.choque / 25.0).min(0.6) });
+            }
         }
+        // Atropellar a alguien con el jugador al volante es un delito.
+        if matches!(v.quien, Quien::Jugador) && v.estado.vel.abs() > 5.0 {
+            let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+            let s = v.estado.vel.signum();
+            let (bx, bz) = (v.estado.x + fx * s * v.estado.largo * 0.5, v.estado.z + fz * s * v.estado.largo * 0.5);
+            if peatones.iter().any(|&(px, pz)| (px - bx).powi(2) + (pz - bz).powi(2) < 1.4 * 1.4) {
+                busqueda.delito(1, "¡Atropellaste a alguien!");
+            }
+        }
+        // El paragolpes: tres golpes invisibles a lo ancho, que recorren lo que el
+        // auto recorre este paso.
+        let vel = v.estado.vel;
+        if vel.abs() > 4.0 {
+            let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+            let sentido = vel.signum();
+            let frente = Vec2::new(v.estado.x, v.estado.z) + Vec2::new(fx, fz) * sentido * v.estado.largo * 0.5;
+            let lado = Vec2::new(-fz, fx) * v.estado.ancho * 0.33;
+            let v2 = Vec2::new(fx, fz) * vel;
+            for k in [-1.0f32, 0.0, 1.0] {
+                let p = frente + lado * k;
+                commands.spawn((
+                    crate::armas::Bala {
+                        pos: p,
+                        prev: p - v2 * dt,
+                        vel: v2,
+                        dano: (vel.abs() - 3.0) * 0.9 * (ficha.salud / 100.0).clamp(0.5, 2.0),
+                        origen: p,
+                        alcance: (vel.abs() * dt).max(0.05),
+                        atraviesa: 3,
+                        golpeados: Vec::new(),
+                        viva: true,
+                        impacto: Sfx::Hurt,
+                        rayo: false,
+                    },
+                    Transform::from_xyz(p.x, -p.y, 18.0),
+                ));
+            }
+        }
+        if matches!(v.quien, Quien::Jugador) {
+            if let Ok((mut sim, mut visual)) = player.get_single_mut() {
+                visual.from_x = v.prev.0;
+                visual.from_z = v.prev.1;
+                visual.to_x = v.estado.x;
+                visual.to_z = v.estado.z;
+                visual.to_rot = v.estado.rumbo;
+                sim.body.x = v.estado.x;
+                sim.body.z = v.estado.z;
+                sim.body.rot = v.estado.rumbo;
+                sim.body.vx = 0.0;
+                sim.body.vz = 0.0;
+            }
+        }
+    }
+}
+
+/// Cumple lo que pidió la consola: un vehículo 5 m delante del jugador, el tanque
+/// lleno, o el nivel de búsqueda.
+#[allow(clippy::too_many_arguments)]
+fn atender_pedidos(
+    mut commands: Commands,
+    mut pedidos: ResMut<Pedidos>,
+    art: Res<crate::art2d::ArtLibrary>,
+    mut busqueda: ResMut<crate::policia::Busqueda>,
+    player: Query<(&SimState, &PlayerVisual), With<Player>>,
+    mut autos: Query<&mut Vehiculo>,
+) {
+    let Ok((sim, visual)) = player.get_single() else { return };
+    if let Some(n) = pedidos.buscado.take() {
+        busqueda.nivel = n;
+    }
+    if std::mem::take(&mut pedidos.nafta) {
+        let (px, pz) = (sim.body.x, sim.body.z);
+        for mut v in &mut autos {
+            let cerca = ((v.estado.x - px).powi(2) + (v.estado.z - pz).powi(2)).sqrt() < 10.0;
+            if cerca || matches!(v.quien, Quien::Jugador) {
+                v.estado.comb = 1.0;
+            }
+        }
+    }
+    let Some(clave) = pedidos.spawn.take() else { return };
+    let Some(clave) = ha_shared::vehiculos::MODELOS.iter().map(|(k, _)| *k).find(|k| *k == clave) else { return };
+    let Some(clase) = veh::clase_de(clave) else { return };
+    let Some((largo, ancho)) = medidas(&art, clave) else { return };
+    let rumbo = visual.to_rot;
+    let (x, z) = (sim.body.x + rumbo.cos() * (4.0 + largo * 0.5), sim.body.z + rumbo.sin() * (4.0 + largo * 0.5));
+    let ficha = veh::ficha(clase);
+    let estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho);
+    spawn_vehiculo(&mut commands, &art, clave, clase, estado, Quien::Nadie, true, (x * 31.0 + z) as u32);
+}
+
+// ---------------------------------------------------------------------------
+// Tránsito: sembrar y borrar con cupo
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+fn manejar_transito(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    world_ctx: Res<WorldContextRuntime>,
+    planet_ctx: Res<ActivePlanet>,
+    tiles: Res<TileWorld>,
+    zoom: Res<crate::camera::CameraZoom>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    mut cache: ResMut<CacheSuelo>,
+    mut transito: ResMut<Transito>,
+    manejando: Res<Manejando>,
+    autos: Query<(Entity, &Vehiculo)>,
+    player: Query<&SimState, With<Player>>,
+) {
+    let Ok(pj) = player.get_single() else { return };
+    let (px, pz) = (pj.body.x, pj.body.z);
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+    let en_superficie = tiles.z == 0 && !matches!(world_ctx.active, ha_shared::WorldContext::Space);
+    // Borrar lo lejano (o todo el tránsito si ya no estás en la superficie).
+    let mut vivos = 0;
+    for (e, v) in &autos {
+        let d = ((v.estado.x - px).powi(2) + (v.estado.z - pz).powi(2)).sqrt();
+        let tope = if v.usado { LEJOS_USADO } else { LEJOS_TRANSITO };
+        if Some(e) != manejando.auto && (d > tope || (!en_superficie && !v.usado)) {
+            commands.entity(e).despawn_recursive();
+        } else if !v.usado && !matches!(v.quien, Quien::Policia(_) | Quien::Navegante(_) | Quien::Bombero(..)) {
+            vivos += 1;
+        }
+    }
+    if !en_superficie || fly.flying() || vivos >= CUPO_TRANSITO || !ha_shared::geography::has_civilisation(body) {
         return;
+    }
+    // Un intento de siembra por cuadro, FUERA de cámara.
+    let afuera = (zoom.live_view_h * 1.05).max(36.0);
+    transito.semilla = hash(transito.semilla.wrapping_add(0x51ed));
+    let h = transito.semilla;
+    let ang = (h % 3600) as f32 / 3600.0 * std::f32::consts::TAU;
+    let dist = afuera + ((h >> 12) % 40) as f32;
+    let (tx, tz) = ((px + ang.cos() * dist).floor() as i64, (pz + ang.sin() * dist).floor() as i64);
+    let cache = RefCell::new(&mut *cache);
+    let calzada = |x: i64, z: i64| suelo_cacheado(&cache, &tiles, body, x, z) == Suelo::Asfalto;
+    if !calzada(tx, tz) || ha_shared::roads::cruce_con(&calzada, tx, tz) {
+        return;
+    }
+    let Some(o) = ha_shared::roads::carril_con(&calzada, tx, tz) else { return };
+    let (fx, fz) = veh::dir_octante(o);
+    let (rx, rz) = (-fz, fx);
+    // La calle tiene que dar para dos manos (5 tiles): un callejón no lleva tránsito.
+    let ancho = 1
+        + (1..=6).take_while(|&k| calzada(tx + rx * k, tz + rz * k)).count()
+        + (1..=6).take_while(|&k| calzada(tx - rx * k, tz - rz * k)).count();
+    if ancho < 5 {
+        return;
+    }
+    if autos.iter().any(|(_, v)| (v.estado.x - tx as f32).powi(2) + (v.estado.z - tz as f32).powi(2) < 100.0) {
+        return;
+    }
+    let clave = veh::modelo_de_transito(hash(h ^ 0xabcd));
+    let Some(clase) = veh::clase_de(clave) else { return };
+    let Some((largo, ancho_m)) = medidas(&art, clave) else { return };
+    let ficha = veh::ficha(clase);
+    // Uno de cada cinco, estacionado contra el cordón de su mano.
+    let estacionado = (h >> 20) % 5 == 0;
+    let (mut x, mut z) = (tx as f32 + 0.5, tz as f32 + 0.5);
+    if estacionado {
+        let al_cordon = (1..=6).take_while(|&k| calzada(tx + rx * k, tz + rz * k)).count() as f32;
+        x += rx as f32 * (al_cordon + 0.5 - ancho_m * 0.5);
+        z += rz as f32 * (al_cordon + 0.5 - ancho_m * 0.5);
+    }
+    let rumbo = -(o as f32) * std::f32::consts::FRAC_PI_4;
+    let mut estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho_m);
+    // Cada uno con su tanque: el estacionado puede estar casi en seco (es el que
+    // te hace buscar una gasolinera); el que circula tiene de medio tanque para arriba.
+    let r = (hash(h ^ 0x7a11) % 1000) as f32 / 1000.0;
+    estado.comb = if estacionado { 0.03 + r * 0.87 } else { 0.4 + r * 0.6 };
+    let quien = if estacionado { Quien::Nadie } else { Quien::Vecino(Conductor::nuevo(o, h)) };
+    spawn_vehiculo(&mut commands, &art, clave, clase, estado, quien, false, h);
+}
+
+/// Cupo del tránsito marítimo: cuántas lanchas navegan a la vez cerca del jugador.
+const CUPO_LANCHAS: usize = 3;
+
+/// **Lanchas en el mar.** Cuando hay agua honda cerca (a menos de ~120 m) salen hasta `CUPO_LANCHAS`
+/// lanchas con piloto (`Quien::Navegante`), fuera de cámara, que navegan y esquivan la costa. Sólo
+/// en el mar: nunca en la calle (lo vigila `modelo_de_transito`, que no devuelve lanchas).
+#[allow(clippy::too_many_arguments)]
+fn transito_maritimo(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    world_ctx: Res<WorldContextRuntime>,
+    planet_ctx: Res<ActivePlanet>,
+    tiles: Res<TileWorld>,
+    zoom: Res<crate::camera::CameraZoom>,
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    mut cache: ResMut<CacheSuelo>,
+    mut transito: ResMut<Transito>,
+    autos: Query<&Vehiculo>,
+    player: Query<&SimState, With<Player>>,
+) {
+    let Ok(pj) = player.get_single() else { return };
+    if tiles.z != 0 || fly.flying() || matches!(world_ctx.active, ha_shared::WorldContext::Space) {
+        return;
+    }
+    let lanchas = autos.iter().filter(|v| matches!(v.quien, Quien::Navegante(_))).count();
+    if lanchas >= CUPO_LANCHAS {
+        return;
+    }
+    let (px, pz) = (pj.body.x, pj.body.z);
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+    transito.semilla = hash(transito.semilla.wrapping_add(0x1a4c));
+    let h = transito.semilla;
+    let afuera = (zoom.live_view_h * 1.05).max(36.0);
+    let ang = (h % 3600) as f32 / 3600.0 * std::f32::consts::TAU;
+    let dist = afuera + 10.0 + ((h >> 12) % 60) as f32;
+    let (x, z) = (px + ang.cos() * dist, pz + ang.sin() * dist);
+    let cache = RefCell::new(&mut *cache);
+    let hondo = |tx: i64, tz: i64| suelo_cacheado(&cache, &tiles, body, tx, tz) == Suelo::Hondo;
+    // Un cuadro de agua honda de 7×7: el casco entra y queda margen para girar.
+    let (tx, tz) = (x.floor() as i64, z.floor() as i64);
+    if !(-3..=3).all(|dz| (-3..=3).all(|dx| hondo(tx + dx, tz + dz))) {
+        return;
+    }
+    if autos.iter().any(|v| (v.estado.x - x).powi(2) + (v.estado.z - z).powi(2) < 400.0) {
+        return;
+    }
+    let clave = "vehicle/lancha";
+    let Some(clase) = veh::clase_de(clave) else { return };
+    let Some((largo, ancho)) = medidas(&art, clave) else { return };
+    let ficha = veh::ficha(clase);
+    let rumbo = ((h >> 8) % 628) as f32 / 100.0;
+    let mut estado = Estado::nuevo(x, z, rumbo, &ficha, largo, ancho);
+    estado.comb = 1.0;
+    let quien = Quien::Navegante(ha_shared::vehiculos::Navegante { lado: if h & 1 == 0 { 1.0 } else { -1.0 }, semilla: h });
+    spawn_vehiculo(&mut commands, &art, clave, clase, estado, quien, false, h);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_vehiculo(
+    commands: &mut Commands,
+    art: &crate::art2d::ArtLibrary,
+    clave: &'static str,
+    clase: Clase,
+    estado: Estado,
+    quien: Quien,
+    usado: bool,
+    uid: u32,
+) -> Option<Entity> {
+    let pose = pose_de_rumbo(estado.rumbo);
+    let ([_, _, w, h], _) = art.pose(clave, pose)?;
+    let sprite = art.pose_sprite(clave, pose, Vec2::new(w as f32 / PX_M, h as f32 / PX_M))?;
+    let r = render_xy(estado.x, estado.z);
+    Some(
+        commands
+            .spawn((
+                Vehiculo {
+                    clave,
+                    clase,
+                    ficha: veh::ficha(clase),
+                    estado,
+                    quien,
+                    usado,
+                    robado: false,
+                    prev: (estado.x, estado.z),
+                    pose,
+                    uid,
+                    sirena: 0.0,
+                },
+                sprite,
+                Transform::from_xyz(r.x, r.y, sort_z(estado.z)),
+                Name::new("Vehiculo"),
+            ))
+            .id(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Subir, bajar, robar
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+fn subir_bajar(
+    mut commands: Commands,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut touches: EventReader<TouchInput>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cam: Query<(&Camera, &GlobalTransform), With<GameCamera>>,
+    (touch_layout, blocks): (Res<TouchLayout>, Res<TouchBlockRects>),
+    (gameplay_block, fly): (Res<crate::game_ui::UiGameplayBlock>, Res<crate::creative_fly::CreativeFlight>),
+    art: Res<crate::art2d::ArtLibrary>,
+    (world_ctx, planet_ctx): (Res<WorldContextRuntime>, Res<ActivePlanet>),
+    obs: crate::obstaculos::Obstaculos,
+    mut manejando: ResMut<Manejando>,
+    mut autos: Query<(Entity, &mut Vehiculo)>,
+    mut player: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
+    (mut sfx, mut busqueda): (EventWriter<PlaySfxAt>, ResMut<crate::policia::Busqueda>),
+) {
+    let tecla = keys.just_pressed(KeyCode::KeyG) || keys.just_pressed(KeyCode::Enter);
+    let pantalla = if mouse.just_pressed(MouseButton::Left) {
+        windows.get_single().ok().and_then(|w| w.cursor_position())
+    } else {
+        touches
+            .read()
+            .find(|t| {
+                t.phase == TouchPhase::Started
+                    && !touch_in_move_zone(t.position, &touch_layout)
+                    && !touch_blocked(t.position, &blocks.0)
+            })
+            .map(|t| t.position)
     };
-    let f = v.clase.ficha();
-    let marcha = (v.cuerpo.vel.abs() / f.v_max.max(1.0)).clamp(0.0, 1.3);
-    let (mut hay, mut primero) = (false, true);
-    for (e, sink) in &loops {
-        if !primero {
-            commands.entity(e).despawn();
+    touches.clear();
+    let Ok((mut sim, mut visual)) = player.get_single_mut() else { return };
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+
+    // Despegar volando te baja del auto: el personaje no se lleva el auto al cielo.
+    let forzar = manejando.activo() && fly.flying();
+    if gameplay_block.blocked && !forzar {
+        return;
+    }
+    let punto = pantalla.and_then(|s| {
+        let (camera, cam_tf) = cam.get_single().ok()?;
+        let win = windows.get_single().ok()?;
+        crate::render::scale::window_to_world_2d(camera, cam_tf, win, s).map(|r| Vec2::new(r.x, -r.y))
+    });
+
+    if let Some(e) = manejando.auto {
+        let Ok((_, mut v)) = autos.get_mut(e) else {
+            manejando.auto = None;
+            return;
+        };
+        let toco_mi_auto = punto.is_some_and(|p| (p - Vec2::new(v.estado.x, v.estado.z)).length() < v.estado.largo * 0.5);
+        if !(tecla || toco_mi_auto || forzar) {
+            return;
+        }
+        if v.estado.vel.abs() > 6.0 && !forzar {
+            return; // nadie se tira de un auto a 25 km/h
+        }
+        // Se baja por la puerta del conductor (izquierda), o por donde haya lugar.
+        let (fx, fz) = (v.estado.rumbo.cos(), v.estado.rumbo.sin());
+        let (lx, lz) = (fz, -fx);
+        let a = v.estado.ancho * 0.5 + 0.6;
+        let b = v.estado.largo * 0.5 + 0.6;
+        let r = ha_shared::topdown::PLAYER_RADIUS;
+        let salida = [(lx * a, lz * a), (-lx * a, -lz * a), (fx * b, fz * b), (-fx * b, -fz * b)]
+            .into_iter()
+            .map(|(dx, dz)| (v.estado.x + dx, v.estado.z + dz))
+            .find(|&(x, z)| obs.libre(body, x, z, r) && !obs.caja_frena(body, x, z, r));
+        let Some((x, z)) = salida.or(forzar.then_some((v.estado.x, v.estado.z))) else { return };
+        v.quien = Quien::Nadie;
+        v.usado = true;
+        sim.body.x = x;
+        sim.body.z = z;
+        visual.from_x = x;
+        visual.to_x = x;
+        visual.from_z = z;
+        visual.to_z = z;
+        manejando.auto = None;
+        sfx.send(PlaySfxAt(Sfx::DoorOpen, render_xy(x, z)));
+        return;
+    }
+
+    if !(tecla || punto.is_some()) || fly.flying() {
+        return;
+    }
+    let yo = Vec2::new(sim.body.x, sim.body.z);
+    let mut mejor: Option<(Entity, f32)> = None;
+    for (e, v) in &autos {
+        let c = Vec2::new(v.estado.x, v.estado.z);
+        let d = c.distance(yo) - v.estado.largo * 0.5;
+        if d > ALCANCE_SUBIR || v.estado.chatarra() || matches!(v.quien, Quien::Policia(_)) {
             continue;
         }
-        primero = false;
-        hay = true;
-        if let Some(s) = sink {
-            s.set_speed(0.6 + marcha * 1.3);
-            s.set_volume(settings.sfx * (0.30 + 0.5 * marcha.min(1.0)));
+        if let Some(p) = punto {
+            if p.distance(c) > v.estado.largo * 0.5 + 0.3 {
+                continue;
+            }
+        }
+        if mejor.is_none_or(|(_, m)| d < m) {
+            mejor = Some((e, d));
         }
     }
-    if !hay {
-        if let Some(h) = bank.seco(Sfx::Motor) {
-            commands.spawn((MotorLoop, AudioPlayer::new(h), PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::new(settings.sfx * 0.3))));
+    let Some((e, _)) = mejor else { return };
+    let Ok((_, mut v)) = autos.get_mut(e) else { return };
+    if let Quien::Vecino(_) = v.quien {
+        v.robado = true;
+        busqueda.delito(1, "¡Robaste un vehículo!");
+        // ROBO: el vecino se baja corriendo para el lado contrario.
+        let skin = format!("npc/char_{}", v.uid % 20 + 1);
+        let huye = (Vec2::new(v.estado.x, v.estado.z) - yo).normalize_or(Vec2::X);
+        let sale = Vec2::new(v.estado.x, v.estado.z) + huye * (v.estado.ancho * 0.5 + 0.7);
+        if let Some(sprite) = art.pose_sprite(&skin, "walk_down", TAM_VECINO).or_else(|| Some(art.sprite_or_color(&skin, Color::srgb(0.85, 0.82, 0.75), TAM_VECINO))) {
+            let r = render_xy(sale.x, sale.y);
+            commands.spawn((
+                Huyendo { dir: huye, vida: 6.0, skin, pose: String::new() },
+                sprite,
+                Transform::from_xyz(r.x, r.y, sort_z(sale.y)),
+            ));
+        }
+    }
+    v.estado.vel = 0.0;
+    v.quien = Quien::Jugador;
+    v.usado = true;
+    manejando.auto = Some(e);
+    sfx.send(PlaySfxAt(Sfx::DoorClose, render_xy(v.estado.x, v.estado.z)));
+}
+
+fn huir(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<crate::art2d::ArtLibrary>,
+    mut q: Query<(Entity, &mut Huyendo, &mut Transform, &mut Sprite)>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut h, mut tf, mut sprite) in &mut q {
+        h.vida -= dt;
+        if h.vida <= 0.0 {
+            commands.entity(e).despawn_recursive();
+            continue;
+        }
+        let paso = h.dir * 4.5 * dt;
+        tf.translation.x += paso.x;
+        tf.translation.y -= paso.y;
+        tf.translation.z = sort_z(-tf.translation.y);
+        let dir = if h.dir.y.abs() >= h.dir.x.abs() {
+            if h.dir.y > 0.0 { "down" } else { "up" }
+        } else if h.dir.x < 0.0 {
+            "left"
+        } else {
+            "right"
+        };
+        let pose = format!("walk_{dir}");
+        if h.pose != pose {
+            if let Some(s) = art.pose_sprite(&h.skin, &pose, TAM_VECINO) {
+                *sprite = s;
+            }
+            h.pose = pose;
         }
     }
 }
 
-fn medidor(
-    mut commands: Commands,
-    mut cond: ResMut<Conduccion>,
-    coches: Query<&Vehiculo>,
-    layout: Res<crate::input::TouchLayout>,
-    mut hud: Query<(Entity, &mut Text), With<MedidorHud>>,
+
+// ---------------------------------------------------------------------------
+// Combustible
+// ---------------------------------------------------------------------------
+
+/// Litros de tanque por segundo (como fracción): vaciar-a-lleno en 10 s.
+const RITMO_REPOSTAJE: f32 = 0.10;
+/// Con menos que esto el HUD avisa y busca una gasolinera.
+const POCO_COMBUSTIBLE: f32 = 0.25;
+
+/// ¿Esta posición cae en una gasolinera? Las generadas por la ciudad
+/// (`ha_shared::vehiculos::gasolinera_en`, el lote entero cuenta como playón) y los
+/// surtidores que colocó el jugador (a 3 m a la redonda de su base).
+fn en_surtidor(body: ha_shared::CelestialBody, est: &crate::structures::BuiltStructures, x: f32, z: f32) -> bool {
+    let (tx, tz) = (x.floor() as i64, z.floor() as i64);
+    if veh::gasolinera_en(body, tx, tz).is_some() {
+        return true;
+    }
+    est.list.iter().any(|s| {
+        s.body == body as u8
+            && veh::es_surtidor(&s.art)
+            && tx >= s.cx - 3
+            && tx < s.cx + s.w + 3
+            && tz >= s.cz - 3
+            && tz < s.cz + s.h + 3
+    })
+}
+
+fn rumbo_en_palabras(dx: f32, dz: f32) -> &'static str {
+    // z crece hacia el sur de la pantalla.
+    let a = (-dz).atan2(dx).to_degrees().rem_euclid(360.0);
+    match ((a + 22.5) / 45.0) as u32 % 8 {
+        0 => "al este",
+        1 => "al noreste",
+        2 => "al norte",
+        3 => "al noroeste",
+        4 => "al oeste",
+        5 => "al sudoeste",
+        6 => "al sur",
+        _ => "al sudeste",
+    }
+}
+
+/// **Repostar.** Con el vehículo casi parado dentro de una gasolinera, el tanque se
+/// llena solo (10 s). Con el tanque bajo calcula, cada 4 s, la gasolinera más
+/// cercana para que el HUD diga hacia dónde ir. El chequeo del surtidor se hace
+/// cuatro veces por segundo, no por cuadro (cuesta un `lot_at`).
+#[allow(clippy::too_many_arguments)]
+fn repostar(
+    time: Res<Time>,
+    world_ctx: Res<WorldContextRuntime>,
+    planet_ctx: Res<ActivePlanet>,
+    estructuras: Res<crate::structures::BuiltStructures>,
+    mut rep: ResMut<Reabastecimiento>,
+    manejando: Res<Manejando>,
+    mut autos: Query<&mut Vehiculo>,
+    mut inv: ResMut<crate::inventory_persist::PlayerInventory>,
+    mut persist: ResMut<crate::inventory_persist::InventoryPersistState>,
+    mut sfx: EventWriter<PlaySfxAt>,
 ) {
-    let Some(e) = cond.vehiculo else {
-        for (h, _) in &hud {
-            commands.entity(h).despawn_recursive();
-        }
-        cond.medidor.clear();
+    let dt = time.delta_secs().min(0.1);
+    let Some(mut v) = manejando.auto.and_then(|e| autos.get_mut(e).ok()) else {
+        rep.cargando = false;
+        rep.en_surtidor = false;
+        rep.destino = None;
         return;
     };
-    let Ok(v) = coches.get(e) else { return };
-    let f = v.clase.ficha();
-    let texto = format!("{} km/h · {:.0} %", (v.cuerpo.vel.abs() * 3.6).round() as i32, (v.vida / f.vida * 100.0).max(0.0));
-    cond.medidor = texto.clone();
-    if let Some((_, mut t)) = hud.iter_mut().next() {
-        if t.0 != texto {
-            t.0 = texto;
-        }
+    if v.ficha.alcance <= 0.0 {
+        rep.cargando = false;
         return;
     }
-    let k = crate::ui_pack::k(&layout);
-    commands.spawn((
-        Text::new(texto),
-        TextFont { font_size: (22.0 * k).clamp(15.0, 26.0), ..default() },
-        TextColor(Color::srgb(1.0, 0.92, 0.7)),
-        Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px((150.0 * k).max(120.0)),
-            left: Val::Percent(50.0),
-            margin: UiRect::left(Val::Px(-120.0)),
-            width: Val::Px(240.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        TextLayout::new_with_justify(JustifyText::Center),
-        GlobalZIndex(41),
-        MedidorHud,
-        Name::new("MedidorHud"),
-    ));
+    let body = active_surface_body(&world_ctx, &planet_ctx);
+    rep.chequeo -= dt;
+    if rep.chequeo <= 0.0 {
+        rep.chequeo = 0.25;
+        rep.en_surtidor = en_surtidor(body, &estructuras, v.estado.x, v.estado.z);
+    }
+    rep.pista -= dt;
+    if v.estado.comb < POCO_COMBUSTIBLE && !rep.en_surtidor {
+        if rep.pista <= 0.0 {
+            rep.pista = 4.0;
+            rep.destino = veh::gasolinera_cercana(body, v.estado.x, v.estado.z, 320.0);
+        }
+    } else {
+        rep.destino = None;
+    }
+    let parado = v.estado.vel.abs() < 3.5;
+    let quiere = rep.en_surtidor && parado && v.estado.comb < 1.0;
+    if quiere && !rep.cargando {
+        // Arranca una carga: lo ya lleno está pagado; lo que sigue se paga de a cuartos.
+        rep.pagado_hasta = (v.estado.comb / PRECIO_CUARTO_TANQUE).floor() * PRECIO_CUARTO_TANQUE;
+    }
+    rep.cargando = quiere;
+    rep.sin_oro = false;
+    if rep.cargando {
+        let nuevo = (v.estado.comb + RITMO_REPOSTAJE * dt).min(1.0);
+        if nuevo > rep.pagado_hasta + 1e-4 {
+            if inv.qty("gold_ingot") > 0 {
+                inv.remove("gold_ingot", 1);
+                persist.mark_dirty();
+                rep.pagado_hasta = (rep.pagado_hasta + PRECIO_CUARTO_TANQUE).min(1.0);
+            } else {
+                rep.cargando = false;
+                rep.sin_oro = true;
+            }
+        }
+    }
+    if rep.cargando {
+        v.estado.comb = nuevo_nivel(v.estado.comb, rep.pagado_hasta, dt);
+        rep.avisado_lleno = false;
+        if (time.elapsed_secs() * 2.0) as u32 % 2 == 0 && (time.elapsed_secs() * 2.0).fract() < dt * 2.0 {
+            sfx.send(PlaySfxAt(Sfx::Drip, render_xy(v.estado.x, v.estado.z)));
+        }
+    } else if rep.en_surtidor && v.estado.comb >= 1.0 && !rep.avisado_lleno {
+        rep.avisado_lleno = true;
+        sfx.send(PlaySfxAt(Sfx::Pickup, render_xy(v.estado.x, v.estado.z)));
+    }
 }
 
-#[allow(dead_code)]
-const _TILE: f32 = TILE_M;
+/// Sube el tanque sin pasar de lo pagado.
+fn nuevo_nivel(comb: f32, pagado: f32, dt: f32) -> f32 {
+    (comb + RITMO_REPOSTAJE * dt).min(pagado).min(1.0)
+}
+
+// ---------------------------------------------------------------------------
+// Dibujo
+// ---------------------------------------------------------------------------
+
+fn dibujar_vehiculos(
+    time: Res<Time<Fixed>>,
+    real: Res<Time>,
+    art: Res<crate::art2d::ArtLibrary>,
+    tiles: Res<TileWorld>,
+    mut q: Query<(&mut Vehiculo, &mut Transform, &mut Sprite, &mut Visibility)>,
+) {
+    let t = time.overstep_fraction() as f32;
+    for (mut v, mut tf, mut sprite, mut vis) in &mut q {
+        *vis = if tiles.z == 0 { Visibility::Inherited } else { Visibility::Hidden };
+        let x = v.prev.0 + (v.estado.x - v.prev.0) * t;
+        let z = v.prev.1 + (v.estado.z - v.prev.1) * t;
+        let mut pose = pose_de_rumbo(v.estado.rumbo);
+        // La ambulancia con alguien al volante lleva la sirena prendida.
+        if v.clase == Clase::Ambulancia && !matches!(v.quien, Quien::Nadie) {
+            v.sirena += real.delta_secs();
+            if (v.sirena * 2.5) as u32 % 2 == 1 {
+                pose = match pose {
+                    "abajo" => "abajo_luz",
+                    "arriba" => "arriba_luz",
+                    "izquierda" => "izquierda_luz",
+                    _ => "derecha_luz",
+                };
+            }
+        }
+        if v.pose != pose {
+            if let Some(([_, _, w, h], _)) = art.pose(v.clave, pose) {
+                if let Some(s) = art.pose_sprite(v.clave, pose, Vec2::new(w as f32 / PX_M, h as f32 / PX_M)) {
+                    *sprite = s;
+                }
+            }
+            v.pose = pose;
+        }
+        if v.estado.chatarra() {
+            sprite.color = Color::srgb(0.35, 0.33, 0.32);
+        }
+        let medio_alto = sprite.custom_size.map_or(1.0, |s| s.y * 0.5);
+        let r = render_xy(x, z);
+        // Se ordena por el PIE del sprite (su borde sur), como todo lo que se para en el suelo.
+        tf.translation = Vec3::new(r.x, r.y, sort_z(z + medio_alto - 0.4));
+    }
+}
+
+/// El que maneja no se dibuja: va adentro.
+fn ocultar_al_conductor(manejando: Res<Manejando>, mut q: Query<&mut Visibility, With<Player>>) {
+    if manejando.activo() {
+        for mut v in &mut q {
+            *v = Visibility::Hidden;
+        }
+    }
+}
+
+fn hud_vehiculo(
+    mut commands: Commands,
+    manejando: Res<Manejando>,
+    layout: Res<TouchLayout>,
+    busqueda: Res<crate::policia::Busqueda>,
+    rep: Res<Reabastecimiento>,
+    autos: Query<&Vehiculo>,
+    player: Query<&SimState, With<Player>>,
+    mut q: Query<(&mut Text, &mut Visibility), With<HudVehiculo>>,
+) {
+    if q.is_empty() {
+        let k = crate::ui_pack::k(&layout);
+        commands.spawn((
+            Text::new(""),
+            TextFont { font_size: (20.0 * k).clamp(14.0, 24.0), ..default() },
+            TextColor(Color::srgb(0.95, 0.95, 0.85)),
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px((124.0 * k).max(104.0)),
+                left: Val::Percent(50.0),
+                margin: UiRect::left(Val::Px(-220.0)),
+                width: Val::Px(440.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            TextLayout::new_with_justify(JustifyText::Center),
+            Visibility::Hidden,
+            GlobalZIndex(41),
+            HudVehiculo,
+            Name::new("HudVehiculo"),
+        ));
+        return;
+    }
+    let tactil = crate::platform::uses_touch_gameplay_ui();
+    let mut lineas: Vec<String> = Vec::new();
+    if busqueda.buscado() {
+        lineas.push(format!("POLICÍA · búsqueda nivel {}", busqueda.nivel));
+    }
+    if let Some((m, _)) = &busqueda.aviso {
+        lineas.push(m.clone());
+    }
+    if let Some(v) = manejando.auto.and_then(|e| autos.get(e).ok()) {
+        let kmh = (v.estado.vel.abs() * 3.6).round() as i32;
+        let salud = (v.estado.salud / v.ficha.salud * 100.0).max(0.0).round() as i32;
+        let bajar = if tactil { "tocá el vehículo para bajar" } else { "G para bajar" };
+        if v.ficha.alcance > 0.0 {
+            let comb = (v.estado.comb * 100.0).round() as i32;
+            lineas.push(format!("{} · {kmh} km/h · casco {salud}% · combustible {comb}% · {bajar}", v.ficha.nombre));
+            if rep.cargando {
+                lineas.push("Repostando…".to_string());
+            } else if v.estado.comb <= 0.0 {
+                lineas.push("SIN COMBUSTIBLE".to_string());
+            }
+            if let Some((gx, gz, d)) = rep.destino {
+                lineas.push(format!("Gasolinera a {} m {}", d.round() as i32, rumbo_en_palabras(gx - v.estado.x, gz - v.estado.z)));
+            }
+        } else {
+            lineas.push(format!("{} · {kmh} km/h · {bajar}", v.ficha.nombre));
+        }
+    } else if let Ok(pj) = player.get_single() {
+        if let Some(v) = autos.iter().filter(|v| !v.estado.chatarra() && !matches!(v.quien, Quien::Policia(_))).find(|v| {
+            ((v.estado.x - pj.body.x).powi(2) + (v.estado.z - pj.body.z).powi(2)).sqrt() - v.estado.largo * 0.5 < ALCANCE_SUBIR
+        }) {
+            let verbo = if matches!(v.quien, Quien::Vecino(_)) { "robar" } else { "subir" };
+            let como = if tactil { "Tocalo para" } else { "G para" };
+            let nafta = if v.ficha.alcance > 0.0 { format!(" · combustible {}%", (v.estado.comb * 100.0).round() as i32) } else { String::new() };
+            lineas.push(format!("{}{nafta} · {como} {verbo}", v.ficha.nombre));
+        }
+    }
+    for (mut t, mut vis) in &mut q {
+        if lineas.is_empty() {
+            *vis = Visibility::Hidden;
+        } else {
+            let s = lineas.join("\n");
+            if t.0 != s {
+                t.0 = s;
+            }
+            *vis = Visibility::Visible;
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const F: Ficha = Ficha { largo: 3.6, ancho: 1.7, v_max: 20.0, v_atras: 5.0, acel: 7.0, freno: 16.0, vida: 120.0, drag: 0.12, terreno: Terreno::Tierra };
-
-    fn correr(c: &mut Cuerpo, m: Mando, seg: f32) {
-        let dt = 1.0 / 60.0;
-        for _ in 0..(seg / dt) as usize {
-            c.pos = paso(c, m, &F, dt);
-        }
-    }
-
+    /// Todo modelo del catálogo tiene arte con sus cuatro poses de rumbo — si el
+    /// importador cambia una clave, esto falla antes que el tránsito quede invisible.
     #[test]
-    fn acelera_hasta_la_velocidad_objetivo_sin_pasarse() {
-        let mut c = Cuerpo { pos: Vec2::ZERO, rumbo: 0.0, vel: 0.0 };
-        correr(&mut c, Mando { rumbo: 0.0, v_obj: 12.0 }, 6.0);
-        assert!((c.vel - 12.0).abs() < 0.6, "vel {}", c.vel);
-        assert!(c.pos.x > 30.0 && c.pos.y.abs() < 1e-3, "recto: {:?}", c.pos);
-    }
-
-    #[test]
-    fn frena_mas_fuerte_de_lo_que_acelera() {
-        let mut c = Cuerpo { pos: Vec2::ZERO, rumbo: 0.0, vel: 14.0 };
-        let mut t = 0.0;
-        while c.vel > 0.5 && t < 5.0 {
-            c.pos = paso(&mut c, Mando { rumbo: 0.0, v_obj: 0.0 }, &F, 1.0 / 60.0);
-            t += 1.0 / 60.0;
-        }
-        assert!(t < 1.2, "frenó en {t} s");
-    }
-
-    #[test]
-    fn dobla_hacia_el_stick_y_el_radio_de_giro_crece_con_la_velocidad() {
-        // Giro sostenido (objetivo lejano): el radio = v / velocidad angular.
-        let radio = |v: f32| {
-            let mut c = Cuerpo { pos: Vec2::ZERO, rumbo: 0.0, vel: v };
-            let m = Mando { rumbo: std::f32::consts::PI * 0.99, v_obj: v };
-            let dt = 1.0 / 60.0;
-            for _ in 0..30 {
-                c.pos = paso(&mut c, m, &F, dt);
-            }
-            let r0 = c.rumbo;
-            for _ in 0..30 {
-                c.pos = paso(&mut c, m, &F, dt);
-            }
-            v / ((c.rumbo - r0).abs() / 0.5).max(1e-3)
-        };
-        let (lento, rapido) = (radio(3.0), radio(18.0));
-        assert!(rapido > lento * 1.8, "radio lento {lento} rápido {rapido}");
-        assert!(lento < 6.0, "un auto a paso de hombre dobla en una calle: {lento}");
-    }
-
-    #[test]
-    fn el_stick_hacia_atras_es_marcha_atras() {
-        let m = mando_de_stick(0.0, Vec2::new(-1.0, 0.0), &F);
-        assert!(m.v_obj < 0.0);
-        let mut c = Cuerpo { pos: Vec2::ZERO, rumbo: 0.0, vel: 0.0 };
-        correr(&mut c, m, 2.0);
-        assert!(c.vel < -2.0 && c.pos.x < -2.0, "retrocede: {c:?}");
-        let adelante = mando_de_stick(0.0, Vec2::new(1.0, 0.1), &F);
-        assert!(adelante.v_obj > 0.0);
-        let quieto = mando_de_stick(0.0, Vec2::new(0.05, 0.0), &F);
-        assert_eq!(quieto.v_obj, 0.0);
-    }
-
-    #[test]
-    fn en_reversa_el_volante_se_invierte_para_acercarse_al_objetivo() {
-        // Quiero ir hacia el oeste-sur desde mirando al este: marcha atrás doblando.
-        let m = mando_de_stick(0.0, Vec2::new(-1.0, 1.0).normalize(), &F);
-        let mut c = Cuerpo { pos: Vec2::ZERO, rumbo: 0.0, vel: 0.0 };
-        let antes = envolver(m.rumbo - c.rumbo).abs();
-        correr(&mut c, m, 2.5);
-        let despues = envolver(m.rumbo - c.rumbo).abs();
-        assert!(despues < antes, "antes {antes} después {despues}");
-    }
-
-    #[test]
-    fn la_caja_orientada_recibe_balas_por_el_costado_y_no_por_fuera() {
-        let c = Vec2::new(10.0, 10.0);
-        // Coche mirando al este: 3,6 de largo (x) y 1,7 de ancho (z).
-        assert!(segmento_toca_caja(Vec2::new(10.0, 5.0), Vec2::new(10.0, 15.0), c, 0.0, 3.6, 1.7));
-        assert!(!segmento_toca_caja(Vec2::new(10.0, 5.0), Vec2::new(10.0, 8.0), c, 0.0, 3.6, 1.7));
-        assert!(!segmento_toca_caja(Vec2::new(5.0, 11.5), Vec2::new(15.0, 11.5), c, 0.0, 3.6, 1.7), "pasa de largo por el costado");
-        // Girado 90°: lo largo queda a lo largo de z.
-        assert!(segmento_toca_caja(Vec2::new(10.0, 7.0), Vec2::new(10.0, 8.5), c, std::f32::consts::FRAC_PI_2, 3.6, 1.7));
-    }
-
-    #[test]
-    fn los_octantes_de_carril_mapean_a_direcciones_del_suelo() {
-        assert_eq!(octante_a_vec(0), Vec2::new(1.0, 0.0));
-        assert_eq!(octante_a_vec(2), Vec2::new(0.0, -1.0)); // norte = z negativo
-        assert_eq!(octante_a_vec(4), Vec2::new(-1.0, 0.0));
-        assert_eq!(octante_a_vec(6), Vec2::new(0.0, 1.0));
-        // Mano derecha: yendo al este la derecha es el sur (z +).
-        assert_eq!(derecha_de(Vec2::new(1.0, 0.0)), Vec2::new(0.0, 1.0));
-        assert_eq!(derecha_de(Vec2::new(0.0, -1.0)), Vec2::new(1.0, 0.0));
-    }
-
-    #[test]
-    fn un_coche_ia_sigue_su_carril_por_una_calle_recta_real() {
-        use ha_shared::celestial_bodies::CelestialBody;
-        // Una celda de calzada recta del mundo: el carril dice a dónde ir y el coche avanza en esa dirección.
-        let body = CelestialBody::Earth;
-        let mut probado = 0;
-        'b: for sx in -6..6i64 {
-            for sz in -6..6i64 {
-                let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
-                let (cx, cz) = s.center;
-                // Barrido corto por la calle central: la primera celda de calzada con carril.
-                for d in 0..60i64 {
-                    let (tx, tz) = (cx + d, cz);
-                    if let Some(o) = ha_shared::roads::lane_at(body, tx, tz) {
-                        let v = octante_a_vec(o);
-                        assert!(v.length() > 0.99);
-                        probado += 1;
-                        if probado >= 5 {
-                            break 'b;
-                        }
-                        break;
-                    }
-                }
+    fn todo_modelo_tiene_sus_cuatro_poses() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/art/manifest.json");
+        let man: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for (clave, _) in veh::MODELOS {
+            let e = &man["sprites"][clave];
+            assert!(!e.is_null(), "{clave} no está en el manifest");
+            for p in ["abajo", "arriba", "izquierda", "derecha"] {
+                assert!(!e["poses"][p].is_null(), "{clave} no tiene la pose {p}");
             }
         }
-        assert!(probado >= 1, "ninguna ciudad con calzada en la muestra");
     }
 
     #[test]
-    fn la_ia_recorre_la_ciudad_real_sin_salirse_de_la_calzada() {
-        use ha_shared::celestial_bodies::CelestialBody;
-        let body = CelestialBody::Earth;
-        let f = Clase::Auto.ficha();
-        let mut corridas = 0;
-        let mut fuera_total = 0.0f32;
-        let mut recorrido_total = 0.0f32;
-        'b: for sx in -8..8i64 {
-            for sz in -8..8i64 {
-                let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
-                if s.radius < 100 {
-                    continue; // sólo ciudades con calles de verdad
-                }
-                // Arranque: la primera celda con carril sobre el eje horizontal de la ciudad.
-                let Some((tx, tz, oct)) = (0..80i64).find_map(|d| {
-                    let (x, z) = (s.center.0 + d, s.center.1);
-                    ha_shared::roads::lane_at(body, x, z).map(|o| (x, z, o))
-                }) else { continue };
-                let pos0 = Vec2::new(tx as f32 + 0.5, tz as f32 + 0.5);
-                let mut c = Cuerpo { pos: pos0, rumbo: octante_a_vec(oct).to_angle(), vel: 0.0 };
-                let mut mem = Rumbo { semilla: 0x1234_5678u32 ^ (sx as u32) ^ ((sz as u32) << 8), ..default() };
-                let (mut fuera, mut recorrido, mut sin_carril) = (0.0f32, 0.0f32, 0.0f32);
-                let mut callejones = 0;
-                let dt = 1.0 / 30.0;
-                let mut rumbo_obj = c.rumbo;
-                let mut vfac = 1.0f32;
-                let mut piensa = 0.0f32;
-                for _ in 0..(120.0 / dt) as usize {
-                    piensa -= dt;
-                    if piensa <= 0.0 {
-                        piensa = 0.125;
-                        match lane(body, c.pos) {
-                            Some(o) => {
-                                let (r, vf) = decidir_rumbo(body, c.pos, c.rumbo, o, c.vel.abs(), 0.125, &mut mem);
-                                rumbo_obj = r;
-                                vfac = vf;
-                                sin_carril = 0.0;
-                                if mem.sin_salida {
-                                    callejones += 1;
-                                    break; // se retira: lo que importa es que no se salió de la calzada hasta acá
-                                }
-                            }
-                            None => sin_carril += 0.125,
-                        }
-                    }
-                    let antes = c.pos;
-                    c.pos = paso(&mut c, Mando { rumbo: rumbo_obj, v_obj: f.v_max * 0.45 * vfac }, &f, dt);
-                    recorrido += c.pos.distance(antes);
-                    if lane(body, c.pos).is_none() {
-                        fuera += dt;
-                    }
-                }
-                assert!(sin_carril < 6.0, "la IA se perdió {sin_carril} s en la ciudad de {:?}", s.center);
-                println!("ciudad {:?} fuera={fuera:.1}s recorrido={recorrido:.0}m callejon={callejones}", s.center);
-                fuera_total += fuera;
-                recorrido_total += recorrido;
-                corridas += 1;
-                if corridas >= 6 {
-                    break 'b;
-                }
-            }
-        }
-        assert!(corridas >= 3, "pocas ciudades probadas: {corridas}");
-        let prom_fuera = fuera_total / corridas as f32;
-        assert!(prom_fuera < 3.0, "demasiado tiempo fuera de la calzada: {prom_fuera} s de 120");
-        assert!(recorrido_total / corridas as f32 > 500.0, "avanzó poco: {}", recorrido_total / corridas as f32);
-    }
-
-    #[test]
-    #[ignore]
-    fn diag_ia() {
-        use ha_shared::celestial_bodies::CelestialBody;
-        let body = CelestialBody::Earth;
-        let f = Clase::Auto.ficha();
-        let (cx, cz): (i64, i64) = (std::env::var("CX").unwrap().parse().unwrap(), std::env::var("CZ").unwrap().parse().unwrap());
-        let s = ha_shared::geography::settlement_in(body, cx.div_euclid(2600), cz.div_euclid(2600)).unwrap();
-        println!("centro {:?} radio {} tier {:?}", s.center, s.radius, s.tier);
-        let (tx, tz, oct) = (0..80i64).find_map(|d| { let (x, z) = (s.center.0 + d, s.center.1); ha_shared::roads::lane_at(body, x, z).map(|o| (x, z, o)) }).unwrap();
-        let mut c = Cuerpo { pos: Vec2::new(tx as f32 + 0.5, tz as f32 + 0.5), rumbo: octante_a_vec(oct).to_angle(), vel: 0.0 };
-        let mut mem = Rumbo { semilla: 7, ..default() };
-        let dt = 1.0 / 30.0;
-        let mut rumbo_obj = c.rumbo;
-        let mut vfac = 1.0f32;
-        let mut piensa = 0.0;
-        for k in 0..(120.0 / dt) as usize {
-            piensa -= dt;
-            if piensa <= 0.0 {
-                piensa = 0.125;
-                if let Some(o) = lane(body, c.pos) { let (r, vf) = decidir_rumbo(body, c.pos, c.rumbo, o, c.vel.abs(), 0.125, &mut mem); rumbo_obj = r; vfac = vf; }
-            }
-            c.pos = paso(&mut c, Mando { rumbo: rumbo_obj, v_obj: f.v_max * 0.45 * vfac }, &f, dt);
-            if let Some(g) = mem.compromiso { if k % 6 == 0 { println!("  compromiso oct={} resta={:.1} W=({:.1},{:.1}) pos=({:.1},{:.1})", g.oct_t, g.resta, g.apice.x, g.apice.y, c.pos.x, c.pos.y); } }
-            if k % 15 == 0 || lane(body, c.pos).is_none() { println!("t={:.1} pos=({:.1},{:.1}) rumbo={:.2} obj={:.2} vel={:.1} lane={:?}", k as f32 * dt, c.pos.x, c.pos.y, c.rumbo, rumbo_obj, c.vel, lane(body, c.pos)); }
-        }
-    }
-
-    #[test]
-    #[ignore]
-    fn diag_mapa() {
-        use ha_shared::celestial_bodies::CelestialBody;
-        let body = CelestialBody::Earth;
-        let (cx, cz): (i64, i64) = (std::env::var("MX").unwrap().parse().unwrap(), std::env::var("MZ").unwrap().parse().unwrap());
-        for z in -14..14i64 {
-            let mut row = String::new();
-            for x in -30..30i64 {
-                row.push(match ha_shared::roads::lane_at(body, cx + x, cz + z) { Some(0) => '>', Some(2) => '^', Some(4) => '<', Some(6) => 'v', _ => if x == 0 && z == 0 { '+' } else { '.' } });
-            }
-            println!("{row}");
-        }
+    fn la_pose_sigue_al_rumbo() {
+        assert_eq!(pose_de_rumbo(0.0), "derecha");
+        assert_eq!(pose_de_rumbo(std::f32::consts::PI), "izquierda");
+        assert_eq!(pose_de_rumbo(std::f32::consts::FRAC_PI_2), "abajo");
+        assert_eq!(pose_de_rumbo(-std::f32::consts::FRAC_PI_2), "arriba");
     }
 }

@@ -141,6 +141,29 @@ pub fn ysort(world_z: f32) -> f32 {
     YSORT_BASE + world_z * YSORT_SPAN
 }
 
+/// Cuánto más al NORTE se ordena el relieve (canto + cara de un escalón) que su
+/// propia celda, en metros de mundo.
+///
+/// El relieve Y-sortea por la celda del CANTO, y su dibujo cuelga hacia el SUR
+/// (la cara de roca cae sobre la terraza de abajo). Lo único plano que cae al sur
+/// del pie de un objeto es su SOMBRA, y con el canto ordenado en su fila, la losa
+/// de pasto de una terraza más abajo le sacaba un trozo en seco a la sombra del
+/// árbol de arriba (captura del usuario, 3 oct 2026).
+///
+/// Correrlo atrás no puede esconder a nadie: todo lo que se para crece hacia el
+/// NORTE desde su pie, así que algo al norte del canto nunca pisa la cara, y lo
+/// que está al sur ya le ganaba y le sigue ganando. Dos escalones apilados se
+/// corren igual, así que entre ellos no cambia nada. 16 m cubre la sombra más
+/// larga del amanecer.
+pub const RELIEVE_ATRAS_M: f32 = 16.0;
+
+/// Y-sort del RELIEVE (canto y cara de un escalón) cuyo canto está en `world_z`.
+/// Ver [`RELIEVE_ATRAS_M`].
+#[inline]
+pub fn relieve(world_z: f32) -> f32 {
+    ysort(world_z - RELIEVE_ATRAS_M)
+}
+
 /// Y-sort de una cara EXTERIOR parada en `world_z`, en la banda [`FACHADA_BASE`].
 #[inline]
 pub fn fachada(world_z: f32) -> f32 {

@@ -276,7 +276,8 @@ fn panel_personaje(p: &mut ChildBuilder, ins: &Insumos, cuerpo: Option<Celestial
 
     up::halo(p, &ins.halo, cx, 500.0, 250.0, k);
     up::sombra(p, cx, 664.0, 92.0, 15.0, k);
-    if let (Some(cg), Some(look)) = (ins.cg.as_deref(), ins.pj.look.as_ref()) {
+    let look_guardado = ins.pj.look.or_else(|| crate::personajes::listar().first().and_then(|p| p.look));
+    if let (Some(cg), Some(look)) = (ins.cg.as_deref(), look_guardado.as_ref()) {
         if cg.available() {
             let escala = 5.0;
             let cel = Vec2::new(cg.index.cell[0] as f32, cg.index.cell[1] as f32) * escala;
@@ -333,7 +334,7 @@ fn panel_pausa(p: &mut ChildBuilder, art: &ArtLibrary, k: f32) {
 
     // Seis casillas, 3 × 2.
     let tw = (iw - geo::GAP * 2.0) / 3.0;
-    let th = 196.0;
+    let th = 188.0;
     let y0 = y + 84.0 + 150.0 + geo::GAP + 6.0;
     let casillas: [(&str, &str); 6] = [
         ("AJUSTES", "ui/ic_engranaje"),
@@ -546,7 +547,7 @@ mod tests {
     fn la_pausa_entra_en_su_panel() {
         let (x, y, w, h) = geo::PAUSA;
         let iw = w - geo::MARGEN * 2.0;
-        let th = 196.0;
+        let th = 188.0;
         let y0 = y + 84.0 + 150.0 + geo::GAP + 6.0;
         let fin_casillas = y0 + 2.0 * th + geo::GAP;
         let yb = y + h - 42.0 - 112.0;

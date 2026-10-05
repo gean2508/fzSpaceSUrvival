@@ -33281,6 +33281,9 @@
   "vehicle/basura": {
    "label": "Camión de basura"
   },
+  "vehicle/bici": {
+   "label": "Bicicleta"
+  },
   "vehicle/bomberos": {
    "label": "Autobomba"
   },
@@ -33391,6 +33394,84 @@
      "label": "Casa rodante (izquierda) 4"
     }
    ]
+  },
+  "vehicle/coche_1": {
+   "label": "Coche hatchback 1"
+  },
+  "vehicle/coche_10": {
+   "label": "Coche sedán 10"
+  },
+  "vehicle/coche_11": {
+   "label": "Taxi (manejable)"
+  },
+  "vehicle/coche_12": {
+   "label": "Coche sedán 12"
+  },
+  "vehicle/coche_13": {
+   "label": "Coche sedán 13"
+  },
+  "vehicle/coche_14": {
+   "label": "Coche suv 14"
+  },
+  "vehicle/coche_15": {
+   "label": "Coche suv 15"
+  },
+  "vehicle/coche_16": {
+   "label": "Coche suv 16"
+  },
+  "vehicle/coche_17": {
+   "label": "Coche suv 17"
+  },
+  "vehicle/coche_18": {
+   "label": "Coche suv 18"
+  },
+  "vehicle/coche_19": {
+   "label": "Coche suv 19"
+  },
+  "vehicle/coche_2": {
+   "label": "Coche hatchback 2"
+  },
+  "vehicle/coche_20": {
+   "label": "Coche suv 20"
+  },
+  "vehicle/coche_21": {
+   "label": "Coche compacto 21"
+  },
+  "vehicle/coche_22": {
+   "label": "Coche compacto 22"
+  },
+  "vehicle/coche_23": {
+   "label": "Coche compacto 23"
+  },
+  "vehicle/coche_24": {
+   "label": "Coche compacto 24"
+  },
+  "vehicle/coche_25": {
+   "label": "Coche compacto 25"
+  },
+  "vehicle/coche_26": {
+   "label": "Coche compacto 26"
+  },
+  "vehicle/coche_3": {
+   "label": "Coche hatchback 3"
+  },
+  "vehicle/coche_4": {
+   "label": "Coche hatchback 4"
+  },
+  "vehicle/coche_5": {
+   "label": "Coche hatchback 5"
+  },
+  "vehicle/coche_6": {
+   "label": "Coche hatchback 6"
+  },
+  "vehicle/coche_7": {
+   "label": "Coche sedán 7"
+  },
+  "vehicle/coche_8": {
+   "label": "Coche sedán 8"
+  },
+  "vehicle/coche_9": {
+   "label": "Coche sedán 9"
   },
   "vehicle/colectivo_1": {
    "label": "Colectivo 1"
@@ -33657,6 +33738,9 @@
   "vehicle/lancha": {
    "label": "Lancha"
   },
+  "vehicle/moto": {
+   "label": "Moto"
+  },
   "vehicle/pancho_carro_1": {
    "label": "Pancho carro 1",
    "variants": [
@@ -33766,9 +33850,6 @@
     }
    ]
   },
-  "agua/pileta_completa": {
-   "label": "Pileta completa (6×4)"
-  },
   "building/ayuntamiento": {
    "label": "Ayuntamiento",
    "variants": [
@@ -33777,6 +33858,9 @@
      "label": "Ayuntamiento 1"
     }
    ]
+  },
+  "agua/pileta_completa": {
+   "label": "Pileta completa (6×4)"
   }
  },
  "origen": {
@@ -61031,94 +61115,6 @@
     32
    ],
    "png": "art/pack/completos_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_2.png",
-     "rect": {
-      "col": 0,
-      "h": 10,
-      "row": 0,
-      "w": 13
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 96,
-      "row": 192,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 10,
@@ -61132,94 +61128,6 @@
     32
    ],
    "png": "art/pack/completos_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_2.png",
-     "rect": {
-      "col": 0,
-      "h": 10,
-      "row": 0,
-      "w": 13
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 96,
-      "row": 192,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 10,
@@ -61233,94 +61141,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 0,
-      "h": 15,
-      "row": 34,
-      "w": 12
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 96,
-      "row": 192,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 15,
@@ -61334,94 +61154,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 18,
-      "h": 16,
-      "row": 18,
-      "w": 12
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 66,
-      "row": 1864,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 66,
-      "row": 1864,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 66,
-      "row": 1864,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 66,
-      "row": 1864,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 64,
-      "h": 66,
-      "row": 384,
-      "w": 96
-     }
-    }
-   },
    "rect": {
     "col": 18,
     "h": 16,
@@ -61448,94 +61180,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 27,
-      "h": 14,
-      "row": 34,
-      "w": 23
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 544,
-      "h": 80,
-      "row": 288,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 27,
     "h": 14,
@@ -61549,99 +61193,24 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 27,
-      "h": 14,
-      "row": 34,
-      "w": 23
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 80,
-      "row": 1542,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 544,
-      "h": 80,
-      "row": 288,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 27,
     "h": 14,
     "row": 34,
     "w": 23
+   }
+  },
+  "building/casa_country#2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_0.png",
+   "rect": {
+    "col": 0,
+    "h": 22,
+    "row": 34,
+    "w": 18
    }
   },
   "building/casa_cubierta_silla_blanca": {
@@ -64454,94 +64023,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 0,
-      "h": 14,
-      "row": 49,
-      "w": 16
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 256,
-      "h": 96,
-      "row": 320,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 14,
@@ -64555,94 +64036,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 0,
-      "h": 14,
-      "row": 49,
-      "w": 16
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 1344,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 588,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 256,
-      "h": 96,
-      "row": 320,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 14,
@@ -64656,94 +64049,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 12,
-      "h": 14,
-      "row": 34,
-      "w": 15
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 960,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 19.2,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1408,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1408,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 17.45,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 960,
-      "h": 64,
-      "row": 0,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 96,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 12,
     "h": 14,
@@ -66678,240 +65983,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 35,
-      "h": 18,
-      "row": 0,
-      "w": 21
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1358,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1358,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 64,
-      "w": 66
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 560,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 812,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 102,
-      "h": 50,
-      "row": 302,
-      "w": 36
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 812,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 560,
-      "h": 50,
-      "row": 1066,
-      "w": 36
-     }
-    },
-    "puerta3_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 644,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 342,
-      "h": 58,
-      "row": 472,
-      "w": 36
-     }
-    },
-    "puerta3_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta3_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 644,
-      "h": 58,
-      "row": 1006,
-      "w": 36
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 82,
-      "h": 64,
-      "row": 416,
-      "w": 66
-     }
-    }
-   },
    "rect": {
     "col": 35,
     "h": 18,
@@ -70156,94 +69227,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 16,
-      "h": 13,
-      "row": 49,
-      "w": 8
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 58,
-      "h": 64,
-      "row": 352,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 16,
     "h": 13,
@@ -70530,167 +69513,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 42,
-      "h": 12,
-      "row": 49,
-      "w": 11
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 208,
-      "h": 46,
-      "row": 228,
-      "w": 62
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 32,
-      "h": 64,
-      "row": 256,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 42,
     "h": 12,
@@ -71688,167 +70510,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 0,
-      "h": 18,
-      "row": 0,
-      "w": 16
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 192,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 64,
-      "h": 96,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 684,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 384,
-      "h": 64,
-      "row": 480,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 18,
@@ -75545,94 +74206,6 @@
     32
    ],
    "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 25,
-      "h": 23,
-      "row": 0,
-      "w": 24
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 76,
-      "row": 1788,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 76,
-      "row": 1788,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 76,
-      "row": 1788,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 76,
-      "row": 1788,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 432,
-      "h": 76,
-      "row": 576,
-      "w": 96
-     }
-    }
-   },
    "rect": {
     "col": 25,
     "h": 23,
@@ -78343,167 +76916,6 @@
     32
    ],
    "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 18,
-      "h": 21,
-      "row": 34,
-      "w": 27
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 876,
-      "w": 128
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 13.71,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 876,
-      "w": 128
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 876,
-      "w": 128
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 12.8,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 876,
-      "w": 128
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 972,
-      "w": 128
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 13.71,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 972,
-      "w": 128
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 704,
-      "h": 96,
-      "row": 480,
-      "w": 128
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 972,
-      "w": 128
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 12.8,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 972,
-      "w": 128
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 576,
-      "h": 96,
-      "row": 480,
-      "w": 128
-     }
-    }
-   },
    "rect": {
     "col": 18,
     "h": 21,
@@ -84076,240 +82488,6 @@
     32
    ],
    "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 45,
-      "h": 19,
-      "row": 34,
-      "w": 12
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 272,
-      "h": 62,
-      "row": 108,
-      "w": 64
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta3_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta3_closing": {
-     "anim": {
-      "fps": 32.0,
-      "frames": 4
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1088,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta3_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 288,
-      "h": 64,
-      "row": 448,
-      "w": 64
-     }
-    },
-    "puerta3_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1088,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta3_opening": {
-     "anim": {
-      "fps": 32.0,
-      "frames": 4
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 160,
-      "h": 60,
-      "row": 544,
-      "w": 96
-     }
-    }
-   },
    "rect": {
     "col": 45,
     "h": 19,
@@ -84323,240 +82501,6 @@
     32
    ],
    "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 45,
-      "h": 19,
-      "row": 34,
-      "w": 12
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 946,
-      "w": 96
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 272,
-      "h": 62,
-      "row": 108,
-      "w": 64
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 512,
-      "w": 64
-     }
-    },
-    "puerta3_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta3_closing": {
-     "anim": {
-      "fps": 32.0,
-      "frames": 4
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1088,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta3_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 288,
-      "h": 64,
-      "row": 448,
-      "w": 64
-     }
-    },
-    "puerta3_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1088,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta3_opening": {
-     "anim": {
-      "fps": 32.0,
-      "frames": 4
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 64,
-      "row": 384,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 160,
-      "h": 60,
-      "row": 544,
-      "w": 96
-     }
-    }
-   },
    "rect": {
     "col": 45,
     "h": 19,
@@ -84570,94 +82514,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 16,
-      "h": 18,
-      "row": 0,
-      "w": 19
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 256,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 256,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 256,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 256,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 160,
-      "h": 64,
-      "row": 512,
-      "w": 96
-     }
-    }
-   },
    "rect": {
     "col": 16,
     "h": 18,
@@ -99042,167 +96898,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 48,
-      "h": 16,
-      "row": 18,
-      "w": 13
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 13.71,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 896,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 12.8,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 96,
-      "row": 780,
-      "w": 128
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 64,
-      "row": 416,
-      "w": 96
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 320,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 256,
-      "h": 96,
-      "row": 416,
-      "w": 128
-     }
-    }
-   },
    "rect": {
     "col": 48,
     "h": 16,
@@ -100604,167 +98299,6 @@
     32
    ],
    "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 0,
-      "h": 34,
-      "row": 0,
-      "w": 25
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 64,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 448,
-      "w": 96
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 128,
-      "row": 460,
-      "w": 96
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 24.0,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 128,
-      "row": 460,
-      "w": 96
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 352,
-      "h": 128,
-      "row": 608,
-      "w": 96
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 672,
-      "h": 128,
-      "row": 460,
-      "w": 96
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 21.33,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 128,
-      "row": 460,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 352,
-      "h": 64,
-      "row": 800,
-      "w": 96
-     }
-    }
-   },
    "rect": {
     "col": 0,
     "h": 34,
@@ -206194,9 +203728,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/ammo_762": {
@@ -206207,9 +203741,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/ammo_9mm": {
@@ -206220,9 +203754,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/ammo_cartucho": {
@@ -206233,9 +203767,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/ammo_energia": {
@@ -206246,9 +203780,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/apple": {
@@ -206636,9 +204170,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ak__115": {
@@ -206649,9 +204183,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ak__bacon": {
@@ -206662,9 +204196,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ak__ciclon": {
@@ -206675,9 +204209,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ak__grafiti": {
@@ -206688,9 +204222,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ak__oscura": {
@@ -206701,9 +204235,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ak__singularidad": {
@@ -206714,9 +204248,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta": {
@@ -206727,9 +204261,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta__115": {
@@ -206740,9 +204274,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta__bacon": {
@@ -206753,9 +204287,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta__ciclon": {
@@ -206766,9 +204300,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta__grafiti": {
@@ -206779,9 +204313,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta__oscura": {
@@ -206792,9 +204326,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_escopeta__singularidad": {
@@ -206805,9 +204339,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40": {
@@ -206818,9 +204352,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40__115": {
@@ -206831,9 +204365,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40__bacon": {
@@ -206844,9 +204378,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40__ciclon": {
@@ -206857,9 +204391,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40__grafiti": {
@@ -206870,9 +204404,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40__oscura": {
@@ -206883,9 +204417,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_mp40__singularidad": {
@@ -206896,9 +204430,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola": {
@@ -206909,9 +204443,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola__115": {
@@ -206922,9 +204456,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola__bacon": {
@@ -206935,9 +204469,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola__ciclon": {
@@ -206948,9 +204482,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola__grafiti": {
@@ -206961,9 +204495,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola__oscura": {
@@ -206974,9 +204508,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pistola__singularidad": {
@@ -206987,9 +204521,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43": {
@@ -207000,9 +204534,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43__115": {
@@ -207013,9 +204547,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43__bacon": {
@@ -207026,9 +204560,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43__ciclon": {
@@ -207039,9 +204573,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43__grafiti": {
@@ -207052,9 +204586,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43__oscura": {
@@ -207065,9 +204599,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_pps43__singularidad": {
@@ -207078,9 +204612,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh": {
@@ -207091,9 +204625,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh__115": {
@@ -207104,9 +204638,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh__bacon": {
@@ -207117,9 +204651,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh__ciclon": {
@@ -207130,9 +204664,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh__grafiti": {
@@ -207143,9 +204677,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh__oscura": {
@@ -207156,9 +204690,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_ppsh__singularidad": {
@@ -207169,9 +204703,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun": {
@@ -207182,9 +204716,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun__115": {
@@ -207195,9 +204729,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun__bacon": {
@@ -207208,9 +204742,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
+    "h": 2,
     "row": 8,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun__ciclon": {
@@ -207221,9 +204755,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
+    "h": 2,
     "row": 8,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun__grafiti": {
@@ -207234,9 +204768,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
+    "h": 2,
     "row": 8,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun__oscura": {
@@ -207247,9 +204781,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
+    "h": 2,
     "row": 8,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_raygun__singularidad": {
@@ -207260,9 +204794,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
+    "h": 2,
     "row": 6,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi": {
@@ -207273,9 +204807,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi__115": {
@@ -207286,9 +204820,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi__bacon": {
@@ -207299,9 +204833,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi__ciclon": {
@@ -207312,9 +204846,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi__grafiti": {
@@ -207325,9 +204859,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi__oscura": {
@@ -207338,9 +204872,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_suomi__singularidad": {
@@ -207351,9 +204885,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
+    "h": 2,
     "row": 4,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson": {
@@ -207364,9 +204898,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson__115": {
@@ -207377,9 +204911,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson__bacon": {
@@ -207390,9 +204924,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson__ciclon": {
@@ -207403,9 +204937,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson__grafiti": {
@@ -207416,9 +204950,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson__oscura": {
@@ -207429,9 +204963,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
+    "h": 2,
     "row": 2,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/gun_thompson__singularidad": {
@@ -207442,9 +204976,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
+    "h": 2,
     "row": 0,
-    "w": 2,
-    "h": 2
+    "w": 2
    }
   },
   "items/hammer": {
@@ -270910,1224 +268444,54 @@
   },
   "vehicle/auto_1": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 2,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 68,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 258,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 134,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 2,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_10": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1718,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1642,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 2,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1794,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 1718,
-    "h": 142,
-    "row": 118,
-    "w": 74
-   }
-  },
-  "vehicle/auto_11": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 234,
-      "h": 142,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 158,
-      "h": 144,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 466,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 310,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 234,
-    "h": 142,
-    "row": 264,
-    "w": 74
-   }
-  },
-  "vehicle/auto_12": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 698,
-      "h": 142,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 622,
-      "h": 144,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 930,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 774,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 698,
-    "h": 142,
-    "row": 264,
-    "w": 74
-   }
-  },
-  "vehicle/auto_13": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1162,
-      "h": 142,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1086,
-      "h": 144,
-      "row": 264,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1394,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1238,
-      "h": 80,
-      "row": 264,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 1162,
-    "h": 142,
-    "row": 264,
-    "w": 74
-   }
-  },
-  "vehicle/auto_14": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1550,
-      "h": 124,
-      "row": 264,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1622,
-      "h": 124,
-      "row": 264,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1828,
-      "h": 74,
-      "row": 264,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1694,
-      "h": 74,
-      "row": 264,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1550,
-    "h": 124,
-    "row": 264,
-    "w": 70
-   }
-  },
-  "vehicle/auto_15": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1962,
-      "h": 124,
-      "row": 264,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 2,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 208,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 74,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1962,
-    "h": 124,
-    "row": 264,
-    "w": 70
-   }
-  },
-  "vehicle/auto_16": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 342,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 414,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 620,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 486,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 342,
-    "h": 124,
-    "row": 410,
-    "w": 70
-   }
-  },
-  "vehicle/auto_17": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 754,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 826,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1032,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 898,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 754,
-    "h": 124,
-    "row": 410,
-    "w": 70
-   }
-  },
-  "vehicle/auto_18": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1166,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1238,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1444,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1310,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1166,
-    "h": 124,
-    "row": 410,
-    "w": 70
-   }
-  },
-  "vehicle/auto_19": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1578,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1650,
-      "h": 124,
-      "row": 410,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1856,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1722,
-      "h": 74,
-      "row": 410,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 1578,
-    "h": 124,
-    "row": 410,
-    "w": 70
+    "col": 0,
+    "h": 3,
+    "row": 12,
+    "w": 5
    }
   },
   "vehicle/auto_2": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 382,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 448,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 638,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 514,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 382,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_20": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 2,
-      "h": 124,
-      "row": 536,
-      "w": 70
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 74,
-      "h": 124,
-      "row": 536,
-      "w": 70
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 280,
-      "h": 74,
-      "row": 536,
-      "w": 132
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 146,
-      "h": 74,
-      "row": 536,
-      "w": 132
-     }
-    }
-   },
-   "rect": {
-    "col": 2,
-    "h": 124,
-    "row": 536,
-    "w": 70
-   }
-  },
-  "vehicle/auto_21": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 490,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 414,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 710,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 566,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 490,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_22": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 930,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 854,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1150,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1006,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 930,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_23": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1370,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1294,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1590,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1446,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 1370,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_24": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1810,
-      "h": 132,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1734,
-      "h": 134,
-      "row": 536,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 2,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1886,
-      "h": 78,
-      "row": 536,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 1810,
-    "h": 132,
-    "row": 536,
-    "w": 74
-   }
-  },
-  "vehicle/auto_25": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 222,
-      "h": 132,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 146,
-      "h": 134,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 442,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 298,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 222,
-    "h": 132,
-    "row": 672,
-    "w": 74
-   }
-  },
-  "vehicle/auto_26": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 662,
-      "h": 132,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 586,
-      "h": 134,
-      "row": 672,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 882,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 738,
-      "h": 78,
-      "row": 672,
-      "w": 142
-     }
-    }
-   },
-   "rect": {
-    "col": 662,
-    "h": 132,
-    "row": 672,
-    "w": 74
+    "col": 5,
+    "h": 3,
+    "row": 12,
+    "w": 5
    }
   },
   "vehicle/auto_3": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 762,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 828,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1018,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 894,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 762,
-    "h": 114,
-    "row": 2,
-    "w": 64
+    "col": 8,
+    "h": 5,
+    "row": 7,
+    "w": 2
    }
   },
   "vehicle/auto_4": {
    "grid": [
-    1,
-    1
+    32,
+    32
    ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1142,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1208,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1398,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1274,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
+   "png": "art/pack/police_station_3.png",
    "rect": {
-    "col": 1142,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_5": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1522,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1588,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1778,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1654,
-      "h": 74,
-      "row": 2,
-      "w": 122
-     }
-    }
-   },
-   "rect": {
-    "col": 1522,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_6": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1902,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1968,
-      "h": 114,
-      "row": 2,
-      "w": 64
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 126,
-      "h": 74,
-      "row": 118,
-      "w": 122
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 2,
-      "h": 74,
-      "row": 118,
-      "w": 122
-     }
-    }
-   },
-   "rect": {
-    "col": 1902,
-    "h": 114,
-    "row": 2,
-    "w": 64
-   }
-  },
-  "vehicle/auto_7": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 326,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 250,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 558,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 402,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 326,
-    "h": 142,
-    "row": 118,
-    "w": 74
-   }
-  },
-  "vehicle/auto_8": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 790,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 714,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1022,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 866,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 790,
-    "h": 142,
-    "row": 118,
-    "w": 74
-   }
-  },
-  "vehicle/auto_9": {
-   "grid": [
-    1,
-    1
-   ],
-   "png": "art/pack/vehiculos.png",
-   "poses": {
-    "abajo": {
-     "rect": {
-      "col": 1254,
-      "h": 142,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "arriba": {
-     "rect": {
-      "col": 1178,
-      "h": 144,
-      "row": 118,
-      "w": 74
-     }
-    },
-    "derecha": {
-     "rect": {
-      "col": 1486,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    },
-    "izquierda": {
-     "rect": {
-      "col": 1330,
-      "h": 80,
-      "row": 118,
-      "w": 154
-     }
-    }
-   },
-   "rect": {
-    "col": 1254,
-    "h": 142,
-    "row": 118,
-    "w": 74
+    "col": 10,
+    "h": 5,
+    "row": 7,
+    "w": 2
    }
   },
   "vehicle/auto_abajo_1": {
@@ -274153,6 +270517,53 @@
     "w": 88
    }
   },
+  "vehicle/bici": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos_dibujados.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 186,
+      "h": 50,
+      "row": 2,
+      "w": 18
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 206,
+      "h": 50,
+      "row": 2,
+      "w": 18
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 276,
+      "h": 22,
+      "row": 2,
+      "w": 48
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 226,
+      "h": 22,
+      "row": 2,
+      "w": 48
+     }
+    }
+   },
+   "rect": {
+    "col": 186,
+    "h": 50,
+    "row": 2,
+    "w": 18
+   }
+  },
   "vehicle/bomberos": {
    "grid": [
     1,
@@ -275098,6 +271509,1228 @@
     "h": 4,
     "row": 4,
     "w": 6
+   }
+  },
+  "vehicle/coche_1": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 68,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 258,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 134,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_10": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1718,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1642,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1794,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1718,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/coche_11": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 234,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 158,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 466,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 310,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 234,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/coche_12": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 698,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 622,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 930,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 774,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 698,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/coche_13": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1162,
+      "h": 142,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1086,
+      "h": 144,
+      "row": 264,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1394,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1238,
+      "h": 80,
+      "row": 264,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1162,
+    "h": 142,
+    "row": 264,
+    "w": 74
+   }
+  },
+  "vehicle/coche_14": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1550,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1622,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1828,
+      "h": 74,
+      "row": 264,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1694,
+      "h": 74,
+      "row": 264,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1550,
+    "h": 124,
+    "row": 264,
+    "w": 70
+   }
+  },
+  "vehicle/coche_15": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1962,
+      "h": 124,
+      "row": 264,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 208,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 74,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1962,
+    "h": 124,
+    "row": 264,
+    "w": 70
+   }
+  },
+  "vehicle/coche_16": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 342,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 414,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 620,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 486,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 342,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_17": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 754,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 826,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1032,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 898,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 754,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_18": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1166,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1238,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1444,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1310,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1166,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_19": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1578,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1650,
+      "h": 124,
+      "row": 410,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1856,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1722,
+      "h": 74,
+      "row": 410,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 1578,
+    "h": 124,
+    "row": 410,
+    "w": 70
+   }
+  },
+  "vehicle/coche_2": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 382,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 448,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 638,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 514,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 382,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_20": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 124,
+      "row": 536,
+      "w": 70
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 74,
+      "h": 124,
+      "row": 536,
+      "w": 70
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 280,
+      "h": 74,
+      "row": 536,
+      "w": 132
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 146,
+      "h": 74,
+      "row": 536,
+      "w": 132
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 124,
+    "row": 536,
+    "w": 70
+   }
+  },
+  "vehicle/coche_21": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 490,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 414,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 710,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 566,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 490,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_22": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 930,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 854,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1150,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1006,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 930,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_23": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1370,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1294,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1590,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1446,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 1370,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_24": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1810,
+      "h": 132,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1734,
+      "h": 134,
+      "row": 536,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 2,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1886,
+      "h": 78,
+      "row": 536,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 1810,
+    "h": 132,
+    "row": 536,
+    "w": 74
+   }
+  },
+  "vehicle/coche_25": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 222,
+      "h": 132,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 146,
+      "h": 134,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 442,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 298,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 222,
+    "h": 132,
+    "row": 672,
+    "w": 74
+   }
+  },
+  "vehicle/coche_26": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 662,
+      "h": 132,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 586,
+      "h": 134,
+      "row": 672,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 882,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 738,
+      "h": 78,
+      "row": 672,
+      "w": 142
+     }
+    }
+   },
+   "rect": {
+    "col": 662,
+    "h": 132,
+    "row": 672,
+    "w": 74
+   }
+  },
+  "vehicle/coche_3": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 762,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 828,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1018,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 894,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 762,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_4": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1142,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1208,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1398,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1274,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1142,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_5": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1522,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1588,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1778,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1654,
+      "h": 74,
+      "row": 2,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1522,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_6": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1902,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1968,
+      "h": 114,
+      "row": 2,
+      "w": 64
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 126,
+      "h": 74,
+      "row": 118,
+      "w": 122
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 2,
+      "h": 74,
+      "row": 118,
+      "w": 122
+     }
+    }
+   },
+   "rect": {
+    "col": 1902,
+    "h": 114,
+    "row": 2,
+    "w": 64
+   }
+  },
+  "vehicle/coche_7": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 326,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 250,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 558,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 402,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 326,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/coche_8": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 790,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 714,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1022,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 866,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 790,
+    "h": 142,
+    "row": 118,
+    "w": 74
+   }
+  },
+  "vehicle/coche_9": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 1254,
+      "h": 142,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 1178,
+      "h": 144,
+      "row": 118,
+      "w": 74
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 1486,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 1330,
+      "h": 80,
+      "row": 118,
+      "w": 154
+     }
+    }
+   },
+   "rect": {
+    "col": 1254,
+    "h": 142,
+    "row": 118,
+    "w": 74
    }
   },
   "vehicle/colectivo_1": {
@@ -276395,6 +274028,53 @@
     "w": 58
    }
   },
+  "vehicle/moto": {
+   "grid": [
+    1,
+    1
+   ],
+   "png": "art/pack/vehiculos_dibujados.png",
+   "poses": {
+    "abajo": {
+     "rect": {
+      "col": 2,
+      "h": 62,
+      "row": 2,
+      "w": 26
+     }
+    },
+    "arriba": {
+     "rect": {
+      "col": 30,
+      "h": 62,
+      "row": 2,
+      "w": 26
+     }
+    },
+    "derecha": {
+     "rect": {
+      "col": 122,
+      "h": 28,
+      "row": 2,
+      "w": 62
+     }
+    },
+    "izquierda": {
+     "rect": {
+      "col": 58,
+      "h": 28,
+      "row": 2,
+      "w": 62
+     }
+    }
+   },
+   "rect": {
+    "col": 2,
+    "h": 62,
+    "row": 2,
+    "w": 26
+   }
+  },
   "vehicle/pancho_carro_1": {
    "grid": [
     32,
@@ -276872,9 +274552,9 @@
    "png": "art/gen/taxi.png",
    "rect": {
     "col": 0,
+    "h": 4,
     "row": 0,
-    "w": 3,
-    "h": 4
+    "w": 3
    }
   },
   "vehicle/telefono_publico_1": {
@@ -280055,61 +277735,61 @@
     32,
     32
    ],
-   "png": "art/pack/construccion.png",
+   "png": "art/pack/interiores.png",
    "poses": {
     "back": {
      "rect": {
-      "col": 7,
+      "col": 28,
       "h": 2,
-      "row": 0,
+      "row": 4,
       "w": 1
      }
     },
     "center": {
      "rect": {
-      "col": 7,
+      "col": 20,
       "h": 2,
-      "row": 0,
+      "row": 4,
       "w": 1
      }
     },
     "espalda": {
      "rect": {
-      "col": 7,
+      "col": 28,
       "h": 2,
-      "row": 0,
+      "row": 4,
       "w": 1
      }
     },
     "front": {
      "rect": {
-      "col": 4,
+      "col": 20,
       "h": 2,
-      "row": 0,
+      "row": 4,
       "w": 1
      }
     },
     "left": {
      "rect": {
-      "col": 5,
+      "col": 22,
       "h": 2,
-      "row": 0,
+      "row": 4,
       "w": 1
      }
     },
     "right": {
      "rect": {
-      "col": 6,
+      "col": 21,
       "h": 2,
-      "row": 0,
+      "row": 4,
       "w": 1
      }
     }
    },
    "rect": {
-    "col": 7,
+    "col": 20,
     "h": 2,
-    "row": 0,
+    "row": 4,
     "w": 1
    }
   },
@@ -280118,11 +277798,11 @@
     32,
     32
    ],
-   "png": "art/pack/construccion.png",
+   "png": "art/pack/interiores.png",
    "poses": {
     "back": {
      "rect": {
-      "col": 3,
+      "col": 8,
       "h": 2,
       "row": 0,
       "w": 1
@@ -280130,7 +277810,7 @@
     },
     "center": {
      "rect": {
-      "col": 3,
+      "col": 0,
       "h": 2,
       "row": 0,
       "w": 1
@@ -280138,7 +277818,7 @@
     },
     "espalda": {
      "rect": {
-      "col": 3,
+      "col": 8,
       "h": 2,
       "row": 0,
       "w": 1
@@ -280154,7 +277834,7 @@
     },
     "left": {
      "rect": {
-      "col": 1,
+      "col": 2,
       "h": 2,
       "row": 0,
       "w": 1
@@ -280162,7 +277842,7 @@
     },
     "right": {
      "rect": {
-      "col": 2,
+      "col": 1,
       "h": 2,
       "row": 0,
       "w": 1
@@ -280170,7 +277850,7 @@
     }
    },
    "rect": {
-    "col": 3,
+    "col": 0,
     "h": 2,
     "row": 0,
     "w": 1
@@ -281152,19 +278832,6 @@
     "w": 1
    }
   },
-  "agua/pileta_completa": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/pileta_completa.png",
-   "rect": {
-    "col": 0,
-    "row": 0,
-    "w": 6,
-    "h": 4
-   }
-  },
   "building/ayuntamiento": {
    "grid": [
     32,
@@ -281266,6 +278933,19 @@
     "w": 18
    }
   },
+  "agua/pileta_completa": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/pileta_completa.png",
+   "rect": {
+    "col": 0,
+    "row": 0,
+    "w": 6,
+    "h": 4
+   }
+  },
   "building/ayuntamiento#1": {
    "grid": [
     32,
@@ -281311,167 +278991,6 @@
     32
    ],
    "png": "art/pack/completos_1.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_1.png",
-     "rect": {
-      "col": 42,
-      "h": 12,
-      "row": 49,
-      "w": 11
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 448,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 64,
-      "row": 1930,
-      "w": 64
-     }
-    },
-    "puerta2_closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 208,
-      "h": 46,
-      "row": 228,
-      "w": 62
-     }
-    },
-    "puerta2_open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1498,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta2_opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1064,
-      "h": 46,
-      "row": 1066,
-      "w": 62
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 32,
-      "h": 64,
-      "row": 256,
-      "w": 64
-     }
-    }
-   },
    "rect": {
     "col": 42,
     "h": 12,

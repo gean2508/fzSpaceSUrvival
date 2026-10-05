@@ -796,14 +796,32 @@ fn tabla_interior(lote: &str, roll: u32) -> Option<&'static [ExtraDecor]> {
             casa[(roll % 4) as usize]
         }
         "building/tienda" | "building/mercado" | "building/shopping" => m::COCINA,
-        "building/oficina" | "building/torre" | "building/correo" => m::ESTUDIO,
+        // Oficinas: la sala de conferencias del pack (ESTUDIO es un set de televisión: tripodes y luces).
+        "building/oficina" | "building/torre" | "building/correo" => m::SALA,
         "building/escuela" | "building/universidad" => m::AULA,
         "building/hospital" | "building/hotel" => m::HOSPITAL,
         "building/comisaria" => m::CARCEL,
         "building/deposito" | "building/nave_industrial" | "building/granero"
         | "building/base_militar" | "building/bomberos" => m::SOTANO,
         "building/estacion_tren" => m::SALA,
-        _ => return None,
+        // **Todo edificio del pack tiene tema** (4 oct 2026): lo que no está en la lista de arriba se
+        // resuelve por su arquetipo (`interiores::arquetipo_de` mira el nombre de la clave).
+        otro => {
+            use crate::interiores::Arq;
+            if otro.contains("gimnasio") {
+                return Some(m::GIMNASIO);
+            }
+            match crate::interiores::arquetipo_de(otro) {
+                Arq::Vivienda => casa[(roll % 4) as usize],
+                Arq::Comercio | Arq::Restaurante => m::COCINA,
+                Arq::Gasolinera | Arq::Industrial | Arq::Granero | Arq::Bunker | Arq::Bomberos => m::SOTANO,
+                Arq::Oficina | Arq::Correo => m::SALA,
+                Arq::Hotel | Arq::Hospital => m::HOSPITAL,
+                Arq::Escuela => m::AULA,
+                Arq::Comisaria => m::CARCEL,
+                Arq::Estacion | Arq::Iglesia | Arq::Generico => m::SALA,
+            }
+        }
     })
 }
 

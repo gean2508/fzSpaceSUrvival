@@ -29,6 +29,8 @@ pub mod grueso;
 pub mod ps1_palette;
 pub mod worldgen;
 pub mod amueblado;
+pub mod interiores;
+pub mod trenes;
 /// Tablas de siembra del pack (generadas por `scripts/import-pack-masivo.py`).
 pub mod interior_siembra;
 pub mod pack_siembra;
@@ -90,6 +92,7 @@ pub mod cercas;
 pub mod roads;
 pub mod semaforos;
 pub mod rail;
+pub mod vehiculos;
 /// Barrios: distritos, parcelas de tamaño real y el programa de cada lote.
 pub mod city;
 pub mod minor_bodies;

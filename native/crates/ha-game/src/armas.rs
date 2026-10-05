@@ -128,6 +128,34 @@ pub const CAMUFLAJES: [(&str, &str); 6] = [
     ("oscura", "Materia oscura"),
 ];
 
+/// Offset de índice de las cartas de la categoría ARMAS en la paleta de CONSTRUIR (`build.rs` las intercepta).
+pub const ARMAS_PALETTE_BASE: usize = 20_000;
+
+/// Lo que vale un arma en lingotes de oro: la base es barata, el camuflaje la hace épica (Weaponized 115 y la
+/// materia oscura son las más caras), la pistola de rayos cuesta el doble. En creativo no se cobra.
+/// Mientras se aprueban las armas todo es gratis (pedido del usuario, 4 oct 2026): poné `true` para cobrar.
+const PRECIOS_ACTIVOS: bool = false;
+
+pub fn precio_en_oro(item: &str) -> u32 {
+    if !PRECIOS_ACTIVOS {
+        return 0;
+    }
+    let Some((def, camo)) = parsear(item) else { return 0 };
+    let base: u32 = match def.id {
+        "pistola" => 4,
+        "escopeta" => 8,
+        "raygun" => 20,
+        _ => 10,
+    };
+    let extra: u32 = match camo {
+        None => 0,
+        Some("115") | Some("oscura") => 40,
+        Some("singularidad") | Some("ciclon") => 28,
+        Some(_) => 18,
+    };
+    base + extra * if def.id == "raygun" { 2 } else { 1 }
+}
+
 /// Separa `gun_<arma>[__<camo>]`.
 pub fn parsear(item: &str) -> Option<(&'static ArmaDef, Option<&'static str>)> {
     let resto = item.strip_prefix("gun_")?;
@@ -280,6 +308,9 @@ struct Recarga {
 
 #[derive(Resource, Default)]
 pub struct EstadoArmas {
+    /// Modo creativo: munición infinita (ni la reserva se gasta ni la recarga la consume). Lo copia
+    /// `sync_creativo` del `UiEditorState` cada cuadro, así los sistemas de arma no piden otro recurso.
+    pub creativo: bool,
     /// Balas en el arma, por ítem.
     cargadas: HashMap<String, u32>,
     cd: f32,
@@ -324,12 +355,7 @@ pub const OIDO_DE_TIRO: f32 = 2.6;
 
 /// Una bala en vuelo. Los módulos que tienen blancos (`infectados`, `fauna`, `society`) leen estas entidades y aplican el
 /// daño a los suyos.
-///
-/// **Lleva `Transform` obligatorio**: `mover_balas` sólo ve entidades con `Bala` Y `Transform`, y una bala sin él
-/// (el capó de un coche, el frente de un tren) nunca moría ni se limpiaba: 2.000 balas fantasma tras 8 minutos
-/// parado en una ciudad, cada una probada contra todos los blancos en cada cuadro.
 #[derive(Component)]
-#[require(Transform)]
 pub struct Bala {
     /// Posición (x, z) del mundo y la del cuadro anterior.
     pub pos: Vec2,
@@ -411,6 +437,7 @@ impl Plugin for ArmasPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EstadoArmas>()
             .init_resource::<RuidoDeArma>()
+            .add_systems(Update, sync_creativo.run_if(in_state(GamePhase::Playing)).before(apuntar_y_disparar))
             .add_systems(Update, (apuntar_y_disparar, recargar, mover_balas.in_set(ArmasSet::Mover)).chain().run_if(in_state(GamePhase::Playing)))
             .add_systems(
                 Update,
@@ -469,7 +496,6 @@ fn apuntar_y_disparar(
     time: Res<Time>,
     equipped: Res<EquippedItem>,
     cursor: Res<AimCursor>,
-    (stick, mut accion): (Res<crate::input::AimStick>, ResMut<crate::pose_jugador::AccionJugador>),
     (mouse, windows, cam): (
         Res<ButtonInput<MouseButton>>,
         Query<&Window, With<PrimaryWindow>>,
@@ -523,12 +549,7 @@ fn apuntar_y_disparar(
     // El punto apuntado: el dedo en el mundo, o el mouse en escritorio.
     let mut punto: Option<Vec2> = None;
     let mut apretado = false;
-    if stick.armado && stick.activo && stick.tiene_dir {
-        // Stick de puntería: manda sobre el dedo en el mundo. Dispara sólo lejos del centro.
-        punto = Some(pos + stick.dir * 8.0);
-        apretado = stick.dispara;
-        accion.apuntar(stick.dir.y.atan2(stick.dir.x));
-    } else if cursor.targeting() && cursor.active {
+    if cursor.targeting() && cursor.active {
         punto = Some(cursor.world);
         apretado = true;
     } else if !crate::platform::uses_touch_gameplay_ui() {
@@ -581,7 +602,7 @@ fn apuntar_y_disparar(
         if flanco || def.auto {
             sfx_ui.send(PlaySfx(Sfx::DryFire));
         }
-        if inv.qty(def.calibre.item()) > 0 {
+        if estado.creativo || inv.qty(def.calibre.item()) > 0 {
             iniciar_recarga(&mut estado, def, &equipped.item_id, &inv);
         } else {
             estado.aviso = Some((format!("SIN {}", def.calibre.etiqueta().to_uppercase()), 1.6));
@@ -626,7 +647,6 @@ fn apuntar_y_disparar(
                 impacto: def.impacto,
                 rayo,
             },
-            crate::sim::UnlitSprite,
             Sprite { color, custom_size: Some(Vec2::new(largo, grueso)), ..default() },
             Transform {
                 translation: Vec3::new(boca.x, -boca.y, 18.0),
@@ -640,9 +660,6 @@ fn apuntar_y_disparar(
     if let Some(g) = glow.as_ref() {
         commands.spawn((
             Fogonazo(0.06),
-            // Un fogonazo ES luz: sin esto `light2d::attach_ground_shadows` le colgaba una sombra proyectada
-            // (el sprite mide 2 m y está sobre la capa Y-sort) — las manchas negras en el suelo al disparar.
-            crate::sim::UnlitSprite,
             Sprite {
                 image: g.0.clone(),
                 color: Color::srgba(def.estela[0], def.estela[1], (def.estela[2] + 0.2).min(1.0), 0.9),
@@ -665,7 +682,7 @@ fn iniciar_recarga(estado: &mut EstadoArmas, def: &ArmaDef, item: &str, inv: &Pl
     if dentro >= def.cargador {
         return;
     }
-    if inv.qty(def.calibre.item()) == 0 {
+    if !estado.creativo && inv.qty(def.calibre.item()) == 0 {
         estado.aviso = Some((format!("SIN {}", def.calibre.etiqueta().to_uppercase()), 1.6));
         return;
     }
@@ -686,13 +703,12 @@ fn recargar(
     mut persist: ResMut<InventoryPersistState>,
     player: Query<&Transform, With<Player>>,
     mut sfx: EventWriter<PlaySfxAt>,
-    conduccion: Res<crate::vehiculos::Conduccion>,
 ) {
     let Some((def, _)) = parsear(&equipped.item_id) else { return };
     let Ok(ptf) = player.get_single() else { return };
     let ppos = Vec2::new(ptf.translation.x, ptf.translation.y);
     // Pedido de recarga: tecla R o el botón USAR (que dice RECARGAR).
-    if !gameplay_block.blocked && (keys.just_pressed(KeyCode::KeyR) || (acciones.use_edge && !conduccion.boton_activo())) {
+    if !gameplay_block.blocked && (keys.just_pressed(KeyCode::KeyR) || acciones.use_edge) {
         iniciar_recarga(&mut estado, def, &equipped.item_id, &inv);
     }
     let dt = time.delta_secs();
@@ -720,11 +736,18 @@ fn recargar(
     let item = r.item.clone();
     let ammo = def.calibre.item();
     let dentro = estado.cargadas.get(&item).copied().unwrap_or(0);
-    let pasan = (def.cargador - dentro.min(def.cargador)).min(inv.qty(ammo));
+    // En creativo la reserva es infinita: se llena el cargador sin gastar nada de la mochila.
+    let pasan = if estado.creativo {
+        def.cargador - dentro.min(def.cargador)
+    } else {
+        (def.cargador - dentro.min(def.cargador)).min(inv.qty(ammo))
+    };
     if pasan > 0 {
-        crate::hud::inventory_ui::remove_from_slots(&mut inv_ui, ammo, pasan);
-        crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
-        persist.mark_dirty();
+        if !estado.creativo {
+            crate::hud::inventory_ui::remove_from_slots(&mut inv_ui, ammo, pasan);
+            crate::hud::inventory_ui::flush_slots_to_inventory(&inv_ui, &mut inv);
+            persist.mark_dirty();
+        }
         estado.cargadas.insert(item, dentro + pasan);
     }
     estado.recarga = None;
@@ -820,7 +843,6 @@ pub fn chispa_de_impacto(commands: &mut Commands, en: Vec2, color: Color) {
         let a = k as f32 * 1.7 + en.x * 3.1;
         commands.spawn((
             Chispa { vel: Vec2::new(a.cos(), a.sin()) * 2.2, vida: 0.22 },
-            crate::sim::UnlitSprite,
             Sprite { color, custom_size: Some(Vec2::splat(0.14)), ..default() },
             Transform::from_xyz(en.x, -en.y, 18.2),
         ));
@@ -873,8 +895,6 @@ fn visual_del_arma(
     equipped: Res<EquippedItem>,
     art: Res<crate::art2d::ArtLibrary>,
     cursor: Res<AimCursor>,
-    stick: Res<crate::input::AimStick>,
-    conduccion: Res<crate::vehiculos::Conduccion>,
     estado: Res<EstadoArmas>,
     player: Query<(&Transform, &PlayerVisual), (With<Player>, Without<ArmaVisual>, Without<MiraDeArma>)>,
     mut visual: Query<(Entity, &mut Transform, &mut Sprite, &mut Visibility, &Name), (With<ArmaVisual>, Without<MiraDeArma>)>,
@@ -898,7 +918,6 @@ fn visual_del_arma(
     let apuntando = cursor.targeting() && cursor.active;
     // El arma apunta al blanco del apuntado asistido si lo hay; si no, al dedo; si no, al frente.
     let dir = match estado.mira_en {
-        _ if stick.activo && stick.tiene_dir => stick.dir,
         Some((p, _)) => (p - pos).normalize_or_zero(),
         None if apuntando => (cursor.world - pos).normalize_or_zero(),
         None => Vec2::ZERO,
@@ -918,7 +937,7 @@ fn visual_del_arma(
             if let Some((mut sprite, _)) = art.world_sprite(&clave, tam) {
                 sprite.custom_size = Some(tam);
                 sprite.anchor = bevy::sprite::Anchor::Custom(Vec2::new(ag.agarre[0] / ag.tam[0] - 0.5, 0.5 - ag.agarre[1] / ag.tam[1]));
-                commands.spawn((ArmaVisual, crate::light2d::ShadowChecked, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
+                commands.spawn((ArmaVisual, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
             }
         }
     }
@@ -929,7 +948,7 @@ fn visual_del_arma(
     for (_, mut tf, mut s, mut vis, _) in &mut visual {
         // El arma se agarra con la mano que dibuja la hoja (`manos.rs`): sin mano a la vista (nadando, comiendo,
         // sentado) no se dibuja, y mirando hacia arriba queda detrás del cuerpo.
-        if !mano.vigente || conduccion.activa() {
+        if !mano.vigente {
             *vis = Visibility::Hidden;
             continue;
         }
@@ -938,10 +957,7 @@ fn visual_del_arma(
         tf.translation = Vec3::new(
             mano.pos.x + retro.x,
             mano.pos.y - retro.y,
-            // **Siempre al frente del cuerpo.** Con `mano.detras` (mirando arriba) el arma se dibujaba DETRÁS del torso:
-            // caminando hacia el norte parecía colgada a la espalda y al frenar —pose de apuntar, mano de frente— saltaba
-            // al frente. Un arma empuñada se ve siempre, gire hacia donde gire el cuerpo.
-            mano.z + crate::manos::DZ,
+            if mano.detras { mano.z - crate::manos::DZ } else { mano.z + crate::manos::DZ },
         );
         // Mirando a la izquierda el sprite se espeja (en vertical) para no quedar patas arriba; el agarre
         // se espeja con él.
@@ -962,7 +978,7 @@ fn visual_del_arma(
     if apuntando || estado.mira_en.is_some() {
         if mira.is_empty() {
             if let Some((sprite, _)) = art.world_sprite("ui/crosshair", Vec2::splat(0.8)) {
-                commands.spawn((MiraDeArma, crate::sim::UnlitSprite, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
+                commands.spawn((MiraDeArma, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
             }
         }
         for (_, mut tf, mut s) in &mut mira {
@@ -1016,7 +1032,7 @@ fn hud_armas(
         return;
     };
     let dentro = estado.cargadas_de(&equipped.item_id).unwrap_or(def.cargador);
-    let reserva = inv.qty(def.calibre.item());
+    let reserva = if estado.creativo { "∞".to_string() } else { inv.qty(def.calibre.item()).to_string() };
     let texto = if let Some(r) = &estado.recarga {
         format!("{} · RECARGANDO {}%", def.nombre, ((r.t / r.total.max(0.01)) * 100.0).min(100.0) as u32)
     } else if let Some((m, _)) = &estado.aviso {
@@ -1130,5 +1146,12 @@ mod tests {
         assert!((distancia_a_segmento(Vec2::new(5.0, 3.0), a, b) - 3.0).abs() < 1e-4);
         assert!((distancia_a_segmento(Vec2::new(-4.0, 3.0), a, b) - 5.0).abs() < 1e-4);
         assert!((distancia_a_segmento(Vec2::new(1.0, 1.0), a, a) - 2f32.sqrt()).abs() < 1e-4);
+    }
+}
+
+/// Copia el modo creativo del editor al estado de armas (ver `EstadoArmas::creativo`).
+fn sync_creativo(editor: Res<crate::ui_editor::UiEditorState>, mut estado: ResMut<EstadoArmas>) {
+    if estado.creativo != editor.creative {
+        estado.creativo = editor.creative;
     }
 }

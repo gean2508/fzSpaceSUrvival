@@ -7,7 +7,7 @@ pub const CASAS_DEL_PACK: &[(&str, &[(i64, i64)])] = &[
     ("building/casa_chica", &[(12, 15), (12, 16), (13, 10)]),
     ("building/casa_mediana", &[(15, 14), (16, 14)]),
     ("building/casa_grande", &[(18, 16)]),
-    ("building/casa_country", &[(23, 14)]),
+    ("building/casa_country", &[(18, 22), (23, 14)]),
     ("building/villa", &[(9, 13)]),
     ("building/duplex", &[(16, 18)]),
 ];

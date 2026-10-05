@@ -238,7 +238,15 @@ pub fn block_size(style: CityStyle, tier: SettlementTier) -> i64 {
 /// hacia dónde apunta mi carril?", y eso sale del mismo mapa determinista que
 /// dibuja las calles.
 pub fn lane_at(body: CelestialBody, tx: i64, tz: i64) -> Option<u8> {
-    let calzada = |x: i64, z: i64| es_calzada(body, x, z);
+    carril_con(&|x: i64, z: i64| es_calzada(body, x, z), tx, tz)
+}
+
+/// [`lane_at`] con la calzada dada por quien pregunta. La REGLA es una sola; lo
+/// que cambia es de dónde sale "acá hay calzada": el mundo celda a celda, o los
+/// tiles ya cargados del cliente (`ha-game/src/vehiculos.rs`), que es lo que
+/// permite que un conductor la consulte veinte veces por segundo sin recalcular
+/// la geografía.
+pub fn carril_con(calzada: &impl Fn(i64, i64) -> bool, tx: i64, tz: i64) -> Option<u8> {
     if !calzada(tx, tz) {
         return None;
     }
@@ -246,10 +254,10 @@ pub fn lane_at(body: CelestialBody, tx: i64, tz: i64) -> Option<u8> {
     // `es_eje_con` encuentra el eje pintado, así que el carril y la línea
     // divisoria no pueden discrepar: la línea cae donde los dos lados empatan, y
     // es exactamente ahí donde el sentido cambia.
-    let n = calzada_seguida(&calzada, tx, tz, 0, -1);
-    let s = calzada_seguida(&calzada, tx, tz, 0, 1);
-    let w = calzada_seguida(&calzada, tx, tz, -1, 0);
-    let e = calzada_seguida(&calzada, tx, tz, 1, 0);
+    let n = calzada_seguida(calzada, tx, tz, 0, -1);
+    let s = calzada_seguida(calzada, tx, tz, 0, 1);
+    let w = calzada_seguida(calzada, tx, tz, -1, 0);
+    let e = calzada_seguida(calzada, tx, tz, 1, 0);
     // ¿La calle corre en X o en Z? Corre en el eje por el que SIGUE, que es el
     // que llega más lejos: en una calle este-oeste chocás con la vereda al norte
     // y al sur a media calzada, y al este y al oeste no chocás nunca.
@@ -268,6 +276,13 @@ pub fn lane_at(body: CelestialBody, tx: i64, tz: i64) -> Option<u8> {
         // ESTE (`w >= e`: más calzada al oeste) va al norte.
         Some(if w >= e { 2 } else { 6 })
     }
+}
+
+/// **¿La celda está dentro de un cruce?** Versión pública de la regla con la que
+/// se pintan las sendas (ver `es_cruce_con`): la calzada no se acaba en ninguna de
+/// las cuatro direcciones. La usa el conductor para decidir si sigue o dobla.
+pub fn cruce_con(calzada: &impl Fn(i64, i64) -> bool, tx: i64, tz: i64) -> bool {
+    calzada(tx, tz) && es_cruce_con(calzada, tx, tz)
 }
 
 /// **El semáforo de una esquina**: hacia dónde MIRA el que va acá, o `None` si en
@@ -916,6 +931,26 @@ mod tests {
     /// terrazas, una carretera podía toparse de frente con una pared de 2.5 m y
     /// quedarse ahí. `relief::in_pass_band` abre rampa donde hay calzada, y esto lo
     /// comprueba sobre medio planeta, celda a celda.
+    /// Blindaje (4 oct 2026): el canto de un acantilado no le cae encima a una calzada ni a una
+    /// acera de la celda de arriba. Ver `topdown_tile`: ahí el canto se vuelve rampa.
+    #[test]
+    fn ningun_acantilado_tapa_una_calzada_de_arriba() {
+        use crate::topdown::{topdown_tile, Tile};
+        let body = CelestialBody::Earth;
+        // Ventana de 800 × 800 alrededor del origen: cubre ciudades y rutas sin recorrer toda la Tierra.
+        let r = 400i64;
+        let mut malos = Vec::new();
+        for tz in (-r..r).step_by(2) {
+            for tx in (-r..r).step_by(2) {
+                let arriba = crate::geography::civil_at(body, tx, tz - 1);
+                if matches!(arriba, Some(_)) && topdown_tile(body, 0, tx, tz) == Tile::Cliff {
+                    malos.push((tx, tz));
+                }
+            }
+        }
+        assert!(malos.is_empty(), "acantilados bajo una calzada/acera en {:?}", &malos[..malos.len().min(8)]);
+    }
+
     #[test]
     fn no_road_is_ever_blocked_by_a_cliff() {
         use crate::topdown::{topdown_tile, Tile};
@@ -1472,3 +1507,92 @@ mod tests {
     }
 }
 
+
+/// **Una carretera que no llega a ningún lado no es una carretera.**
+///
+/// Los demás tests miran la calzada celda a celda (sin acantilados, con línea,
+/// con carriles); éste mira lo que un conductor necesita: que desde el centro de
+/// un núcleo se pueda LLEGAR en auto al centro del vecino siguiendo sólo asfalto
+/// y puentes, sin saltos. Sale de una inundación sobre las celdas transitables
+/// ([`is_drivable_at`] y que el tile final no sea sólido), que es exactamente
+/// por donde puede ir un vehículo.
+#[cfg(test)]
+mod tests_conectividad {
+    use super::*;
+    use crate::topdown::topdown_tile;
+    use std::collections::{HashSet, VecDeque};
+
+    fn transitable(body: CelestialBody, tx: i64, tz: i64) -> bool {
+        is_drivable_at(body, tx, tz) && !topdown_tile(body, 0, tx, tz).solid()
+    }
+
+    /// Inunda desde `a` y devuelve si alcanza `b` (y cuántas celdas visitó).
+    fn alcanza(body: CelestialBody, a: (i64, i64), b: (i64, i64)) -> (bool, usize) {
+        // Se acota a la caja que une los dos núcleos con un margen: el enlace
+        // sale del eje del núcleo y dobla una sola vez dentro de ella.
+        let (x0, x1) = (a.0.min(b.0) - 80, a.0.max(b.0) + 80);
+        let (z0, z1) = (a.1.min(b.1) - 80, a.1.max(b.1) + 80);
+        // Se parte de la celda transitable más cercana al centro (el centro puede
+        // caer en una plaza o en una manzana).
+        let mut ini = None;
+        'b: for r in 0..40i64 {
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    if dx.abs().max(dz.abs()) == r && transitable(body, a.0 + dx, a.1 + dz) {
+                        ini = Some((a.0 + dx, a.1 + dz));
+                        break 'b;
+                    }
+                }
+            }
+        }
+        let Some(ini) = ini else { return (false, 0) };
+        let mut visto: HashSet<(i64, i64)> = HashSet::new();
+        let mut cola = VecDeque::new();
+        visto.insert(ini);
+        cola.push_back(ini);
+        while let Some((x, z)) = cola.pop_front() {
+            if (x - b.0).abs() <= 40 && (z - b.1).abs() <= 40 {
+                return (true, visto.len());
+            }
+            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let p = (x + dx, z + dz);
+                if p.0 < x0 || p.0 > x1 || p.1 < z0 || p.1 > z1 || visto.contains(&p) {
+                    continue;
+                }
+                if transitable(body, p.0, p.1) {
+                    visto.insert(p);
+                    cola.push_back(p);
+                }
+            }
+        }
+        (false, visto.len())
+    }
+
+    #[test]
+    fn de_cada_nucleo_se_llega_en_auto_al_vecino() {
+        let body = CelestialBody::Earth;
+        let mut pares = 0;
+        let mut rotos: Vec<String> = Vec::new();
+        'todo: for sx in -3..=3i64 {
+            for sz in -3..=3i64 {
+                let Some(a) = crate::geography::settlement_in(body, sx, sz) else { continue };
+                for (nx, nz) in [(sx + 1, sz), (sx, sz + 1)] {
+                    let Some(b) = crate::geography::settlement_in(body, nx, nz) else { continue };
+                    pares += 1;
+                    let (ok, vistas) = alcanza(body, a.center, b.center);
+                    if !ok {
+                        rotos.push(format!(
+                            "{:?} {:?} -> {:?} {:?}: se acaba tras {vistas} celdas",
+                            a.tier, a.center, b.tier, b.center
+                        ));
+                    }
+                    if pares >= 12 {
+                        break 'todo;
+                    }
+                }
+            }
+        }
+        assert!(pares >= 3, "sólo {pares} pares de núcleos vecinos");
+        assert!(rotos.is_empty(), "carreteras cortadas ({} de {pares}):\n{}", rotos.len(), rotos.join("\n"));
+    }
+}

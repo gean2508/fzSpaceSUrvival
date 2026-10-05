@@ -55,6 +55,8 @@ const ARCHIVOS: &[&str] = &[
     "colony.json",
     "edificios.json",
     "escaleras.json",
+    "pandemia.json",
+    "puertas_edificios.json",
     "harvested.json",
     "inventory.json",
     "machines.json",
