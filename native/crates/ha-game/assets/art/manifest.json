@@ -117548,12 +117548,142 @@
     32,
     32
    ],
-   "png": "art/pack/terrains_and_fences_0.png",
+   "png": "art/pack/cercas.png",
    "rect": {
-    "col": 26,
-    "h": 1,
-    "row": 8,
+    "col": 13,
+    "h": 2,
+    "row": 0,
     "w": 1
+   },
+   "poses": {
+    "es": {
+     "rect": {
+      "col": 12,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ew": {
+     "rect": {
+      "col": 13,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ew@s": {
+     "rect": {
+      "col": 13,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ew@s#2": {
+     "rect": {
+      "col": 14,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ne": {
+     "rect": {
+      "col": 15,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ns": {
+     "rect": {
+      "col": 0,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@e": {
+     "rect": {
+      "col": 0,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@e#2": {
+     "rect": {
+      "col": 1,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@w": {
+     "rect": {
+      "col": 2,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@w#2": {
+     "rect": {
+      "col": 3,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "nw": {
+     "rect": {
+      "col": 4,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "s": {
+     "rect": {
+      "col": 5,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "s#2": {
+     "rect": {
+      "col": 6,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "sw": {
+     "rect": {
+      "col": 7,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "solo": {
+     "rect": {
+      "col": 5,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ew@n": {
+     "rect": {
+      "col": 13,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    }
    }
   },
   "fence/alambre_de_puas_abajo_esquina_derecha": {
@@ -120135,12 +120265,142 @@
     32,
     32
    ],
-   "png": "art/pack/terrains_and_fences_0.png",
+   "png": "art/pack/cercas.png",
    "rect": {
-    "col": 10,
+    "col": 13,
     "h": 2,
-    "row": 4,
+    "row": 0,
     "w": 1
+   },
+   "poses": {
+    "es": {
+     "rect": {
+      "col": 12,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ew": {
+     "rect": {
+      "col": 13,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ew@s": {
+     "rect": {
+      "col": 13,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ew@s#2": {
+     "rect": {
+      "col": 14,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ne": {
+     "rect": {
+      "col": 15,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    },
+    "ns": {
+     "rect": {
+      "col": 0,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@e": {
+     "rect": {
+      "col": 0,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@e#2": {
+     "rect": {
+      "col": 1,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@w": {
+     "rect": {
+      "col": 2,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ns@w#2": {
+     "rect": {
+      "col": 3,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "nw": {
+     "rect": {
+      "col": 4,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "s": {
+     "rect": {
+      "col": 5,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "s#2": {
+     "rect": {
+      "col": 6,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "sw": {
+     "rect": {
+      "col": 7,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "solo": {
+     "rect": {
+      "col": 5,
+      "h": 2,
+      "row": 2,
+      "w": 1
+     }
+    },
+    "ew@n": {
+     "rect": {
+      "col": 13,
+      "h": 2,
+      "row": 0,
+      "w": 1
+     }
+    }
    }
   },
   "fence/obra_cerca_1": {

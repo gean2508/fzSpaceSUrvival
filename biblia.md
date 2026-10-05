@@ -5439,7 +5439,7 @@ Los tres números que sostienen todo se midieron y el script los vuelve a verifi
 en cada corrida (`verificar_estructura`):
 
 ```
-MODULO   =    9 celdas   el frente de un edificio modular
+MODULO   =    7 celdas   el frente de un edificio modular (el bloque de la hoja mide 9: ver §21)
 PERIODO  = 2432 px       lo que ocupa un TEMA completo
 Y0       =  504 px       dónde arranca el primero
 ```
@@ -9314,8 +9314,12 @@ joystick derecho para apuntar y disparar» y «que los NPC conduzcan, como en GT
   4. Un callejón sin salida **no se gira en U** (un coche no gira 180° en 7 m): se detiene y se retira (de inmediato si nadie lo ve).
   5. Centrado en el carril con la desviación CONTINUA (se resta lo que el coche ya está corrido dentro de su celda): con el escalón por
      celda serpenteaba.
+* **Clases** (`vehiculos::Clase`): coche, ambulancia, camión, basura, **helicóptero** y **lancha** (estos dos aparecen ocasionalmente,
+  `aparecer_otros`; la lancha sólo en agua, el helicóptero vuela sobre todo). Todas se suben, se manejan, chocan contra el terreno (`choca`) y
+  se destruyen a balazos. Driver `HA_VEHTEST=ambulancia,camion,basura,helicoptero,lancha` (cada clase: aparece → se dibuja → se sube → maneja ≥ 5 m
+  en 6 s → se baja → se destruye). Medido en PC (render por software, UNA corrida): ambulancia 39 m, camión 24, basura 20, helicóptero 63, lancha 16.
 * **No existe todavía**: semáforos que se respeten, peatones que esquiven coches, sonido de motor/choque propio (se reusan
-  `Crumble`/`BulletWall`), lanchas ni helicópteros manejables (`vehicle/helicoptero_*` es un teléfono público del pack, no un helicóptero).
+  `Crumble`/`BulletWall`); `vehicle/moto` y `vehicle/bici` siguen sin arte (falla `ningun_slot_se_queda_sin_pixel`, preexistente).
 
 ### Trenes (`ha-shared/src/rail.rs` + `ha-game/src/trenes.rs`)
 
@@ -9347,6 +9351,57 @@ Sólo existe con un arma de fuego en la mano. Fuera de la zona muerta (18 %, rad
 stick (y su cuerpo mira ahí aunque camine para otro lado: `AccionJugador::apuntar`); pasado el 62 % **dispara** y deja de disparar bajo el 45 %
 (histéresis); de vuelta al centro conserva el último rumbo sin disparar. Mismo arte que el joystick de caminar (`ui/joystick_*`), tinte rojizo al
 disparar; sus dedos no llegan al mundo (`world_touch` los ignora vía `AimStick::cubre`). Números sin medir con un pulgar: perillas en el módulo.
+
+### Pandemia (`ha-game/src/pandemia.rs`)
+
+Los infectados que muerden a un vecino lo **contagian** (`Contagiado`, 55 % si la mordida no mata) y un vecino que muere de eso se **levanta como
+infectado** (60 %, `infectados::levantar`). Si el que muerde al jugador es un infectado, el jugador queda con **fiebre** (`Infeccion`). Sin pruebas
+de ciclo completo todavía: sólo compila y corre dentro de los drivers existentes.
+
+### Fachadas modulares: el módulo mide 7, no 9 (5 oct 2026)
+
+Reporte del usuario (con captura): *«todas las casas y edificios tienen el bug: en la hoja venían el módulo del centro y a los lados otros módulos para
+agrandarlo o cambiar la tienda, y el importador lo tomó todo como una sola pieza»*. Medido: cada banda de `5_Floor_Modular_Buildings` se dibuja en un
+bloque de 9 celdas **con UNA celda de módulo vecino por lado** (saltos de luminancia 46–58 en las columnas 31|32 y 255|256 de las tres temas). La banda
+real mide **224 px = 7 celdas**; los pedazos de los costados eran un cajero/ventana a medio dibujar pegado a cada pilar.
+`ha_shared::edificio::MODULO` pasó de 9 a **7**; `scripts/import-modulares.py` parte la hoja de a 9 (`PASO_HOJA`) y recorta el sangrado, y
+`scripts/recortar-modulares.py` hace lo mismo sobre un manifest ya importado (92 bandas; corre `puerta*_en_sprite` 32 px). `planos.rs` (cuartos de 7,
+puertas en 0/7/14) y `LOT_PROGRAMS` (torre 16, oficina 23, hotel 30, tienda 9, shopping 30, dúplex 39: `huella` = múltiplo de 7) se reescalaron.
+`building::LOCALES` perdió `tienda_discos/galletas/juguetes/cerrada` (miden 6 celdas, dejaban un hueco al costado). Capturas `HA_VISTATEST`:
+sin cajeros sobrantes, pilares continuos entre módulos.
+
+### Las ciudades son una plataforma (5 oct 2026)
+
+*«Acantilados tapando calles dentro de las ciudades.»* `relief::plataforma_de_ciudad`: dentro del casco (+24 tiles) el campo se lleva al de su centro y el
+ruido se apaga; hacia afuera se funde en un anillo de 160 tiles. La playa (primer escalón sobre el mar) y el agua conservan el relieve natural
+(`ninguna_calle_ni_vereda_sobre_el_agua` sigue verde). Medido (`tests/medir_acantilados_ciudad.rs --ignored`, stride 3, 8 ciudades de la Tierra):
+celdas con relieve dentro del casco **2,02 % → 0,11 %** (lo que queda es la costa). ⚠ La ladera urbana con escaleras y caños (`HA_RELIEVETEST` «urbano»)
+ya casi no existe: era justo el acantilado en medio de la ciudad.
+
+### Fugas que hacían lag parado en la ciudad (5 oct 2026) — medido con `HA_ENTSTEST=600`
+
+Parado 8 minutos en Ciudad Central las entidades subían de 6.200 a **15.400** y no paraban. Tres causas, las tres arregladas:
+1. **`Bala` sin `Transform`**: el capó de un coche (`vehiculos::atropellar`) y el frente de un tren eran `Bala` sueltas; `mover_balas` sólo ve `Bala + Transform`,
+   así que **nunca morían** (2.190 balas fantasma, cada una probada contra todos los blancos en cada cuadro, y destruyendo coches del tránsito → humo).
+   Ahora `Bala` declara `#[require(Transform)]`.
+2. **`weather::sync_weather_audio` creaba un loop de lluvia por cuadro** mientras el `AudioSink` no existía (un cuadro después, o nunca sin dispositivo de audio): 1.700 `RainLoop`.
+3. (consecuencia de 1) cientos de `Humo` de coches destruidos en cadena.
+Después: **10.600 entidades planas durante 8 minutos**. `HA_ENTSTEST=segundos` imprime los arquetipos más poblados cada 30 s.
+
+### Parcelas: cercas, pileta, interiores (5 oct 2026)
+
+* **Borde de tierra en vez de cerca**: `fence/madera` y `fence/alambre` habían perdido sus poses (sólo `fence/reja` las conservaba) → `tile_has_art` falso → el
+  perímetro de cada parcela era la franja marrón del tile. `scripts/cercas-reparar.py` les reparte las poses medidas de `reja` (+ `solo`, `ew@n`) mientras no haya hoja cruda.
+* **Pileta de borde roto**: el muro de ribera (`spawn_chunk_muelle`) se plantaba también alrededor de la pileta de 4×2; ahora sólo con agua de verdad (≥ 70 celdas en 15×15, `agua_de_verdad`).
+* **Ventanas del muro del fondo cortadas**: `window/basic` es 1×2 con la fila de arriba transparente; ahora se dibuja el paño del estilo de la casa debajo.
+* **Sombras de adentro**: un techo que se desvanece se lleva su sombra (alfa del dueño) y dentro de la casa (`building::CasaActual`) no hay sol: sólo sombra de contacto.
+* **Una puerta por módulo** en edificios modulares (`city::es_modular`, `puerta_del_frente`): antes las puertas dibujadas de los módulos laterales no se podían cruzar.
+* Drivers nuevos: `HA_ENTRARTEST` (3 edificios reales: entra y sale por la puerta), `HA_POOLTEST` (foto de una pileta real, `HA_ESPERA=segundos`), `HA_PANDEMIATEST`.
+  ⚠ `HA_PARTIDA_NUEVA` sortea un mundo distinto cada corrida: para repetir usar `HA_SEMILLA=n`.
+
+### `HA_VISTATEST="x,z;x,z"`
+
+Teletransporta, espera el mundo y deja `vista-N.png` en cada sitio. Para mirar fachadas, calles y relieve sin escribir un driver nuevo.
 
 ### Otros arreglos del 5 oct
 

@@ -174,6 +174,7 @@ pub struct BuildingPlugin;
 impl Plugin for BuildingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BuiltRoofs>()
+            .init_resource::<CasaActual>()
             .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), load_roofs_on_startup)
             .add_systems(
                 Update,
@@ -1168,14 +1169,21 @@ impl<'a> IntoIterator for &'a BuiltRoofs {
 
 /// El corazón de F4: jugador dentro del footprint (+1 de margen) → el techo se
 /// desvanece a `ROOF_ALPHA_INSIDE`; afuera → vuelve a opaco. Lerp suave por dt.
+/// El rectángulo `[x0, z0, x1, z1]` (tiles) de la casa en la que está el jugador, si está adentro. Lo lee `light2d`: adentro
+/// no entra el sol, así que las sombras de lo que hay en esa casa son sólo de contacto (nada de rombos alargados).
+#[derive(Resource, Default)]
+pub struct CasaActual(pub Option<[f32; 4]>);
+
 fn fade_roofs(
     time: Res<Time>,
     player: Query<&Transform, With<Player>>,
     mut roofs: Query<(&BuildingRoof, &mut Sprite)>,
+    mut actual: ResMut<CasaActual>,
 ) {
     let Ok(player_tf) = player.get_single() else {
         return;
     };
+    let mut adentro = None;
     let ptx = player_tf.translation.x / TILE_M;
     let ptz = -player_tf.translation.y / TILE_M;
     let k = 1.0 - (-ROOF_FADE_RATE * time.delta_secs()).exp();
@@ -1184,11 +1192,17 @@ fn fade_roofs(
             && ptx <= (roof.min.0 + roof.w + 1) as f32
             && ptz >= (roof.min.1 - 1) as f32
             && ptz <= (roof.min.1 + roof.h + 1) as f32;
+        if inside {
+            adentro = Some([roof.min.0 as f32, roof.min.1 as f32, (roof.min.0 + roof.w) as f32, (roof.min.1 + roof.h) as f32]);
+        }
         let target = if inside { ROOF_ALPHA_INSIDE } else { 1.0 };
         let a = sprite.color.alpha();
         if (a - target).abs() > 0.002 {
             sprite.color.set_alpha(a + (target - a) * k);
         }
+    }
+    if actual.0 != adentro {
+        actual.0 = adentro;
     }
 }
 

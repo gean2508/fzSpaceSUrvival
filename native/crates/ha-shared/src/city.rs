@@ -1195,9 +1195,18 @@ pub fn puerta_del_frente(clave: &str, x: i64, w: i64) -> i64 {
     if es_hilera(clave) {
         // La primera vivienda de la fila: su puerta está en el medio de SU tramo.
         x + ANCHO_DE_HILERA / 2 - 1
+    } else if es_modular(clave) && w % crate::edificio::MODULO == 0 {
+        // Edificio modular: una puerta por módulo (ver `plain_building_tile`); la de referencia es la del módulo del medio.
+        let m = crate::edificio::MODULO;
+        x + (w / m / 2) * m + m / 2
     } else {
         x + w / 2
     }
+}
+
+/// ¿Este programa de lote se compone con el kit modular (una puerta por módulo)?
+pub fn es_modular(key: &str) -> bool {
+    LOTES_MODULARES.iter().any(|(k, _, _)| *k == key)
 }
 
 /// ¿Este programa de lote es una hilera de viviendas pegadas?
@@ -1932,8 +1941,16 @@ fn plain_building_tile(p: &LotProgram, lot: Lot, lx: i64, lz: i64, h: u32) -> Op
     }
     // Puerta al frente, de dos tiles: misma razón que en la casa — la calzada gana
     // sobre lo edificado y un portal de una sola celda se puede quedar sin ella.
-    if rz == bd - 1 && bw >= 4 && (rx == bw / 2 || rx == bw / 2 - 1) {
-        return Some(Tile::Door);
+    // **Edificio modular: una puerta por MÓDULO** (la banda del pack dibuja una en cada uno, y una puerta dibujada por la
+    // que no se pasa es el bug). Cae en el centro del módulo, que es donde la tiene el arte; con un solo módulo coincide
+    // con la de siempre. Los demás edificios llevan una al medio.
+    let modular = es_modular(p.key);
+    if rz == bd - 1 && bw >= 4 {
+        let m = crate::edificio::MODULO;
+        let puerta = if modular && bw % m == 0 { matches!(rx % m, 2 | 3) } else { rx == bw / 2 || rx == bw / 2 - 1 };
+        if puerta {
+            return Some(Tile::Door);
+        }
     }
     let corner = (rx == 0 || rx == bw - 1) && (rz == 0 || rz == bd - 1);
     // Vidriera: el comercio tiene MUCHO más vidrio que una nave industrial, y esa

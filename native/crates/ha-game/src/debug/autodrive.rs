@@ -322,6 +322,22 @@ impl Plugin for AutoDrivePlugin {
         if crate::flags::var("HA_TRENTEST").is_ok() {
             app.add_systems(Update, tren_test_drive.before(aplicar_actuacion_del_driver));
         }
+        // **La pandemia: contagio de un vecino y fiebre del jugador.** HA_PANDEMIATEST=1 — ver `pandemia_test_drive`.
+        if crate::flags::var("HA_PANDEMIATEST").is_ok() {
+            app.add_systems(Update, pandemia_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        // **Entidades por arquetipo, parado en la ciudad.** HA_ENTSTEST=segundos — ver `ents_test_drive`.
+        if crate::flags::var("HA_ENTSTEST").is_ok() {
+            app.add_systems(Update, ents_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        // **La pileta y la cerca de una parcela real.** HA_POOLTEST=1 — ver `pileta_test_drive`.
+        if crate::flags::var("HA_POOLTEST").is_ok() {
+            app.add_systems(Update, pileta_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        // **Entrar y salir de las casas por la puerta.** HA_ENTRARTEST=1 — ver `entrar_test_drive`.
+        if crate::flags::var("HA_ENTRARTEST").is_ok() {
+            app.add_systems(Update, entrar_test_drive.before(aplicar_actuacion_del_driver));
+        }
         // **Una foto en cada sitio.** HA_VISTATEST="x,z;x,z" — ver `vista_test_drive`.
         if crate::flags::var("HA_VISTATEST").is_ok() {
             app.add_systems(Update, vista_test_drive.before(aplicar_actuacion_del_driver));
@@ -8443,5 +8459,375 @@ fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
             st.i += 1;
             st.paso = 0;
         }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_ENTRARTEST — tres edificios REALES de la ciudad: se camina de la vereda a adentro por la puerta, y de vuelta
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct EntrarTest {
+    sitios: Vec<ha_shared::geography::BuildingSite>,
+    i: usize,
+    paso: u32,
+    t0: f32,
+    espera: f32,
+    fallo: bool,
+}
+
+fn entrar_test_drive(world: &mut World, mut st: Local<EntrarTest>) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    let body = ha_shared::CelestialBody::Earth;
+    let dir = flytest_dir();
+    if st.sitios.is_empty() && st.paso == 0 {
+        // Tres edificios con puerta de verdad (celda `Door`), de tamaños distintos, cerca del centro de Ciudad Central.
+        let (cx, cz) = (9600i64, 2400i64);
+        let mut vistos = std::collections::BTreeSet::new();
+        let mut halladas: Vec<ha_shared::geography::BuildingSite> = Vec::new();
+        'busca: for r in (0..600i64).step_by(3) {
+            for k in (-r..=r).step_by(3) {
+                for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
+                    let Some(b) = ha_shared::geography::building_at(body, x, z) else { continue };
+                    if !vistos.insert(b.min) {
+                        continue;
+                    }
+                    if ha_shared::topdown::topdown_tile(body, 0, b.door.0, b.door.1) != ha_shared::topdown::Tile::Door {
+                        continue;
+                    }
+                    if halladas.iter().any(|h| h.w == b.w) {
+                        continue;
+                    }
+                    halladas.push(b);
+                    if halladas.len() == 3 {
+                        break 'busca;
+                    }
+                }
+            }
+        }
+        if halladas.is_empty() {
+            eprintln!("ha-verify: ENTRARTEST FAIL (no hay edificios con puerta)");
+            std::process::exit(1);
+        }
+        eprintln!("ha-entrartest: {} edificios: {:?}", halladas.len(), halladas.iter().map(|b| (b.min, b.w, b.h, b.door)).collect::<Vec<_>>());
+        st.sitios = halladas;
+    }
+    if st.i >= st.sitios.len() {
+        if st.paso != 99 {
+            st.paso = 99;
+            st.t0 = now;
+        } else if now - st.t0 > 3.0 {
+            eprintln!("ha-verify: ENTRARTEST {}", if st.fallo { "FAIL" } else { "DONE" });
+            std::process::exit(if st.fallo { 1 } else { 0 });
+        }
+        return;
+    }
+    let b = st.sitios[st.i];
+    let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+    match st.paso {
+        0 => {
+            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+            teleport_a_celda(world, b.door.0 as f32 + 0.5, b.door.1 as f32 + 4.5);
+            st.paso = 1;
+            st.t0 = now;
+            st.espera = now;
+        }
+        1 => {
+            if !mundo_listo(world) && now - st.espera < 90.0 {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 < 3.0 {
+                return;
+            }
+            shot(world, &format!("{dir}/entrar-{}-0-afuera.png", st.i));
+            st.paso = 2;
+            st.t0 = now;
+        }
+        2 => {
+            // Hacia el norte (adentro), derecho por la puerta.
+            let dx = (b.door.0 as f32 + 0.5 - px).clamp(-1.0, 1.0);
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(dx, -1.0);
+            if pz < b.door.1 as f32 - 1.5 {
+                eprintln!("ha-entrartest: edificio {} — entró ({px:.1}, {pz:.1}), puerta {:?}", st.i, b.door);
+                shot(world, &format!("{dir}/entrar-{}-1-adentro.png", st.i));
+                st.paso = 3;
+                st.t0 = now;
+            } else if now - st.t0 > 12.0 {
+                report_bug("casa", "se_entra", &format!("edificio {:?}: en 12 s no pasó la puerta {:?} (quedó en {px:.1},{pz:.1})", b.min, b.door));
+                st.fallo = true;
+                st.i += 1;
+                st.paso = 0;
+            }
+        }
+        3 => {
+            if now - st.t0 < 2.0 {
+                return;
+            }
+            let dx = (b.door.0 as f32 + 0.5 - px).clamp(-1.0, 1.0);
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(dx, 1.0);
+            if pz > b.door.1 as f32 + 2.5 {
+                eprintln!("ha-entrartest: edificio {} — salió", st.i);
+                shot(world, &format!("{dir}/entrar-{}-2-salio.png", st.i));
+                st.i += 1;
+                st.paso = 0;
+            } else if now - st.t0 > 14.0 {
+                report_bug("casa", "se_sale", &format!("edificio {:?}: no pudo volver a salir por {:?} (quedó en {px:.1},{pz:.1})", b.min, b.door));
+                st.fallo = true;
+                st.i += 1;
+                st.paso = 0;
+            }
+        }
+        _ => {}
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_PANDEMIATEST — un vecino contagiado se convierte en infectado; una mordida le da fiebre al jugador
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct PandemiaTest {
+    paso: u32,
+    t0: f32,
+    vecino: Option<Entity>,
+    infectados_antes: usize,
+    hp_antes: f32,
+}
+
+fn pandemia_test_drive(world: &mut World, mut st: Local<PandemiaTest>) {
+    use crate::pandemia::{Contagiado, Infeccion, Pandemia};
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    let fallar = |what: &str, detalle: &str| {
+        report_bug("pandemia", what, detalle);
+        eprintln!("ha-verify: PANDEMIATEST FAIL ({what}: {detalle})");
+        std::process::exit(1);
+    };
+    match st.paso {
+        0 => {
+            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+            teleport_a_celda(world, 9600.0, 2400.0);
+            st.paso = 1;
+            st.t0 = now;
+        }
+        1 => {
+            if now - st.t0 < 4.0 {
+                return;
+            }
+            // El vecino más cercano al jugador.
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            let mut q = world.query::<(Entity, &crate::society::Npc)>();
+            let mejor = q
+                .iter(world)
+                .map(|(e, n)| (e, (n.x - px).hypot(n.z - pz)))
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+            match mejor {
+                Some((e, d)) if d < 120.0 => {
+                    eprintln!("ha-pandemiatest: vecino a {d:.0} m: se le pega el contagio");
+                    let mut c = Contagiado::nuevo();
+                    c.t = 1.0;
+                    st.infectados_antes = world.query::<&crate::infectados::Infectado>().iter(world).count();
+                    world.entity_mut(e).insert(c);
+                    st.vecino = Some(e);
+                    st.paso = 2;
+                    st.t0 = now;
+                }
+                _ => {
+                    if now - st.t0 > 90.0 {
+                        fallar("hay_vecinos", "en 90 s ningún vecino a menos de 120 m");
+                    }
+                }
+            }
+        }
+        2 => {
+            if now - st.t0 < 3.0 {
+                return;
+            }
+            let vivo = st.vecino.map_or(false, |e| world.get_entity(e).is_ok());
+            let ahora = world.query::<&crate::infectados::Infectado>().iter(world).count();
+            let conv = world.resource::<Pandemia>().convertidos;
+            eprintln!("ha-pandemiatest: vecino vivo={vivo} infectados {} → {ahora} convertidos={conv}", st.infectados_antes);
+            // De día los infectados se queman (`infectados::amanecer`): el recuento no sirve, vale el contador de la pandemia.
+            if vivo || conv < 1 {
+                fallar("se_contagia", &format!("vivo={vivo} convertidos={conv} infectados {} → {ahora}", st.infectados_antes));
+            }
+            // La fiebre.
+            st.hp_antes = world.query_filtered::<&SimState, With<Player>>().single(world).hp;
+            world.resource_mut::<Infeccion>().mordida(0);
+            st.paso = 3;
+            st.t0 = now;
+        }
+        3 => {
+            if now - st.t0 < 4.0 {
+                return;
+            }
+            let hp = world.query_filtered::<&SimState, With<Player>>().single(world).hp;
+            let t = world.resource::<Infeccion>().t;
+            eprintln!("ha-pandemiatest: fiebre t={t:.0} s, hp {:.2} → {hp:.2}", st.hp_antes);
+            if t <= 0.0 || hp >= st.hp_antes {
+                fallar("da_fiebre", &format!("t={t} hp {} → {hp}", st.hp_antes));
+            }
+            eprintln!("ha-verify: PANDEMIATEST DONE");
+            std::process::exit(0);
+        }
+        _ => {}
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_ENTSTEST — ¿de qué se llena el mundo con el jugador parado en la ciudad? Cada 30 s imprime los arquetipos más poblados.
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct EntsTest {
+    paso: u32,
+    t0: f32,
+    ultimo: f32,
+}
+
+fn ents_test_drive(world: &mut World, mut st: Local<EntsTest>) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    if st.paso == 0 {
+        world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+        teleport_a_celda(world, 9600.0, 2400.0);
+        st.paso = 1;
+        st.t0 = now;
+        st.ultimo = now - 100.0;
+        return;
+    }
+    let total: f32 = crate::flags::var("HA_ENTSTEST").ok().and_then(|v| v.parse().ok()).unwrap_or(300.0);
+    if now - st.ultimo >= 30.0 {
+        st.ultimo = now;
+        let mut filas: Vec<(usize, String)> = Vec::new();
+        let infos = world.components();
+        for a in world.archetypes().iter() {
+            let n = a.len();
+            if n < 50 {
+                continue;
+            }
+            let nombres: Vec<String> = a
+                .components()
+                .filter_map(|c| infos.get_info(c))
+                .map(|i| i.name().rsplit("::").next().unwrap_or("").to_string())
+                .filter(|n| !matches!(n.as_str(), "Transform" | "GlobalTransform" | "InheritedVisibility" | "ViewVisibility" | "Visibility" | "TransformTreeChanged" | "Sprite" | "SyncToRenderWorld"))
+                .take(7)
+                .collect();
+            filas.push((n, nombres.join("+")));
+        }
+        filas.sort_by(|a, b| b.0.cmp(&a.0));
+        let todo = world.entities().len();
+        eprintln!("ha-ents t={:.0}s total={todo}: {}", now - st.t0, filas.iter().take(7).map(|(n, s)| format!("{n}×[{s}]")).collect::<Vec<_>>().join(" | "));
+    }
+    if now - st.t0 > total {
+        eprintln!("ha-verify: ENTSTEST DONE");
+        std::process::exit(0);
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_POOLTEST — foto de una pileta real (borde, cerca) y de la casa de al lado por dentro
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct PiletaTest {
+    paso: u32,
+    t0: f32,
+    espera: f32,
+    sitio: Option<(i64, i64)>,
+}
+
+fn pileta_test_drive(world: &mut World, mut st: Local<PiletaTest>) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    let body = ha_shared::CelestialBody::Earth;
+    let dir = flytest_dir();
+    match st.paso {
+        0 => {
+            let mut mejor: Option<(i64, (i64, i64))> = None;
+            for sx in -25..25 {
+                for sz in -25..25 {
+                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    if s.tier != ha_shared::geography::SettlementTier::City {
+                        continue;
+                    }
+                    let d = s.center.0.abs() + s.center.1.abs();
+                    if mejor.map_or(true, |(bd, _)| d < bd) {
+                        mejor = Some((d, s.center));
+                    }
+                }
+            }
+            let (cx, cz) = mejor.map(|m| m.1).unwrap_or((9600, 2400));
+            let mut hallado = None;
+            'b: for r in (0..900i64).step_by(2) {
+                for k in (-r..=r).step_by(2) {
+                    for (x, z) in [(cx + k, cz - r), (cx + k, cz + r), (cx - r, cz + k), (cx + r, cz + k)] {
+                        if ha_shared::topdown::topdown_tile(body, 0, x, z) == ha_shared::topdown::Tile::Water
+                            && ha_shared::geography::settlement_covering(body, x, z).is_some()
+                            && ha_shared::topdown::topdown_tile(body, 0, x + 2, z) == ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x, z + 1) == ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x - 1, z) != ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x + 6, z) != ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x, z + 4) != ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x + 12, z) != ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x - 8, z) != ha_shared::topdown::Tile::Water
+                            && ha_shared::topdown::topdown_tile(body, 0, x, z + 9) != ha_shared::topdown::Tile::Water
+                        {
+                            hallado = Some((x, z));
+                            break 'b;
+                        }
+                    }
+                }
+            }
+            let Some((x, z)) = hallado else {
+                eprintln!("ha-verify: POOLTEST FAIL (no hay pileta)");
+                std::process::exit(1);
+            };
+            eprintln!("ha-pooltest: pileta en ({x}, {z})");
+            for dz in -2..7i64 {
+                let fila: Vec<String> = (-3..10i64).map(|dx| format!("{:?}", ha_shared::topdown::topdown_tile(body, 0, x + dx, z + dz)).chars().take(4).collect()).collect();
+                eprintln!("ha-pooltest:   {}", fila.join(" "));
+            }
+            st.sitio = Some((x, z));
+            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+            teleport_a_celda(world, x as f32 + 0.5, z as f32 + 6.5);
+            st.paso = 1;
+            st.t0 = now;
+            st.espera = now;
+        }
+        1 => {
+            let tope: f32 = crate::flags::var("HA_ESPERA").ok().and_then(|v| v.parse().ok()).unwrap_or(90.0);
+            if !mundo_listo(world) && now - st.espera < tope {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 < 4.0 {
+                return;
+            }
+            shot(world, &format!("{dir}/pileta-0.png"));
+            st.paso = 2;
+            st.t0 = now;
+        }
+        2 => {
+            if now - st.t0 > 4.0 {
+                eprintln!("ha-verify: POOLTEST DONE");
+                std::process::exit(0);
+            }
+        }
+        _ => {}
     }
 }

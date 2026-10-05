@@ -1226,6 +1226,9 @@ fn cast_shadows(
     camera: Query<(&Transform, &OrthographicProjection), (With<GameCamera>, Without<GroundShadow>)>,
     lights: Query<(Entity, &Light2d, &GlobalTransform)>,
     parents: Query<&GlobalTransform, Without<GroundShadow>>,
+    // El alfa del dueño: un techo que se desvanece al entrar a la casa se lleva su sombra (los rombos oscuros de adentro).
+    owners: Query<&Sprite, Without<GroundShadow>>,
+    casa: Res<crate::building::CasaActual>,
     mut shadows: Query<(&GroundShadow, &mut Transform, &mut Sprite)>,
     mut acc: Local<f32>,
     span: Res<crate::debug::CpuSpanStats>,
@@ -1295,8 +1298,14 @@ fn cast_shadows(
         if p.distance(cam) > cull_r {
             continue;
         }
-        let mut v = sky_v;
-        let mut w = sky_w;
+        let dueno_a = owners.get(owner).map_or(1.0, |o| o.color.alpha());
+        // Adentro de una casa no entra el sol: sólo la sombra de contacto (las antorchas de adentro sí proyectan).
+        let en_la_casa = casa.0.is_some_and(|c| {
+            let (tx, tz) = (p.x / ha_shared::topdown::TILE_M, -p.y / ha_shared::topdown::TILE_M);
+            tx >= c[0] && tx <= c[2] && tz >= c[1] && tz <= c[3]
+        });
+        let mut v = if en_la_casa { Vec2::ZERO } else { sky_v };
+        let mut w = if en_la_casa { 0.0 } else { sky_w };
         for (_, le, lp, reach, k) in &active {
             // Mismo rechazo barato que en `light_sprites`: este también es un
             // bucle objeto × luz, y con el presupuesto de [`VEIL_LIGHTS`] en 40
@@ -1341,7 +1350,7 @@ fn cast_shadows(
             };
             tf.rotation = Quat::from_rotation_z(ang);
             sprite.custom_size = Some(Vec2::new(sh.base.x, sh.base.y * (0.30 + 0.32 * len)));
-            let a = (0.30 + 0.30 * w.min(1.2)) * (1.0 - ambiente.weather.cover * 0.45) * (1.0 - 0.10 * len);
+            let a = (0.30 + 0.30 * w.min(1.2)) * (1.0 - ambiente.weather.cover * 0.45) * (1.0 - 0.10 * len) * dueno_a;
             sprite.color = if shadow_debug() {
                 Color::srgba(1.0, 0.0, 0.8, 1.0)
             } else {
@@ -1379,7 +1388,7 @@ fn cast_shadows(
         // adorno al lado del astro), así que se pinta más marcada y se diluye
         // menos al estirarse (0.16 → 0.11 por metro).
         let spread = 1.0 - 0.11 * len;
-        let a = (0.46 + 0.50 * w.min(1.2)) * (1.0 - ambiente.weather.cover * 0.45) * spread;
+        let a = (0.46 + 0.50 * w.min(1.2)) * (1.0 - ambiente.weather.cover * 0.45) * spread * dueno_a;
         sprite.color = if shadow_debug() {
             // `HA_SHADOW_DEBUG=1`: magenta opaco. Es la única forma de VER dónde
             // cae una sombra, hacia dónde apunta y cuánto mide — a su alpha real

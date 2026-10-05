@@ -3988,6 +3988,24 @@ fn spawn_chunk_tile_art(
             let wx = tx as f32 * TILE_M + 0.5;
             let wz = tz as f32 * TILE_M + 0.5;
             let r = render_xy(wx, wz);
+            // **La ventana del muro del fondo va SOBRE su pared.** `window/basic` es un recorte de 1×2 con la fila de arriba
+            // transparente y marco de ladrillo: sola, en el muro de adentro dejaba un hueco por donde se veía el pasto
+            // (las paredes «cortadas en las ventanas»). Se dibuja primero el paño del estilo de la casa y encima el vidrio.
+            if tile == Tile::Window && interior.is_none() {
+                if let (Some(est), Some(cara)) = (casa_memo.estilo, cara_de_muro(tiles, body, tx, tz)) {
+                    if art.tile_has_art(est.pared) {
+                        let m = art.medida_de_obra(est.pared, Some(cara), Vec2::splat(TILE_M));
+                        if let Some((sprite, _)) = art.tile_sprite(est.pared, cara, m) {
+                            commands.spawn((
+                                SurfaceDecor { cx, cz, z, small: false },
+                                TileArt,
+                                sprite,
+                                Transform::from_xyz(r.x, r.y + (m.y - TILE_M) * 0.5, crate::layers::ysort(wz) - 0.0004),
+                            ));
+                        }
+                    }
+                }
+            }
             // Puertas: pose open/closed animada por proximidad (building.rs las
             // conmuta). Con arte de poses, spawn especial; si no, sigue al autotile.
             // **UNA ABERTURA, UNA PUERTA.**
@@ -5644,6 +5662,12 @@ fn spawn_chunk_muelle(
                 "inner_se" | "inner_sw" => "edge_s",
                 s => s,
             };
+            // **Una pileta no es un canal.** El borde de piedra de la pileta de un patio (4×2 de agua) recibía el
+            // muro de ribera y salía como un cerco de bloques con el costado roto. El muro es de ríos, canales y
+            // mar: sólo si hay AGUA de verdad alrededor (≥ 70 celdas en 15×15; se corta apenas las junta).
+            if aqui == Tile::Pavement && !agua_de_verdad(tiles, body, tx, tz) {
+                continue;
+            }
             let Some((sprite, _)) = art.tile_sprite(MUELLE_ART, shape, Vec2::splat(TILE_M)) else {
                 continue;
             };
@@ -5660,6 +5684,23 @@ fn spawn_chunk_muelle(
             ));
         }
     }
+}
+
+/// ¿Hay un cuerpo de agua DE VERDAD (≥ 70 celdas en el entorno de 15×15) alrededor de `(tx, tz)`? Distingue un río, un
+/// canal o el mar de la pileta de un patio. Sale en cuanto junta las 70.
+fn agua_de_verdad(tiles: &TileWorld, body: CelestialBody, tx: i64, tz: i64) -> bool {
+    let mut n = 0;
+    for dz in -7..=7i64 {
+        for dx in -7..=7i64 {
+            if tiles.tile_at(body, tx + dx, tz + dz).swim() {
+                n += 1;
+                if n >= 70 {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Slot de la línea pintada de la calzada. Ver `spawn_chunk_lane_marks`.

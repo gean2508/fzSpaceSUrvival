@@ -324,7 +324,12 @@ pub const OIDO_DE_TIRO: f32 = 2.6;
 
 /// Una bala en vuelo. Los módulos que tienen blancos (`infectados`, `fauna`, `society`) leen estas entidades y aplican el
 /// daño a los suyos.
+///
+/// **Lleva `Transform` obligatorio**: `mover_balas` sólo ve entidades con `Bala` Y `Transform`, y una bala sin él
+/// (el capó de un coche, el frente de un tren) nunca moría ni se limpiaba: 2.000 balas fantasma tras 8 minutos
+/// parado en una ciudad, cada una probada contra todos los blancos en cada cuadro.
 #[derive(Component)]
+#[require(Transform)]
 pub struct Bala {
     /// Posición (x, z) del mundo y la del cuadro anterior.
     pub pos: Vec2,
