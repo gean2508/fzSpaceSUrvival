@@ -505,7 +505,7 @@ pub(crate) fn face_player_sprite(
         // Con blanco, mira al blanco. Sin él, la cardinal sale de `dir` (con histéresis), no del cuadrante crudo:
         // así el pulgar en la diagonal no hace parpadear la pose; la diagonal sólo se usa si el pack la trae y
         // es del mismo lado.
-        let (diag, card) = match en_curso.and_then(|(_, r)| r) {
+        let (diag, card) = match en_curso.and_then(|(_, r)| r).or(accion.rumbo_apuntado()) {
             Some(rumbo) => {
                 let [d, c] = pose_directions(rumbo);
                 (d, c)

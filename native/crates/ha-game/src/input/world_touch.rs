@@ -202,8 +202,10 @@ fn touch_is_world(
     layout: &TouchLayout,
     blocks: &TouchBlockRects,
     buttons: &ActionButtonRects,
+    aim: &super::aim_stick::AimStick,
 ) -> bool {
-    !actions::touch_hits_action_button(pos, buttons)
+    !aim.cubre(pos)
+        && !actions::touch_hits_action_button(pos, buttons)
         && !layout::touch_blocked(pos, &blocks.0)
         && !layout::touch_in_move_zone(pos, layout)
 }
@@ -215,6 +217,7 @@ fn track_world_touch(
     layout: Res<TouchLayout>,
     blocks: Res<TouchBlockRects>,
     buttons: Res<ActionButtonRects>,
+    aim_stick: Res<super::aim_stick::AimStick>,
     editor: Res<UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
     pinch: Res<PinchActive>,
@@ -258,7 +261,7 @@ fn track_world_touch(
                 if runtime.pointer.is_some() || in_pinch(ev.id) {
                     continue;
                 }
-                if !touch_is_world(pos, &layout, &blocks, &buttons) {
+                if !touch_is_world(pos, &layout, &blocks, &buttons, &aim_stick) {
                     continue;
                 }
                 runtime.pointer = Some(ev.id);

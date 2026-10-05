@@ -464,6 +464,7 @@ fn apuntar_y_disparar(
     time: Res<Time>,
     equipped: Res<EquippedItem>,
     cursor: Res<AimCursor>,
+    (stick, mut accion): (Res<crate::input::AimStick>, ResMut<crate::pose_jugador::AccionJugador>),
     (mouse, windows, cam): (
         Res<ButtonInput<MouseButton>>,
         Query<&Window, With<PrimaryWindow>>,
@@ -517,7 +518,12 @@ fn apuntar_y_disparar(
     // El punto apuntado: el dedo en el mundo, o el mouse en escritorio.
     let mut punto: Option<Vec2> = None;
     let mut apretado = false;
-    if cursor.targeting() && cursor.active {
+    if stick.armado && stick.activo && stick.tiene_dir {
+        // Stick de puntería: manda sobre el dedo en el mundo. Dispara sólo lejos del centro.
+        punto = Some(pos + stick.dir * 8.0);
+        apretado = stick.dispara;
+        accion.apuntar(stick.dir.y.atan2(stick.dir.x));
+    } else if cursor.targeting() && cursor.active {
         punto = Some(cursor.world);
         apretado = true;
     } else if !crate::platform::uses_touch_gameplay_ui() {
@@ -856,6 +862,7 @@ fn visual_del_arma(
     equipped: Res<EquippedItem>,
     art: Res<crate::art2d::ArtLibrary>,
     cursor: Res<AimCursor>,
+    stick: Res<crate::input::AimStick>,
     estado: Res<EstadoArmas>,
     player: Query<(&Transform, &PlayerVisual), (With<Player>, Without<ArmaVisual>, Without<MiraDeArma>)>,
     mut visual: Query<(Entity, &mut Transform, &mut Sprite, &mut Visibility, &Name), (With<ArmaVisual>, Without<MiraDeArma>)>,
@@ -879,6 +886,7 @@ fn visual_del_arma(
     let apuntando = cursor.targeting() && cursor.active;
     // El arma apunta al blanco del apuntado asistido si lo hay; si no, al dedo; si no, al frente.
     let dir = match estado.mira_en {
+        _ if stick.activo && stick.tiene_dir => stick.dir,
         Some((p, _)) => (p - pos).normalize_or_zero(),
         None if apuntando => (cursor.world - pos).normalize_or_zero(),
         None => Vec2::ZERO,

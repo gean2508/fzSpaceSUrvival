@@ -64,6 +64,9 @@ pub struct AccionJugador {
     resta: f32,
     /// Rumbo (como `PlayerVisual::to_rot`) hacia lo que se está tocando, si lo hay.
     rumbo: Option<f32>,
+    /// Hacia dónde apunta el stick de puntería (rumbo como `PlayerVisual::to_rot`) y cuánto le queda vigente:
+    /// el cuerpo mira ahí aunque camine hacia otro lado (twin-stick).
+    mira: Option<(f32, f32)>,
 }
 
 /// Qué acción pisa a cuál: el daño interrumpe todo; un golpe, a juntar o comer.
@@ -103,6 +106,16 @@ impl AccionJugador {
         }
     }
 
+    /// El stick de puntería manda: el cuerpo mira a `rumbo` (se renueva cada cuadro mientras el pulgar está apoyado).
+    pub fn apuntar(&mut self, rumbo: f32) {
+        self.mira = Some((rumbo, MANTENIDO_S));
+    }
+
+    /// Rumbo del stick de puntería, si sigue vigente.
+    pub fn rumbo_apuntado(&self) -> Option<f32> {
+        self.mira.map(|(r, _)| r)
+    }
+
     /// Un golpe con lo que tenés en la mano, hacia el blanco.
     pub fn golpe(&mut self, item: &str, desde: Vec2, hacia: Vec2) {
         self.hacer_hacia(verbo_de_golpe(item), GOLPE_S, desde, hacia);
@@ -114,6 +127,12 @@ impl AccionJugador {
     }
 
     fn pasar(&mut self, dt: f32) {
+        if let Some((_, t)) = self.mira.as_mut() {
+            *t -= dt;
+        }
+        if self.mira.map_or(false, |(_, t)| t <= 0.0) {
+            self.mira = None;
+        }
         self.resta -= dt;
         if self.resta <= 0.0 {
             self.verbo = None;

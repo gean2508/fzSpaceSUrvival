@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 pub mod calibration;
 pub(crate) mod actions;
+pub mod aim_stick;
 pub mod desktop_input;
 pub(crate) mod gamepad;
 pub(crate) mod joystick;
@@ -28,6 +29,7 @@ pub use calibration::DEFAULT_RENDER_SCALE;
 pub use actions::{layout_action_buttons, ActionButton, ActionKind, ActionUiRoot, CraftIntent, TouchActions};
 pub use joystick::{CameraLookIntent, InputPlugin, JoystickBase, MovementIntent};
 pub(crate) use joystick::set_px;
+pub use aim_stick::AimStick;
 pub use layout::{touch_blocked, touch_in_move_zone, TouchBlockRects, TouchLayout};
 pub use look_interact::{
     AbilityCooldown, AbilityTapPulse, BuildModeActive, EquippedItem, HoldInteractState,

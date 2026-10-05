@@ -80,6 +80,7 @@ impl Plugin for InputPlugin {
             .init_resource::<super::gamepad::GamepadActive>()
             .init_resource::<super::gamepad::GamepadHotbarIndex>()
             .init_resource::<StickState>()
+            .init_resource::<super::aim_stick::AimStick>()
             .init_resource::<TouchLayout>()
             .init_resource::<TouchBlockRects>()
             .init_resource::<TouchActions>()
@@ -89,7 +90,7 @@ impl Plugin for InputPlugin {
             .init_resource::<actions::ActionTouchState>()
             .init_resource::<actions::ActionButtonsSpawned>()
             .init_resource::<actions::UseButtonActive>()
-            .add_systems(Startup, (spawn_joystick_ui, actions::spawn_action_ui));
+            .add_systems(Startup, (spawn_joystick_ui, actions::spawn_action_ui, super::aim_stick::spawn_aim_stick_ui));
         #[cfg(not(target_os = "android"))]
         app.init_resource::<desktop_input::DesktopMouseCapture>()
             .add_systems(
@@ -133,8 +134,10 @@ impl Plugin for InputPlugin {
                     touch_move_stick
                         .after(actions::poll_action_buttons_held)
                         .after(crate::hud::append_hud_touch_blocks),
+                    super::aim_stick::touch_aim_stick.after(touch_move_stick),
                     smooth_movement_intent,
                     update_joystick_ui,
+                    super::aim_stick::update_aim_stick_ui,
                 )
                     .chain(),
             );
