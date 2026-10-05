@@ -1310,53 +1310,136 @@ pub fn link_clearance(body: CelestialBody, px: f32, pz: f32) -> Option<f32> {
     let p = (px, pz);
     let cx = (px.floor() as i64).div_euclid(SITE_PERIOD);
     let cz = (pz.floor() as i64).div_euclid(SITE_PERIOD);
-    let seed = body_terrain_seed(body) ^ 0x20ad_5000;
 
     let mut best: Option<f32> = None;
+    let mut unir = |m: f32| best = Some(best.map_or(m, |b: f32| b.max(m)));
     for dx in -1..=0 {
         for dz in -1..=0 {
             let (ax, az) = (cx + dx, cz + dz);
             let Some(from) = settlement_in(body, ax, az) else { continue };
-            let (fx, fz) = from.center;
             for (nx, nz) in [(ax + 1, az), (ax, az + 1)] {
                 let Some(to) = settlement_in(body, nx, nz) else { continue };
-                let a = (fx as f32, fz as f32);
-                let b = (to.center.0 as f32, to.center.1 as f32);
-                let hh = hash2(seed, ax + nx * 7, az + nz * 13);
-                // **EL ENLACE VA EN TRAMOS RECTOS, NO EN DIAGONAL** (28 sep 2026).
-                // Era una recta (con un quiebre) a cualquier ángulo, y el kit del
-                // pack sólo dibuja calles ortogonales: a 25° el asfalto salía en
-                // escalones de un metro, la línea central saltaba de columna en
-                // columna y el borde contra el pasto quedaba serruchado ("las
-                // calles en diagonal están rotas", reporte del usuario). Ahora sale
-                // del centro del pueblo por su eje —que es una calle de la
-                // retícula—, dobla 90° en un punto sorteado entre el 35 y el 65 %
-                // del camino, y entra al otro pueblo por su eje. Con eso la línea,
-                // los cruces y las sendas salen solos: se miden sobre el asfalto
-                // (`roads::pintura_con`), igual que en la ciudad.
-                let t = 0.35 + (hh & 0xffff) as f32 / 65535.0 * 0.30;
-                // vecino al este → tramos E-O con el quiebre N-S; al sur, al revés
-                let este = nx != ax;
-                let tramos: [((f32, f32), (f32, f32)); 3] = if este {
-                    let xm = (a.0 + (b.0 - a.0) * t).round();
-                    [(a, (xm, a.1)), ((xm, a.1), (xm, b.1)), ((xm, b.1), b)]
-                } else {
-                    let zm = (a.1 + (b.1 - a.1) * t).round();
-                    [(a, (a.0, zm)), ((a.0, zm), (b.0, zm)), ((b.0, zm), b)]
-                };
-                // El ancho del enlace sale del RANGO de los dos extremos: dos
-                // ciudades se unen por autopista, a una aldea le llega una ruta.
-                let half = crate::roads::link_class(from.tier, to.tier).half_width();
-                let d = tramos
-                    .iter()
-                    .map(|&(p0, p1)| dist_caja_a_tramo(p, p0, p1))
-                    .fold(f32::INFINITY, f32::min);
-                let margen = half - d;
-                best = Some(best.map_or(margen, |m: f32| m.max(margen)));
+                unir(margen_del_enlace(body, p, (ax, az), from, (nx, nz), to));
             }
         }
     }
+    // Enlaces de refuerzo (ver `enlaces_de_refuerzo`).
+    ENLACES.with(|c| {
+        let mut c = c.borrow_mut();
+        let clave = (body as u32) ^ crate::partida::epoca().wrapping_mul(0x85eb_ca6b);
+        if !matches!(&*c, Some((k, x, z, _)) if *k == clave && *x == cx && *z == cz) {
+            *c = Some((clave, cx, cz, enlaces_de_refuerzo(body, cx, cz)));
+        }
+        if let Some((_, _, _, v)) = &*c {
+            for &(ca, fa, cb, fb) in v {
+                unir(margen_del_enlace(body, p, ca, fa, cb, fb));
+            }
+        }
+    });
     best
+}
+
+/// Alcance (en celdas de asentamiento) de un enlace de refuerzo.
+const ALCANCE_REFUERZO: i64 = 3;
+
+type EnlaceRef = ((i64, i64), Settlement, (i64, i64), Settlement);
+
+thread_local! {
+    static ENLACES: std::cell::RefCell<Option<(u32, i64, i64, Vec<EnlaceRef>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// El núcleo más cercano (celdas, distancia al cuadrado y luego coordenadas) de
+/// `(ax, az)` dentro de [`ALCANCE_REFUERZO`], o `None` si está solo.
+fn vecino_mas_cercano(body: CelestialBody, ax: i64, az: i64) -> Option<(i64, i64)> {
+    let r = ALCANCE_REFUERZO;
+    let mut best: Option<(i64, i64, i64)> = None;
+    for dx in -r..=r {
+        for dz in -r..=r {
+            if (dx, dz) == (0, 0) || settlement_in(body, ax + dx, az + dz).is_none() {
+                continue;
+            }
+            let k = (dx * dx + dz * dz, ax + dx, az + dz);
+            if best.map_or(true, |b| k < b) {
+                best = Some(k);
+            }
+        }
+    }
+    best.map(|(_, x, z)| (x, z))
+}
+
+/// **Los núcleos que el enlace este/sur dejaba sin carretera.** La red sólo unía
+/// celdas vecinas por los cuatro lados: medido sobre la Tierra (±60 celdas, 64
+/// núcleos) había 15 componentes y 8 núcleos sin ningún camino, aunque tuvieran
+/// otro a una o dos celdas en diagonal. Cada núcleo se une además con su vecino
+/// más cercano dentro de [`ALCANCE_REFUERZO`] (si no era ya un vecino de los
+/// cuatro lados): 15 → 7 componentes, y los 7 que quedan son archipiélagos
+/// separados por más de 20 celdas (50 km) — a ésos no los une una ruta local.
+///
+/// Devuelve los enlaces que pueden tocar la celda `(cx, cz)`: los de núcleos a
+/// ≤ `ALCANCE_REFUERZO + 1` celdas, que es hasta donde llega una caja de enlace.
+fn enlaces_de_refuerzo(body: CelestialBody, cx: i64, cz: i64) -> Vec<EnlaceRef> {
+    let r = ALCANCE_REFUERZO + 1;
+    let mut v: Vec<EnlaceRef> = Vec::new();
+    for dx in -r..=r {
+        for dz in -r..=r {
+            let (ax, az) = (cx + dx, cz + dz);
+            let Some(from) = settlement_in(body, ax, az) else { continue };
+            let Some((nx, nz)) = vecino_mas_cercano(body, ax, az) else { continue };
+            let (ddx, ddz) = (nx - ax, nz - az);
+            if (ddx.abs() + ddz.abs()) == 1 {
+                continue; // ya lo une el enlace este/sur
+            }
+            let Some(to) = settlement_in(body, nx, nz) else { continue };
+            // orden canónico: el mismo enlace sale igual lo pida quien lo pida
+            let e = if (ax, az) < (nx, nz) { ((ax, az), from, (nx, nz), to) } else { ((nx, nz), to, (ax, az), from) };
+            if !v.iter().any(|o| o.0 == e.0 && o.2 == e.2) {
+                v.push(e);
+            }
+        }
+    }
+    v
+}
+
+/// Cuánto sobra (o falta) para estar sobre el enlace de `a` a `b`. Tres tramos
+/// ortogonales — ver el comentario de [`link_clearance`] y §5 de la biblia.
+fn margen_del_enlace(
+    body: CelestialBody,
+    p: (f32, f32),
+    (ax, az): (i64, i64),
+    from: Settlement,
+    (nx, nz): (i64, i64),
+    to: Settlement,
+) -> f32 {
+    let seed = body_terrain_seed(body) ^ 0x20ad_5000;
+    let a = (from.center.0 as f32, from.center.1 as f32);
+    let b = (to.center.0 as f32, to.center.1 as f32);
+    let hh = hash2(seed, ax + nx * 7, az + nz * 13);
+    // **EL ENLACE VA EN TRAMOS RECTOS, NO EN DIAGONAL** (28 sep 2026).
+    // El kit del pack sólo dibuja calles ortogonales: a 25° el asfalto salía en
+    // escalones de un metro y la línea central saltaba de columna en columna.
+    // Sale del centro del pueblo por su eje —que es una calle de la retícula—,
+    // dobla 90° en un punto sorteado entre el 35 y el 65 % del camino, y entra
+    // al otro pueblo por su eje. La línea, los cruces y las sendas salen solos:
+    // se miden sobre el asfalto (`roads::pintura_con`), igual que en la ciudad.
+    let t = 0.35 + (hh & 0xffff) as f32 / 65535.0 * 0.30;
+    // Predominio este-oeste → tramos E-O con el quiebre N-S; si no, al revés.
+    let este = (nx - ax).abs() >= (nz - az).abs();
+    let tramos: [((f32, f32), (f32, f32)); 3] = if este {
+        let xm = (a.0 + (b.0 - a.0) * t).round();
+        [(a, (xm, a.1)), ((xm, a.1), (xm, b.1)), ((xm, b.1), b)]
+    } else {
+        let zm = (a.1 + (b.1 - a.1) * t).round();
+        [(a, (a.0, zm)), ((a.0, zm), (b.0, zm)), ((b.0, zm), b)]
+    };
+    // El ancho del enlace sale del RANGO de los dos extremos: dos ciudades se
+    // unen por autopista, a una aldea le llega una ruta.
+    let half = crate::roads::link_class(from.tier, to.tier).half_width();
+    let d = tramos
+        .iter()
+        .map(|&(p0, p1)| dist_caja_a_tramo(p, p0, p1))
+        .fold(f32::INFINITY, f32::min);
+    half - d
 }
 
 /// Distancia de un punto a un tramo ORTOGONAL, en norma de caja (L∞): así la
