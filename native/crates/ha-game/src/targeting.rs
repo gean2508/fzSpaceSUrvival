@@ -214,6 +214,7 @@ fn update_look_target(
     tiles: Res<TileWorld>,
     equipped: Res<EquippedItem>,
     build_mode: Res<crate::input::BuildModeActive>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
     player: Query<(&Transform, &SimState), With<Player>>,
     targets: Query<(
         Entity,
@@ -225,6 +226,11 @@ fn update_look_target(
     mut current: ResMut<LookTarget>,
 ) {
     if current.locked {
+        return;
+    }
+    // Al volante (coche o tren) no hay objetivo bajo el dedo: el mundo pasa por debajo.
+    if conduccion.activa() {
+        *current = LookTarget::default();
         return;
     }
     // Con un arma de fuego en la mano el mundo no se talla ni se cosecha: se apunta y se dispara (`armas.rs`).

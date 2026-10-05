@@ -9276,3 +9276,99 @@ prueba multi-semilla (§2) y arte del pack o dibujado con la skill `pixel-art` a
 [Vampire Survivors](https://jmduke.com/posts/vampire-survivors.html) ·
 [Wordle](https://www.newswise.com/articles/the-word-on-wordle) ·
 [patrones oscuros](https://deceptive.design/articles/level-up-or-game-over-exploring-how-dark-patterns-shape-mobile-games).
+
+## §21 Vehículos, trenes y puntería con stick (5 oct 2026)
+
+Pedido del usuario: «ya deja el sistema de vehículos completamente hecho… todos los coches manejables, físicas,
+colisiones», «que cada ciudad tenga una estación funcional, que los trenes vayan y regresen cada uno por su vía», «un
+joystick derecho para apuntar y disparar» y «que los NPC conduzcan, como en GTA». Todo se probó en la PC con el perfil
+`qa` bajo `xvfb` + lavapipe (ver «Cómo probarlo» al final); el celu queda para medir rendimiento.
+
+### Coches (`ha-game/src/vehiculos.rs`)
+
+* **Física** (`paso`, pura y con tests): modelo cinemático de bicicleta — aceleración con tope, freno más fuerte que el
+  motor, resistencia, radio de giro que crece con la velocidad (`/(1+v/14)`), marcha atrás. Auto: 20 m/s, colectivo:
+  13 m/s. Estable a cualquier `dt` (se topa en 0,05 s).
+* **Control táctil**: el MISMO stick de caminar, en modo *twin-stick*: la dirección del stick es hacia dónde ir, su
+  recorrido la velocidad; hacia atrás = marcha atrás (`mando_de_stick`). El pulgar derecho queda libre para el stick de
+  puntería (se puede tirar desde el coche). En escritorio, WASD.
+* **Entrar y salir**: el botón USAR dice ENTRAR junto a un coche (≤ 3,2 m del borde de la caja) y SALIR adentro; sale por
+  el costado libre. Subirse a uno con conductor se lo roba. `Conduccion` (recurso) lo comparte con los trenes; con
+  `activa()` el cuerpo no camina (`sim::tick_sim` sale) y el objetivo del dedo se apaga (`targeting`).
+* **Choques**: contra el mundo con `Obstaculos::libre` (las mismas cajas que frenan al jugador: 3 círculos de 0,8 m por
+  coche), contra otros coches (separación + daño) y contra lo que esté a pie: **un atropello es un `Bala` de un cuadro** delante
+  del capó (`atropellar`), así que infectados, animales y aldeanos mueren por SU propio camino (`balas_a_*`), sin reglas
+  duplicadas. Sobre `V_CHOQUE` = 3 m/s el golpe cuesta vida; a 0 el coche explota (chispas, humo negro y llama, sacudida),
+  queda el chasis 150 s y el conductor sale con 30 de daño.
+* **Balas**: `balas_a_vehiculos` (caja orientada, Liang–Barsky). Los NPC al volante aceleran y huyen 8 s.
+* **Tránsito** (`aparecer_trafico` + `pensar_ia`): hasta 8 coches (4 en Android) en un anillo de 42–90 m alrededor del jugador
+  sobre celdas de `roads::lane_at`, que se retiran a 140 m. La IA (`decidir_rumbo`, pura) **se prueba sobre el mapa real**
+  (`la_ia_recorre_la_ciudad_real_sin_salirse_de_la_calzada`: 6 ciudades × 120 s, 0,2–1,5 s fuera de la calzada y 650–800 m
+  recorridos por coche). Reglas que costaron aprender, y que mide ese test:
+  1. **El sentido de marcha es el del coche, no el de la celda**: dentro de una bocacalle `lane_at` devuelve el sentido de
+     la calle cruzada (el carril este de una avenida muestra `<<<<<` al pasar un cruce) y seguirlo daba media vuelta en pleno cruce.
+  2. **Un giro es una curva de Bézier** (entrada en el carril propio, vértice en el cruce de los dos ejes de carril, salida
+     en el nuevo; piernas de 5,5 m a la derecha y 6,5 m a la izquierda ⇒ radio mínimo 0,7·pierna ≥ el que el coche puede
+     trazar) recorrida por persecución pura, **y se compromete**: sin memoria, en medio del cruce se arrepentía a cada pensamiento.
+  3. **Se llega despacio a todo cruce y fin de calle** (`v_factor` 0,4): el radio de giro crece con la velocidad.
+  4. Un callejón sin salida **no se gira en U** (un coche no gira 180° en 7 m): se detiene y se retira (de inmediato si nadie lo ve).
+  5. Centrado en el carril con la desviación CONTINUA (se resta lo que el coche ya está corrido dentro de su celda): con el escalón por
+     celda serpenteaba.
+* **No existe todavía**: semáforos que se respeten, peatones que esquiven coches, sonido de motor/choque propio (se reusan
+  `Crumble`/`BulletWall`), lanchas ni helicópteros manejables (`vehicle/helicoptero_*` es un teléfono público del pack, no un helicóptero).
+
+### Trenes (`ha-shared/src/rail.rs` + `ha-game/src/trenes.rs`)
+
+* **Cada ciudad (rango `City`) tiene una línea**: un tramo recto **este-oeste** junto al casco (por fuera de la circunvalación),
+  con TRES paradas (apeadero oeste, **estación** frente al centro, apeadero este) y DOS vías: el tren va por la 0 (hacia el este)
+  y vuelve por la 1 (`SEPARACION_VIAS` = 5, el andén entre las dos). Medido sobre la Tierra: **8 ciudades, 8 líneas** de 562 a 2.500 tiles.
+* **Por qué recta y este-oeste, y por qué no entre ciudades**: el tren del pack es una vista lateral de 10 m por coche (no hay
+  dibujo hacia el norte ni curvas que cierren con 29 m), y las 8 ciudades de ±78 km están a 8–14 km y casi nunca a la misma
+  latitud (una recta entre dos queda a kilómetros de ambas). Las ciudades se unen por carretera (`geography::link_clearance`,
+  ahora también con el vecino más cercano a ≤ 3 celdas: 15 → 7 componentes, 8 núcleos aislados → 0 con vecino cerca).
+* **«Sin rieles rotas por los desniveles»**: la fila se elige donde TODA celda de las vías y del andén es `celda_firme` (suelo firme:
+  ni agua, ni `Cliff`, ni `Slope`; la calzada vale: paso a nivel) y fuera de todo casco ajeno; se mide con un sondeo barato cada 6
+  columnas sobre 62 filas candidatas y exacto sobre las 5 mejores. Casi toda fila cruza una terraza (el relieve es de terrazas), así que
+  **la línea es el tramo llano más largo** de la fila, no la fila entera. Test con mapa real: `la_linea_de_una_ciudad_real_es_llana…`.
+* **La red se calcula en un hilo de fondo** (`trenes::pedir_red`, ~2 s por ciudad en release, con memo global `rail::linea_de_ciudad`) y
+  se renueva cuando el jugador se aleja 2 celdas. Hasta que llega no hay vías (nada a medias).
+* **Vías, andenes y trenes son entidades de `trenes.rs`**, no del chunk: un riel modular (`building/riel_gris_modular_vertical`, 2×1) cada 2 tiles
+  y baldosa de andén (`floor/tren_y_subte_baldosa_lila`), sólo a ≤ 110 tiles del jugador. El tren son tres coches `vehicle/tren_exterior_*`
+  (29 m); su posición es **función pura del reloj** (`rail::estado_del_tren`): acelera a 1,6 m/s², crucero 28 m/s, frena, espera 20 s con las puertas
+  abiertas y en las puntas cambia de vía desvaneciéndose 1,2 s.
+* **Estación funcional**: con un tren parado a la puerta el botón USAR dice ENTRAR; dentro el jugador viaja pegado al tren, y SALIR (sólo
+  parado) lo deja en el andén. Un tren en marcha se lleva lo que esté en su vía (mismo truco del `Bala` + 60 de daño al jugador).
+* **Pendiente**: nombre de la estación en el mundo, sonido, entrada de la ciudad a la estación (hoy son ~70 m de pasto desde la
+  circunvalación), líneas de punta a punta entre ciudades (pediría tren de espaldas y curvas: arte nuevo con la skill `pixel-art`).
+
+### Stick derecho de puntería (`ha-game/src/input/aim_stick.rs`)
+
+Sólo existe con un arma de fuego en la mano. Fuera de la zona muerta (18 %, radial escalada de `apuntado.rs`) el personaje **apunta** hacia el
+stick (y su cuerpo mira ahí aunque camine para otro lado: `AccionJugador::apuntar`); pasado el 62 % **dispara** y deja de disparar bajo el 45 %
+(histéresis); de vuelta al centro conserva el último rumbo sin disparar. Mismo arte que el joystick de caminar (`ui/joystick_*`), tinte rojizo al
+disparar; sus dedos no llegan al mundo (`world_touch` los ignora vía `AimStick::cubre`). Números sin medir con un pulgar: perillas en el módulo.
+
+### Otros arreglos del 5 oct
+
+* **Manchas negras al disparar**: `light2d::attach_ground_shadows` colgaba una sombra proyectada de TODO sprite sin padre ≥ 0,7 m sobre la capa
+  Y-sort — el fogonazo (2 m), la mira (0,8 m) y el arma en la mano. Ahora llevan `UnlitSprite` / `ShadowChecked`.
+* **Gasolinera y estacionamiento** se dibujaban sobre el jugador (la capa de fachadas va siempre sobre los actores): son lotes SIN paredes, se
+  ordenan como suelo (`building::es_a_cielo_abierto`, Y-sort por el borde de atrás de la huella).
+* **Arma a la espalda al caminar**: con `mano.detras` (mirando arriba) el arma se dibujaba detrás del torso; ahora siempre al frente.
+* **Semáforos de perfil**: las caras izquierda/derecha venían sin lámparas; `import-semaforos.py` enciende las tres vainas del lado hacia el que mira.
+* **Puentes**: donde `civil_at` da `Civil::Bridge` hay pretil (`fence/barrera_modular_medio`) en cada borde que da a algo que no es calzada.
+* **Orden de pantallas**: `GameplayUi` nace oculta salvo en `Playing` (gancho `on_add`): no puede dibujarse un cuadro antes de su fase.
+* **Mariposas y luciérnagas** mueren a balazos (`ambient::balas_a_bichos`), con reciclaje (no se crean ni destruyen entidades por tiro).
+
+### Cómo probarlo en la PC (sin GPU)
+
+```bash
+apt-get install -y mesa-vulkan-drivers libvulkan1 xvfb libwayland-dev libxkbcommon-dev libasound2-dev libudev-dev libx11-dev
+cd native && cargo build -p ha-game --profile qa          # 2 min incremental, ~25 min la primera vez
+timeout 600 xvfb-run -a -s "-screen 0 1280x720x24" env WGPU_BACKEND=vulkan VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
+  HA_AUTOPLAY=1 HA_COCHETEST=1 HA_PARTIDA_NUEVA=1 HA_SHOTDIR=/tmp/ha-qa ./target/qa/ha-game     # HA_TRENTEST=1 para el tren
+```
+
+`HA_COCHETEST`: tránsito aparece y avanza → el jugador se sube → maneja ≥ 15 m → baja → 30 balas destruyen el coche (capturas `coche-*.png`).
+`HA_TRENTEST`: la red se calcula → tren a la puerta → sube → viaja ≥ 300 m → baja (capturas `tren-*.png`). ⚠ `pkill -f` con la ruta del binario
+mata la propia shell (el patrón está en su línea de comandos).

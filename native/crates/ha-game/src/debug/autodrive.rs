@@ -314,6 +314,18 @@ impl Plugin for AutoDrivePlugin {
             return;
         }
         // **El cubo: lago, pasto y vaca.** HA_CUBOTEST=1 — ver `cubo_test_drive`.
+        // **Los trenes: red, andén, subir, viajar, bajar.** HA_TRENTEST=1 — ver `tren_test_drive`.
+        if crate::flags::var("HA_TRENTEST").is_ok() {
+            app.add_systems(Update, tren_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        // **Todas las clases de vehículo (ambulancia, camión, basura, helicóptero, lancha).** HA_VEHTEST=1.
+        if crate::flags::var("HA_VEHTEST").is_ok() {
+            app.add_systems(Update, veh_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        // **Los coches: tránsito, entrar, manejar, balas.** HA_COCHETEST=1 — ver `coche_test_drive`.
+        if crate::flags::var("HA_COCHETEST").is_ok() {
+            app.add_systems(Update, coche_test_drive.before(aplicar_actuacion_del_driver));
+        }
         if crate::flags::var("HA_CUBOTEST").is_ok() {
             app.add_systems(Update, cubo_test_drive.before(aplicar_actuacion_del_driver));
             return;
@@ -7213,6 +7225,618 @@ fn salir_test_drive(world: &mut World, mut paso: Local<u32>, mut t0: Local<f32>,
                 }
                 eprintln!("ha-verify: SALIRTEST DONE");
                 std::process::exit(0);
+            }
+        }
+    }
+}
+
+
+
+// ---------------------------------------------------------------------------
+// HA_TRENTEST — la estación funcional: red calculada, andén, subir al tren, viajar y bajar
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct TrenTest {
+    paso: u32,
+    t0: f32,
+    fallo: bool,
+    x0: f32,
+    linea: Option<ha_shared::rail::Linea>,
+    paradas_vistas: u32,
+    /// El tren ya salió de la parada donde subí (hay que esperar a que llegue a la siguiente).
+    espera_salida: bool,
+}
+
+fn tren_falla(st: &mut TrenTest, inv: &str, detalle: &str) {
+    report_bug("tren", inv, detalle);
+    st.fallo = true;
+}
+
+/// **El tren, por los sistemas de verdad** (`trenes.rs` + `ha_shared::rail`):
+///
+/// 1. La red se calcula (hilo de fondo) y la ciudad más cercana tiene línea.
+/// 2. Parado en el andén de la estación, aparece un tren por su vía y se detiene a la puerta (`tren_cerca`).
+/// 3. USAR sube; viaja hasta la parada siguiente (≥ 300 m) con el jugador pegado al tren.
+/// 4. USAR parado en esa parada baja al jugador al andén.
+///
+/// Capturas en `HA_SHOTDIR` (`tren-*.png`).
+fn tren_test_drive(world: &mut World, mut st: Local<TrenTest>) {
+    use crate::vehiculos::Conduccion;
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    let dir = flytest_dir();
+    let body = ha_shared::CelestialBody::Earth;
+    match st.paso {
+        0 => {
+            // La ciudad más cercana al origen (cualquier ciudad sirve) y a esperar la red.
+            let mut best: Option<(i64, ha_shared::geography::Settlement)> = None;
+            for sx in -12..12 {
+                for sz in -12..12 {
+                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    if s.tier != ha_shared::geography::SettlementTier::City {
+                        continue;
+                    }
+                    let d = s.center.0.abs() + s.center.1.abs();
+                    if best.as_ref().map_or(true, |(bd, _)| d < *bd) {
+                        best = Some((d, s));
+                    }
+                }
+            }
+            let Some((_, s)) = best else {
+                eprintln!("ha-verify: TRENTEST FAIL (no hay ciudad)");
+                std::process::exit(1);
+            };
+            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+            // Cerca del centro para que el hilo de red arranque con esta ciudad.
+            teleport_a_celda(world, s.center.0 as f32, s.center.1 as f32);
+            eprintln!("ha-trentest: ciudad en {:?}", s.center);
+            st.linea = None;
+            st.paso = 1;
+            st.t0 = now;
+        }
+        1 => {
+            // Esperar a que la red incluya la línea de esta ciudad.
+            let (lineas, _) = crate::trenes::lineas();
+            let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+            let mejor = lineas.iter().min_by_key(|l| (l.ciudad.0 - px as i64).abs() + (l.ciudad.1 - pz as i64).abs()).copied();
+            if let Some(l) = mejor {
+                eprintln!("ha-trentest: línea lista tras {:.0} s: z={} paradas={:?}", now - st.t0, l.z, l.paradas);
+                st.linea = Some(l);
+                // A la estación: sobre el andén, entre las dos vías.
+                teleport_a_celda(world, l.paradas[1] as f32 + 0.5, l.z as f32 + 2.5);
+                st.paso = 2;
+                st.t0 = now;
+            } else if now - st.t0 > 400.0 {
+                tren_falla(&mut st, "la_red_se_calcula", "en 400 s no hay ninguna línea");
+                st.paso = 99;
+            }
+        }
+        2 => {
+            if !mundo_listo(world) {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 < 4.0 {
+                return;
+            }
+            shot(world, &format!("{dir}/tren-0-anden.png"));
+            st.paso = 3;
+            st.t0 = now;
+        }
+        3 => {
+            // Esperar un tren parado en la estación.
+            if world.resource::<Conduccion>().tren_cerca {
+                eprintln!("ha-trentest: hay un tren a la puerta tras {:.0} s", now - st.t0);
+                shot(world, &format!("{dir}/tren-1-en-la-estacion.png"));
+                let (px, _) = posicion_del_jugador(world).unwrap_or_default();
+                st.x0 = px;
+                world.resource_mut::<DriverActuation>().usar = true;
+                st.paso = 4;
+                st.t0 = now;
+            } else if now - st.t0 > 420.0 {
+                tren_falla(&mut st, "llega_un_tren", "en 420 s ningún tren se paró en la estación");
+                st.paso = 99;
+            }
+        }
+        4 => {
+            if world.resource::<Conduccion>().en_tren.is_some() {
+                eprintln!("ha-trentest: a bordo");
+                st.paso = 5;
+                st.t0 = now;
+            } else if now - st.t0 > 3.0 {
+                tren_falla(&mut st, "se_puede_subir", "USAR con el tren a la puerta no subió");
+                st.paso = 99;
+            }
+        }
+        5 => {
+            // Viajando: el jugador va pegado al tren; esperar a que pare en la parada siguiente.
+            let c = world.resource::<Conduccion>();
+            let (en_tren, parado) = (c.en_tren.is_some(), c.tren_parado);
+            let (px, _) = posicion_del_jugador(world).unwrap_or_default();
+            if !en_tren {
+                tren_falla(&mut st, "sigue_a_bordo", "se bajó solo");
+                st.paso = 99;
+                return;
+            }
+            if (px - st.x0).abs() > 300.0 && st.paradas_vistas < 2 {
+                shot(world, &format!("{dir}/tren-2-viajando.png"));
+                st.paradas_vistas = 2;
+            }
+            if !parado {
+                st.paradas_vistas = st.paradas_vistas.max(1);
+                st.espera_salida = true;
+            }
+            if parado && st.espera_salida {
+                eprintln!("ha-trentest: llegó a la parada siguiente tras {:.0} s: recorrió {:.0} m", now - st.t0, (px - st.x0).abs());
+                if (px - st.x0).abs() < 300.0 {
+                    let detalle = format!("sólo {:.0} m entre paradas", (px - st.x0).abs());
+                    tren_falla(&mut st, "el_tren_viaja", &detalle);
+                }
+                shot(world, &format!("{dir}/tren-3-llegada.png"));
+                world.resource_mut::<DriverActuation>().usar = true;
+                st.paso = 6;
+                st.t0 = now;
+            } else if now - st.t0 > 160.0 {
+                tren_falla(&mut st, "el_tren_llega", "en 160 s no paró en la parada siguiente");
+                st.paso = 99;
+            }
+        }
+        6 => {
+            if world.resource::<Conduccion>().en_tren.is_none() {
+                eprintln!("ha-trentest: bajó al andén");
+                shot(world, &format!("{dir}/tren-4-bajo.png"));
+                st.paso = 99;
+                st.t0 = now;
+            } else if now - st.t0 > 3.0 {
+                tren_falla(&mut st, "se_puede_bajar", "USAR en la parada no bajó");
+                st.paso = 99;
+            }
+        }
+        _ => {
+            if st.t0 == 0.0 {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 > 3.0 {
+                eprintln!("ha-verify: TRENTEST {}", if st.fallo { "FAIL" } else { "DONE" });
+                std::process::exit(if st.fallo { 1 } else { 0 });
+            }
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_VEHTEST — cada clase de vehículo: aparece, se dibuja, se maneja y se destruye a balazos
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct VehTest {
+    paso: u32,
+    clase: usize,
+    t0: f32,
+    fallo: bool,
+    inicio: Vec2,
+    id: Option<Entity>,
+    agua: Option<(i64, i64)>,
+}
+
+fn veh_falla(st: &mut VehTest, inv: &str, detalle: &str) {
+    report_bug("vehiculo", inv, detalle);
+    st.fallo = true;
+}
+
+/// **Cada clase, por los sistemas de verdad**: la ambulancia, el camión de bomberos, el de basura, el helicóptero y la lancha.
+/// Para cada una: se crea junto al jugador (la lancha, en el agua más cercana), se dibuja (captura), el jugador se sube, la maneja
+/// con el stick hacia el este (≥ 5 m), se baja y una ráfaga la destruye.
+fn veh_test_drive(world: &mut World, mut st: Local<VehTest>) {
+    use crate::vehiculos::{Clase, Conduccion, Conductor, Vehiculo};
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    const CLASES: [(Clase, &str); 5] = [(Clase::Ambulancia, "ambulancia"), (Clase::Camion, "camion"), (Clase::Basura, "basura"), (Clase::Helicoptero, "helicoptero"), (Clase::Lancha, "lancha")];
+    let dir = flytest_dir();
+    let body = ha_shared::CelestialBody::Earth;
+    if st.clase >= CLASES.len() {
+        if st.t0 == 0.0 {
+            st.t0 = now;
+            return;
+        }
+        if now - st.t0 > 3.0 {
+            eprintln!("ha-verify: VEHTEST {}", if st.fallo { "FAIL" } else { "DONE" });
+            std::process::exit(if st.fallo { 1 } else { 0 });
+        }
+        return;
+    }
+    let (clase, nombre) = CLASES[st.clase];
+    match st.paso {
+        0 => {
+            // Plantarse en una ciudad (para la lancha, junto al agua más cercana).
+            if st.clase == 0 {
+                let mut best: Option<(i64, (i64, i64))> = None;
+                for sx in -25..25 {
+                    for sz in -25..25 {
+                        let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                        if s.tier != ha_shared::geography::SettlementTier::City {
+                            continue;
+                        }
+                        let d = s.center.0.abs() + s.center.1.abs();
+                        if best.map_or(true, |(bd, _)| d < bd) {
+                            best = Some((d, s.center));
+                        }
+                    }
+                }
+                let Some((_, (cx, cz))) = best else {
+                    eprintln!("ha-verify: VEHTEST FAIL (no hay ciudad)");
+                    std::process::exit(1);
+                };
+                world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+                teleport_a_celda(world, cx as f32, cz as f32);
+            }
+            if clase == Clase::Lancha {
+                let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
+                let (px, pz) = (px.floor() as i64, pz.floor() as i64);
+                let tiles = world.resource::<TileWorld>();
+                let mut mejor: Option<(i64, (i64, i64))> = None;
+                for dz in (-300..=300i64).step_by(2) {
+                    for dx in (-300..=300i64).step_by(2) {
+                        let (x, z) = (px + dx, pz + dz);
+                        let agua = |a: i64, b: i64| matches!(tiles.tile_at(body, a, b), ha_shared::topdown::Tile::Water | ha_shared::topdown::Tile::WaterDeep);
+                        if agua(x, z) && agua(x + 3, z) && agua(x - 3, z) && agua(x, z + 3) && agua(x, z - 3) {
+                            let d = dx * dx + dz * dz;
+                            if mejor.map_or(true, |m| d < m.0) {
+                                mejor = Some((d, (x, z)));
+                            }
+                        }
+                    }
+                }
+                let Some((_, (x, z))) = mejor else {
+                    eprintln!("ha-vehtest: no hay agua a 300 m: se omite la lancha");
+                    st.clase += 1;
+                    st.paso = 0;
+                    return;
+                };
+                st.agua = Some((x, z));
+                teleport_a_celda(world, x as f32 + 0.5, z as f32 + 0.5);
+            }
+            st.paso = 1;
+            st.t0 = now;
+        }
+        1 => {
+            if !mundo_listo(world) {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 < 3.0 {
+                return;
+            }
+            let Some((px, pz)) = posicion_del_jugador(world) else { return };
+            // En tierra, sobre un carril este de la calzada con 12 m libres a cada lado (no sobre la vereda, llena de faroles).
+            let calle = (0..=60i64)
+                .flat_map(|d| (-d..=d).flat_map(move |k| [(k, -d), (k, d), (-d, k), (d, k)]))
+                .map(|(dx, dz)| (px.floor() as i64 + dx, pz.floor() as i64 + dz))
+                .find(|&(x, z)| [0i64, 12, -12].iter().all(|o| ha_shared::roads::lane_at(body, x + o, z) == Some(0)));
+            let pos = if let Some((x, z)) = st.agua.filter(|_| clase == Clase::Lancha) {
+                Vec2::new(x as f32 + 0.5, z as f32 + 0.5)
+            } else if let Some((x, z)) = calle {
+                Vec2::new(x as f32 + 0.5, z as f32 + 0.5)
+            } else {
+                Vec2::new(px + 7.0, pz + 5.0)
+            };
+            let nuevo = world.resource_scope::<crate::art2d::ArtLibrary, _>(|_, art| Vehiculo::nuevo(&art, clase, pos, 0.0, Conductor::Nadie, 77 + st.clase as u32));
+            let Some(v) = nuevo else {
+                veh_falla(&mut st, "hay_arte", &format!("el pack no trae el dibujo de {nombre}"));
+                st.clase += 1;
+                st.paso = 0;
+                return;
+            };
+            let e = world.spawn((v, Sprite::default(), Transform::from_xyz(pos.x, -pos.y, 3.5), Visibility::Hidden)).id();
+            st.id = Some(e);
+            st.inicio = pos;
+            st.paso = 2;
+            st.t0 = now;
+        }
+        2 => {
+            if now - st.t0 < 2.0 {
+                return;
+            }
+            shot(world, &format!("{dir}/veh-{nombre}.png"));
+            // Junto al vehículo y USAR.
+            let p = world.get::<Vehiculo>(st.id.unwrap()).map(|v| v.cuerpo.pos).unwrap_or_default();
+            teleport_a_celda(world, p.x - 3.0 - clase.ficha().largo * 0.5, p.y);
+            st.paso = 3;
+            st.t0 = now;
+        }
+        3 => {
+            if world.resource::<Conduccion>().cerca.is_some() || now - st.t0 > 1.0 {
+                world.resource_mut::<DriverActuation>().usar = true;
+                st.paso = 4;
+                st.t0 = now;
+            }
+        }
+        4 => {
+            if world.resource::<Conduccion>().vehiculo.is_some() {
+                st.paso = 5;
+                st.t0 = now;
+            } else if now - st.t0 > 3.0 {
+                veh_falla(&mut st, "se_puede_entrar", &format!("no se pudo subir a {nombre}"));
+                st.clase += 1;
+                st.paso = 0;
+            }
+        }
+        5 => {
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
+            if now - st.t0 > 6.0 {
+                let p = world.get::<Vehiculo>(st.id.unwrap()).map(|v| v.cuerpo.pos).unwrap_or_default();
+                let d = p.distance(st.inicio);
+                eprintln!("ha-vehtest: {nombre} manejado {d:.0} m");
+                if d < 5.0 {
+                    veh_falla(&mut st, "se_maneja", &format!("{nombre} recorrió sólo {d:.1} m en 6 s"));
+                }
+                shot(world, &format!("{dir}/veh-{nombre}-manejando.png"));
+                st.paso = 6;
+                st.t0 = now;
+            }
+        }
+        6 => {
+            world.resource_mut::<DriverActuation>().usar = true;
+            st.paso = 7;
+            st.t0 = now;
+        }
+        7 => {
+            if world.resource::<Conduccion>().vehiculo.is_none() {
+                let v = world.get::<Vehiculo>(st.id.unwrap()).cloned().unwrap();
+                for k in 0..40 {
+                    let a = Vec2::new(v.cuerpo.pos.x - 6.0, v.cuerpo.pos.y + (k as f32 - 20.0) * 0.02);
+                    world.spawn(crate::armas::Bala {
+                        pos: v.cuerpo.pos,
+                        prev: a,
+                        vel: Vec2::ZERO,
+                        dano: 60.0,
+                        origen: a,
+                        alcance: 30.0,
+                        atraviesa: 1,
+                        golpeados: Vec::new(),
+                        viva: true,
+                        impacto: crate::audio::Sfx::BulletHit,
+                        rayo: false,
+                    });
+                }
+                st.paso = 8;
+                st.t0 = now;
+            } else if now - st.t0 > 3.0 {
+                veh_falla(&mut st, "se_puede_salir", &format!("no se pudo bajar de {nombre}"));
+                st.clase += 1;
+                st.paso = 0;
+            }
+        }
+        _ => {
+            if now - st.t0 > 1.5 {
+                let destruido = world.get::<Vehiculo>(st.id.unwrap()).map(|v| v.destruido).unwrap_or(true);
+                if !destruido {
+                    veh_falla(&mut st, "las_balas_destruyen", &format!("40 balas de 60 no destruyeron {nombre}"));
+                }
+                shot(world, &format!("{dir}/veh-{nombre}-destruido.png"));
+                st.clase += 1;
+                st.paso = 0;
+                st.agua = None;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HA_COCHETEST — el tránsito: aparece, circula, se le sube el jugador, maneja y lo destruyen a balazos
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct CocheTest {
+    paso: u32,
+    t0: f32,
+    fallo: bool,
+    inicio: Vec2,
+    id: Option<Entity>,
+}
+
+fn coche_falla(st: &mut CocheTest, inv: &str, detalle: &str) {
+    report_bug("coche", inv, detalle);
+    st.fallo = true;
+}
+
+/// **Los vehículos, por los sistemas de verdad** (`vehiculos.rs`):
+///
+/// 1. En una ciudad, el tránsito aparece solo (≥ 1 coche con conductor NPC en 40 s) y AVANZA por su carril.
+/// 2. El jugador se para junto a uno y toca USAR: queda al volante (`Conduccion::vehiculo`).
+/// 3. Con el stick hacia el este, el coche acelera y recorre ≥ 15 m.
+/// 4. USAR de nuevo lo baja, y una ráfaga de balas sobre el coche abandonado lo destruye.
+///
+/// Capturas en `HA_SHOTDIR` (`coche-*.png`).
+fn coche_test_drive(world: &mut World, mut st: Local<CocheTest>) {
+    use crate::vehiculos::{Conduccion, Conductor as Conducto, Vehiculo};
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    let dir = flytest_dir();
+    let body = ha_shared::CelestialBody::Earth;
+    match st.paso {
+        0 => {
+            let mut best: Option<(i64, (i64, i64))> = None;
+            for sx in -25..25 {
+                for sz in -25..25 {
+                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    if s.tier != ha_shared::geography::SettlementTier::City {
+                        continue;
+                    }
+                    let d = s.center.0.abs() + s.center.1.abs();
+                    if best.map_or(true, |(bd, _)| d < bd) {
+                        best = Some((d, s.center));
+                    }
+                }
+            }
+            let Some((_, (cx, cz))) = best else {
+                eprintln!("ha-verify: COCHETEST FAIL (no hay ciudad)");
+                std::process::exit(1);
+            };
+            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+            teleport_a_celda(world, cx as f32, cz as f32);
+            eprintln!("ha-cochetest: ciudad en ({cx}, {cz})");
+            st.paso = 1;
+            st.t0 = now;
+        }
+        1 => {
+            if !mundo_listo(world) {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 < 3.0 {
+                return;
+            }
+            st.paso = 2;
+            st.t0 = now;
+        }
+        2 => {
+            // Esperar el tránsito.
+            let mut q = world.query::<(Entity, &Vehiculo)>();
+            let coches: Vec<(Entity, Vec2)> = q.iter(world).filter(|(_, v)| v.conductor == Conducto::Npc).map(|(e, v)| (e, v.cuerpo.pos)).collect();
+            if let Some(&(e, p)) = coches.first() {
+                st.id = Some(e);
+                st.inicio = p;
+                eprintln!("ha-cochetest: {} coche(s) de tránsito; sigo a uno en ({:.0},{:.0})", coches.len(), p.x, p.y);
+                shot(world, &format!("{dir}/coche-0-transito.png"));
+                st.paso = 3;
+                st.t0 = now;
+            } else if now - st.t0 > 60.0 {
+                coche_falla(&mut st, "aparece_el_transito", "en 60 s ningún coche con conductor NPC");
+                st.paso = 99;
+            }
+        }
+        3 => {
+            // Avanza por su carril (o espera si el semáforo/obstáculo lo frena: se le da tiempo).
+            let Some(e) = st.id else { st.paso = 99; return };
+            let Some(v) = world.get::<Vehiculo>(e).cloned() else {
+                // Se retiró (fin de calle o lejos): se busca otro.
+                st.paso = 2;
+                st.t0 = now;
+                return;
+            };
+            let recorrido = v.cuerpo.pos.distance(st.inicio);
+            if recorrido > 25.0 {
+                eprintln!("ha-cochetest: el coche avanzó {recorrido:.0} m solo");
+                st.paso = 4;
+                st.t0 = now;
+            } else if now - st.t0 > 45.0 {
+                coche_falla(&mut st, "el_transito_avanza", &format!("sólo {recorrido:.1} m en 45 s (vel {:.1})", v.cuerpo.vel));
+                st.paso = 99;
+            }
+        }
+        4 => {
+            // Junto al coche: se planta el jugador a 2 m y toca USAR.
+            let Some(e) = st.id else { st.paso = 99; return };
+            let Some(v) = world.get::<Vehiculo>(e).cloned() else { st.paso = 2; st.t0 = now; return };
+            teleport_a_celda(world, v.cuerpo.pos.x + 2.0, v.cuerpo.pos.y + 2.0);
+            if world.resource::<Conduccion>().cerca.is_some() || now - st.t0 > 1.0 {
+                world.resource_mut::<DriverActuation>().usar = true;
+                st.paso = 5;
+                st.t0 = now;
+            }
+        }
+        5 => {
+            if world.resource::<Conduccion>().vehiculo.is_some() {
+                eprintln!("ha-cochetest: al volante");
+                shot(world, &format!("{dir}/coche-1-al-volante.png"));
+                let p = world.get::<Vehiculo>(world.resource::<Conduccion>().vehiculo.unwrap()).map(|v| v.cuerpo.pos).unwrap_or_default();
+                st.inicio = p;
+                st.paso = 6;
+                st.t0 = now;
+            } else if now - st.t0 > 3.0 {
+                coche_falla(&mut st, "se_puede_entrar", "USAR junto al coche no lo subió");
+                st.paso = 99;
+            }
+        }
+        6 => {
+            // Stick hacia el este durante 8 s.
+            world.resource_mut::<DriverActuation>().mover = Vec2::new(1.0, 0.0);
+            let Some(e) = world.resource::<Conduccion>().vehiculo else {
+                coche_falla(&mut st, "sigue_al_volante", "se bajó solo");
+                st.paso = 99;
+                return;
+            };
+            let v = world.get::<Vehiculo>(e).cloned().unwrap();
+            if now - st.t0 > 8.0 {
+                let d = v.cuerpo.pos.distance(st.inicio);
+                eprintln!("ha-cochetest: manejado {d:.0} m, vel {:.1} m/s, vida {:.0}", v.cuerpo.vel, v.vida);
+                shot(world, &format!("{dir}/coche-2-manejando.png"));
+                if d < 15.0 && v.vida >= 119.0 {
+                    coche_falla(&mut st, "el_jugador_maneja", &format!("el coche recorrió sólo {d:.1} m en 8 s con el stick al este"));
+                }
+                st.paso = 7;
+                st.t0 = now;
+            }
+        }
+        7 => {
+            world.resource_mut::<DriverActuation>().usar = true;
+            st.paso = 8;
+            st.t0 = now;
+        }
+        8 => {
+            if world.resource::<Conduccion>().vehiculo.is_none() {
+                // Una ráfaga sobre el coche abandonado.
+                let p = posicion_del_jugador(world).unwrap_or_default();
+                let pa = Vec2::new(p.0, p.1);
+                let mut q = world.query::<(Entity, &Vehiculo)>();
+                let objetivo = q
+                    .iter(world)
+                    .filter(|(_, v)| !v.destruido)
+                    .min_by(|a, b| a.1.cuerpo.pos.distance(pa).total_cmp(&b.1.cuerpo.pos.distance(pa)));
+                let Some((e, v)) = objetivo.map(|(e, v)| (e, v.clone())) else { coche_falla(&mut st, "hay_a_quien_disparar", "no hay coches"); st.paso = 99; return };
+                st.id = Some(e);
+                for k in 0..30 {
+                    let a = Vec2::new(v.cuerpo.pos.x - 8.0, v.cuerpo.pos.y + (k as f32 - 15.0) * 0.02);
+                    world.spawn(crate::armas::Bala {
+                        pos: v.cuerpo.pos,
+                        prev: a,
+                        vel: Vec2::ZERO,
+                        dano: 40.0,
+                        origen: a,
+                        alcance: 30.0,
+                        atraviesa: 1,
+                        golpeados: Vec::new(),
+                        viva: true,
+                        impacto: crate::audio::Sfx::BulletHit,
+                        rayo: false,
+                    });
+                }
+                st.paso = 9;
+                st.t0 = now;
+            } else if now - st.t0 > 3.0 {
+                coche_falla(&mut st, "se_puede_salir", "USAR al volante no lo bajó");
+                st.paso = 99;
+            }
+        }
+        9 => {
+            if now - st.t0 > 1.5 {
+                let destruido = st.id.and_then(|e| world.get::<Vehiculo>(e)).map(|v| v.destruido).unwrap_or(true);
+                shot(world, &format!("{dir}/coche-3-destruido.png"));
+                if !destruido {
+                    coche_falla(&mut st, "las_balas_destruyen", "30 balas de 40 no destruyeron el coche");
+                }
+                st.paso = 99;
+                st.t0 = now;
+            }
+        }
+        _ => {
+            if now - st.t0 > 3.0 || st.t0 == 0.0 {
+                if st.t0 == 0.0 {
+                    st.t0 = now;
+                    return;
+                }
+                eprintln!("ha-verify: COCHETEST {}", if st.fallo { "FAIL" } else { "DONE" });
+                std::process::exit(if st.fallo { 1 } else { 0 });
             }
         }
     }

@@ -933,7 +933,10 @@ fn visual_del_arma(
         tf.translation = Vec3::new(
             mano.pos.x + retro.x,
             mano.pos.y - retro.y,
-            if mano.detras { mano.z - crate::manos::DZ } else { mano.z + crate::manos::DZ },
+            // **Siempre al frente del cuerpo.** Con `mano.detras` (mirando arriba) el arma se dibujaba DETRÁS del torso:
+            // caminando hacia el norte parecía colgada a la espalda y al frenar —pose de apuntar, mano de frente— saltaba
+            // al frente. Un arma empuñada se ve siempre, gire hacia donde gire el cuerpo.
+            mano.z + crate::manos::DZ,
         );
         // Mirando a la izquierda el sprite se espeja (en vertical) para no quedar patas arriba; el agarre
         // se espeja con él.

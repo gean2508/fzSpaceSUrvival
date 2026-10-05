@@ -38,12 +38,12 @@ pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKi
         return surface_decor_at_calc(body, tx, tz);
     }
     const RANURAS: usize = 4096;
-    type Clave = (u8, i64, i64, u32, u32);
+    type Clave = (u8, i64, i64, u32, u32, u32);
     thread_local! {
         static MEMO: std::cell::RefCell<Vec<Option<(Clave, Option<DecorKind>)>>> =
             std::cell::RefCell::new(vec![None; RANURAS]);
     }
-    let clave: Clave = (body as u8, tx, tz, crate::partida::epoca(), crate::zonas::generacion());
+    let clave: Clave = (body as u8, tx, tz, crate::partida::epoca(), crate::zonas::generacion(), crate::rail::generacion());
     let h = (tx as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (tz as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
     let ranura = (h >> 40) as usize % RANURAS;
     if let Some(v) = MEMO.with(|m| m.borrow()[ranura].as_ref().and_then(|(c, v)| (*c == clave).then_some(*v))) {
@@ -55,6 +55,11 @@ pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKi
 }
 
 fn surface_decor_at_calc(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKind> {
+    // **Sobre las vías y el andén no crece nada**: un árbol en medio del riel (o una piedra en el andén) es lo primero
+    // que se vio en la captura de la estación. Sólo cuenta lo que el hilo de fondo ya midió (`rail::corredor_conocido`).
+    if crate::rail::corredor_conocido(body, tx, tz) {
+        return None;
+    }
     let seed = crate::body_terrain_seed(body) ^ 0x1234_abcd;
     let tile = topdown_tile(body, 0, tx, tz);
     // `buildable_ground` y no `!solid()`: desde que el bajío se nada, `!solid()`
@@ -286,6 +291,11 @@ pub fn nature_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static
     if body != CelestialBody::Earth {
         return None;
     }
+    // Ni piedras, ni troncos, ni flores sobre las vías y el andén (`rail::corredor_conocido`).
+    if crate::rail::corredor_conocido(body, tx, tz) {
+        return None;
+    }
+
     // **LO QUE CRECE SOLO NO CRECE EN EL ASFALTO.** Esta tabla no miraba el suelo
     // urbanizado, así que la flora de jardín del pack —girasoles, macetas,
     // arbustos podados— salía sorteada encima de la calzada y de la acera, en
@@ -407,6 +417,9 @@ pub fn jardin_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static
 
 /// Props cerca de asentamientos (el "patio" del pueblo): ~3% de esas celdas.
 pub fn prop_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    if crate::rail::corredor_conocido(body, tx, tz) {
+        return None;
+    }
     let site = building_site_in(body, tx.div_euclid(SITE_PERIOD), tz.div_euclid(SITE_PERIOD))?;
     let (ox, oz) = site.min;
     let near = tx >= ox - 6 && tx < ox + site.w + 6 && tz >= oz - 6 && tz < oz + site.h + 6;
@@ -720,6 +733,9 @@ pub fn tabla_interior_de(lote: &str) -> Option<&'static [ExtraDecor]> {
 /// y sitio para pescar. Sin esto un lago es un obstáculo; con esto es un sitio
 /// adonde ir.
 pub fn shore_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    if crate::rail::corredor_conocido(body, tx, tz) {
+        return None;
+    }
     // Tiene que ser tierra firme: nada de plantar una carpa dentro del agua.
     if !topdown_tile(body, 0, tx, tz).buildable_ground() {
         return None;
@@ -816,6 +832,9 @@ pub fn calzada_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'stati
 /// La playa era arena pelada aunque el pack trae 317 sprites de playa. Se siembra
 /// sobre arena con agua cerca — o sea la orilla del mar, no un desierto interior.
 pub fn playa_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    if crate::rail::corredor_conocido(body, tx, tz) {
+        return None;
+    }
     if topdown_tile(body, 0, tx, tz) != crate::topdown::Tile::Sand {
         return None;
     }

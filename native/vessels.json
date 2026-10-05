@@ -25,17 +25,17 @@
     {
       "id": "OrbitalStation",
       "label": "ORBITAL STATION",
-      "mode": "ParkedOrbit",
+      "mode": "Inactive",
       "body": "Earth",
-      "orbit_phase": 0.11635528,
+      "orbit_phase": 0.0,
       "surface_tz": 0.0,
-      "orbit_alt_m": 600.0,
+      "orbit_alt_m": 420.0,
       "fuel_pct": 100.0,
       "power": {
         "generation_w": 0.0,
-        "load_w": 38.0,
+        "load_w": 0.0,
         "storage_wh": 0.0,
-        "storage_max_wh": 500.0,
+        "storage_max_wh": 0.0,
         "solar_efficiency": 0.0
       },
       "connectivity": {

@@ -57,6 +57,21 @@ const VIDA_CHASIS: f32 = 150.0;
 pub enum Clase {
     Auto,
     Colectivo,
+    Ambulancia,
+    /// Camión de bomberos (en el pack, `vehicle/camion_*`).
+    Camion,
+    Basura,
+    /// Bote inflable (`vehicle/lancha`): navega, no pisa tierra.
+    Lancha,
+    Helicoptero,
+}
+
+/// Por dónde se mueve una clase.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Terreno {
+    Tierra,
+    Agua,
+    Aire,
 }
 
 /// Lo que cambia entre clases: tamaño de la caja de choque, motor, vida.
@@ -70,14 +85,84 @@ pub struct Ficha {
     pub acel: f32,
     pub freno: f32,
     pub vida: f32,
+    /// Resistencia del medio (1/s): el agua frena más que el asfalto.
+    pub drag: f32,
+    pub terreno: Terreno,
 }
 
 impl Clase {
     pub fn ficha(self) -> Ficha {
+        let t = |largo, ancho, v_max, v_atras, acel, freno, vida| Ficha { largo, ancho, v_max, v_atras, acel, freno, vida, drag: 0.12, terreno: Terreno::Tierra };
         match self {
-            Clase::Auto => Ficha { largo: 3.6, ancho: 1.7, v_max: 20.0, v_atras: 5.0, acel: 7.0, freno: 16.0, vida: 120.0 },
-            Clase::Colectivo => Ficha { largo: 7.0, ancho: 2.2, v_max: 13.0, v_atras: 3.0, acel: 3.6, freno: 11.0, vida: 280.0 },
+            Clase::Auto => t(3.6, 1.7, 20.0, 5.0, 7.0, 16.0, 120.0),
+            Clase::Colectivo => t(7.0, 2.2, 13.0, 3.0, 3.6, 11.0, 280.0),
+            Clase::Ambulancia => t(6.2, 2.3, 23.0, 5.0, 6.5, 15.0, 170.0),
+            Clase::Camion => t(8.2, 3.0, 16.0, 4.0, 3.6, 12.0, 340.0),
+            Clase::Basura => t(7.2, 2.7, 14.0, 3.5, 3.2, 11.0, 280.0),
+            Clase::Lancha => Ficha { largo: 3.0, ancho: 1.7, v_max: 13.0, v_atras: 3.0, acel: 5.0, freno: 7.0, vida: 90.0, drag: 0.45, terreno: Terreno::Agua },
+            Clase::Helicoptero => Ficha { largo: 8.0, ancho: 3.0, v_max: 34.0, v_atras: 10.0, acel: 6.0, freno: 9.0, vida: 220.0, drag: 0.25, terreno: Terreno::Aire },
         }
+    }
+
+    /// Clases que circulan solas por las calles, con su peso en el tránsito.
+    pub const TRANSITO: [(Clase, u32); 5] = [(Clase::Auto, 70), (Clase::Colectivo, 10), (Clase::Ambulancia, 7), (Clase::Camion, 6), (Clase::Basura, 7)];
+}
+
+/// De dónde sale el dibujo de una clase.
+enum Arte {
+    /// Un slot con las cuatro poses (`derecha`, `arriba`, `izquierda`, `abajo`); hay varios para elegir.
+    Poses(&'static [&'static str]),
+    /// Una clave por dirección `[derecha, arriba, izquierda, abajo]`; `true` = la izquierda es la derecha espejada.
+    Claves([&'static str; 4], bool),
+}
+
+fn arte(clase: Clase) -> Arte {
+    match clase {
+        Clase::Auto => Arte::Poses(AUTOS),
+        Clase::Colectivo => Arte::Poses(COLECTIVOS),
+        Clase::Lancha => Arte::Poses(&["vehicle/lancha"]),
+        Clase::Ambulancia => Arte::Claves(
+            ["vehicle/ambulancia_derecha_1", "vehicle/ambulancia_arriba", "vehicle/ambulancia_izquierda_1", "vehicle/ambulancia_abajo"],
+            false,
+        ),
+        Clase::Camion => Arte::Claves(["vehicle/camion_derecha", "vehicle/camion_arriba", "vehicle/camion_izquierda", "vehicle/camion_abajo"], false),
+        Clase::Basura => Arte::Claves(
+            [
+                "vehicle/camion_de_basura_verde_derecha",
+                "vehicle/camion_de_basura_verde_arriba",
+                "vehicle/camion_de_basura_verde_izquierda",
+                "vehicle/camion_de_basura_verde_abajo",
+            ],
+            false,
+        ),
+        // El helicóptero del pack: de costado (hacia la derecha; a la izquierda, espejado) y de arriba (nariz abajo / nariz arriba).
+        Clase::Helicoptero => Arte::Claves(
+            ["vehicle/helicoptero_base_costado", "vehicle/helicoptero_atras_costado", "vehicle/helicoptero_base_costado", "vehicle/helicoptero_frente_costado"],
+            true,
+        ),
+    }
+}
+
+/// ¿El pack trae todo el dibujo de esta clase? (Si no, la clase no aparece.)
+fn arte_disponible(art: &crate::art2d::ArtLibrary, clase: Clase) -> bool {
+    match arte(clase) {
+        Arte::Poses(l) => l.iter().any(|k| tiene_poses(art, k)),
+        Arte::Claves(k, _) => k.iter().all(|c| art.has_art(c)),
+    }
+}
+
+/// Sorteo del slot de una clase con `Poses` (o `""` si es de `Claves`).
+fn elegir_clave(art: &crate::art2d::ArtLibrary, clase: Clase, s: &mut u32) -> Option<String> {
+    match arte(clase) {
+        Arte::Poses(l) => {
+            let ok: Vec<&&str> = l.iter().filter(|k| tiene_poses(art, k)).collect();
+            if ok.is_empty() {
+                None
+            } else {
+                Some((**ok[(azar01(s) * ok.len() as f32) as usize % ok.len()]).to_string())
+            }
+        }
+        Arte::Claves(..) => arte_disponible(art, clase).then(String::new),
     }
 }
 
@@ -143,7 +228,7 @@ pub fn paso(c: &mut Cuerpo, m: Mando, f: &Ficha, dt: f32) -> Vec2 {
     let dv = (falta.signum() * a * dt).clamp(-falta.abs(), falta.abs());
     c.vel += dv;
     // Resistencia (el coche rueda y se frena solo).
-    c.vel -= c.vel * 0.12 * dt;
+    c.vel -= c.vel * f.drag * dt;
     if m.v_obj == 0.0 && c.vel.abs() < 0.15 {
         c.vel = 0.0;
     }
@@ -211,6 +296,30 @@ pub enum Conductor {
     Npc,
 }
 
+impl Vehiculo {
+    /// Un vehículo nuevo de `clase` en `pos`, sorteando su dibujo (`None` si el pack no trae el de esa clase).
+    pub fn nuevo(art: &crate::art2d::ArtLibrary, clase: Clase, pos: Vec2, rumbo: f32, conductor: Conductor, semilla: u32) -> Option<Self> {
+        let mut s = semilla | 1;
+        let clave = elegir_clave(art, clase, &mut s)?;
+        Some(Vehiculo {
+            clase,
+            clave,
+            chasis: None,
+            cuerpo: Cuerpo { pos, rumbo, vel: 0.0 },
+            vida: clase.ficha().vida,
+            conductor,
+            destruido: false,
+            edad_chasis: 0.0,
+            dir4: 255,
+            pose: (255, false),
+            humo_t: 0.0,
+            atropello_cd: 0.0,
+            choque_cd: 0.0,
+            ia: Ia { rumbo_obj: rumbo, v_obj: 0.0, mem: Rumbo { semilla: s, ..default() }, ..default() },
+        })
+    }
+}
+
 #[derive(Component, Clone, Debug)]
 pub struct Vehiculo {
     pub clase: Clase,
@@ -252,20 +361,27 @@ pub struct Conduccion {
     pub cerca: Option<Entity>,
     /// Texto del medidor (velocidad y vida), para el HUD.
     pub medidor: String,
+    /// Hay un tren parado junto al jugador (lo escribe `trenes`).
+    pub tren_cerca: bool,
+    /// Viajando en la línea de tren con esa id.
+    pub en_tren: Option<u32>,
+    /// El tren en el que viaja está parado en una estación (se puede bajar).
+    pub tren_parado: bool,
 }
 
 impl Conduccion {
+    /// El jugador va dentro de algo (coche o tren): el cuerpo no camina.
     pub fn activa(&self) -> bool {
-        self.vehiculo.is_some()
+        self.vehiculo.is_some() || self.en_tren.is_some()
     }
 
     /// El botón USAR se ocupa de entrar/salir.
     pub fn boton_activo(&self) -> bool {
-        self.vehiculo.is_some() || self.cerca.is_some()
+        self.vehiculo.is_some() || self.cerca.is_some() || self.tren_cerca || (self.en_tren.is_some() && self.tren_parado)
     }
 
     pub fn etiqueta(&self) -> &'static str {
-        if self.vehiculo.is_some() { "SALIR" } else { "ENTRAR" }
+        if self.vehiculo.is_some() || self.en_tren.is_some() { "SALIR" } else { "ENTRAR" }
     }
 }
 
@@ -305,7 +421,7 @@ impl Plugin for VehiculosPlugin {
                     .chain()
                     .run_if(in_state(GamePhase::Playing)),
             )
-            .add_systems(Update, aparecer_trafico.run_if(in_state(GamePhase::Playing)))
+            .add_systems(Update, (aparecer_trafico, aparecer_otros).run_if(in_state(GamePhase::Playing)))
             .add_systems(
                 Update,
                 (atropellar, balas_a_vehiculos)
@@ -406,13 +522,24 @@ fn aparecer_trafico(
         if !obs.libre(body, centro.x, centro.y, R_COCHE) {
             continue;
         }
-        let colectivo = azar01(&mut s) < 0.12;
-        let (clase, lista) = if colectivo { (Clase::Colectivo, COLECTIVOS) } else { (Clase::Auto, AUTOS) };
-        let candidatos: Vec<&&str> = lista.iter().filter(|k| tiene_poses(&art, k)).collect();
-        if candidatos.is_empty() {
+        // Qué clase: sorteo con peso entre las que el pack dibuja completas.
+        let total: u32 = Clase::TRANSITO.iter().filter(|(c, _)| arte_disponible(&art, *c)).map(|(_, w)| *w).sum();
+        if total == 0 {
             return;
         }
-        let clave = (**candidatos[(azar01(&mut s) * candidatos.len() as f32) as usize % candidatos.len()]).to_string();
+        let mut r = (azar01(&mut s) * total as f32) as u32;
+        let mut clase = Clase::Auto;
+        for (c, w) in Clase::TRANSITO {
+            if !arte_disponible(&art, c) {
+                continue;
+            }
+            if r < w {
+                clase = c;
+                break;
+            }
+            r -= w;
+        }
+        let Some(clave) = elegir_clave(&art, clase, &mut s) else { return };
         let rumbo = octante_a_vec(oct).to_angle();
         let f = clase.ficha();
         commands.spawn((
@@ -441,6 +568,92 @@ fn aparecer_trafico(
     }
 }
 
+/// **Lanchas y helicópteros**: no circulan por las calles. Una lancha flota en el agua cercana (hasta 2) y un helicóptero espera
+/// posado en un claro de la ciudad (hasta 1), los dos sin conductor, para que el jugador se suba (y para que las balas los
+/// destruyan, como a un coche).
+#[allow(clippy::too_many_arguments)]
+fn aparecer_otros(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut acc: Local<f32>,
+    mut tick: Local<u32>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    art: Res<crate::art2d::ArtLibrary>,
+    obs: crate::obstaculos::Obstaculos,
+    player: Query<&Transform, With<Player>>,
+    coches: Query<&Vehiculo>,
+) {
+    *acc += time.delta_secs();
+    if *acc < 2.5 {
+        return;
+    }
+    *acc = 0.0;
+    *tick = tick.wrapping_add(1);
+    if !matches!(ctx.active, ha_shared::WorldContext::Overworld) {
+        return;
+    }
+    let body = active_surface_body(&ctx, &planet);
+    if !ha_shared::geography::has_civilisation(body) {
+        return;
+    }
+    let Ok(ptf) = player.get_single() else { return };
+    let p = Vec2::new(ptf.translation.x, -ptf.translation.y);
+    let n_lanchas = coches.iter().filter(|v| v.clase == Clase::Lancha && !v.destruido).count();
+    let n_heli = coches.iter().filter(|v| v.clase == Clase::Helicoptero && !v.destruido).count();
+    let mut s = hash(tick.wrapping_mul(0x85eb_ca6b) ^ (p.x as i32 as u32).rotate_left(5) ^ (p.y as i32 as u32));
+    let agua = |x: f32, z: f32| matches!(obs.tiles().tile_at(body, x.floor() as i64, z.floor() as i64), ha_shared::topdown::Tile::Water | ha_shared::topdown::Tile::WaterDeep);
+    for (clase, hay) in [(Clase::Lancha, n_lanchas < 2), (Clase::Helicoptero, n_heli < 1)] {
+        if !hay || !arte_disponible(&art, clase) {
+            continue;
+        }
+        for _ in 0..24 {
+            let ang = azar01(&mut s) * std::f32::consts::TAU;
+            let rad = 28.0 + azar01(&mut s) * 55.0;
+            let q = p + dir_de(ang) * rad;
+            let libre = match clase {
+                // Lancha: agua alrededor (un palmo de orilla no alcanza).
+                Clase::Lancha => [(0.0, 0.0), (2.5, 0.0), (-2.5, 0.0), (0.0, 2.5), (0.0, -2.5)].iter().all(|(dx, dz)| agua(q.x + dx, q.y + dz)),
+                // Helicóptero: un claro firme DENTRO de una ciudad y lejos de las calles.
+                _ => {
+                    let (tx, tz) = (q.x.floor() as i64, q.y.floor() as i64);
+                    ha_shared::geography::settlement_covering(body, tx, tz).is_some()
+                        && ha_shared::geography::civil_at(body, tx, tz).is_none()
+                        && obs.libre(body, q.x, q.y, 4.5)
+                }
+            };
+            if !libre || coches.iter().any(|v| v.cuerpo.pos.distance(q) < 12.0) {
+                continue;
+            }
+            let Some(clave) = elegir_clave(&art, clase, &mut s) else { break };
+            let f = clase.ficha();
+            commands.spawn((
+                Vehiculo {
+                    clase,
+                    clave,
+                    chasis: None,
+                    cuerpo: Cuerpo { pos: q, rumbo: azar01(&mut s) * std::f32::consts::TAU, vel: 0.0 },
+                    vida: f.vida,
+                    conductor: Conductor::Nadie,
+                    destruido: false,
+                    edad_chasis: 0.0,
+                    dir4: 255,
+                    pose: (255, false),
+                    humo_t: 0.0,
+                    atropello_cd: 0.0,
+                    choque_cd: 0.0,
+                    ia: Ia::default(),
+                },
+                Sprite::default(),
+                Transform::from_xyz(q.x, -q.y, crate::layers::ysort(q.y)),
+                Visibility::Hidden,
+                Name::new("Vehiculo"),
+            ));
+            break;
+        }
+    }
+}
+
 // ── Cercanía, entrar y salir ─────────────────────────────────────────────────────────────────────────────────────
 
 fn buscar_cercano(
@@ -450,7 +663,7 @@ fn buscar_cercano(
     player: Query<&Transform, With<Player>>,
     coches: Query<(Entity, &Vehiculo)>,
 ) {
-    if cond.vehiculo.is_some() {
+    if cond.vehiculo.is_some() || cond.en_tren.is_some() {
         cond.cerca = None;
         return;
     }
@@ -489,7 +702,7 @@ fn entrar_o_salir(
     mut player: Query<(&mut SimState, &mut PlayerVisual, &mut Visibility), With<Player>>,
     mut coches: Query<&mut Vehiculo>,
 ) {
-    if gameplay_block.blocked || !actions.use_edge {
+    if gameplay_block.blocked || !actions.use_edge || cond.en_tren.is_some() || cond.tren_cerca {
         return;
     }
     let Ok((mut sim, mut visual, mut vis)) = player.get_single_mut() else { return };
@@ -809,6 +1022,23 @@ fn cruce(body: ha_shared::CelestialBody, pos: Vec2, d: Vec2) -> bool {
 
 // ── Movimiento, choques y daño ───────────────────────────────────────────────────────────────────────────────────
 
+/// ¿El cuerpo `c`, puesto en `pos`, choca con algo según por dónde se mueve su clase? Tierra: las cajas que frenan al que camina;
+/// agua: todo lo que no sea agua; aire: nada.
+fn choca(obs: &crate::obstaculos::Obstaculos, body: ha_shared::CelestialBody, c: &Cuerpo, f: &Ficha, pos: Vec2) -> bool {
+    match f.terreno {
+        Terreno::Aire => false,
+        Terreno::Tierra => bola_choca(obs, body, c, f, pos),
+        Terreno::Agua => {
+            let d = dir_de(c.rumbo);
+            let sep = (f.largo * 0.5 - 0.6).max(0.0);
+            [-sep, 0.0, sep].into_iter().any(|o| {
+                let q = pos + d * o;
+                !matches!(obs.tiles().tile_at(body, q.x.floor() as i64, q.y.floor() as i64), ha_shared::topdown::Tile::Water | ha_shared::topdown::Tile::WaterDeep)
+            })
+        }
+    }
+}
+
 fn bola_choca(obs: &crate::obstaculos::Obstaculos, body: ha_shared::CelestialBody, c: &Cuerpo, f: &Ficha, pos: Vec2) -> bool {
     let d = dir_de(c.rumbo);
     let sep = (f.largo * 0.5 - R_COCHE).max(0.0);
@@ -854,8 +1084,8 @@ fn mover_vehiculos(
         let destino = paso(&mut c, mando, &f, dt);
         // Prueba el movimiento; si choca, no avanza y pierde velocidad. Un coche ya encimado (cargaste partida,
         // te empujaron) puede moverse hasta salir: el choque sólo cuenta si el paso EMPEORA la situación.
-        let ya_trabado = bola_choca(&obs, body, &c, &f, v.cuerpo.pos);
-        if !ya_trabado && bola_choca(&obs, body, &c, &f, destino) {
+        let ya_trabado = choca(&obs, body, &c, &f, v.cuerpo.pos);
+        if !ya_trabado && choca(&obs, body, &c, &f, destino) {
             let vi = c.vel.abs();
             if vi > V_CHOQUE && v.choque_cd <= 0.0 {
                 let dano = (vi - V_CHOQUE + 1.0) * 6.0;
@@ -930,9 +1160,13 @@ fn choques_entre_coches(
         .iter()
         .map(|(e, c)| (e, c.cuerpo.pos, c.cuerpo.rumbo, c.cuerpo.vel, c.clase.ficha().largo, c.destruido))
         .collect();
+    let terreno: Vec<Terreno> = q.iter().map(|(_, c)| c.clase.ficha().terreno).collect();
     let mut cambios: Vec<(Entity, Vec2, f32, f32)> = Vec::new(); // (coche, empuje, dvel, dano)
     for i in 0..v.len() {
         for j in (i + 1)..v.len() {
+            if terreno[i] != terreno[j] {
+                continue; // un helicóptero no choca con un coche, ni una lancha con un camión
+            }
             let (a, b) = (v[i], v[j]);
             let r = (a.4.min(b.4)) * 0.38 + 0.6;
             let d = b.1.distance(a.1);
@@ -982,7 +1216,7 @@ fn choques_entre_coches(
 #[allow(clippy::too_many_arguments)]
 fn atropellar(mut commands: Commands, mut coches: Query<(Entity, &mut Vehiculo)>) {
     for (e, mut v) in &mut coches {
-        if v.destruido || v.cuerpo.vel.abs() < 3.5 || v.atropello_cd > 0.0 {
+        if v.destruido || v.cuerpo.vel.abs() < 3.5 || v.atropello_cd > 0.0 || v.clase.ficha().terreno != Terreno::Tierra {
             continue;
         }
         let f = v.clase.ficha();
@@ -1063,34 +1297,49 @@ fn dibujar_vehiculos(
         if v.dir4 != dir || v.pose.1 != chasis || v.pose.0 == 255 {
             v.dir4 = dir;
             v.pose = (dir, chasis);
-            let nuevo = if chasis {
-                // El chasis quemado del pack (`auto_chocado`); si no hay, el mismo coche ennegrecido.
-                let clave = v.chasis.get_or_insert_with(|| "vehicle/auto_chocado_1".to_string()).clone();
-                art.world_sprite(&clave, Vec2::new(4.0, 3.0)).map(|(s, _)| s)
-            } else {
-                None
-            };
-            match nuevo {
-                Some(s) => *sprite = s,
-                None => {
-                    let pose = POSES[dir as usize];
-                    if let Some((rect, _)) = art.pose(&v.clave, pose) {
+            let oscuro = Color::srgb(0.18, 0.17, 0.17);
+            let nuevo: Option<Sprite> = match arte(v.clase) {
+                Arte::Poses(_) => {
+                    // El chasis quemado del pack (`auto_chocado`) sólo para los autos; si no, el mismo dibujo ennegrecido.
+                    let chocado = (chasis && v.clase == Clase::Auto)
+                        .then(|| {
+                            let clave = v.chasis.get_or_insert_with(|| "vehicle/auto_chocado_1".to_string()).clone();
+                            art.world_sprite(&clave, Vec2::new(4.0, 3.0)).map(|(s, _)| s)
+                        })
+                        .flatten();
+                    chocado.or_else(|| {
+                        let pose = POSES[dir as usize];
+                        let (rect, _) = art.pose(&v.clave, pose)?;
                         let tam = Vec2::new(rect[2] as f32, rect[3] as f32) * M_POR_PX;
-                        if let Some(mut s) = art.pose_sprite(&v.clave, pose, tam) {
-                            if chasis {
-                                s.color = Color::srgb(0.18, 0.17, 0.17);
-                            }
-                            *sprite = s;
+                        let mut s = art.pose_sprite(&v.clave, pose, tam)?;
+                        if chasis {
+                            s.color = oscuro;
                         }
-                    }
+                        Some(s)
+                    })
                 }
+                Arte::Claves(claves, espejar) => {
+                    let clave = claves[dir as usize];
+                    let tam = art.celdas_de(clave, None).unwrap_or(Vec2::new(f.largo, f.ancho * 1.5));
+                    art.world_sprite(clave, tam).map(|(mut s, _)| {
+                        s.flip_x = espejar && dir == 2;
+                        if chasis {
+                            s.color = oscuro;
+                        }
+                        s
+                    })
+                }
+            };
+            if let Some(s) = nuevo {
+                *sprite = s;
             }
         }
         // El dibujo se apoya con su base sobre el borde de adelante de la huella (3/4 cenital).
         let prof = if lateral { f.ancho } else { f.largo } * 0.5;
         let alto = sprite.custom_size.map_or(2.0, |s| s.y);
         tf.translation.x = v.cuerpo.pos.x;
-        tf.translation.y = -(v.cuerpo.pos.y + prof) + alto * 0.5;
+        let vuelo = if f.terreno == Terreno::Aire && !v.destruido { 1.6 } else { 0.0 };
+        tf.translation.y = -(v.cuerpo.pos.y + prof) + alto * 0.5 + vuelo;
         tf.translation.z = crate::layers::ysort(v.cuerpo.pos.y + prof * 0.5);
         if *vis != Visibility::Inherited {
             *vis = Visibility::Inherited;
@@ -1196,7 +1445,7 @@ const _TILE: f32 = TILE_M;
 mod tests {
     use super::*;
 
-    const F: Ficha = Ficha { largo: 3.6, ancho: 1.7, v_max: 20.0, v_atras: 5.0, acel: 7.0, freno: 16.0, vida: 120.0 };
+    const F: Ficha = Ficha { largo: 3.6, ancho: 1.7, v_max: 20.0, v_atras: 5.0, acel: 7.0, freno: 16.0, vida: 120.0, drag: 0.12, terreno: Terreno::Tierra };
 
     fn correr(c: &mut Cuerpo, m: Mando, seg: f32) {
         let dt = 1.0 / 60.0;

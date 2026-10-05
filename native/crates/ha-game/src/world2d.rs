@@ -5428,6 +5428,59 @@ fn spawn_chunk_lane_marks(
     }
     spawn_chunk_cordon(commands, art, tiles, body, z, cx, cz);
     spawn_chunk_muelle(commands, art, tiles, body, z, cx, cz);
+    spawn_chunk_puentes(commands, art, body, z, cx, cz);
+}
+
+/// Slot del pack que hace de **pretil** del puente: la barrera metálica modular (`fence/barrera_modular_medio`).
+const PRETIL_ART: &str = "fence/barrera_modular_medio";
+
+/// **Los PUENTES de las carreteras**: donde un enlace interurbano cruza agua, `geography::civil_at` devuelve
+/// `Civil::Bridge`. Era asfalto liso flotando sobre el río; ahora lleva **pretil a cada lado** (barrera metálica del pack,
+/// la misma de las calles peatonales) contra el agua, que es lo que dice «esto es un puente». Un pretil sólo nace en el
+/// borde que da a algo que NO es calzada, así que un puente de dos tramos no se llena de barandas en el medio.
+fn spawn_chunk_puentes(commands: &mut Commands, art: &ArtLibrary, body: CelestialBody, z: i32, cx: i64, cz: i64) {
+    use ha_shared::geography::{civil_at, Civil};
+    if z != 0 || !art.has_art(PRETIL_ART) {
+        return;
+    }
+    let es_calzada = |x: i64, y: i64| matches!(civil_at(body, x, y), Some(Civil::Road | Civil::Bridge));
+    for lz in 0..CHUNK {
+        for lx in 0..CHUNK {
+            let (tx, tz) = (cx * CHUNK + lx, cz * CHUNK + lz);
+            // Barato primero: la gran mayoría de las celdas de un chunk no son calzada.
+            if !matches!(ha_shared::geography::civil_kind_at(body, tx, tz), Some(Civil::Road)) {
+                continue;
+            }
+            if civil_at(body, tx, tz) != Some(Civil::Bridge) {
+                continue;
+            }
+            // (dx, dz, horizontal): cada borde que da a algo que no es calzada lleva su pretil.
+            for (dx, dz, horizontal) in [(0i64, -1i64, true), (0, 1, true), (-1, 0, false), (1, 0, false)] {
+                if es_calzada(tx + dx, tz + dz) {
+                    continue;
+                }
+                let Some((mut sprite, _)) = art.world_sprite(PRETIL_ART, Vec2::new(TILE_M, TILE_M * 0.34)) else { continue };
+                // El pretil de un borde vertical es el mismo dibujo girado un cuarto de vuelta.
+                if !horizontal {
+                    sprite.custom_size = Some(Vec2::new(TILE_M, TILE_M * 0.34));
+                }
+                let wx = tx as f32 * TILE_M + 0.5 + dx as f32 * 0.46;
+                let wz = tz as f32 * TILE_M + 0.5 + dz as f32 * 0.46;
+                let r = render_xy(wx, wz);
+                let mut ent = commands.spawn((
+                    SurfaceDecor { cx, cz, z, small: true },
+                    TileArt,
+                    sprite,
+                    Transform {
+                        translation: Vec3::new(r.x, r.y, crate::layers::ysort(wz)),
+                        rotation: if horizontal { Quat::IDENTITY } else { Quat::from_rotation_z(std::f32::consts::FRAC_PI_2) },
+                        ..default()
+                    },
+                ));
+                crate::light2d::sin_sombra(&mut ent);
+            }
+        }
+    }
 }
 
 /// **El CORDÓN: por donde la vereda se levanta sobre la calzada.**
