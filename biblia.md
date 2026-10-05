@@ -170,6 +170,30 @@ el código; esto es lo que **sirvió** y quedó como regla, y lo que se descart�
 
 ---
 
+### §2.bis Órdenes permanentes del usuario (fz) — se cumplen SIEMPRE, sin que las repita (5 oct 2026)
+
+> Decretadas por el usuario porque se olvidaban entre sesiones. Cada una nació de un bug que él vio con sus ojos. Romper una es repetirle el error.
+
+1. **Esquinas y bordes COHERENTES, en todo.** Un rectángulo es un rectángulo: pileta, cerca, muro exterior, muro interior, andén, escenario. Las esquinas se
+   cierran, los bordes no se cortan ni se estiran. Antes de dar algo por hecho se mira la captura **ampliada** de las esquinas. Una pieza de 1×1 se dibuja
+   a 1×1 (medir POR POSE, nunca por el slot). Una T o un tabique contra un muro sigue de largo.
+2. **El agua de río/lago/mar NUNCA es una pileta.** Toda pileta (patio, natatorio, hotel) usa las piezas de pileta del pack (`agua/pileta_completa`):
+   borde de piedra con sus esquinas. Un vaso grande de `Tile::Water` se dibuja con orilla de río y es un error.
+3. **Las láminas de LimeZu mandan.** Las ciudades se ven como las 20 capturas del pack (canales con muros de muelle y puentes, helipuertos con helicóptero,
+   plazas con fuente/estatuas/setos, cementerio, natatorio, gasolinera, correo con camión, bomberos con camiones, base militar, subte…). Se usa el asset
+   como se ve en la lámina, con su nombre correcto: **nunca un prop mal nombrado** (la torre del reloj es un ayuntamiento, no una casa; la plataforma de
+   helipuerto no es un helicóptero). Una pieza de kit se compone, no se siembra suelta.
+4. **Las casas se ven por FUERA; se entra por la puerta** (flecha en la puerta). Adentro: sin sombras raras, sin paredes cortadas en las ventanas, medianeras
+   sin ventanas, una puerta por módulo, módulo = 7 celdas. La parcela se adapta a la casa, no al revés. Todas las casas se auditan: configurar bien y reutilizar.
+5. **Cercas con variedad** (ladrillo, reja, piedra) por parcela, esquinas cerradas. Sin franjas de playa dentro de la ciudad ni acantilados que tapen calles.
+6. **Semáforos por FASE** (no todas las luces prendidas, según el sentido del tránsito); motores y choques suenan; todo vehículo se maneja y se destruye.
+7. **Probar en la PC primero** (captura con `HA_VISTATEST`, test, mirar la imagen) y recién después el celu, sólo para rendimiento. Publicar el APK al final.
+8. **No narrar: hacer.** Los tokens van al trabajo, el resumen va al final con números concretos y cuántas muestras sostienen cada veredicto.
+9. **Nada queda «pendiente».** Cada orden del chat se hace entera en la misma tanda (regla 0). Lo único que se declara no hecho es un bloqueo físico real (sin NDK/adb en el contenedor).
+10. **Hablarle de «fz».** Y si una idea suya es mala, decírselo con argumentos; no complacer.
+
+---
+
 ## §3 Arquitectura
 
 ```

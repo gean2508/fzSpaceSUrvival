@@ -27,6 +27,8 @@ corresponda:
 Si algo del documento contradice al código, **gana el código** — pero actualizá el
 documento.
 
+**Órdenes permanentes del usuario: biblia §2.bis. Se leen ANTES de empezar cualquier tarea** (esquinas coherentes, pileta ≠ agua de río, láminas de LimeZu, casas por fuera con flecha, no dejar nada pendiente).
+
 ## Estructura
 
 ```
