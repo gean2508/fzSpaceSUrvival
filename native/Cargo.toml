@@ -56,6 +56,11 @@ strip = "debuginfo"
 # `codegen-units = 1`: el juego corre igual de rápido para mirar una captura, y
 # volver a compilar `ha-game` después de tocar una línea baja de 13 minutos a
 # uno. Nunca se publica con este perfil — el APK sale de `release-native`.
+[profile.qa-sym]
+inherits = "qa"
+strip = false
+debug = "line-tables-only"
+
 [profile.qa]
 inherits = "release"
 opt-level = 2

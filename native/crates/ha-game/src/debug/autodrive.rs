@@ -7747,7 +7747,10 @@ fn coche_test_drive(world: &mut World, mut st: Local<CocheTest>) {
         2 => {
             // Esperar el tránsito.
             let mut q = world.query::<(Entity, &Vehiculo)>();
-            let coches: Vec<(Entity, Vec2)> = q.iter(world).filter(|(_, v)| v.conductor == Conducto::Npc).map(|(e, v)| (e, v.cuerpo.pos)).collect();
+            let mut coches: Vec<(Entity, Vec2, f32)> = q.iter(world).filter(|(_, v)| v.conductor == Conducto::Npc).map(|(e, v)| (e, v.cuerpo.pos, v.cuerpo.vel.abs())).collect();
+            // Se sigue al que más rápido va: uno parado en un callejón sin salida o detrás de otro no dice nada del tránsito.
+            coches.sort_by(|a, b| b.2.total_cmp(&a.2));
+            let coches: Vec<(Entity, Vec2)> = coches.into_iter().map(|(e, p, _)| (e, p)).collect();
             if let Some(&(e, p)) = coches.first() {
                 st.id = Some(e);
                 st.inicio = p;

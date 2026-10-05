@@ -198,6 +198,8 @@ fn id_de(a: (i64, i64), b: (i64, i64)) -> u32 {
 
 /// Largo mínimo de una línea (tiles entre las dos puntas): menos que esto no vale un tren.
 pub const LARGO_MIN: i64 = 260;
+/// Cuántos tiles se extiende una línea a cada lado de su estación, como máximo.
+pub const LADO_MAX: i64 = 700;
 /// Cada cuántas columnas se sondea una fila candidata.
 const SONDEO: i64 = 6;
 /// Cuántas filas candidatas se miden exactas.
@@ -273,6 +275,9 @@ pub fn linea_desde(body: CelestialBody, a: &Settlement) -> Option<Linea> {
     if (est - cx).abs() > a.radius + EXTENSION || h - d < 2 * 80 + 40 {
         return None;
     }
+    // **Tope de largo por lado**: con las ciudades en plataforma el tramo llano llega a kilómetros, y un tren que tarda
+    // 7 minutos en volver a la estación no es un tren (el jugador espera parado). A ±700 el ciclo es de ~4 minutos.
+    let (d, h) = (d.max(est - LADO_MAX), h.min(est + LADO_MAX));
     Some(Linea { id: id_de((cx, cz), (0, 0)), ciudad: (cx, cz), radio: a.radius, z, paradas: [d, est, h] })
 }
 
