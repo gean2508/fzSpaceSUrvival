@@ -9446,7 +9446,7 @@ Teletransporta, espera el mundo y deja `vista-N.png` en cada sitio. Para mirar f
   juego (`HA_PARTIDA_NUEVA` + `HA_SEMILLA`) no es el de los tests (semilla 0): para verlo en pantalla hay que buscar el puente en el mundo del juego
   (`HA_VISTATEST="puente"`; en la semilla 0 no apareció ninguno en r<1800 de la ciudad de prueba — checkpoint de 1 corrida, no veredicto).
 * **Nombres mal puestos**: las «casas» con torre de reloj eran ayuntamientos → `building/ayuntamiento` (lote cívico 20×24) y el granero salió de las casas.
-  Se reproduce con `import-completos.py` (SLOTS) + `scripts/reasignar-lotes.py` (post-fix sobre el manifest). Orden al re-importar: importadores →
+  Se reproduce con `import-completos.py` (SLOTS) + `scripts/reasignar-lotes.py` (post-fix sobre el manifest). Todo junto: `./scripts/regenerar-arte.sh` (corre cada paso en este orden y corta si uno falla). Orden al re-importar: importadores →
   `recortar-modulares.py` → `cercas-reparar.py` → `reasignar-lotes.py` → `import-casas-medidas.py`.
 * **Prefabs de parque** (`worldgen::prefab_de_lote_at`, función pura de la celda, sitio fijo antes del alumbrado): `lot/plaza` = fuente al centro,
   estatuas de seto, arcos en el eje, bancos, canteros; `lot/natatorio` = grilla de piletas de 6×4 (las MISMAS `agua/pileta_completa` del patio; un vaso grande de `Tile::Water` salía con orilla de río) sobre baldosa, con reposeras/sombrillas alternadas en el andén norte, palmeras (nada sobre
