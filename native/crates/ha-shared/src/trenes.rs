@@ -51,6 +51,38 @@ impl Linea {
     }
 }
 
+/// Ciudades y pueblos de un cuerpo: `(nombre, centro, es_ciudad)`. Sirve a la brújula del HUD.
+pub fn ciudades(body: CelestialBody) -> Vec<(String, (f32, f32), bool)> {
+    static C: OnceLock<Mutex<Vec<(u8, Vec<(String, (f32, f32), bool)>)>>> = OnceLock::new();
+    let cache = C.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(c) = cache.lock() {
+        if let Some((_, v)) = c.iter().find(|(b, _)| *b == body as u8) {
+            return v.clone();
+        }
+    }
+    let v = calcular_ciudades(body);
+    if let Ok(mut c) = cache.lock() {
+        c.push((body as u8, v.clone()));
+    }
+    v
+}
+
+fn calcular_ciudades(body: CelestialBody) -> Vec<(String, (f32, f32), bool)> {
+    let mut v = Vec::new();
+    for sx in -BARRIDO..=BARRIDO {
+        for sz in -BARRIDO..=BARRIDO {
+            if let Some(s) = settlement_in(body, sx, sz) {
+                let ciudad = s.tier == SettlementTier::City;
+                if ciudad || s.tier == SettlementTier::Town {
+                    let nombre = s.name.map(|n| n.to_string()).unwrap_or_else(|| if ciudad { "Ciudad".into() } else { "Pueblo".into() });
+                    v.push((nombre, (s.center.0 as f32, s.center.1 as f32), ciudad));
+                }
+            }
+        }
+    }
+    v
+}
+
 /// Todas las líneas de la red de un cuerpo. Se calcula una vez por cuerpo.
 pub fn red(body: CelestialBody) -> Vec<Linea> {
     static C: OnceLock<Mutex<Vec<(u8, Vec<Linea>)>>> = OnceLock::new();

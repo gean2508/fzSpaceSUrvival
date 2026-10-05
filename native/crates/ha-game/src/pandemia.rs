@@ -222,7 +222,7 @@ fn avanzar(
     let en_superficie = matches!(ctx.active, ha_shared::WorldContext::Overworld) && obs.capa() == 0;
 
     // 0 → 1: el primer brote. Desde el día 2, de noche, aparece el paciente cero.
-    if p.etapa == etapa::RUMOR && dia >= 2.0 && noche && en_superficie {
+    if p.etapa == etapa::RUMOR && dia >= 1.0 && noche && en_superficie {
         let ang = h(1) * std::f32::consts::TAU;
         let d = 60.0 + h(2) * 30.0;
         let (x, z) = (px + ang.cos() * d, pz + ang.sin() * d);
