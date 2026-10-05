@@ -104,14 +104,18 @@ const apkOk = existsSync(apkPath) && statSync(apkPath).size > 5_000_000;
 // para morir en el `listen` es la peor forma de enterarse.
 liberarPuertos();
 
+let buildFallo = false;
 if (!noShip || !apkOk) {
   try {
     const shipFlags = skipTests ? " --skip-tests" : "";
-    execSync(`node scripts/ship-native-android.mjs --host ${lanHost}${shipFlags}`, {
+    // El log completo queda en `build-ultimo.log` (para mandarlo tal cual si algo falla).
+    execSync(`set -o pipefail; node scripts/ship-native-android.mjs --host ${lanHost}${shipFlags} 2>&1 | tee build-ultimo.log`, {
       cwd: ROOT,
       stdio: "inherit",
+      shell: "/bin/bash",
     });
   } catch (e) {
+    buildFallo = true;
     if (apkOk) {
       console.error("\n⚠ Build APK falló — siguiendo con el APK ya publicado en client/public/downloads/");
     } else {
@@ -157,6 +161,16 @@ if (sinPc) {
         "  Reintentá a mano con:  npm run instalar:pc",
     );
   }
+}
+
+if (buildFallo) {
+  const caja = "█".repeat(70);
+  console.error(
+    `\n${caja}\n█ NO SE PUBLICÓ VERSIÓN NUEVA: el build falló.\n` +
+      "█ La web sigue ofreciendo el APK VIEJO (misma versión que ya tenés).\n" +
+      "█ El error está arriba y en  build-ultimo.log  — mandámelo tal cual.\n" +
+      `${caja}\n`,
+  );
 }
 
 console.log("\n▶ Levantando servidor + landing…");
