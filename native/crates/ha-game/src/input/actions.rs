@@ -112,12 +112,13 @@ pub fn sync_use_button_active(
     flight: Res<crate::flight::Flight>,
     equipped: Res<super::EquippedItem>,
     inv: Res<crate::inventory_persist::PlayerInventory>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
     mut active: ResMut<UseButtonActive>,
 ) {
     // **Y el botón USAR vuelve a existir para lo que tenés en la mano**: con comida, ropa o un
     // cubo con agua dice COMER / VESTIR / BEBER y NO compite con el mantener del mundo, que
     // sigue siendo cavar, talar y picar (como el botón "usar" de Minecraft de bolsillo).
-    let want = fly.flying() || flight.active || uso_del_objeto(&equipped.item_id, &inv).is_some();
+    let want = fly.flying() || flight.active || conduccion.boton_activo() || uso_del_objeto(&equipped.item_id, &inv).is_some();
     if active.0 != want {
         active.0 = want;
     }
@@ -137,10 +138,13 @@ pub fn update_use_button_label(
     flight: Res<crate::flight::Flight>,
     equipped: Res<super::EquippedItem>,
     inv: Res<crate::inventory_persist::PlayerInventory>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
     mut labels: Query<&mut Text, With<ActionButtonLabel>>,
 ) {
     let label = if fly.flying() || flight.active {
         "BAJAR"
+    } else if conduccion.boton_activo() {
+        conduccion.etiqueta()
     } else {
         uso_del_objeto(&equipped.item_id, &inv).unwrap_or("USAR")
     };
@@ -161,9 +165,10 @@ pub fn usar_objeto_con_boton(
     flight: Res<crate::flight::Flight>,
     equipped: Res<super::EquippedItem>,
     inv: Res<crate::inventory_persist::PlayerInventory>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
     mut hold: ResMut<HoldInteractState>,
 ) {
-    if fly.flying() || flight.active || uso_del_objeto(&equipped.item_id, &inv).is_none() {
+    if fly.flying() || flight.active || conduccion.boton_activo() || uso_del_objeto(&equipped.item_id, &inv).is_none() {
         return;
     }
     // RECARGAR no es un «mantener»: lo lee `armas.rs` en el flanco de la pulsación.

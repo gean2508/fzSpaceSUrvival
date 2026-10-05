@@ -681,12 +681,13 @@ fn recargar(
     mut persist: ResMut<InventoryPersistState>,
     player: Query<&Transform, With<Player>>,
     mut sfx: EventWriter<PlaySfxAt>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
 ) {
     let Some((def, _)) = parsear(&equipped.item_id) else { return };
     let Ok(ptf) = player.get_single() else { return };
     let ppos = Vec2::new(ptf.translation.x, ptf.translation.y);
     // Pedido de recarga: tecla R o el botón USAR (que dice RECARGAR).
-    if !gameplay_block.blocked && (keys.just_pressed(KeyCode::KeyR) || acciones.use_edge) {
+    if !gameplay_block.blocked && (keys.just_pressed(KeyCode::KeyR) || (acciones.use_edge && !conduccion.boton_activo())) {
         iniciar_recarga(&mut estado, def, &equipped.item_id, &inv);
     }
     let dt = time.delta_secs();
@@ -868,6 +869,7 @@ fn visual_del_arma(
     art: Res<crate::art2d::ArtLibrary>,
     cursor: Res<AimCursor>,
     stick: Res<crate::input::AimStick>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
     estado: Res<EstadoArmas>,
     player: Query<(&Transform, &PlayerVisual), (With<Player>, Without<ArmaVisual>, Without<MiraDeArma>)>,
     mut visual: Query<(Entity, &mut Transform, &mut Sprite, &mut Visibility, &Name), (With<ArmaVisual>, Without<MiraDeArma>)>,
@@ -922,7 +924,7 @@ fn visual_del_arma(
     for (_, mut tf, mut s, mut vis, _) in &mut visual {
         // El arma se agarra con la mano que dibuja la hoja (`manos.rs`): sin mano a la vista (nadando, comiendo,
         // sentado) no se dibuja, y mirando hacia arriba queda detrás del cuerpo.
-        if !mano.vigente {
+        if !mano.vigente || conduccion.activa() {
             *vis = Visibility::Hidden;
             continue;
         }

@@ -103,6 +103,15 @@ impl Plugin for AmbientPlugin {
                 )
                     .chain()
                     .run_if(crate::game_phase::world_active),
+            )
+            // Las balas también matan a los bichos del aire (mariposas y luciérnagas): en la misma fase que el
+            // resto de los blancos (`armas::ArmasSet::Impactos`).
+            .add_systems(
+                Update,
+                balas_a_bichos
+                    .in_set(crate::armas::ArmasSet::Impactos)
+                    .after(crate::armas::ArmasSet::Mover)
+                    .run_if(in_state(crate::game_phase::GamePhase::Playing)),
             );
     }
 }
@@ -645,6 +654,45 @@ fn place_butterfly(b: &mut Butterfly, px: f32, pz: f32, tick: u32) {
 /// el slot `particles/mariposa*` no existe en el manifest no pasa nada: se
 /// marca hecho y el día simplemente no tiene mariposas (cero regresión en un
 /// pack viejo).
+/// **Las balas contra los bichos del aire.** La mariposa o la luciérnaga que cruza el segmento de la bala muere en una
+/// nube de chispas y otra entra desde el borde del campo (se recicla con `place_*`: el campo siempre tiene su
+/// cupo, y no se crean ni se destruyen entidades por tiro). La bala los atraviesa: matar un bicho no frena el tiro.
+#[allow(clippy::too_many_arguments)]
+fn balas_a_bichos(
+    mut commands: Commands,
+    mut tick: Local<u32>,
+    balas: Query<&crate::armas::Bala>,
+    player: Query<&Transform, With<Player>>,
+    mut mariposas: Query<(&mut Butterfly, &Visibility), Without<Firefly>>,
+    mut luciernagas: Query<(&mut Firefly, &Visibility), Without<Butterfly>>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
+) {
+    let Ok(ptf) = player.get_single() else { return };
+    let (px, pz) = (ptf.translation.x, -ptf.translation.y);
+    for b in &balas {
+        if !b.viva {
+            continue;
+        }
+        for (mut m, vis) in &mut mariposas {
+            if *vis == Visibility::Hidden || crate::armas::distancia_a_segmento(Vec2::new(m.x, m.z), b.prev, b.pos) > 0.5 {
+                continue;
+            }
+            *tick = tick.wrapping_add(1);
+            crate::armas::chispa_de_impacto(&mut commands, Vec2::new(m.x, m.z), Color::srgb(0.95, 0.85, 0.6));
+            sfx.send(crate::audio::PlaySfxAt(crate::audio::Sfx::BulletHit, Vec2::new(m.x, -m.z)));
+            place_butterfly(&mut m, px, pz, *tick);
+        }
+        for (mut f, vis) in &mut luciernagas {
+            if *vis == Visibility::Hidden || crate::armas::distancia_a_segmento(Vec2::new(f.x, f.z), b.prev, b.pos) > 0.4 {
+                continue;
+            }
+            *tick = tick.wrapping_add(1);
+            crate::armas::chispa_de_impacto(&mut commands, Vec2::new(f.x, f.z), Color::srgb(0.6, 1.0, 0.4));
+            place(&mut f, px, pz, *tick);
+        }
+    }
+}
+
 fn spawn_butterflies(
     mut commands: Commands,
     art: Option<Res<ArtLibrary>>,

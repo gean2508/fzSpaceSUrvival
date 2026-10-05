@@ -127,10 +127,12 @@ pub(crate) fn tick_sim(
     planet_ctx: Res<ActivePlanet>,
     obs: crate::obstaculos::Obstaculos,
     editor: Res<crate::ui_editor::UiEditorState>,
+    conduccion: Res<crate::vehiculos::Conduccion>,
     mut query: Query<(&mut SimState, &mut PlayerVisual), With<Player>>,
 ) {
     let _p = crate::debug::probe("fx_tick_sim");
-    if flight.blocks_walking() {
+    // Al volante el cuerpo no camina: `vehiculos` lo lleva pegado al coche.
+    if flight.blocks_walking() || conduccion.activa() {
         return;
     }
     let dt = fixed_delta_secs(&time);
