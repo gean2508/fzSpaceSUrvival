@@ -27,7 +27,11 @@ impl Plugin for AutoDrivePlugin {
         app.init_resource::<DriverActuation>().add_systems(
             Update,
             aplicar_actuacion_del_driver
-                .after(crate::input::actions::poll_action_buttons_held),
+                .after(crate::input::actions::poll_action_buttons_held)
+                .after(crate::input::joystick::smooth_movement_intent)
+                // Los vehículos y los trenes leen la intención y el flanco de USAR: tienen que verlos ya escritos.
+                .before(crate::vehiculos::buscar_cercano)
+                .before(crate::trenes::actualizar_red),
         );
         // Creative-fly visual test: enable creative, hold JUMP, screenshot the
         // whole ascent so we can SEE it (HA_FLYTEST=1 HA_AUTOPLAY=1). Ordered
@@ -317,6 +321,10 @@ impl Plugin for AutoDrivePlugin {
         // **Los trenes: red, andén, subir, viajar, bajar.** HA_TRENTEST=1 — ver `tren_test_drive`.
         if crate::flags::var("HA_TRENTEST").is_ok() {
             app.add_systems(Update, tren_test_drive.before(aplicar_actuacion_del_driver));
+        }
+        // **Una foto en cada sitio.** HA_VISTATEST="x,z;x,z" — ver `vista_test_drive`.
+        if crate::flags::var("HA_VISTATEST").is_ok() {
+            app.add_systems(Update, vista_test_drive.before(aplicar_actuacion_del_driver));
         }
         // **Todas las clases de vehículo (ambulancia, camión, basura, helicóptero, lancha).** HA_VEHTEST=1.
         if crate::flags::var("HA_VEHTEST").is_ok() {
@@ -7422,6 +7430,9 @@ struct VehTest {
     inicio: Vec2,
     id: Option<Entity>,
     agua: Option<(i64, i64)>,
+    plantado: bool,
+    visto: (usize, u32),
+    espera: f32,
 }
 
 fn veh_falla(st: &mut VehTest, inv: &str, detalle: &str) {
@@ -7453,10 +7464,22 @@ fn veh_test_drive(world: &mut World, mut st: Local<VehTest>) {
         return;
     }
     let (clase, nombre) = CLASES[st.clase];
+    // `HA_VEHTEST=helicoptero,lancha` prueba sólo esas clases (con el render por software cada clase cuesta minutos).
+    if st.paso == 0 {
+        let filtro = crate::flags::var("HA_VEHTEST").unwrap_or_default();
+        if filtro != "1" && !filtro.is_empty() && !filtro.split(',').any(|f| f.trim() == nombre) {
+            st.clase += 1;
+            return;
+        }
+    }
+    if st.visto != (st.clase, st.paso) {
+        st.visto = (st.clase, st.paso);
+        eprintln!("ha-vehtest: {nombre} paso {}", st.paso);
+    }
     match st.paso {
         0 => {
             // Plantarse en una ciudad (para la lancha, junto al agua más cercana).
-            if st.clase == 0 {
+            if st.clase == 0 || !st.plantado {
                 let mut best: Option<(i64, (i64, i64))> = None;
                 for sx in -25..25 {
                     for sz in -25..25 {
@@ -7476,6 +7499,7 @@ fn veh_test_drive(world: &mut World, mut st: Local<VehTest>) {
                 };
                 world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
                 teleport_a_celda(world, cx as f32, cz as f32);
+                st.plantado = true;
             }
             if clase == Clase::Lancha {
                 let (px, pz) = posicion_del_jugador(world).unwrap_or_default();
@@ -7507,13 +7531,18 @@ fn veh_test_drive(world: &mut World, mut st: Local<VehTest>) {
             st.t0 = now;
         }
         1 => {
-            if !mundo_listo(world) {
+            // Con el render por software el anillo de chunks tarda minutos: a los 90 s se sigue igual.
+            if st.espera == 0.0 {
+                st.espera = now;
+            }
+            if !mundo_listo(world) && now - st.espera < 90.0 {
                 st.t0 = now;
                 return;
             }
             if now - st.t0 < 3.0 {
                 return;
             }
+            st.espera = 0.0;
             let Some((px, pz)) = posicion_del_jugador(world) else { return };
             // En tierra, sobre un carril este de la calzada con 12 m libres a cada lado (no sobre la vereda, llena de faroles).
             let calle = (0..=60i64)
@@ -8353,5 +8382,66 @@ fn descanso_test_drive(world: &mut World) {
             std::process::exit(0);
         }
         _ => {}
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_VISTATEST — una captura en cada coordenada pedida (fachadas, acantilados, calles): `HA_VISTATEST="9607,2405;6819,4384"`
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct VistaTest {
+    i: usize,
+    paso: u32,
+    t0: f32,
+}
+
+fn vista_test_drive(world: &mut World, mut st: Local<VistaTest>) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if *world.resource::<State<crate::game_phase::GamePhase>>().get() != crate::game_phase::GamePhase::Playing || !player_ready(world) {
+        return;
+    }
+    let lista = crate::flags::var("HA_VISTATEST").unwrap_or_default();
+    let sitios: Vec<(f32, f32)> = lista
+        .split(';')
+        .filter_map(|p| {
+            let (x, z) = p.split_once(',')?;
+            Some((x.trim().parse().ok()?, z.trim().parse().ok()?))
+        })
+        .collect();
+    if st.i >= sitios.len() {
+        // La captura se escribe en otro hilo: se le da tiempo antes de cerrar.
+        if st.t0 == 0.0 || st.paso != 9 {
+            st.t0 = now;
+            st.paso = 9;
+        } else if now - st.t0 > 3.0 {
+            eprintln!("ha-verify: VISTATEST DONE");
+            std::process::exit(0);
+        }
+        return;
+    }
+    let (x, z) = sitios[st.i];
+    match st.paso {
+        0 => {
+            world.resource_mut::<crate::ui_editor::UiEditorState>().creative = false;
+            teleport_a_celda(world, x, z);
+            st.paso = 1;
+            st.t0 = now;
+        }
+        _ => {
+            if !mundo_listo(world) {
+                st.t0 = now;
+                return;
+            }
+            if now - st.t0 < 4.0 {
+                return;
+            }
+            let dir = flytest_dir();
+            shot(world, &format!("{dir}/vista-{}.png", st.i));
+            eprintln!("ha-vista: {} en ({x}, {z})", st.i);
+            st.i += 1;
+            st.paso = 0;
+        }
     }
 }

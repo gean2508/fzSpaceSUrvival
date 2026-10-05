@@ -124,6 +124,7 @@ impl Plugin for TrenesPlugin {
                 Update,
                 (actualizar_red, limpiar_decoracion, reconciliar_vias, reconciliar_trenes, mover_trenes, subir_o_bajar, peligro_en_la_via)
                     .chain()
+                    .after(crate::input::joystick::smooth_movement_intent)
                     .run_if(in_state(GamePhase::Playing)),
             )
             .add_systems(OnExit(GamePhase::Playing), limpiar);
@@ -148,7 +149,7 @@ fn limpiar(
     }
 }
 
-fn actualizar_red(ctx: Res<WorldContextRuntime>, planet: Res<ActivePlanet>, player: Query<&Transform, With<Player>>) {
+pub(crate) fn actualizar_red(ctx: Res<WorldContextRuntime>, planet: Res<ActivePlanet>, player: Query<&Transform, With<Player>>) {
     if !matches!(ctx.active, ha_shared::WorldContext::Overworld) {
         return;
     }

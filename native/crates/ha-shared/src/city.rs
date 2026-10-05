@@ -212,7 +212,7 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     // sprite de 32×32 px estirado a 30×22 tiles. `building/villa` es el slot
     // curado que recibe las villas de verdad.
     LotProgram { key: "building/villa", cells: (35, 34), district: District::Residential, weight: 6 },
-    LotProgram { key: "building/duplex", cells: (33, 24), district: District::Residential, weight: 12 },
+    LotProgram { key: "building/duplex", cells: (39, 24), district: District::Residential, weight: 12 },
     // ── Comercio. **Los rubros son de verdad**, no un `building/tienda`
     // genérico repetido: el pack dibujó dieciocho locales distintos con su
     // vidriera y su cartel (`edificio/tienda_*`, `cartel/*`) y la ciudad los
@@ -258,11 +258,11 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     // Ahora los interiores no pueden caer en `building/`
     // (`import-pack-masivo.py::CARPETAS_DE_AFUERA`) y ningún lote puede apuntar a
     // un dibujo de adentro (`art2d::la_ciudad_no_se_construye_con_interiores`).
-    LotProgram { key: "building/tienda", cells: (11, 9), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/tienda", cells: (9, 9), district: District::Commercial, weight: 5 },
     LotProgram { key: "building/mercado_chico_1", cells: (14, 12), district: District::Commercial, weight: 8 },
     LotProgram { key: "building/mercado_mediano_1", cells: (18, 14), district: District::Commercial, weight: 8 },
     LotProgram { key: "building/gasolinera", cells: (15, 14), district: District::Commercial, weight: 7 },
-    LotProgram { key: "building/shopping", cells: (29, 13), district: District::Commercial, weight: 5 },
+    LotProgram { key: "building/shopping", cells: (30, 13), district: District::Commercial, weight: 5 },
     LotProgram { key: "lot/estacionamiento", cells: (20, 16), district: District::Commercial, weight: 10 },
     // **LOS FOOD TRUCKS Y LOS PUESTOS DE FERIA.** Otro de los que figuraba como
     // "no está en el manifest": el pack trae el tuk-tuk de pizza entero
@@ -274,9 +274,9 @@ pub const LOT_PROGRAMS: &[LotProgram] = &[
     LotProgram { key: "vehicle/pizza_tuk_tuk_tuk_tuk_1", cells: (9, 9), district: District::Commercial, weight: 6 },
     LotProgram { key: "building/puestos_1", cells: (7, 6), district: District::Commercial, weight: 7 },
     // ── Centro.
-    LotProgram { key: "building/oficina", cells: (20, 19), district: District::Downtown, weight: 22 },
-    LotProgram { key: "building/torre", cells: (20, 23), district: District::Downtown, weight: 18 },
-    LotProgram { key: "building/hotel", cells: (29, 22), district: District::Downtown, weight: 8 },
+    LotProgram { key: "building/oficina", cells: (23, 19), district: District::Downtown, weight: 22 },
+    LotProgram { key: "building/torre", cells: (16, 23), district: District::Downtown, weight: 18 },
+    LotProgram { key: "building/hotel", cells: (30, 22), district: District::Downtown, weight: 8 },
     // La torre del reloj de la estación: el pack la dibujó entera y es el hito
     // que se ve de lejos en las referencias.
     LotProgram { key: "building/reloj_torre", cells: (14, 20), district: District::Downtown, weight: 5 },

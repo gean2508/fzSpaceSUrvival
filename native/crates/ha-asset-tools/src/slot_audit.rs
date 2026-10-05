@@ -405,7 +405,8 @@ mod tests {
             );
             vistas += 1;
         }
-        assert!(vistas >= 40, "sólo {vistas} fachadas de vivienda en el manifest");
+        // 24 desde que `import-completos.py` dejó pocas variantes por lote a propósito (RAM del Redmi).
+        assert!(vistas >= 20, "sólo {vistas} fachadas de vivienda en el manifest");
     }
 
     /// `(píxeles de la mancha conexa más grande, píxeles dibujados en total)`.

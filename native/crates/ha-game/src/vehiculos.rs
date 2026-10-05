@@ -419,6 +419,9 @@ impl Plugin for VehiculosPlugin {
                     medidor,
                 )
                     .chain()
+                    // Al volante se lee la intención YA suavizada (y, en los drivers de QA, ya escrita): sin este orden la
+                    // lectura caía a veces antes y el coche se quedaba sin stick ese cuadro.
+                    .after(crate::input::joystick::smooth_movement_intent)
                     .run_if(in_state(GamePhase::Playing)),
             )
             .add_systems(Update, (aparecer_trafico, aparecer_otros).run_if(in_state(GamePhase::Playing)))
@@ -656,7 +659,7 @@ fn aparecer_otros(
 
 // ── Cercanía, entrar y salir ─────────────────────────────────────────────────────────────────────────────────────
 
-fn buscar_cercano(
+pub(crate) fn buscar_cercano(
     mut cond: ResMut<Conduccion>,
     flight: Res<crate::flight::Flight>,
     fly: Res<crate::creative_fly::CreativeFlight>,
@@ -1041,10 +1044,12 @@ fn choca(obs: &crate::obstaculos::Obstaculos, body: ha_shared::CelestialBody, c:
 
 fn bola_choca(obs: &crate::obstaculos::Obstaculos, body: ha_shared::CelestialBody, c: &Cuerpo, f: &Ficha, pos: Vec2) -> bool {
     let d = dir_de(c.rumbo);
-    let sep = (f.largo * 0.5 - R_COCHE).max(0.0);
+    // El círculo de choque sigue el ANCHO del vehículo (una ambulancia de 2,3 m no cabe en círculos de 0,8) y se reparten a lo largo.
+    let r = (f.ancho * 0.5 - 0.15).clamp(0.55, 1.2);
+    let sep = (f.largo * 0.5 - r).max(0.0);
     [-sep, 0.0, sep].into_iter().any(|o| {
         let q = pos + d * o;
-        !obs.libre(body, q.x, q.y, R_COCHE)
+        !obs.libre(body, q.x, q.y, r)
     })
 }
 
@@ -1085,24 +1090,37 @@ fn mover_vehiculos(
         // Prueba el movimiento; si choca, no avanza y pierde velocidad. Un coche ya encimado (cargaste partida,
         // te empujaron) puede moverse hasta salir: el choque sólo cuenta si el paso EMPEORA la situación.
         let ya_trabado = choca(&obs, body, &c, &f, v.cuerpo.pos);
-        if !ya_trabado && choca(&obs, body, &c, &f, destino) {
-            let vi = c.vel.abs();
-            if vi > V_CHOQUE && v.choque_cd <= 0.0 {
-                let dano = (vi - V_CHOQUE + 1.0) * 6.0;
-                v.vida -= dano;
-                v.choque_cd = 0.4;
-                let en = c.pos + dir_de(c.rumbo) * f.largo * 0.5;
-                crate::armas::chispa_de_impacto(&mut commands, en, Color::srgb(1.0, 0.8, 0.3));
-                sfx.send(PlaySfxAt(Sfx::Crumble, Vec2::new(c.pos.x, -c.pos.y)));
-                if v.conductor == Conductor::Jugador {
-                    shake.send(CameraShakeEvent { trauma: (vi / 20.0).clamp(0.1, 0.6) });
-                }
-            }
-            c.vel = -c.vel * 0.25;
-            // Rebote mínimo hacia atrás para despegar del obstáculo.
-            c.pos -= dir_de(c.rumbo) * c.vel.signum() * -0.04;
-        } else {
+        if ya_trabado || !choca(&obs, body, &c, &f, destino) {
             c.pos = destino;
+        } else {
+            // **Deslizar antes de chocar**: los postes y faroles son finos y un coche pegado a uno no tiene que quedar clavado
+            // (con círculos de choque redondos, medio paso de más es un tope). Se prueba medio paso y corrimientos laterales de
+            // unos decímetros; recién si nada cabe es un choque.
+            let d = dir_de(c.rumbo);
+            let perp = derecha_de(d);
+            let avance = (destino - c.pos).dot(d);
+            let salida = [(0.5, 0.0), (1.0, 0.1), (1.0, -0.1), (1.0, 0.22), (1.0, -0.22)]
+                .into_iter()
+                .map(|(frac, lat)| c.pos + d * avance * frac + perp * lat)
+                .find(|q| !choca(&obs, body, &c, &f, *q));
+            if let Some(q) = salida {
+                c.pos = q;
+            } else {
+                let vi = c.vel.abs();
+                if vi > V_CHOQUE && v.choque_cd <= 0.0 {
+                    let dano = (vi - V_CHOQUE + 1.0) * 6.0;
+                    v.vida -= dano;
+                    v.choque_cd = 0.4;
+                    let en = c.pos + dir_de(c.rumbo) * f.largo * 0.5;
+                    crate::armas::chispa_de_impacto(&mut commands, en, Color::srgb(1.0, 0.8, 0.3));
+                    sfx.send(PlaySfxAt(Sfx::Crumble, Vec2::new(c.pos.x, -c.pos.y)));
+                    if v.conductor == Conductor::Jugador {
+                        shake.send(CameraShakeEvent { trauma: (vi / 20.0).clamp(0.1, 0.6) });
+                    }
+                }
+                // Despacio no rebota (sería un temblor): se frena.
+                c.vel = if vi > V_CHOQUE { -c.vel * 0.25 } else { 0.0 };
+            }
         }
         v.cuerpo = c;
         if v.vida <= 0.0 {

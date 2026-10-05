@@ -33765,210 +33765,6 @@
      "label": "Helicóptero 2"
     }
    ]
-  },
-  "items/gun_pistola": {
-   "label": "Pistola M1911"
-  },
-  "items/gun_pistola__115": {
-   "label": "Pistola M1911 · Weaponized 115"
-  },
-  "items/gun_pistola__singularidad": {
-   "label": "Pistola M1911 · Singularidad"
-  },
-  "items/gun_pistola__grafiti": {
-   "label": "Pistola M1911 · Grafiti"
-  },
-  "items/gun_pistola__bacon": {
-   "label": "Pistola M1911 · Bacon"
-  },
-  "items/gun_pistola__ciclon": {
-   "label": "Pistola M1911 · Ciclón"
-  },
-  "items/gun_pistola__oscura": {
-   "label": "Pistola M1911 · Materia oscura"
-  },
-  "items/gun_thompson": {
-   "label": "Thompson M1A1"
-  },
-  "items/gun_thompson__115": {
-   "label": "Thompson M1A1 · Weaponized 115"
-  },
-  "items/gun_thompson__singularidad": {
-   "label": "Thompson M1A1 · Singularidad"
-  },
-  "items/gun_thompson__grafiti": {
-   "label": "Thompson M1A1 · Grafiti"
-  },
-  "items/gun_thompson__bacon": {
-   "label": "Thompson M1A1 · Bacon"
-  },
-  "items/gun_thompson__ciclon": {
-   "label": "Thompson M1A1 · Ciclón"
-  },
-  "items/gun_thompson__oscura": {
-   "label": "Thompson M1A1 · Materia oscura"
-  },
-  "items/gun_ppsh": {
-   "label": "PPSh-41"
-  },
-  "items/gun_ppsh__115": {
-   "label": "PPSh-41 · Weaponized 115"
-  },
-  "items/gun_ppsh__singularidad": {
-   "label": "PPSh-41 · Singularidad"
-  },
-  "items/gun_ppsh__grafiti": {
-   "label": "PPSh-41 · Grafiti"
-  },
-  "items/gun_ppsh__bacon": {
-   "label": "PPSh-41 · Bacon"
-  },
-  "items/gun_ppsh__ciclon": {
-   "label": "PPSh-41 · Ciclón"
-  },
-  "items/gun_ppsh__oscura": {
-   "label": "PPSh-41 · Materia oscura"
-  },
-  "items/gun_mp40": {
-   "label": "MP40"
-  },
-  "items/gun_mp40__115": {
-   "label": "MP40 · Weaponized 115"
-  },
-  "items/gun_mp40__singularidad": {
-   "label": "MP40 · Singularidad"
-  },
-  "items/gun_mp40__grafiti": {
-   "label": "MP40 · Grafiti"
-  },
-  "items/gun_mp40__bacon": {
-   "label": "MP40 · Bacon"
-  },
-  "items/gun_mp40__ciclon": {
-   "label": "MP40 · Ciclón"
-  },
-  "items/gun_mp40__oscura": {
-   "label": "MP40 · Materia oscura"
-  },
-  "items/gun_suomi": {
-   "label": "Suomi KP/-31"
-  },
-  "items/gun_suomi__115": {
-   "label": "Suomi KP/-31 · Weaponized 115"
-  },
-  "items/gun_suomi__singularidad": {
-   "label": "Suomi KP/-31 · Singularidad"
-  },
-  "items/gun_suomi__grafiti": {
-   "label": "Suomi KP/-31 · Grafiti"
-  },
-  "items/gun_suomi__bacon": {
-   "label": "Suomi KP/-31 · Bacon"
-  },
-  "items/gun_suomi__ciclon": {
-   "label": "Suomi KP/-31 · Ciclón"
-  },
-  "items/gun_suomi__oscura": {
-   "label": "Suomi KP/-31 · Materia oscura"
-  },
-  "items/gun_pps43": {
-   "label": "PPS-43"
-  },
-  "items/gun_pps43__115": {
-   "label": "PPS-43 · Weaponized 115"
-  },
-  "items/gun_pps43__singularidad": {
-   "label": "PPS-43 · Singularidad"
-  },
-  "items/gun_pps43__grafiti": {
-   "label": "PPS-43 · Grafiti"
-  },
-  "items/gun_pps43__bacon": {
-   "label": "PPS-43 · Bacon"
-  },
-  "items/gun_pps43__ciclon": {
-   "label": "PPS-43 · Ciclón"
-  },
-  "items/gun_pps43__oscura": {
-   "label": "PPS-43 · Materia oscura"
-  },
-  "items/gun_ak": {
-   "label": "Fusil de asalto AK"
-  },
-  "items/gun_ak__115": {
-   "label": "Fusil de asalto AK · Weaponized 115"
-  },
-  "items/gun_ak__singularidad": {
-   "label": "Fusil de asalto AK · Singularidad"
-  },
-  "items/gun_ak__grafiti": {
-   "label": "Fusil de asalto AK · Grafiti"
-  },
-  "items/gun_ak__bacon": {
-   "label": "Fusil de asalto AK · Bacon"
-  },
-  "items/gun_ak__ciclon": {
-   "label": "Fusil de asalto AK · Ciclón"
-  },
-  "items/gun_ak__oscura": {
-   "label": "Fusil de asalto AK · Materia oscura"
-  },
-  "items/gun_escopeta": {
-   "label": "Escopeta de ánima lisa"
-  },
-  "items/gun_escopeta__115": {
-   "label": "Escopeta de ánima lisa · Weaponized 115"
-  },
-  "items/gun_escopeta__singularidad": {
-   "label": "Escopeta de ánima lisa · Singularidad"
-  },
-  "items/gun_escopeta__grafiti": {
-   "label": "Escopeta de ánima lisa · Grafiti"
-  },
-  "items/gun_escopeta__bacon": {
-   "label": "Escopeta de ánima lisa · Bacon"
-  },
-  "items/gun_escopeta__ciclon": {
-   "label": "Escopeta de ánima lisa · Ciclón"
-  },
-  "items/gun_escopeta__oscura": {
-   "label": "Escopeta de ánima lisa · Materia oscura"
-  },
-  "items/gun_raygun": {
-   "label": "Pistola de rayos"
-  },
-  "items/gun_raygun__115": {
-   "label": "Pistola de rayos · Weaponized 115"
-  },
-  "items/gun_raygun__singularidad": {
-   "label": "Pistola de rayos · Singularidad"
-  },
-  "items/gun_raygun__grafiti": {
-   "label": "Pistola de rayos · Grafiti"
-  },
-  "items/gun_raygun__bacon": {
-   "label": "Pistola de rayos · Bacon"
-  },
-  "items/gun_raygun__ciclon": {
-   "label": "Pistola de rayos · Ciclón"
-  },
-  "items/gun_raygun__oscura": {
-   "label": "Pistola de rayos · Materia oscura"
-  },
-  "items/ammo_45": {
-   "label": "Balas .45"
-  },
-  "items/ammo_9mm": {
-   "label": "Balas 9 mm"
-  },
-  "items/ammo_762": {
-   "label": "Balas 7,62"
-  },
-  "items/ammo_cartucho": {
-   "label": "Cartuchos"
-  },
-  "items/ammo_energia": {
-   "label": "Celdas de energía"
   }
  },
  "origen": {
@@ -108968,10 +108764,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 6,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea#azul": {
@@ -108981,10 +108777,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 6,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea#hormigon": {
@@ -108994,10 +108790,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 6,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea#ladrillo": {
@@ -109007,10 +108803,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 6,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea_clara": {
@@ -109020,10 +108816,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 7,
     "row": 10,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea_clara#azul": {
@@ -109033,10 +108829,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 7,
     "row": 10,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea_clara#hormigon": {
@@ -109046,10 +108842,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 7,
     "row": 10,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/azotea_clara#ladrillo": {
@@ -109059,10 +108855,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 7,
     "row": 10,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/local": {
@@ -109072,10 +108868,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 11,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/local#azul": {
@@ -109085,10 +108881,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 4,
     "row": 11,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/local#hormigon": {
@@ -109098,10 +108894,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 4,
     "row": 11,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/local#ladrillo": {
@@ -109111,10 +108907,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 11,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/local_angosto": {
@@ -109365,10 +109161,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 12,
+      "col": 13,
       "h": 3,
       "row": 8,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -109438,7 +109234,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 162,
+      "col": 130,
       "h": 62,
       "row": 32,
       "w": 60
@@ -109446,10 +109242,10 @@
     }
    },
    "rect": {
-    "col": 12,
+    "col": 13,
     "h": 3,
     "row": 8,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_arco#azul": {
@@ -109466,10 +109262,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 21,
+      "col": 22,
       "h": 3,
       "row": 8,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -109539,7 +109335,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 162,
+      "col": 130,
       "h": 62,
       "row": 32,
       "w": 60
@@ -109547,10 +109343,10 @@
     }
    },
    "rect": {
-    "col": 21,
+    "col": 22,
     "h": 3,
     "row": 8,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_arco#hormigon": {
@@ -109560,10 +109356,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 12,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_arco#ladrillo": {
@@ -109580,10 +109376,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 12,
+      "col": 13,
       "h": 3,
       "row": 8,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -109653,7 +109449,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 162,
+      "col": 130,
       "h": 62,
       "row": 32,
       "w": 60
@@ -109661,10 +109457,10 @@
     }
    },
    "rect": {
-    "col": 12,
+    "col": 13,
     "h": 3,
     "row": 8,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_cajero": {
@@ -109681,10 +109477,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 12,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -109754,7 +109550,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 122,
+      "col": 90,
       "h": 44,
       "row": 42,
       "w": 44
@@ -109762,10 +109558,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 12,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_cajero#azul": {
@@ -109782,10 +109578,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 12,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -109855,7 +109651,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 122,
+      "col": 90,
       "h": 44,
       "row": 42,
       "w": 44
@@ -109863,10 +109659,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 12,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_cajero#hormigon": {
@@ -109876,10 +109672,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_cajero#ladrillo": {
@@ -109896,10 +109692,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 12,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -109969,7 +109765,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 122,
+      "col": 90,
       "h": 44,
       "row": 42,
       "w": 44
@@ -109977,10 +109773,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 12,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_madera": {
@@ -109997,10 +109793,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 15,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110070,7 +109866,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 60,
       "row": 32,
       "w": 40
@@ -110078,10 +109874,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_madera#azul": {
@@ -110098,10 +109894,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 15,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110171,7 +109967,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 60,
       "row": 32,
       "w": 40
@@ -110179,10 +109975,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_madera#hormigon": {
@@ -110192,10 +109988,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 18,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_madera#ladrillo": {
@@ -110212,10 +110008,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 15,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110285,7 +110081,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 60,
       "row": 32,
       "w": 40
@@ -110293,10 +110089,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_vidrio": {
@@ -110313,10 +110109,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 18,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110386,7 +110182,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 160,
+      "col": 128,
       "h": 62,
       "row": 32,
       "w": 64
@@ -110394,10 +110190,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 18,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_vidrio#azul": {
@@ -110414,10 +110210,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 18,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110487,7 +110283,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 160,
+      "col": 128,
       "h": 62,
       "row": 32,
       "w": 64
@@ -110495,10 +110291,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 18,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_vidrio#hormigon": {
@@ -110515,10 +110311,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 3,
       "row": 21,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110588,7 +110384,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 160,
+      "col": 128,
       "h": 62,
       "row": 32,
       "w": 64
@@ -110596,10 +110392,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 21,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/pb_vidrio#ladrillo": {
@@ -110616,10 +110412,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 18,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -110689,7 +110485,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 160,
+      "col": 128,
       "h": 62,
       "row": 32,
       "w": 64
@@ -110697,10 +110493,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 18,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_balcon": {
@@ -110710,10 +110506,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_balcon#azul": {
@@ -110723,10 +110519,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 4,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_balcon#hormigon": {
@@ -110736,10 +110532,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 4,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_balcon#ladrillo": {
@@ -110749,10 +110545,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 15,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_doble": {
@@ -110762,10 +110558,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 19,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_doble#azul": {
@@ -110775,10 +110571,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 4,
     "row": 19,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_doble#hormigon": {
@@ -110788,10 +110584,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 4,
     "row": 19,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_doble#ladrillo": {
@@ -110801,10 +110597,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 19,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_rejilla": {
@@ -110814,10 +110610,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 23,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_rejilla#azul": {
@@ -110827,10 +110623,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 4,
     "row": 23,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_rejilla#hormigon": {
@@ -110840,10 +110636,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 4,
     "row": 23,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_rejilla#ladrillo": {
@@ -110853,10 +110649,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 23,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_ventanal": {
@@ -110866,10 +110662,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_ventanal#azul": {
@@ -110879,10 +110675,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 4,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_ventanal#hormigon": {
@@ -110892,10 +110688,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 4,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/piso_ventanal#ladrillo": {
@@ -110905,10 +110701,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/sombra": {
@@ -110931,10 +110727,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 7,
     "row": 17,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado#azul": {
@@ -110944,10 +110740,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 7,
     "row": 17,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado#hormigon": {
@@ -110957,10 +110753,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 7,
     "row": 17,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado#ladrillo": {
@@ -110970,10 +110766,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 7,
     "row": 17,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado_liso": {
@@ -110983,10 +110779,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 6,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado_liso#azul": {
@@ -110996,10 +110792,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 6,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado_liso#hormigon": {
@@ -111009,10 +110805,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 6,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tejado_liso#ladrillo": {
@@ -111022,10 +110818,10 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 6,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tendedero": {
@@ -111256,10 +111052,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 21,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_carniceria#azul": {
@@ -111269,10 +111065,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 21,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_carniceria#hormigon": {
@@ -111282,10 +111078,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_carniceria#ladrillo": {
@@ -111295,10 +111091,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 21,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_cerrada": {
@@ -111464,10 +111260,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 10,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_entera#azul": {
@@ -111477,10 +111273,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 10,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_entera#hormigon": {
@@ -111490,10 +111286,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 10,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_entera#ladrillo": {
@@ -111503,10 +111299,10 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 10,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_galletas": {
@@ -111575,10 +111371,10 @@
      ],
      "png": "art/pack/modulares_2.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 5,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -111648,7 +111444,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 96,
       "w": 46
@@ -111656,10 +111452,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 5,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio#azul": {
@@ -111676,10 +111472,10 @@
      ],
      "png": "art/pack/modulares_2.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 5,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -111749,7 +111545,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 96,
       "w": 46
@@ -111757,10 +111553,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 5,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio#hormigon": {
@@ -111777,10 +111573,10 @@
      ],
      "png": "art/pack/modulares_2.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 5,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -111850,7 +111646,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 96,
       "w": 46
@@ -111858,10 +111654,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 5,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio#ladrillo": {
@@ -111878,10 +111674,10 @@
      ],
      "png": "art/pack/modulares_2.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 5,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -111951,7 +111747,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 96,
       "w": 46
@@ -111959,10 +111755,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 5,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio_bajo": {
@@ -111972,10 +111768,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio_bajo#azul": {
@@ -111985,10 +111781,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 4,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio_bajo#hormigon": {
@@ -111998,10 +111794,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 4,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_gimnasio_bajo#ladrillo": {
@@ -112011,10 +111807,10 @@
    ],
    "png": "art/pack/modulares_3.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 4,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_heladeria": {
@@ -112031,10 +111827,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 24,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112104,7 +111900,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 56,
       "row": 38,
       "w": 40
@@ -112112,10 +111908,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_heladeria#azul": {
@@ -112132,10 +111928,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 24,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112205,7 +112001,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 56,
       "row": 38,
       "w": 40
@@ -112213,10 +112009,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_heladeria#hormigon": {
@@ -112233,10 +112029,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 3,
       "row": 27,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112306,7 +112102,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 56,
       "row": 38,
       "w": 40
@@ -112314,10 +112110,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_heladeria#ladrillo": {
@@ -112334,10 +112130,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 24,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112407,7 +112203,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 124,
+      "col": 92,
       "h": 56,
       "row": 38,
       "w": 40
@@ -112415,10 +112211,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 24,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_juguetes": {
@@ -112487,10 +112283,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 27,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112560,7 +112356,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 176,
+      "col": 144,
       "h": 62,
       "row": 32,
       "w": 64
@@ -112568,10 +112364,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_mascotas#azul": {
@@ -112588,10 +112384,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 27,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112661,7 +112457,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 176,
+      "col": 144,
       "h": 62,
       "row": 32,
       "w": 64
@@ -112669,10 +112465,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_mascotas#hormigon": {
@@ -112689,10 +112485,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 3,
       "row": 0,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112762,7 +112558,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 176,
+      "col": 144,
       "h": 62,
       "row": 32,
       "w": 64
@@ -112770,10 +112566,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_mascotas#ladrillo": {
@@ -112790,10 +112586,10 @@
      ],
      "png": "art/pack/modulares_3.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 27,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112863,7 +112659,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 176,
+      "col": 144,
       "h": 62,
       "row": 32,
       "w": 64
@@ -112871,10 +112667,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 27,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_panaderia": {
@@ -112891,10 +112687,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 0,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -112964,7 +112760,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 178,
+      "col": 146,
       "h": 62,
       "row": 32,
       "w": 60
@@ -112972,10 +112768,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_panaderia#azul": {
@@ -112992,10 +112788,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 0,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113065,7 +112861,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 178,
+      "col": 146,
       "h": 62,
       "row": 32,
       "w": 60
@@ -113073,10 +112869,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_panaderia#hormigon": {
@@ -113093,10 +112889,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 3,
       "row": 3,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113166,7 +112962,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 178,
+      "col": 146,
       "h": 62,
       "row": 32,
       "w": 60
@@ -113174,10 +112970,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 3,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_panaderia#ladrillo": {
@@ -113194,10 +112990,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 0,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113267,7 +113063,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 178,
+      "col": 146,
       "h": 62,
       "row": 32,
       "w": 60
@@ -113275,10 +113071,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 0,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_persiana": {
@@ -113288,10 +113084,10 @@
    ],
    "png": "art/pack/modulares_4.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 3,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_persiana#azul": {
@@ -113301,10 +113097,10 @@
    ],
    "png": "art/pack/modulares_4.png",
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 3,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_persiana#hormigon": {
@@ -113314,10 +113110,10 @@
    ],
    "png": "art/pack/modulares_4.png",
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_persiana#ladrillo": {
@@ -113327,10 +113123,10 @@
    ],
    "png": "art/pack/modulares_4.png",
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 3,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_pesca": {
@@ -113347,10 +113143,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113420,7 +113216,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 96,
+      "col": 64,
       "h": 62,
       "row": 32,
       "w": 96
@@ -113428,10 +113224,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_pesca#azul": {
@@ -113448,10 +113244,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113521,7 +113317,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 96,
+      "col": 64,
       "h": 62,
       "row": 32,
       "w": 96
@@ -113529,10 +113325,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_pesca#hormigon": {
@@ -113549,10 +113345,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 3,
       "row": 9,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113622,7 +113418,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 96,
+      "col": 64,
       "h": 62,
       "row": 32,
       "w": 96
@@ -113630,10 +113426,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 9,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_pesca#ladrillo": {
@@ -113650,10 +113446,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 6,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113723,7 +113519,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 96,
+      "col": 64,
       "h": 62,
       "row": 32,
       "w": 96
@@ -113731,10 +113527,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 6,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_vacia": {
@@ -113803,10 +113599,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 9,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113876,7 +113672,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 32,
       "w": 46
@@ -113884,10 +113680,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 9,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_vidriera#azul": {
@@ -113904,10 +113700,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 18,
+      "col": 19,
       "h": 3,
       "row": 9,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -113977,7 +113773,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 32,
       "w": 46
@@ -113985,10 +113781,10 @@
     }
    },
    "rect": {
-    "col": 18,
+    "col": 19,
     "h": 3,
     "row": 9,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_vidriera#hormigon": {
@@ -114005,10 +113801,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 0,
+      "col": 1,
       "h": 3,
       "row": 12,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -114078,7 +113874,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 32,
       "w": 46
@@ -114086,10 +113882,10 @@
     }
    },
    "rect": {
-    "col": 0,
+    "col": 1,
     "h": 3,
     "row": 12,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_vidriera#ladrillo": {
@@ -114106,10 +113902,10 @@
      ],
      "png": "art/pack/modulares_4.png",
      "rect": {
-      "col": 9,
+      "col": 10,
       "h": 3,
       "row": 9,
-      "w": 9
+      "w": 7
      }
     },
     "closed": {
@@ -114179,7 +113975,7 @@
      ],
      "png": "art/pack/edificios_puertas_1.png",
      "rect": {
-      "col": 184,
+      "col": 152,
       "h": 60,
       "row": 32,
       "w": 46
@@ -114187,10 +113983,10 @@
     }
    },
    "rect": {
-    "col": 9,
+    "col": 10,
     "h": 3,
     "row": 9,
-    "w": 9
+    "w": 7
    }
   },
   "edificio/tienda_vitrina_juguetes": {
@@ -206163,9 +205959,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/ammo_762": {
@@ -206176,9 +205972,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/ammo_9mm": {
@@ -206189,9 +205985,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/ammo_cartucho": {
@@ -206202,9 +205998,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/ammo_energia": {
@@ -206215,9 +206011,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/apple": {
@@ -206605,9 +206401,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ak__115": {
@@ -206618,9 +206414,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ak__bacon": {
@@ -206631,9 +206427,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ak__ciclon": {
@@ -206644,9 +206440,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ak__grafiti": {
@@ -206657,9 +206453,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ak__oscura": {
@@ -206670,9 +206466,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ak__singularidad": {
@@ -206683,9 +206479,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta": {
@@ -206696,9 +206492,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta__115": {
@@ -206709,9 +206505,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta__bacon": {
@@ -206722,9 +206518,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta__ciclon": {
@@ -206735,9 +206531,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta__grafiti": {
@@ -206748,9 +206544,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta__oscura": {
@@ -206761,9 +206557,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_escopeta__singularidad": {
@@ -206774,9 +206570,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40": {
@@ -206787,9 +206583,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40__115": {
@@ -206800,9 +206596,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40__bacon": {
@@ -206813,9 +206609,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40__ciclon": {
@@ -206826,9 +206622,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40__grafiti": {
@@ -206839,9 +206635,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40__oscura": {
@@ -206852,9 +206648,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_mp40__singularidad": {
@@ -206865,9 +206661,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola": {
@@ -206878,9 +206674,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola__115": {
@@ -206891,9 +206687,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola__bacon": {
@@ -206904,9 +206700,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola__ciclon": {
@@ -206917,9 +206713,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola__grafiti": {
@@ -206930,9 +206726,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola__oscura": {
@@ -206943,9 +206739,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pistola__singularidad": {
@@ -206956,9 +206752,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43": {
@@ -206969,9 +206765,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43__115": {
@@ -206982,9 +206778,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43__bacon": {
@@ -206995,9 +206791,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43__ciclon": {
@@ -207008,9 +206804,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43__grafiti": {
@@ -207021,9 +206817,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 22,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43__oscura": {
@@ -207034,9 +206830,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_pps43__singularidad": {
@@ -207047,9 +206843,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 20,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh": {
@@ -207060,9 +206856,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh__115": {
@@ -207073,9 +206869,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh__bacon": {
@@ -207086,9 +206882,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh__ciclon": {
@@ -207099,9 +206895,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 16,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh__grafiti": {
@@ -207112,9 +206908,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh__oscura": {
@@ -207125,9 +206921,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 18,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_ppsh__singularidad": {
@@ -207138,9 +206934,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun": {
@@ -207151,9 +206947,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun__115": {
@@ -207164,9 +206960,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun__bacon": {
@@ -207177,9 +206973,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
-    "h": 2,
     "row": 8,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun__ciclon": {
@@ -207190,9 +206986,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
-    "h": 2,
     "row": 8,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun__grafiti": {
@@ -207203,9 +206999,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
-    "h": 2,
     "row": 8,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun__oscura": {
@@ -207216,9 +207012,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
-    "h": 2,
     "row": 8,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_raygun__singularidad": {
@@ -207229,9 +207025,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
-    "h": 2,
     "row": 6,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi": {
@@ -207242,9 +207038,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi__115": {
@@ -207255,9 +207051,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi__bacon": {
@@ -207268,9 +207064,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 10,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi__ciclon": {
@@ -207281,9 +207077,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 12,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi__grafiti": {
@@ -207294,9 +207090,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 8,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi__oscura": {
@@ -207307,9 +207103,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 14,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_suomi__singularidad": {
@@ -207320,9 +207116,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 6,
-    "h": 2,
     "row": 4,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson": {
@@ -207333,9 +207129,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 24,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson__115": {
@@ -207346,9 +207142,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 26,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson__bacon": {
@@ -207359,9 +207155,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 0,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson__ciclon": {
@@ -207372,9 +207168,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 2,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson__grafiti": {
@@ -207385,9 +207181,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 30,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson__oscura": {
@@ -207398,9 +207194,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 4,
-    "h": 2,
     "row": 2,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/gun_thompson__singularidad": {
@@ -207411,9 +207207,9 @@
    "png": "art/gen/armas.png",
    "rect": {
     "col": 28,
-    "h": 2,
     "row": 0,
-    "w": 2
+    "w": 2,
+    "h": 2
    }
   },
   "items/hammer": {
@@ -281118,890 +280914,6 @@
     "h": 1,
     "row": 18,
     "w": 1
-   }
-  },
-  "items/gun_pistola": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pistola__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_thompson__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ppsh__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 2,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_mp40__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_suomi__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_pps43__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 4,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_ak__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 10,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 12,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 14,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 16,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 18,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 20,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 22,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_escopeta__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 24,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 26,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__115": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 28,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__singularidad": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 30,
-    "row": 6,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__grafiti": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__bacon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__ciclon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/gun_raygun__oscura": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 8,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_45": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 0,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_9mm": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 2,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_762": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 4,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_cartucho": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 6,
-    "row": 0,
-    "w": 2,
-    "h": 2
-   }
-  },
-  "items/ammo_energia": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/armas.png",
-   "rect": {
-    "col": 8,
-    "row": 0,
-    "w": 2,
-    "h": 2
    }
   }
  }

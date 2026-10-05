@@ -272,6 +272,30 @@ fn aparecer(
     ));
 }
 
+/// **Un infectado nuevo en `(x, z)`**: el mismo cuerpo que el que sale de noche (`aparecer`). Lo usa la pandemia
+/// (`pandemia::avanzar_contagio`, y el vecino que muere de una mordida) para levantar a quien cayó.
+pub(crate) fn levantar(commands: &mut Commands, art: &crate::art2d::ArtLibrary, x: f32, z: f32, semilla: u32) {
+    let skin = format!("npc/char_{}", 1 + semilla % 20);
+    let mut sprite = art.sprite_or_color(&skin, Color::srgb(0.5, 0.7, 0.5), TAMANO);
+    sprite.color = Color::srgb(0.55, 0.78, 0.55);
+    commands.spawn((
+        sprite,
+        Transform::from_xyz(x, -z, sort_z(z)),
+        Infectado {
+            x,
+            z,
+            vida: VIDA,
+            ataque_cd: 1.0,
+            destello: 0.0,
+            desvio: ((semilla % 90) as f32 / 100.0) - 0.45,
+            bloqueado: 0.0,
+            botin: botin_de(semilla.wrapping_mul(2_654_435_761)),
+            guardia: false,
+        },
+        Name::new("Infectado"),
+    ));
+}
+
 #[allow(clippy::too_many_arguments)]
 fn mover_y_morder(
     time: Res<Time>,
@@ -285,6 +309,7 @@ fn mover_y_morder(
     mut sfx: EventWriter<crate::audio::PlaySfx>,
     mut sim: Query<&mut SimState, With<Player>>,
     ruido_de_arma: Res<crate::armas::RuidoDeArma>,
+    mut fiebre: ResMut<crate::pandemia::Infeccion>,
     mut q: Query<(&mut Infectado, &mut Transform, &mut Sprite)>,
     mut ultimo: Local<f32>,
     mut ultimo_z: Local<f32>,
@@ -355,6 +380,8 @@ fn mover_y_morder(
     }
     if mordidas > 0 {
         sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Bite));
+        // La mordida puede contagiar (fiebre): ver `pandemia`.
+        fiebre.mordida((time.elapsed().as_micros() as u32).wrapping_mul(2_654_435_761) >> 8);
         if let Ok(mut s) = sim.get_single_mut() {
             s.hp = (s.hp - DANO * mordidas as f32 * (1.0 - s.armadura)).max(0.0);
         }

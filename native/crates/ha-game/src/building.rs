@@ -486,18 +486,16 @@ fn roof_sprite(
 /// Es lo que hace que una cuadra comercial se lea como una cuadra: cada local es
 /// un rubro distinto, con su vidriera y su cartel, y salen del mismo kit modular
 /// que el resto del edificio, así que encastran sin un pixel de corrimiento.
+// Sólo bandas de MODULO (7) celdas: las de 6 (discos, galletas, juguetes, cerrada) son el vano sin pilares
+// y dejaban un hueco de pared al costado.
 pub(crate) const LOCALES: &[&str] = &[
     "edificio/local",
     "edificio/tienda_panaderia",
     "edificio/tienda_carniceria",
-    "edificio/tienda_discos",
-    "edificio/tienda_galletas",
-    "edificio/tienda_juguetes",
     "edificio/tienda_mascotas",
     "edificio/tienda_pesca",
     "edificio/tienda_heladeria",
     "edificio/tienda_vidriera",
-    "edificio/tienda_cerrada",
     "edificio/tienda_persiana",
 ];
 
@@ -603,7 +601,7 @@ fn spawn_fachada_apilada(
             let clave = art.resolved_key(pieza, Some(tema));
             // **Una celda del pack por TILE.** Es una banda que embaldosa a lo
             // largo del frente, igual que una pared: con la escala de objeto
-            // (0,95 m/celda) un módulo de 9 mediría 8,55 m sobre 9 tiles y cada
+            // (0,95 m/celda) un módulo de 7 mediría 6,65 m sobre 7 tiles y cada
             // edificio se montaría medio metro sobre su vecino.
             let size = art.medida_de_obra(
                 &clave,

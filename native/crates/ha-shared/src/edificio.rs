@@ -40,7 +40,7 @@ use crate::build_grid::{WallAxis, WallKind};
 /// `5_Floor_Modular_Buildings` (ver `scripts/import-modulares.py`). Angostarla
 /// parte una ventana al medio, que es exactamente el estropicio que dejó la
 /// primera importación cuando cortó las bandas en columnas de 1 celda.
-pub const MODULO: i64 = 9;
+pub const MODULO: i64 = 7;
 
 /// Alto de la banda de PLANTA BAJA, en celdas del pack.
 pub const ALTO_PLANTA_BAJA: i64 = 3;

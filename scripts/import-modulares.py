@@ -23,7 +23,7 @@ slot. Con islas de pixel salen 337 piezas y la gramática aparece sola.
 Los tres números que sostienen todo salieron de medir la hoja, y el script los
 vuelve a verificar en cada corrida (`verificar_estructura`):
 
-    MODULO   =    9 celdas   el frente de un edificio modular
+    MODULO   =    7 celdas   el frente de un edificio modular (el bloque de la hoja mide 9: 1 celda de sangrado por lado)
     PERIODO  = 2432 px       lo que ocupa un TEMA completo
     Y0       =  504 px       dónde arranca el primer tema
 
@@ -94,9 +94,15 @@ CELL = 32
 PAGE = 1024  # px por página de atlas = 32×32 celdas. Igual que el resto del pack.
 OPACO = 16   # alfa mínimo para que un pixel cuente como dibujo
 
-#: El frente de un edificio modular, en celdas. Sale de medir la hoja: TODAS las
-#: bandas miden 9 celdas o 18 (= dos de 9). No es un número elegido.
-MODULO = 9
+#: **El frente REAL de un edificio modular, en celdas: 7.** La hoja dibuja cada banda en un bloque de 9
+#: celdas (o 18 = dos), pero el bloque trae UNA CELDA DE SANGRADO por lado: el pedazo del módulo vecino,
+#: que es lo que se ve al ensamblar. El borde verdadero de la banda está en las columnas de pixel 32|33 y
+#: 255|256 (el trazo del pilar: salto de luminancia 46-58 en las 3 temas), o sea 224 px = 7 celdas. Importar
+#: el bloque entero metía en cada edificio un cajero/ventana a medio dibujar pegado al pilar (bug de las
+#: fachadas, 5 oct 2026). La hoja se PARTE de a 9 (PASO_HOJA) y cada banda se RECORTA a sus 7.
+MODULO = 7
+PASO_HOJA = 9
+SANGRADO = (PASO_HOJA - MODULO) // 2  # celdas de vecino a cada lado
 #: Lo que ocupa un tema completo, en px, y dónde arranca el primero.
 PERIODO = 2432
 Y0 = 504
@@ -299,11 +305,14 @@ def piezas(arr):
         y0, y1 = int(sy.min()), int(sy.max()) + 1
         x0, x1 = int(sx.min()), int(sx.max()) + 1
         ancho = x1 - x0
-        paso = MODULO * CELL
+        paso = PASO_HOJA * CELL
         n = ancho // paso if ancho % paso == 0 and ancho > paso else 1
         for k in range(n):
-            p = ajustar(arr, y0, x0 + k * paso if n > 1 else x0,
-                        y1 - y0, paso if n > 1 else ancho)
+            xk = x0 + k * paso if n > 1 else x0
+            wk = paso if n > 1 else ancho
+            if wk == paso:  # banda de la hoja: se recorta el sangrado de los vecinos
+                xk, wk = xk + SANGRADO * CELL, MODULO * CELL
+            p = ajustar(arr, y0, xk, y1 - y0, wk)
             if p:
                 out.append(p)
     return out
@@ -326,7 +335,7 @@ def verificar_estructura(arr, pzs):
     # es una banda que no se partió y estaríamos a punto de exportar media pared.
     # (Arriba de `Y0` vive el encabezado de la hoja, que sí trae dibujos anchos.)
     anchos = {p["w"] for p in pzs
-              if p["y"] >= Y0 and (p["y"] - Y0) // PERIODO < len(TEMAS) and p["w"] > MODULO * CELL}
+              if p["y"] >= Y0 and (p["y"] - Y0) // PERIODO < len(TEMAS) and p["w"] > PASO_HOJA * CELL}
     if anchos:
         raise SystemExit(f"quedaron piezas más anchas que el módulo: {sorted(anchos)}")
 

@@ -62,7 +62,7 @@ pub enum Uso {
     Torre,
 }
 
-/// Una abertura del plano, relativa a la celda del frente: `(dx, dz, eje, tipo)`. **Cada módulo de 9
+/// Una abertura del plano, relativa a la celda del frente: `(dx, dz, eje, tipo)`. **Cada módulo de 7
 /// del frente lleva una puerta en su centro**: la banda del pack dibuja una puerta por módulo y la
 /// abertura tiene que caer justo ahí (si no, se ve una puerta por la que no se pasa).
 type Ab = (i64, i64, WallAxis, WallKind);
@@ -83,14 +83,14 @@ use WallAxis::{H, V};
 use WallKind::{Door, Doorway};
 use Rol::*;
 
-/// El catálogo. Todos los anchos son múltiplos de `MODULO` (9): la fachada del pack se dibuja en
-/// bandas de 9 y un frente que no calza parte una ventana al medio.
+/// El catálogo. Todos los anchos son múltiplos de `MODULO` (7): la fachada del pack se dibuja en
+/// bandas de 7 y un frente que no calza parte una ventana al medio.
 pub static PLANOS: &[Plano] = &[
     Plano {
         id: "cabana",
         nombre: "Cabaña",
         uso: Uso::Vivienda,
-        cuartos: &[(-4, -4, 9, FONDO, Living)],
+        cuartos: &[(-3, -4, 7, FONDO, Living)],
         pisos: 0,
         aberturas: &[(0, 1, H, Door)],
         madera: 40,
@@ -100,7 +100,7 @@ pub static PLANOS: &[Plano] = &[
         id: "casa",
         nombre: "Casa",
         uso: Uso::Vivienda,
-        cuartos: &[(-4, -4, 9, FONDO, Living), (-4, -9, 9, FONDO, Dormitorio)],
+        cuartos: &[(-3, -4, 7, FONDO, Living), (-3, -9, 7, FONDO, Dormitorio)],
         pisos: 1,
         aberturas: &[(0, 1, H, Door), (0, -4, H, Doorway)],
         madera: 60,
@@ -110,9 +110,9 @@ pub static PLANOS: &[Plano] = &[
         id: "casa_doble",
         nombre: "Casa ancha",
         uso: Uso::Vivienda,
-        cuartos: &[(-4, -4, 9, FONDO, Living), (5, -4, 9, FONDO, Cocina)],
+        cuartos: &[(-3, -4, 7, FONDO, Living), (4, -4, 7, FONDO, Cocina)],
         pisos: 1,
-        aberturas: &[(0, 1, H, Door), (9, 1, H, Door), (5, -2, V, Doorway)],
+        aberturas: &[(0, 1, H, Door), (7, 1, H, Door), (4, -2, V, Doorway)],
         madera: 90,
         piedra: 40,
     },
@@ -121,18 +121,18 @@ pub static PLANOS: &[Plano] = &[
         nombre: "Residencia",
         uso: Uso::Vivienda,
         cuartos: &[
-            (-4, -4, 9, FONDO, Living),
-            (5, -4, 9, FONDO, Cocina),
-            (-4, -9, 9, FONDO, Dormitorio),
-            (5, -9, 9, FONDO, Bano),
+            (-3, -4, 7, FONDO, Living),
+            (4, -4, 7, FONDO, Cocina),
+            (-3, -9, 7, FONDO, Dormitorio),
+            (4, -9, 7, FONDO, Bano),
         ],
         pisos: 2,
         aberturas: &[
             (0, 1, H, Door),
-            (9, 1, H, Door),
-            (5, -2, V, Doorway),
+            (7, 1, H, Door),
+            (4, -2, V, Doorway),
             (0, -4, H, Doorway),
-            (9, -4, H, Doorway),
+            (7, -4, H, Doorway),
         ],
         madera: 160,
         piedra: 90,
@@ -141,7 +141,7 @@ pub static PLANOS: &[Plano] = &[
         id: "tienda",
         nombre: "Tienda",
         uso: Uso::Comercio,
-        cuartos: &[(-4, -4, 9, FONDO, Tienda), (-4, -9, 9, FONDO, Deposito)],
+        cuartos: &[(-3, -4, 7, FONDO, Tienda), (-3, -9, 7, FONDO, Deposito)],
         pisos: 1,
         aberturas: &[(0, 1, H, Door), (0, -4, H, Doorway)],
         madera: 70,
@@ -151,7 +151,7 @@ pub static PLANOS: &[Plano] = &[
         id: "torre",
         nombre: "Torre",
         uso: Uso::Torre,
-        cuartos: &[(-4, -4, 9, FONDO, Oficina)],
+        cuartos: &[(-3, -4, 7, FONDO, Oficina)],
         pisos: 3,
         aberturas: &[(0, 1, H, Door)],
         madera: 80,
@@ -161,9 +161,9 @@ pub static PLANOS: &[Plano] = &[
         id: "galpon",
         nombre: "Galpón",
         uso: Uso::Taller,
-        cuartos: &[(-4, -4, 9, FONDO, Taller), (5, -4, 9, FONDO, Deposito)],
+        cuartos: &[(-3, -4, 7, FONDO, Taller), (4, -4, 7, FONDO, Deposito)],
         pisos: 0,
-        aberturas: &[(0, 1, H, Door), (9, 1, H, Door), (5, -2, V, Doorway)],
+        aberturas: &[(0, 1, H, Door), (7, 1, H, Door), (4, -2, V, Doorway)],
         madera: 90,
         piedra: 50,
     },
@@ -171,9 +171,9 @@ pub static PLANOS: &[Plano] = &[
         id: "renta",
         nombre: "Departamentos",
         uso: Uso::Vivienda,
-        cuartos: &[(-4, -4, 9, FONDO, Living), (5, -4, 9, FONDO, Dormitorio), (14, -4, 9, FONDO, Cocina)],
+        cuartos: &[(-3, -4, 7, FONDO, Living), (4, -4, 7, FONDO, Dormitorio), (11, -4, 7, FONDO, Cocina)],
         pisos: 3,
-        aberturas: &[(0, 1, H, Door), (9, 1, H, Door), (18, 1, H, Door)],
+        aberturas: &[(0, 1, H, Door), (7, 1, H, Door), (14, 1, H, Door)],
         madera: 200,
         piedra: 160,
     },

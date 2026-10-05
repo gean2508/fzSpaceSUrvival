@@ -213,6 +213,72 @@ pub fn escalon_de_cordillera(body: CelestialBody, tx: i64, tz: i64) -> (i8, f32)
     (level_from_field(body, h), (t - t.floor()).clamp(0.0, 1.0))
 }
 
+/// Ancho del anillo, en tiles, en el que el terreno pasa de la plataforma de la ciudad al relieve natural.
+const ANILLO_DE_CIUDAD: i64 = 160;
+/// Cuánto se extiende la plataforma, entera, más allá del casco (el borde del casco sale a campo abierto).
+const MARGEN_DE_CIUDAD: i64 = 24;
+
+thread_local! {
+    /// Altura de campo del centro de cada ciudad: `(cuerpo, época, cx, cz) → campo`. Se calcula una vez.
+    static ALTURA_DE_CIUDAD: RefCell<std::collections::HashMap<(u32, i64, i64), f32>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+/// El campo de altura al que se aplana una ciudad: el del terreno natural en su CENTRO, nunca bajo la primera
+/// media grada sobre el mar (igual que [`rellenar_pueblo`]).
+fn altura_de_ciudad(body: CelestialBody, centro: (i64, i64)) -> f32 {
+    let clave = ((body as u32) ^ crate::partida::epoca().wrapping_mul(0x85eb_ca6b), centro.0, centro.1);
+    if let Some(v) = ALTURA_DE_CIUDAD.with(|m| m.borrow().get(&clave).copied()) {
+        return v;
+    }
+    let sea = sea_level(body);
+    let p = crate::world_map::platform(body, centro.0, centro.1);
+    let n = terrain_noise(body, centro.0, centro.1);
+    let paso = (1.0 - sea).max(1e-3) / LEVELS_UP as f32;
+    let h = (p + (n - 0.5) * crate::world_map::RELIEF_AMPLITUDE).clamp(0.0, 1.0).max(sea + paso * 0.5);
+    ALTURA_DE_CIUDAD.with(|m| m.borrow_mut().insert(clave, h));
+    h
+}
+
+/// `(peso, altura)`: cuánto manda la plataforma de la ciudad en este tile (1 dentro del casco, 0 pasado el
+/// anillo) y a qué campo se aplana. Sin ciudad cerca: `(0, 0)`. El agua no se toca (una laguna o el mar dentro
+/// del casco siguen siendo agua) y la franja de playa (el primer escalón sobre el mar) conserva su relieve
+/// natural: el puerto de una ciudad costera sigue dando al agua. `natural` es el campo SIN ciudad ni río.
+fn plataforma_de_ciudad(body: CelestialBody, tx: i64, tz: i64, natural: f32) -> (f32, f32) {
+    let sea = sea_level(body);
+    if sea <= 0.0 || natural < sea {
+        return (0.0, 0.0);
+    }
+    let paso = (1.0 - sea).max(1e-3) / LEVELS_UP as f32;
+    let t = ((natural - sea) / paso).clamp(0.0, 1.0);
+    let franja = t * t * (3.0 - 2.0 * t);
+    if franja <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let (sx0, sz0) = (tx.div_euclid(crate::geography::SITE_PERIOD), tz.div_euclid(crate::geography::SITE_PERIOD));
+    let mut mejor = (0.0f32, 0.0f32);
+    for dx in -1..=1 {
+        for dz in -1..=1 {
+            let Some(s) = crate::geography::settlement_in(body, sx0 + dx, sz0 + dz) else { continue };
+            let d = (tx - s.center.0).abs().max((tz - s.center.1).abs());
+            if d > s.radius + MARGEN_DE_CIUDAD + ANILLO_DE_CIUDAD {
+                continue;
+            }
+            let w = if d <= s.radius + MARGEN_DE_CIUDAD {
+                1.0
+            } else {
+                let t = 1.0 - (d - s.radius - MARGEN_DE_CIUDAD) as f32 / ANILLO_DE_CIUDAD as f32;
+                t * t * (3.0 - 2.0 * t)
+            };
+            let w = w * franja;
+            if w > mejor.0 {
+                mejor = (w, altura_de_ciudad(body, s.center));
+            }
+        }
+    }
+    mejor
+}
+
 /// El campo SIN caché. Sólo lo llama la caché; el resto del mundo usa
 /// [`relief_field`].
 
@@ -229,7 +295,13 @@ fn campo_crudo(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     // sesenta kilómetros donde ningún sitio se distinguía del anterior.
     let platform = crate::world_map::platform(body, tx, tz);
     let n = terrain_noise(body, tx, tz);
-    let base = platform + (n - 0.5) * crate::world_map::RELIEF_AMPLITUDE;
+    // **LA CIUDAD ES UNA PLATAFORMA** (5 oct 2026): dentro del casco el terreno se lleva a UN solo nivel y el
+    // ruido se apaga; hacia afuera se funde con el relieve natural en un anillo ancho. Antes la trama urbana se
+    // tendía sobre terrazas cualquiera y un acantilado de 2-3 pisos cortaba calles, veredas y manzanas.
+    let (w_ciudad, alto_ciudad) = plataforma_de_ciudad(body, tx, tz, platform + (n - 0.5) * crate::world_map::RELIEF_AMPLITUDE);
+    let platform = platform + (alto_ciudad - platform) * w_ciudad;
+    let amplitud = crate::world_map::RELIEF_AMPLITUDE * (1.0 - w_ciudad);
+    let base = platform + (n - 0.5) * amplitud;
     // **Y EL RÍO EXCAVA SU VALLE.** Sin esto el cauce es una cinta de agua
     // colgada sobre el relieve: la amplitud del ruido es 0,42 y se come cualquier
     // hondura que se le reste, así que el fondo del río sube y baja con el
@@ -253,7 +325,7 @@ fn campo_crudo(body: CelestialBody, tx: i64, tz: i64) -> f32 {
     let h = match crate::rios::perfil_del_cauce(body, tx, tz) {
         Some((cota, peso)) => {
             let ondula = (n - 0.5)
-                * crate::world_map::RELIEF_AMPLITUDE
+                * amplitud
                 * (1.0 - peso * (1.0 - crate::rios::RUIDO_EN_EL_CAUCE));
             platform * (1.0 - peso) + cota * peso + ondula
         }
