@@ -355,7 +355,12 @@ pub const OIDO_DE_TIRO: f32 = 2.6;
 
 /// Una bala en vuelo. Los módulos que tienen blancos (`infectados`, `fauna`, `society`) leen estas entidades y aplican el
 /// daño a los suyos.
+///
+/// **Lleva `Transform` obligatorio**: `mover_balas` sólo ve entidades con `Bala` Y `Transform`, y una bala sin él
+/// (el capó de un coche, el frente de un tren) nunca moría ni se limpiaba: 2.000 balas fantasma tras 8 minutos
+/// parado en una ciudad, cada una probada contra todos los blancos en cada cuadro.
 #[derive(Component)]
+#[require(Transform)]
 pub struct Bala {
     /// Posición (x, z) del mundo y la del cuadro anterior.
     pub pos: Vec2,
@@ -496,6 +501,7 @@ fn apuntar_y_disparar(
     time: Res<Time>,
     equipped: Res<EquippedItem>,
     cursor: Res<AimCursor>,
+    (stick, mut accion): (Res<crate::input::AimStick>, ResMut<crate::pose_jugador::AccionJugador>),
     (mouse, windows, cam): (
         Res<ButtonInput<MouseButton>>,
         Query<&Window, With<PrimaryWindow>>,
@@ -549,7 +555,12 @@ fn apuntar_y_disparar(
     // El punto apuntado: el dedo en el mundo, o el mouse en escritorio.
     let mut punto: Option<Vec2> = None;
     let mut apretado = false;
-    if cursor.targeting() && cursor.active {
+    if stick.armado && stick.activo && stick.tiene_dir {
+        // Stick de puntería: manda sobre el dedo en el mundo. Dispara sólo lejos del centro.
+        punto = Some(pos + stick.dir * 8.0);
+        apretado = stick.dispara;
+        accion.apuntar(stick.dir.y.atan2(stick.dir.x));
+    } else if cursor.targeting() && cursor.active {
         punto = Some(cursor.world);
         apretado = true;
     } else if !crate::platform::uses_touch_gameplay_ui() {
@@ -647,6 +658,7 @@ fn apuntar_y_disparar(
                 impacto: def.impacto,
                 rayo,
             },
+            crate::sim::UnlitSprite,
             Sprite { color, custom_size: Some(Vec2::new(largo, grueso)), ..default() },
             Transform {
                 translation: Vec3::new(boca.x, -boca.y, 18.0),
@@ -660,6 +672,9 @@ fn apuntar_y_disparar(
     if let Some(g) = glow.as_ref() {
         commands.spawn((
             Fogonazo(0.06),
+            // Un fogonazo ES luz: sin esto `light2d::attach_ground_shadows` le colgaba una sombra proyectada
+            // (el sprite mide 2 m y está sobre la capa Y-sort) — las manchas negras en el suelo al disparar.
+            crate::sim::UnlitSprite,
             Sprite {
                 image: g.0.clone(),
                 color: Color::srgba(def.estela[0], def.estela[1], (def.estela[2] + 0.2).min(1.0), 0.9),
@@ -843,6 +858,7 @@ pub fn chispa_de_impacto(commands: &mut Commands, en: Vec2, color: Color) {
         let a = k as f32 * 1.7 + en.x * 3.1;
         commands.spawn((
             Chispa { vel: Vec2::new(a.cos(), a.sin()) * 2.2, vida: 0.22 },
+            crate::sim::UnlitSprite,
             Sprite { color, custom_size: Some(Vec2::splat(0.14)), ..default() },
             Transform::from_xyz(en.x, -en.y, 18.2),
         ));
@@ -895,6 +911,7 @@ fn visual_del_arma(
     equipped: Res<EquippedItem>,
     art: Res<crate::art2d::ArtLibrary>,
     cursor: Res<AimCursor>,
+    stick: Res<crate::input::AimStick>,
     estado: Res<EstadoArmas>,
     player: Query<(&Transform, &PlayerVisual), (With<Player>, Without<ArmaVisual>, Without<MiraDeArma>)>,
     mut visual: Query<(Entity, &mut Transform, &mut Sprite, &mut Visibility, &Name), (With<ArmaVisual>, Without<MiraDeArma>)>,
@@ -918,6 +935,7 @@ fn visual_del_arma(
     let apuntando = cursor.targeting() && cursor.active;
     // El arma apunta al blanco del apuntado asistido si lo hay; si no, al dedo; si no, al frente.
     let dir = match estado.mira_en {
+        _ if stick.activo && stick.tiene_dir => stick.dir,
         Some((p, _)) => (p - pos).normalize_or_zero(),
         None if apuntando => (cursor.world - pos).normalize_or_zero(),
         None => Vec2::ZERO,
@@ -937,7 +955,7 @@ fn visual_del_arma(
             if let Some((mut sprite, _)) = art.world_sprite(&clave, tam) {
                 sprite.custom_size = Some(tam);
                 sprite.anchor = bevy::sprite::Anchor::Custom(Vec2::new(ag.agarre[0] / ag.tam[0] - 0.5, 0.5 - ag.agarre[1] / ag.tam[1]));
-                commands.spawn((ArmaVisual, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
+                commands.spawn((ArmaVisual, crate::light2d::ShadowChecked, sprite, Transform::from_xyz(pos.x, -pos.y, 5.0), Visibility::Hidden, Name::new("ArmaVisual")));
             }
         }
     }
@@ -957,7 +975,10 @@ fn visual_del_arma(
         tf.translation = Vec3::new(
             mano.pos.x + retro.x,
             mano.pos.y - retro.y,
-            if mano.detras { mano.z - crate::manos::DZ } else { mano.z + crate::manos::DZ },
+            // **Siempre al frente del cuerpo.** Con `mano.detras` (mirando arriba) el arma se dibujaba DETRÁS del torso:
+            // caminando hacia el norte parecía colgada a la espalda y al frenar —pose de apuntar, mano de frente— saltaba
+            // al frente. Un arma empuñada se ve siempre, gire hacia donde gire el cuerpo.
+            mano.z + crate::manos::DZ,
         );
         // Mirando a la izquierda el sprite se espeja (en vertical) para no quedar patas arriba; el agarre
         // se espeja con él.
@@ -978,7 +999,7 @@ fn visual_del_arma(
     if apuntando || estado.mira_en.is_some() {
         if mira.is_empty() {
             if let Some((sprite, _)) = art.world_sprite("ui/crosshair", Vec2::splat(0.8)) {
-                commands.spawn((MiraDeArma, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
+                commands.spawn((MiraDeArma, crate::sim::UnlitSprite, sprite, Transform::from_xyz(donde.x, -donde.y, 17.0), Name::new("MiraDeArma")));
             }
         }
         for (_, mut tf, mut s) in &mut mira {

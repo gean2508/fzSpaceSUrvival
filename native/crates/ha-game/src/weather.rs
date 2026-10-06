@@ -815,7 +815,7 @@ fn sync_weather_audio(
     bank: Res<WeatherAudio>,
     settings: Res<crate::audio::AudioSettings>,
     tiles: Res<TileWorld>,
-    loops: Query<(Entity, &AudioSink), With<RainLoop>>,
+    loops: Query<(Entity, Option<&AudioSink>), With<RainLoop>>,
 ) {
     // Adentro, la lluvia se oye apagada: el edificio filtra el ruido de afuera.
     let adentro = if ha_shared::interiores::es_interior(tiles.z) { 0.18 } else { 1.0 };
@@ -823,25 +823,26 @@ fn sync_weather_audio(
         return;
     }
     let want = w.rain > 0.05;
-    match loops.get_single() {
-        Ok((e, sink)) => {
-            if !want {
-                commands.entity(e).despawn();
-            } else {
-                sink.set_volume(settings.sfx * 0.55 * w.rain * adentro);
-            }
+    // **Un loop como mucho**: el `AudioSink` aparece un cuadro DESPUÉS (y nunca si no hay dispositivo de audio); pedirlo
+    // en la consulta hacía que, sin sink, se creara un loop nuevo por cuadro (1.700 en 8 minutos de lluvia).
+    let mut hay = false;
+    for (e, sink) in &loops {
+        if !want || hay {
+            commands.entity(e).despawn();
+            continue;
         }
-        Err(_) => {
-            if want {
-                if let Some(h) = bank.rain.as_ref() {
-                    commands.spawn((
-                        RainLoop,
-                        AudioPlayer::new(h.clone()),
-                        PlaybackSettings::LOOP
-                            .with_volume(Volume::new(settings.sfx * 0.55 * w.rain * adentro)),
-                    ));
-                }
-            }
+        hay = true;
+        if let Some(sink) = sink {
+            sink.set_volume(settings.sfx * 0.55 * w.rain * adentro);
+        }
+    }
+    if !hay && want {
+        if let Some(h) = bank.rain.as_ref() {
+            commands.spawn((
+                RainLoop,
+                AudioPlayer::new(h.clone()),
+                PlaybackSettings::LOOP.with_volume(Volume::new(settings.sfx * 0.55 * w.rain * adentro)),
+            ));
         }
     }
 }

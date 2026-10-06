@@ -85,7 +85,7 @@ impl Plugin for VehiculosPlugin {
             )
             .add_systems(
                 Update,
-                (atender_pedidos, manejar_transito, transito_maritimo, subir_bajar, repostar, dibujar_vehiculos, huir, hud_vehiculo, lamparas_semaforo)
+                (motor_sonido, atender_pedidos, manejar_transito, transito_maritimo, subir_bajar, repostar, dibujar_vehiculos, huir, hud_vehiculo, lamparas_semaforo)
                     .chain()
                     .run_if(in_state(GamePhase::Playing)),
             )
@@ -374,10 +374,15 @@ fn fisica_vehiculos(
                 || obs.caja_frena(body, x, z, r)
                 || fotos.iter().any(|&(o, ox, oz, or)| o != yo && (ox - x).powi(2) + (oz - z).powi(2) < (or + r).powi(2))
         };
+        let salud_antes = v.estado.salud;
         let paso = veh::paso(&mut v.estado, mando, &ficha, dt, &suelo, &choca);
         let r = render_xy(v.estado.x, v.estado.z);
+        // Se pierde el último punto de carrocería: explota (queda el chasis).
+        if salud_antes > 0.0 && v.estado.salud <= 0.0 {
+            sfx.send(PlaySfxAt(Sfx::CarBoom, r));
+        }
         if paso.choque > veh::CHOQUE_QUE_DANIA {
-            sfx.send(PlaySfxAt(Sfx::Stamp, r));
+            sfx.send(PlaySfxAt(Sfx::CarCrash, r));
             if matches!(v.quien, Quien::Jugador) {
                 shake.send(CameraShakeEvent { trauma: (paso.choque / 25.0).min(0.6) });
             }
@@ -989,6 +994,50 @@ fn dibujar_vehiculos(
 }
 
 /// El que maneja no se dibuja: va adentro.
+#[derive(Component)]
+struct MotorLoop;
+
+/// **El motor del vehículo en el que vas**: un loop cuya velocidad de reproducción sigue a la marcha (ralentí → a fondo).
+/// Un solo loop como mucho (el `AudioSink` aparece un cuadro después: ver `weather::sync_weather_audio`). La bici no tiene
+/// motor y un chasis destruido no suena.
+fn motor_sonido(
+    mut commands: Commands,
+    manejando: Res<Manejando>,
+    autos: Query<&Vehiculo>,
+    bank: Res<crate::audio::SfxBank>,
+    settings: Res<crate::audio::AudioSettings>,
+    loops: Query<(Entity, Option<&AudioSink>), With<MotorLoop>>,
+) {
+    let activo = manejando
+        .auto
+        .and_then(|e| autos.get(e).ok())
+        .filter(|v| v.ficha.motor && v.estado.salud > 0.0);
+    let Some(v) = activo else {
+        for (e, _) in &loops {
+            commands.entity(e).despawn();
+        }
+        return;
+    };
+    let marcha = (v.estado.vel.abs() / v.ficha.vel_max.max(1.0)).clamp(0.0, 1.3);
+    let mut hay = false;
+    for (e, sink) in &loops {
+        if hay {
+            commands.entity(e).despawn();
+            continue;
+        }
+        hay = true;
+        if let Some(s) = sink {
+            s.set_speed(0.6 + marcha * 1.3);
+            s.set_volume(settings.sfx * (0.30 + 0.5 * marcha.min(1.0)));
+        }
+    }
+    if !hay {
+        if let Some(h) = bank.seco(Sfx::Motor) {
+            commands.spawn((MotorLoop, AudioPlayer::new(h), PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::new(settings.sfx * 0.3))));
+        }
+    }
+}
+
 fn ocultar_al_conductor(manejando: Res<Manejando>, mut q: Query<&mut Visibility, With<Player>>) {
     if manejando.activo() {
         for mut v in &mut q {

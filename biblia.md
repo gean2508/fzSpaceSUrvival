@@ -9588,6 +9588,12 @@ Teletransporta, espera el mundo y deja `vista-N.png` en cada sitio. Para mirar f
 * **Esquinas de cuarto** (`world2d::cara_de_muro` + `spawn_remate_de_esquina`): el kit `Room_Builder_3d_walls` no trae tapa unida al canto, así que las esquinas
   se arman con `edge_n`/`edge_s` + recorte del canto lateral; las piezas de 1×1 se miden POR POSE (antes se estiraban al alto del slot, 1×2); una T
   (tabique contra el muro) sigue de largo; las medianeras de la hilera no llevan ventanas. Captura: `HA_VISTATEST="casa"` (también `lote:<programa>`).
+* **Merge con la rama de fz (6 oct 2026) y lo que se repuso**: al resolver conflictos se tomó la versión de fz de `vehiculos/trenes/pandemia` y se
+  perdieron cosas de esta sesión; se repusieron sobre su código: stick derecho (apunta con el pulgar fuera de la zona muerta y dispara al pasar el 62 %;
+  `armas.rs` + `world_touch.rs`), manchas negras al disparar (`UnlitSprite`), arma siempre al frente, `Bala` con `Transform` obligatorio, fuga del loop
+  de lluvia (`weather.rs`, un solo `RainLoop`), el personaje gira hacia el rumbo apuntado (`sim.rs`), y motor/choque/explosión de vehículos
+  (`vehiculos::motor_sonido`, `Sfx::CarCrash/CarBoom`). **No repuestos:** helicóptero manejable, mis drivers de QA de vehículos/pandemia, lámparas de
+  semáforo con arte del pack (la versión de fz pinta un punto de color por poste).
 * **Pendiente declarado**: faltan los prefabs de gasolinera/correo+camión/bomberos+camiones/cementerio/escenario/subte/base militar tal cual la lámina
   (hoy salen como edificios sueltos del pack); entrar/salir de casa por el sistema de escenas (pausado por el usuario); APK y prueba de rendimiento
   en el Redmi (este contenedor no tiene NDK/adb).
