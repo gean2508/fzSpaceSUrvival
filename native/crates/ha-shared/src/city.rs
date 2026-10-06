@@ -870,14 +870,24 @@ fn calcular_retiro(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> R
     let mut nivel = Vec::with_capacity((nx * nz) as usize);
     for j in 0..nz {
         for i in 0..nx {
-            let n = crate::relief::relief_level(body, ox + muestra(i, w), oz + muestra(j, hgt));
-            nivel.push(if n < 0 { None } else { Some(n) });
+            let (x, z) = (ox + muestra(i, w), oz + muestra(j, hgt));
+            let n = crate::relief::relief_level(body, x, z);
+            // **Bajo el dibujo de un muro no se edifica**: esas celdas tienen el nivel de la
+            // terraza de abajo pero el muro las tapa (cerca y vereda quedaban bajo la roca).
+            // Centinela que no es de ningún escalón real: la parcela se achica.
+            nivel.push(if n < 0 {
+                None
+            } else if crate::relief::bajo_el_dibujo_de_una_pared(body, x, z) {
+                Some(-100)
+            } else {
+                Some(n)
+            });
         }
     }
     let en = |i: i64, j: i64| nivel[(j * nx + i) as usize];
     // Todo el rectángulo en el mismo escalón seco: el caso normal, y se contesta
     // sin buscar nada.
-    if let Some(n0) = en(0, 0) {
+    if let Some(n0) = en(0, 0).filter(|&n| n >= 0) {
         if nivel.iter().all(|&n| n == Some(n0)) {
             return Retiro::Sitio((ox, oz, w, hgt));
         }
@@ -906,7 +916,7 @@ fn calcular_retiro(body: CelestialBody, ox: i64, oz: i64, w: i64, hgt: i64) -> R
     let mut niveles: Vec<i8> = nivel.iter().flatten().copied().collect();
     niveles.sort_unstable();
     niveles.dedup();
-    for objetivo in niveles {
+    for objetivo in niveles.into_iter().filter(|&n| n >= 0) {
         // Altura de la columna de celdas buenas que termina en esta fila.
         let mut alto = vec![0i64; nx as usize];
         for j in 0..nz {

@@ -905,9 +905,18 @@ fn topdown_tile_calc(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
         // pie de una terraza, 4 oct 2026). Donde una obra civil queda al norte, el canto se vuelve
         // rampa: la carretera sube o baja por ahí, y el asfalto queda limpio.
         if nat == Tile::Cliff
-            && [(-1, -1), (0, -1), (1, -1)]
-                .iter()
-                .any(|&(dx, dz)| matches!(crate::geography::civil_at(body, tx + dx, tz + dz), Some(_)))
+            // Y la cara CUELGA su pared hacia el sur (labio + cuerpo + pie, hasta dos celdas aun
+            // en un bordillo): si ahí abajo corre una calzada o una acera, el dibujo del muro
+            // la tapa. Mismo arreglo, mirado desde el otro lado (medido: 1.183 celdas de
+            // obra civil bajo el dibujo de un muro en los 64 cascos, 6 oct 2026).
+            && {
+                // Todo el alto de la pared: labio + cuerpos + pie (`alto + 1` celdas).
+                let abajo = crate::relief::alto_de_pared(body, tx, tz).max(1) + 1;
+                [(-1i64, -1i64), (0, -1), (1, -1)]
+                    .into_iter()
+                    .chain((1..=abajo).flat_map(|dz| [(-1, dz), (0, dz), (1, dz)]))
+                    .any(|(dx, dz)| matches!(crate::geography::civil_at(body, tx + dx, tz + dz), Some(_)))
+            }
         {
             return Tile::Slope;
         }

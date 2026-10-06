@@ -5050,8 +5050,12 @@ fn spawn_chunk_canto_concavo(
                 SurfaceDecor { cx, cz, z, small: false },
                 TileArt,
                 tenir_sprite(sprite, gris),
-                Transform::from_xyz(r.x, r.y, crate::layers::ysort(wz)),
+                // Mismo orden que el resto del relieve: con `ysort(wz)` el
+                // jugador parado en la mitad norte de la celda quedaba DETRÁS
+                // de este canto (meseta dibujada encima de sus pies).
+                Transform::from_xyz(r.x, r.y, crate::layers::relieve(wz)),
             ));
+            crate::light2d::sin_sombra(&mut ent);
             if let Some(a) = anim {
                 ent.insert(a);
             }

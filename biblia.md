@@ -2505,6 +2505,15 @@ Arreglado, quedan **2** (0,05 %), las dos en paredes altas donde el dibujo se po
 contra un canto de más abajo. Guardián nuevo con el número medido, no con un
 porcentaje: `agua::queda_una_fila_de_llano_al_pie_de_toda_pared`.
 
+### UN SOLO FILO EN EL BORDE + NADA EDIFICADO BAJO UN MURO (6 oct 2026)
+
+Queja del usuario (captura con las esquinas de una mesa tachadas): *"debería verse sólido hasta el borde y de ahí viene la piedra; pero viene verde, verde, se pone un filo y después otro filo"*. Causa medida sobre la hoja: cada pieza de meseta del kit (`labio`, `labio_se/sw`, `inner_*`, `edge_e/w`, fila de arriba de `edge_s/center/corner_*`) trae **arcos y sombras verde oscuro DENTRO de la meseta**; en una escalera de bordes cada celda repetía su arco. `scripts/limpiar-filos-de-acantilado.py` (idempotente, correr después de `import-acantilado.py` + `derivar-esquinas-de-acantilado.py`; el pack crudo no hace falta) manda al color plano de la meseta todo píxel que no esté a ≤3 px de roca (la roca = colores del `cuerpo` que no están en el `labio`) ni en las últimas 8 filas de una pieza que sigue en pared, y quita las púas de roca sueltas arriba de `labio_se/sw`/`inner_se/sw`. Verificado en captura (pasto, nieve, cascada).
+
+Otros dos arreglos del mismo pedido:
+- `world2d::spawn_chunk_canto_concavo` ordenaba con `ysort(wz)` y el resto del relieve con `relieve(wz)`: el jugador parado en la mitad norte de esa celda quedaba DETRÁS de un cuadrado de meseta (borde sobre el jugador). Ahora usa `relieve` y `sin_sombra`.
+- **Obra civil bajo el dibujo de un muro.** Medido (`tests/obra_bajo_muros.rs`, 64 cascos): 1.183 celdas de calzada/vereda/cerca bajo la pared → **10** (8 son bocas de cueva). `topdown_tile` vuelve rampa la cara si hay obra civil en cualquier celda que su pared cubre (`alto+1` filas al sur, no sólo al norte) y `city::calcular_retiro` trata `bajo_el_dibujo_de_una_pared` como no edificable.
+- Para fotografiar bordes: `HA_VISTATEST="x,z;..."` SIN `HA_PARTIDA_NUEVA` (la partida nueva cambia la semilla y las coordenadas ya no coinciden); coordenadas reales con `tests/sitios_de_borde.rs`.
+
 ### LA MESETA SE APILA: la pared mide lo que mide su macizo (14 ago 2026)
 
 La queja, con captura tachada con una X: *"solo se está poniendo el borde donde
