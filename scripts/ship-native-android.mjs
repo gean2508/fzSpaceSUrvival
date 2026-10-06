@@ -95,6 +95,10 @@ run("node scripts/setup-android-native.mjs", ROOT, androidEnv);
 
 const buildEnv = {
   ...androidEnv,
+  // La generación de código de `ha-game` tarda y NO imprime nada: con la barra de progreso de cargo siempre
+  // encendida (aunque la salida pase por `tee`) se ve que sigue vivo (`Building [====>] 458/459: ha-game`).
+  CARGO_TERM_PROGRESS_WHEN: "always",
+  CARGO_TERM_PROGRESS_WIDTH: "80",
   HA_SERVER_HOST: lanHost,
   HA_SERVER_PORT: process.env.HA_SERVER_PORT ?? "2567",
 };
