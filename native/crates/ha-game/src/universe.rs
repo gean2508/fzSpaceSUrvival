@@ -70,8 +70,14 @@ const FAR_ZOOM_FACTOR: f32 = 2.2;
 fn far_blend_alt(body: CelestialBody) -> f32 {
     (body_radius(body) * 0.5).max(400.0)
 }
-/// Techo de altura (m) — alcanza para encuadrar el sistema solar entero.
-pub const MAX_ALT: f32 = 2_000_000.0;
+/// Techo de altura (m) — tiene que alcanzar para encuadrar el sistema ENTERO.
+///
+/// Los 2 000 000 viejos no alcanzaban: el sistema va del Sol (x = −4 000 000) a
+/// Neptuno (x = +3 584 000), o sea 7.6 millones de metros de punta a punta, y con
+/// ese techo el encuadre topaba en ~4.5 Mm — desde el borde del sistema la mitad
+/// del mapa quedaba fuera de pantalla y no había forma de ver hacia dónde ibas.
+/// 12 Mm de altura dan un encuadre de ~26 Mm: el sistema entero cabe con aire.
+pub const MAX_ALT: f32 = 12_000_000.0;
 
 /// LA función de encuadre: altura sobre la superficie → alto del viewport.
 /// Continua y monótona en todo el rango, sin tramos ni saltos — es la que hace
@@ -119,9 +125,20 @@ pub fn lateral_speed(alt: f32) -> f32 {
 // ---------------------------------------------------------------------------
 
 /// Los tiles finos (1 m) empiezan a desvanecerse acá…
-pub const FINE_FADE_VIEW_H: f32 = 70.0;
+///
+/// 29 jul 2026 — subido de 70 a 95. Con la curva de encuadre (`view_h ≈ 30 +
+/// 2.4·alt` cerca del suelo) los 70 m viejos caían a **17 metros de altura**: un
+/// vuelo rasante ya empezaba a borrar el bosque, y a 42 m no quedaba ni un árbol.
+/// Volar bajo sobre TU mundo tiene que verse como tu mundo.
+pub const FINE_FADE_VIEW_H: f32 = 95.0;
 /// …y ya no están acá (el anillo streameado dejaría de llenar la pantalla).
-pub const FINE_OFF_VIEW_H: f32 = 130.0;
+///
+/// El techo no es libre: es el encuadre que el anillo de chunks todavía puede
+/// LLENAR (ver `world2d::stream_tile_chunks`, `range` topa en 12 chunks = 192 m
+/// de radio ⇒ cubre pantallas de hasta ~160 m de alto). Se elige de modo que
+/// cuando el anillo deja de llenar la vista, la capa fina ya esté al ~5 % de
+/// alfa: así el borde del anillo nunca se ve, que es la razón de ser del LOD.
+pub const FINE_OFF_VIEW_H: f32 = 170.0;
 /// Encuadre a partir del cual existe la malla adaptativa (nunca caminando: sus
 /// decenas de miles de quads se reconstruirían con cada bloque que ponés).
 const LOD_ON_VIEW_H: f32 = 50.0;
@@ -198,10 +215,19 @@ pub fn nearest_landable(p: Vec2, ref_body: CelestialBody, t: f32) -> (CelestialB
 }
 
 /// Altura de la superficie del cuerpo a la que se considera "espacio" para el
-/// resto del juego (HUD, audio, supervivencia): el techo de su atmósfera, con
-/// un mínimo para las lunas sin aire.
+/// resto del juego (región, HUD, audio, supervivencia): el techo de su atmósfera
+/// y, en los cuerpos sin aire, una fracción de su radio.
+///
+/// El mínimo viejo eran **60 metros**, y con eso la Luna te echaba al espacio
+/// desde la altura de un edificio: a 61 m sobre el regolito la región pasaba a
+/// `Space`, el terreno dejaba de streamearse y el marco ya no rebasaba. Era la
+/// mitad del "en la Luna me quedaba a 30 metros". Un cuerpo de 8.4 km de radio
+/// tiene que tener cielo propio: 5 % del radio (420 m en la Luna), con un piso de
+/// 600 m para las rocas chiquitas (Fobos, Deimos).
 pub fn space_alt(body: CelestialBody) -> f32 {
-    body_atmo_top(body).max(60.0)
+    body_atmo_top(body)
+        .max(body_radius(body) * 0.05)
+        .max(600.0)
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +342,8 @@ fn sync_terminators(
         // de un tercio del disco, que es como se ve un planeta desde fuera de su
         // órbita. Al orbitar, el creciente gira solo.
         let away = -sun_dir_from(n.body, t) * body_radius(n.body) * 0.78;
-        tf.translation = Vec3::new(o.x + away.x, o.y + away.y, -19.5);
+        let z = tf.translation.z; // épsilon por cuerpo — ver `spawn_universe`
+        tf.translation = Vec3::new(o.x + away.x, o.y + away.y, z);
     }
 }
 
@@ -326,10 +353,26 @@ impl Plugin for UniversePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UniverseFrame>()
             .init_resource::<TerrainLodState>()
-            .add_systems(Startup, (spawn_glow_texture, spawn_universe).chain())
+            .init_resource::<DiscBakeQueue>()
+            .init_resource::<DiscBakeRows>()
+            .add_systems(Startup, spawn_glow_texture)
+            // Los discos planetarios se crean AL EMPEZAR A JUGAR, no en el boot:
+            // en splash/menú se dibujaban detrás del panel (con sus halos, anillos
+            // y etiquetas) y cualquier parpadeo del panel mostraba el sistema
+            // solar. `spawn_glow_texture` sí se queda en `Startup`: es sólo la
+            // textura que los discos usan.
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), spawn_universe)
             .add_systems(
                 Update,
-                (sync_universe, sync_terminators, sync_body_labels, sync_terrain_lod).chain(),
+                (
+                    sync_universe,
+                    bake_body_textures,
+                    sync_terminators,
+                    sync_body_labels,
+                    sync_terrain_lod,
+                )
+                    .chain()
+                    .run_if(crate::game_phase::world_active),
             );
     }
 }
@@ -341,8 +384,23 @@ fn spawn_universe(
     glow: Res<GlowTexture>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    existing: Query<(), With<BodyDisc>>,
 ) {
-    for &body in CelestialBody::all() {
+    // Corre al entrar a `Playing`; si algún día se puede volver al menú y jugar
+    // otra vez, los discos ya están creados y no se duplican.
+    if !existing.is_empty() {
+        return;
+    }
+    for (i, &body) in CelestialBody::all().iter().enumerate() {
+        // Desempate de PROFUNDIDAD por cuerpo. La fase transparente de Bevy ordena
+        // por z, y con todos los discos exactamente en −20 (y todos los halos en
+        // −21) dos cuerpos que se solapan en pantalla —la Luna delante de la
+        // Tierra, el cinturón sobre Marte— quedaban empatados: el orden lo decidía
+        // el orden de extracción, que puede cambiar de un frame al otro, y el par
+        // se INTERCAMBIABA. Eso es parpadeo real, y salta justo donde el jugador lo
+        // vio: volando y en el espacio, que es cuando hay varios cuerpos a la vez.
+        // Con un épsilon por índice el orden es fijo para siempre.
+        let dz = i as f32 * 0.01;
         let r = body_radius(body);
         let base = ha_shared::body_def(body).color;
         let disc_color = if body == CelestialBody::Sun {
@@ -355,7 +413,7 @@ fn spawn_universe(
             Mesh2d(meshes.add(Circle::new(r))),
             MeshMaterial2d(materials.add(ColorMaterial::from_color(disc_color))),
             // Detrás de todo el suelo (tiles finos z≈0, satelital z=-1).
-            Transform::from_xyz(0.0, 0.0, -20.0),
+            Transform::from_xyz(0.0, 0.0, -20.0 + dz),
         ));
 
         // LUZ, no aros. La atmósfera y la corona son halos radiales
@@ -369,7 +427,7 @@ fn spawn_universe(
             // Dos capas: una ancha y tenue (la dispersión que se ve desde lejos)
             // y una ceñida al limbo (el arco azul del amanecer visto en órbita).
             for (spread, alpha, z) in
-                [(2.1_f32, 0.13_f32, -21.5_f32), (1.28, 0.26, -21.0)]
+                [(2.1_f32, 0.13_f32, -21.5_f32), (1.28, 0.26, -21.4)]
             {
                 commands.spawn((
                     BodyHalo { body },
@@ -379,7 +437,7 @@ fn spawn_universe(
                         custom_size: Some(Vec2::splat(r * 2.0 * spread)),
                         ..default()
                     },
-                    Transform::from_xyz(0.0, 0.0, z),
+                    Transform::from_xyz(0.0, 0.0, z + dz),
                 ));
             }
         } else if body != CelestialBody::Sun {
@@ -393,7 +451,7 @@ fn spawn_universe(
                     custom_size: Some(Vec2::splat(r * 2.0 * 1.8)),
                     ..default()
                 },
-                Transform::from_xyz(0.0, 0.0, -21.0),
+                Transform::from_xyz(0.0, 0.0, -21.4 + dz),
             ));
         }
 
@@ -401,7 +459,7 @@ fn spawn_universe(
         // ilumina de verdad el rincón del sistema donde estés.
         if body == CelestialBody::Sun {
             for (spread, alpha, z) in
-                [(9.0_f32, 0.10_f32, -22.0_f32), (4.2, 0.20, -21.6), (2.0, 0.38, -21.2)]
+                [(9.0_f32, 0.10_f32, -22.4_f32), (4.2, 0.20, -22.0), (2.0, 0.38, -21.6)]
             {
                 commands.spawn((
                     BodyHalo { body },
@@ -411,7 +469,7 @@ fn spawn_universe(
                         custom_size: Some(Vec2::splat(r * 2.0 * spread)),
                         ..default()
                     },
-                    Transform::from_xyz(0.0, 0.0, z),
+                    Transform::from_xyz(0.0, 0.0, z + dz),
                 ));
             }
         } else {
@@ -431,7 +489,7 @@ fn spawn_universe(
                     custom_size: Some(Vec2::splat(r * 2.2)),
                     ..default()
                 },
-                Transform::from_xyz(0.0, 0.0, -19.5),
+                Transform::from_xyz(0.0, 0.0, -19.5 + dz),
             ));
         }
 
@@ -444,7 +502,7 @@ fn spawn_universe(
                 MeshMaterial2d(materials.add(ColorMaterial::from_color(Color::srgba(
                     0.55, 0.68, 0.85, 0.07,
                 )))),
-                Transform::from_xyz(0.0, 0.0, -25.0),
+                Transform::from_xyz(0.0, 0.0, -25.0 + dz),
             ));
         }
 
@@ -455,7 +513,7 @@ fn spawn_universe(
             Text2d::new(ha_shared::body_def(body).label),
             TextFont { font_size: 13.0, ..default() },
             TextColor(Color::srgba(0.85, 0.88, 0.92, 0.0)),
-            Transform::from_xyz(0.0, 0.0, -19.0),
+            Transform::from_xyz(0.0, 0.0, -19.0 + dz),
         ));
     }
 }
@@ -475,38 +533,70 @@ fn sync_universe(
     frame: Res<UniverseFrame>,
     clock: Res<SolarSystemClock>,
     zoom: Res<CameraZoom>,
-    tiles: Res<TileWorld>,
-    mut images: ResMut<Assets<Image>>,
+    mut bake: ResMut<DiscBakeQueue>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut discs: Query<(&mut BodyDisc, &mut Transform, &MeshMaterial2d<ColorMaterial>)>,
-    mut halos: Query<(&BodyHalo, &mut Transform), (Without<BodyDisc>, Without<OrbitRing>)>,
+    mut discs: Query<
+        (&mut BodyDisc, &mut Transform, &MeshMaterial2d<ColorMaterial>),
+        Without<crate::camera::GameCamera>,
+    >,
+    mut halos: Query<
+        (&BodyHalo, &mut Transform),
+        (Without<BodyDisc>, Without<OrbitRing>, Without<crate::camera::GameCamera>),
+    >,
     mut rings: Query<
         (&OrbitRing, &mut Transform, &Mesh2d, &MeshMaterial2d<ColorMaterial>),
-        (Without<BodyDisc>, Without<BodyHalo>),
+        (Without<BodyDisc>, Without<BodyHalo>, Without<crate::camera::GameCamera>),
     >,
+    camera: Query<&Transform, With<crate::camera::GameCamera>>,
 ) {
+    let _probe = crate::debug::probe("sync_universe");
     let t = clock.t;
     let r#ref = frame.ref_body;
-
-    // Una textura de terreno por frame como mucho: generarlas es caro y no hay
-    // ninguna prisa (el disco ya se ve con su color de catálogo mientras tanto).
-    let mut textured_this_frame = false;
+    let eye = camera.get_single().map(|c| c.translation.truncate()).unwrap_or(Vec2::ZERO);
 
     for (mut disc, mut tf, mat) in &mut discs {
         let o = body_offset(disc.body, r#ref, t);
-        tf.translation = Vec3::new(o.x, o.y, -20.0);
+        // La z se CONSERVA (la fijó `spawn_universe` con el épsilon por cuerpo que
+        // evita el empate de profundidad): reescribirla a −20.0 los volvía a
+        // empatar a todos y devolvía el parpadeo entre discos solapados.
+        let z = tf.translation.z;
+        tf.translation = Vec3::new(o.x, o.y, z);
 
-        if !disc.textured && !textured_this_frame && disc.body != CelestialBody::Sun {
-            // Sólo vale la pena cuando el disco ya ocupa algo en pantalla.
-            let on_screen = body_radius(disc.body) * 2.0 / zoom.live_view_h.max(1.0);
-            if on_screen > 0.02 {
-                if let Some(m) = materials.get_mut(&mat.0) {
-                    m.texture = Some(images.add(body_surface_texture(&tiles, disc.body)));
-                    m.color = Color::WHITE;
-                }
+        // Encolar la textura de terreno del disco. Antes se generaba ENTERA acá
+        // (una por frame): 512² píxeles × 4 muestras de terreno + dos pasadas de
+        // desenfoque = más de un millón de evaluaciones de ruido en UN frame, o sea
+        // un tirón de cientos de ms cada vez que te acercás a un cuerpo. En el móvil
+        // eso se ve como un tranco/parpadeo justo al llegar a un planeta. Ahora la
+        // pide y `bake_body_textures` la cocina por franjas — ver ese sistema.
+        if !disc.textured && disc.body != CelestialBody::Sun {
+            // Sólo vale la pena cuando el disco ya ocupa algo en pantalla…
+            let r = body_radius(disc.body);
+            let on_screen = r * 2.0 / zoom.live_view_h.max(1.0);
+            // …y cuando ESTÁ en pantalla. Este segundo test faltaba, y era el
+            // bajón de los primeros dos minutos de partida (§10).
+            //
+            // `on_screen` sólo compara el TAMAÑO del cuerpo con el encuadre; no
+            // mira dónde está. Parado en el pasto, con un encuadre de ~20 m,
+            // Neptuno da `on_screen` = 2·24 000 000 / 20 = un millón — o sea que
+            // pasaba el test, igual que los otros once cuerpos. Resultado: al
+            // entrar a jugar se encolaban **los doce discos de una**, y cada uno
+            // son 512² píxeles × 4 muestras de terreno = un millón de
+            // evaluaciones de ruido, repartidas de a 32 filas por frame. Doce
+            // discos × 16 frames = 192 frames seguidos en los que el horneado se
+            // come el frame ENTERO (medido: 125–384 ms cada uno, `ha-sys`), a
+            // 3-4 fps. Eso es el "se laggea como dos minutos y después levanta
+            // solo": levanta solo cuando la cola se vacía.
+            //
+            // El disco de un cuerpo que está a 600 000 km no se ve ni como un
+            // punto: se textura cuando te acercás, que es justo lo que el diseño
+            // original decía ("cuando ya ocupa algo en pantalla") y lo que el
+            // test no comprobaba.
+            let dist = (tf.translation.truncate() - eye).length();
+            let in_frame = dist < zoom.live_view_h.max(1.0) * 1.5 + r;
+            if on_screen > 0.02 && in_frame {
                 disc.textured = true;
-                textured_this_frame = true;
+                bake.request(disc.body, mat.0.clone());
             }
         }
     }
@@ -536,7 +626,9 @@ fn sync_universe(
         if let Some(m) = materials.get_mut(&mat.0) {
             m.color = Color::srgba(0.55, 0.68, 0.85, 0.10 * close * far);
         }
-        tf.translation = Vec3::new(center.x, center.y, -25.0);
+        // z conservada: épsilon por cuerpo (ver `spawn_universe`).
+        let z = tf.translation.z;
+        tf.translation = Vec3::new(center.x, center.y, z);
         // Grosor ~1 px en pantalla a cualquier zoom: una línea, no una banda.
         let thickness = (view_h * 0.0015).max(radius * 0.0002);
         meshes.insert(
@@ -561,7 +653,9 @@ fn sync_body_labels(
     for (label, mut tf, mut color) in &mut labels {
         let r = body_radius(label.body);
         let o = body_offset(label.body, frame.ref_body, t);
-        tf.translation = Vec3::new(o.x, o.y + r + view_h * 0.035, -19.0);
+        // z conservada: épsilon por cuerpo (ver `spawn_universe`).
+        let z = tf.translation.z;
+        tf.translation = Vec3::new(o.x, o.y + r + view_h * 0.035, z);
         tf.scale = Vec3::splat(scale);
         // Visible sólo en vista de mapa: aparece cuando el encuadre supera al
         // cuerpo, y desaparece si el disco llena la pantalla.
@@ -595,6 +689,7 @@ fn sync_terrain_lod(
         (With<TerrainLod>, Without<crate::sim::Player>),
     >,
 ) {
+    let _probe = crate::debug::probe("sync_terrain_lod");
     let view_h = zoom.live_view_h;
     let body = frame.ref_body;
     let drop_it = |commands: &mut Commands,
@@ -670,9 +765,25 @@ fn quantize(p: Vec2, tile_m: f32) -> Vec2 {
 }
 
 /// Malla de `LOD_QUADS²` quads de `tile_m` metros centrada en `center`
-/// (coordenadas de RENDER), recortada al disco del cuerpo. Un color por bloque,
-/// promediado del mismo `TileWorld` que los tiles finos → sin costura de color
-/// al fundirse, y sin ruido de sal y pimienta al alejarse.
+/// (coordenadas de RENDER), recortada al disco del cuerpo. El color sale del
+/// mismo `TileWorld` que los tiles finos → sin costura al fundirse, y promediado
+/// → sin ruido de sal y pimienta al alejarse.
+///
+/// ## Por qué el color va en los VÉRTICES y no en el quad
+///
+/// Antes cada quad llevaba su color plano en sus cuatro vértices propios, y eso
+/// es exactamente lo que se veía desde el aire: un damero de bloques de borde
+/// duro — "el terreno me sale con cuadrados, como cuando no carga la textura".
+/// No era arte faltante: es que un color plano por celda ES un cuadrado, y como
+/// `lod_tile_m` sigue al encuadre, el damero medía siempre ~40 bloques de alto
+/// en pantalla, a cualquier altura.
+///
+/// Ahora la rejilla comparte vértices y cada vértice lleva SU muestra del
+/// terreno: el interpolador de la GPU rellena el resto y el mundo se lee como un
+/// mapa pintado —la versión de pocos polígonos del mismo terreno— en vez de como
+/// bloques. Y sale más barato que antes: 4 veces menos vértices (se comparten) y
+/// las muestras de terreno bajan de `4·n²` a `~n²`, que es el trabajo que costaba
+/// el tirón al cambiar de escalón de LOD.
 fn build_terrain_lod_mesh(
     tiles: &TileWorld,
     body: CelestialBody,
@@ -681,35 +792,60 @@ fn build_terrain_lod_mesh(
 ) -> Mesh {
     let radius = body_walk_radius(body);
     let n = LOD_QUADS;
+    let side = (n + 1) as usize; // vértices por lado
     let half = n as f32 * tile_m * 0.5;
-    let cap = (n * n) as usize;
-    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(cap * 4);
-    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(cap * 4);
-    let mut indices: Vec<u32> = Vec::with_capacity(cap * 6);
+    let corner = center - Vec2::splat(half);
 
+    // Qué vértices usa alguien: los de los quads que caen DENTRO del disco. Se
+    // marca primero para no pagar una muestra de terreno por cada vértice del
+    // borde exterior (en un cuerpo chico, la mayoría de la rejilla se descarta).
+    let mut used = vec![false; side * side];
+    let mut quads: Vec<(i32, i32)> = Vec::with_capacity((n * n) as usize / 2);
     for iy in 0..n {
         for ix in 0..n {
-            let x0 = center.x - half + ix as f32 * tile_m;
-            let y0 = center.y - half + iy as f32 * tile_m;
-            let cx = x0 + tile_m * 0.5;
-            let cy = y0 + tile_m * 0.5;
+            let c = corner + Vec2::new((ix as f32 + 0.5) * tile_m, (iy as f32 + 0.5) * tile_m);
             // RECORTE AL CUERPO: la malla no puede salirse del disco, o el
             // planeta se queda sin borde y el suelo llena el espacio.
-            if Vec2::new(cx, cy).length() > radius {
+            if c.length() > radius {
                 continue;
             }
-            let rgb = average_tile_color(tiles, body, cx, cy, tile_m, 2);
-            let lin = Color::srgb(rgb[0], rgb[1], rgb[2]).to_linear();
-            let base = positions.len() as u32;
-            positions.push([x0, y0, 0.0]);
-            positions.push([x0 + tile_m, y0, 0.0]);
-            positions.push([x0 + tile_m, y0 + tile_m, 0.0]);
-            positions.push([x0, y0 + tile_m, 0.0]);
-            for _ in 0..4 {
-                colors.push([lin.red, lin.green, lin.blue, 1.0]);
+            quads.push((ix, iy));
+            for (dx, dy) in [(0, 0), (1, 0), (1, 1), (0, 1)] {
+                used[(iy + dy) as usize * side + (ix + dx) as usize] = true;
             }
-            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         }
+    }
+
+    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(used.len() / 2);
+    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(used.len() / 2);
+    let mut index_of = vec![u32::MAX; side * side];
+    for iy in 0..side {
+        for ix in 0..side {
+            if !used[iy * side + ix] {
+                continue;
+            }
+            let p = corner + Vec2::new(ix as f32 * tile_m, iy as f32 * tile_m);
+            // Los vértices del borde caen FUERA del disco (el quad de adentro los
+            // usa igual). Muestrear ahí devolvería el vacío y el planeta quedaría
+            // con la orilla lavada: se muestrea el punto de la costa más cercano.
+            let s = if p.length() > radius { p.normalize_or_zero() * radius * 0.999 } else { p };
+            // Promediado sobre la celda que rodea al vértice: a 1024 m por quad,
+            // UNA muestra es un tile de 1 m elegido al azar — volvería el ruido de
+            // sal y pimienta que este promedio existe para matar.
+            let rgb = average_tile_color(tiles, body, s.x, s.y, tile_m, 2);
+            let lin = Color::srgb(rgb[0], rgb[1], rgb[2]).to_linear();
+            index_of[iy * side + ix] = positions.len() as u32;
+            positions.push([p.x, p.y, 0.0]);
+            colors.push([lin.red, lin.green, lin.blue, 1.0]);
+        }
+    }
+
+    let mut indices: Vec<u32> = Vec::with_capacity(quads.len() * 6);
+    for (ix, iy) in quads {
+        let (ix, iy) = (ix as usize, iy as usize);
+        let v = |dx: usize, dy: usize| index_of[(iy + dy) * side + ix + dx];
+        let (a, b, c, d) = (v(0, 0), v(1, 0), v(1, 1), v(0, 1));
+        indices.extend_from_slice(&[a, b, c, a, c, d]);
     }
 
     let mut mesh = Mesh::new(
@@ -726,6 +862,23 @@ fn build_terrain_lod_mesh(
 /// de RENDER `(rx, ry)`. Promediar es lo que convierte el ruido de tiles de 1 m
 /// en bioma legible cuando un píxel cubre metros de mundo: sin esto, tanto el
 /// mapa satelital como el disco del planeta se ven como estática.
+/// Color medio del terreno en un cuadrado de `size` metros centrado en un punto
+/// de RENDER `(rx, ry)`.
+///
+/// El color de cada muestra sale de `world2d::tile_render_color`, la MISMA
+/// función que pinta los tiles de 1 m: con relieve, con la sombra por altura y
+/// con el líquido propio del cuerpo. Antes acá se usaba `Tile::color()` pelado y
+/// el resultado era que en cuanto la capa fina se apagaba el mundo perdía todo
+/// su modelado y quedaba un manchón café o verde — la "niebla" de la reentrada.
+/// La sombra de TERRAZA sí se salta (`TileShade::Coarse`): es de escala de un
+/// tile y a esta resolución se promedia sola.
+///
+/// `taps²` muestras por celda de salida, y el número no es libre: la malla
+/// adaptativa son 37 000 quads que se rehacen de golpe en UN frame, así que cada
+/// tap de más son 37 000 consultas de relieve más en ese frame. Subirlo fue lo
+/// primero que probé y devolvió el tirón al despegue que costó arreglar (ver
+/// `docs/RENDIMIENTO.md`). Con 2 alcanza: lo que hacía falta para que el mundo se
+/// leyera desde el aire era el SOMBREADO, no más muestras.
 fn average_tile_color(
     tiles: &TileWorld,
     body: CelestialBody,
@@ -743,7 +896,13 @@ fn average_tile_color(
             // render y = -z.
             let tx = (sx / TILE_M).floor() as i64;
             let tz = (-sy / TILE_M).floor() as i64;
-            let c = tiles.tile_at(body, tx, tz).color();
+            let c = crate::world2d::tile_render_color(
+                tiles,
+                body,
+                tx,
+                tz,
+                crate::world2d::TileShade::Coarse,
+            );
             acc[0] += c[0];
             acc[1] += c[1];
             acc[2] += c[2];
@@ -757,16 +916,130 @@ fn average_tile_color(
 /// suficiente para leer costas y bosques cuando el planeta llena la pantalla.
 const DISC_TEX_N: usize = 512;
 
+/// Filas de la textura del disco que se pintan por frame.
+///
+/// A 32 filas, un disco entero son 16 frames (~0.27 s a 60 fps) y cada frame paga
+/// ~65 000 muestras de terreno en vez de 1 000 000 de golpe. El disco se ve con su
+/// color de catálogo mientras tanto, así que la espera no se nota: lo que SÍ se
+/// notaba era el tirón.
+const DISC_BAKE_ROWS_PER_FRAME: usize = 32;
+
+/// Filas por frame **vigentes**. Es un recurso y no la constante a secas por lo
+/// mismo que `world2d::ChunkBudget`: detrás de la cortina de carga un frame de
+/// 200 ms no es un tirón, es trabajo adelantado, así que ahí se sube
+/// (`loading::boost_budget`) y se vuelve a [`DiscBakeRows::normal`] al entrar.
+#[derive(Resource)]
+pub struct DiscBakeRows(pub usize);
+
+impl Default for DiscBakeRows {
+    fn default() -> Self {
+        Self(Self::normal())
+    }
+}
+
+impl DiscBakeRows {
+    pub const fn normal() -> usize {
+        DISC_BAKE_ROWS_PER_FRAME
+    }
+}
+
+/// Trabajo de textura de disco a medio cocinar.
+struct DiscBake {
+    body: CelestialBody,
+    material: Handle<ColorMaterial>,
+    /// RGBA de `DISC_TEX_N`², se llena de arriba hacia abajo.
+    data: Vec<u8>,
+    next_row: usize,
+}
+
+/// Cola de texturas de disco pendientes (una en curso + las que esperan).
+///
+/// Existe para que generar el mapa de un planeta NUNCA cueste un frame entero.
+/// `sync_universe` sólo pide; el horneado real lo reparte `bake_body_textures`.
+#[derive(Resource, Default)]
+pub struct DiscBakeQueue {
+    jobs: Vec<DiscBake>,
+}
+
+impl DiscBakeQueue {
+    /// Discos que faltan cocinar. Lo mira la pantalla de carga: entrar al juego
+    /// con esto sin vaciar es entrar con el tirón puesto.
+    pub fn pending(&self) -> usize {
+        self.jobs.len()
+    }
+
+    fn request(&mut self, body: CelestialBody, material: Handle<ColorMaterial>) {
+        if self.jobs.iter().any(|j| j.body == body) {
+            return;
+        }
+        self.jobs.push(DiscBake {
+            body,
+            material,
+            data: vec![0u8; DISC_TEX_N * DISC_TEX_N * 4],
+            next_row: 0,
+        });
+    }
+}
+
+/// Cocina la textura del disco del planeta por FRANJAS, un trabajo a la vez.
+/// Cuando termina una, aplica el desenfoque, sube la imagen y la enchufa al
+/// material del disco (que hasta ese momento mostraba el color de catálogo).
+fn bake_body_textures(
+    mut queue: ResMut<DiscBakeQueue>,
+    rows: Res<DiscBakeRows>,
+    tiles: Res<TileWorld>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let _probe = crate::debug::probe("bake_body_textures");
+    let Some(job) = queue.jobs.first_mut() else { return };
+    let n = DISC_TEX_N;
+    let end = (job.next_row + rows.0.max(1)).min(n);
+    fill_disc_rows(&mut job.data, &tiles, job.body, job.next_row, end);
+    job.next_row = end;
+    if job.next_row < n {
+        return;
+    }
+    let mut job = queue.jobs.remove(0);
+    // Desenfoque de caja sobre el RGB (respetando el alfa del recorte). El
+    // promediado por texel ya baja el ruido, pero a la escala del disco un píxel
+    // sigue siendo metros de terreno: sin esto el planeta se ve granulado como
+    // estática en vez de con biomas.
+    box_blur_rgb(&mut job.data, n, 2);
+    let mut image = Image::new(
+        Extent3d { width: n as u32, height: n as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        std::mem::take(&mut job.data),
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    // Lineal: el disco se ve a todas las escalas, desde llenar la pantalla hasta
+    // ser un punto, y con vecino más próximo el limbo se escalona.
+    image.sampler = bevy::image::ImageSampler::linear();
+    if let Some(m) = materials.get_mut(&job.material) {
+        m.texture = Some(images.add(image));
+        m.color = Color::WHITE;
+    }
+}
+
 /// El disco del planeta pintado con SU PROPIO terreno (`topdown_tile`), no con
 /// ruido inventado: la costa que ves desde el espacio es la misma que pisás. Con
 /// oscurecimiento hacia el limbo para que lea como una esfera, y transparente
 /// fuera del círculo.
-fn body_surface_texture(tiles: &TileWorld, body: CelestialBody) -> Image {
+///
+/// Pinta sólo las filas `[row0, row1)`: es una PORCIÓN del trabajo, para que
+/// `bake_body_textures` pueda repartir un disco entre varios frames.
+fn fill_disc_rows(
+    data: &mut [u8],
+    tiles: &TileWorld,
+    body: CelestialBody,
+    row0: usize,
+    row1: usize,
+) {
     let n = DISC_TEX_N;
     let r = body_radius(body);
     let seed = ha_shared::body_def(body).terrain_seed;
-    let mut data = vec![0u8; n * n * 4];
-    for py in 0..n {
+    for py in row0..row1 {
         for px in 0..n {
             let u = (px as f32 + 0.5) / n as f32 - 0.5;
             let v = (py as f32 + 0.5) / n as f32 - 0.5;
@@ -783,10 +1056,13 @@ fn body_surface_texture(tiles: &TileWorld, body: CelestialBody) -> Image {
             // planeta parecía estática de TV, no un mundo).
             let texel_m = 2.0 * r / n as f32;
             let rgb = average_tile_color(tiles, body, u * 2.0 * r, -v * 2.0 * r, texel_m, 2);
-            // Relieve: un sombreado suave de ruido para que un cuerpo de terreno
-            // UNIFORME (la Luna es todo regolito) no se lea como un círculo de
-            // pintura plana. Es ±8 %, no inventa bioma — sólo da volumen.
-            let relief = 0.92 + 0.16 * fbm(u * 9.0 + 4.0, v * 9.0 + 4.0, seed);
+            // Un toque de ruido para dar volumen. Bajado de ±8 % a ±4 %: ahora el
+            // color de cada texel YA trae el sombreado de relieve real
+            // (`average_tile_color` → `tile_render_color`), así que este ruido
+            // dejó de ser el que dibujaba el modelado y pasó a ser lo que
+            // siempre debió ser — una pizca de grano encima de la geografía de
+            // verdad, no un sustituto de ella.
+            let relief = 0.96 + 0.08 * fbm(u * 9.0 + 4.0, v * 9.0 + 4.0, seed);
             // Limbo oscurecido → lectura esférica.
             let shade = relief * (1.0 - (d / 0.5).powi(2) * 0.42);
             data[idx] = ((rgb[0] * shade).clamp(0.0, 1.0) * 255.0) as u8;
@@ -795,23 +1071,6 @@ fn body_surface_texture(tiles: &TileWorld, body: CelestialBody) -> Image {
             data[idx + 3] = 255;
         }
     }
-    // Desenfoque de caja 3×3 sobre el RGB (respetando el alpha del recorte). El
-    // promediado por texel ya baja el ruido, pero a la escala del disco un
-    // píxel sigue siendo metros de terreno: sin esto el planeta se ve granulado
-    // como estática en vez de con biomas. Dos pasadas, muy barato (512²).
-    box_blur_rgb(&mut data, n, 2);
-
-    let mut image = Image::new(
-        Extent3d { width: n as u32, height: n as u32, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-    // Lineal: el disco se ve a todas las escalas, desde llenar la pantalla hasta
-    // ser un punto, y con muestreo por vecino más próximo el limbo se escalona.
-    image.sampler = bevy::image::ImageSampler::linear();
-    image
 }
 
 /// Ruido de valor con interpolación suave — sólo para el sombreado de relieve
@@ -983,6 +1242,56 @@ mod tests {
     }
 
     #[test]
+    fn every_landable_body_has_room_to_fly_before_space() {
+        // El bug de "en la Luna me quedaba a 30 metros" empezaba acá: con un
+        // mínimo de 60 m, volar la altura de un edificio sobre un cuerpo de 8.4 km
+        // de radio ya te ponía en `RegionId::Space` — se dejaba de streamear el
+        // terreno y el marco no rebasaba. Un cuerpo tiene que tener cielo propio.
+        for &b in CelestialBody::all() {
+            if !body_landable(b) {
+                continue;
+            }
+            let sky = space_alt(b);
+            assert!(sky >= 600.0, "{b:?} tiene sólo {sky} m de cielo");
+            // Y tiene que ser chico respecto del cuerpo: si no, nunca saldrías.
+            assert!(
+                sky < body_radius(b).max(2_000.0),
+                "{b:?}: techo de {sky} m sobre un radio de {}",
+                body_radius(b)
+            );
+        }
+    }
+
+    #[test]
+    fn the_zoom_ceiling_frames_the_whole_system() {
+        // "En teoría podría ir a cualquier rincón del universo": para eso hace
+        // falta poder VER el sistema entero desde el borde, o navegar a ciegas.
+        // El encuadre máximo tiene que cubrir la distancia Sol↔Neptuno.
+        let span = body_offset(CelestialBody::Neptune, CelestialBody::Sun, 0.0).length();
+        let widest = view_h_for_alt(CelestialBody::Earth, MAX_ALT);
+        assert!(
+            widest > span,
+            "el encuadre topa en {widest:.0} m y el sistema mide {span:.0} m"
+        );
+    }
+
+    #[test]
+    fn the_farthest_body_is_reachable_on_one_ki_charge() {
+        // Con la economía nueva (el Ki cuesta EMPUJAR, no existir) una carga tiene
+        // que alcanzar para el trayecto más largo del sistema a velocidad de tope.
+        // Si esto falla, explorar los rincones vuelve a depender de no quedarse
+        // tirado en el vacío.
+        use crate::flight::{KI_DRAIN_PER_S, KI_MAX};
+        let span = body_offset(CelestialBody::Neptune, CelestialBody::Sun, 0.0).length();
+        let cruise = span / lateral_speed(MAX_ALT);
+        let budget = KI_MAX / (KI_DRAIN_PER_S * 1.5); // el peor caso: empujando
+        assert!(
+            budget > cruise,
+            "cruzar el sistema son {cruise:.0} s y el Ki da para {budget:.0} s"
+        );
+    }
+
+    #[test]
     fn fine_tiles_hand_over_cleanly() {
         assert!(FINE_FADE_VIEW_H < FINE_OFF_VIEW_H);
         assert_eq!(fine_tile_alpha(0.0), 1.0);
@@ -1020,5 +1329,36 @@ mod tests {
             prev = t;
             v *= 1.3;
         }
+    }
+
+    #[test]
+    fn la_malla_lod_no_es_un_damero() {
+        // El terreno visto desde el aire NO puede ser un mosaico de bloques planos
+        // ("me sale con cuadrados, como cuando no carga la textura"). La prueba de
+        // que dejo de serlo es geometrica: los vertices se COMPARTEN entre quads
+        // (un damero necesita 4 propios por quad) y el color varia dentro de un
+        // mismo quad, que es lo que la GPU interpola.
+        let tiles = crate::world2d::TileWorld::default();
+        let mesh = build_terrain_lod_mesh(&tiles, CelestialBody::Earth, Vec2::ZERO, 16.0);
+        let verts = mesh.count_vertices();
+        let tris = match mesh.indices() {
+            Some(Indices::U32(i)) => i.len() / 3,
+            _ => panic!("la malla perdio sus indices"),
+        };
+        let quads = tris / 2;
+        assert!(quads > 1_000, "malla sospechosamente vacia: {quads} quads");
+        assert!(
+            verts < quads * 2,
+            "{verts} vertices para {quads} quads: siguen sin compartirse"
+        );
+        let Some(bevy::render::mesh::VertexAttributeValues::Float32x4(colors)) =
+            mesh.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("la malla perdio su color por vertice");
+        };
+        assert!(
+            colors.windows(2).any(|w| w[0] != w[1]),
+            "todos los vertices del mismo color: el terreno seria un manchon plano"
+        );
     }
 }

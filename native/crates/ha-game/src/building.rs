@@ -18,7 +18,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use ha_assets::ArtLayer;
-use ha_shared::topdown::{building_site_in, BuildingSite, SITE_PERIOD, TILE_M};
+use ha_shared::topdown::{BuildingSite, TILE_M};
 use ha_shared::CelestialBody;
 
 use crate::art2d::ArtLibrary;
@@ -80,12 +80,56 @@ pub struct BuildingRoof {
     z: i32,
 }
 
-/// Sprite de puerta con poses open/closed (lo spawnea `spawn_chunk_tile_art`).
+/// Sprite de puerta animado por proximidad (lo spawnea `spawn_chunk_tile_art`).
 #[derive(Component)]
 pub struct DoorArt {
     pub tx: i64,
     pub tz: i64,
     pub open: bool,
+    /// Clave de arte de ESTA puerta. Antes se asumía `door/wood` a fuerza bruta,
+    /// así que una puerta de metal o de piedra se animaba con el sprite de la de
+    /// madera (o no se animaba). La clave sale del tile, como todo lo demás.
+    pub art: &'static str,
+    /// Segundos que le quedan a la transición en curso (`opening`/`closing`).
+    /// 0 = ya está en su pose de reposo.
+    pub t: f32,
+}
+
+/// Tamaño con el que se dibuja una puerta de TILE: un tile de suelo de ancho y
+/// `WALL_RENDER_H` de alto, igual que una pared de borde. Que las dos clases de
+/// puerta compartan medida es lo que evita que la del terreno se vea enana al
+/// lado de la que construís.
+pub(crate) fn door_render_size() -> Vec2 {
+    Vec2::new(TILE_M, TILE_M * ha_shared::build_grid::WALL_RENDER_H)
+}
+
+/// **La cadena de estados de una puerta**: reposo → transición → reposo.
+///
+/// `closed → opening → open → closing → closed`. Las dos transiciones son
+/// OPCIONALES: si el asset no las trae, la puerta salta directo entre reposos y
+/// se comporta como siempre. Devuelve `(pose, duración)`; duración 0 = no hay
+/// transición que esperar.
+///
+/// Vive acá y la usan las dos clases de puerta —la de tile (este módulo) y la de
+/// borde (`walls`)— para que una puerta se vea igual la hayas puesto como la
+/// hayas puesto.
+pub(crate) fn door_transition(
+    art: &ArtLibrary,
+    key: &str,
+    opening: bool,
+) -> Option<(&'static str, f32)> {
+    let pose = if opening { "opening" } else { "closing" };
+    if !art.has_pose(key, pose) {
+        return None;
+    }
+    // Cuánto dura: los frames de la propia animación. Así el estado del juego y
+    // lo que se ve terminan a la vez, sin un número mágico que se desincronice
+    // al recortar la animación de otra manera en el editor.
+    let secs = art
+        .pose_frames(key, pose)
+        .map(|(frames, fps)| frames as f32 / fps.max(0.1))
+        .unwrap_or(0.35);
+    Some((pose, secs))
 }
 
 pub struct BuildingPlugin;
@@ -163,25 +207,42 @@ fn stream_roofs(
     // Techos deseados alrededor del jugador.
     let mut want: Vec<(RoofRect, Option<&'static str>)> = Vec::new();
     if z == 0 {
-        // Techos por MANZANA del núcleo que pisás: una ciudad tiene decenas de
-        // edificios, no uno por celda de 1.8 km (ver `geography::building_in_block`).
+        // TECHOS POR PARCELA. Se barre la vecindad del jugador preguntando por el
+        // lote de cada celda (`city::roofed_rect`) y se deduplica por esquina.
+        //
+        // Antes se iteraban MANZANAS con una retícula fija de 34/26/22 tiles
+        // copiada a mano de `geography`. Con parcelas de tamaño variable —una
+        // universidad ocupa cuatro manzanas, una plaza ninguna— esa retícula ya no
+        // describe nada, y peor: era una tercera copia del tamaño de manzana que
+        // se desincronizaba en silencio. Ahora el dueño del dato es `city` y acá
+        // sólo se pregunta.
         if let Some(s) = ha_shared::geography::settlement_covering(body, ptx, ptz) {
-            let block = match s.tier {
-                ha_shared::geography::SettlementTier::City => 34,
-                ha_shared::geography::SettlementTier::Town => 26,
-                _ => 22,
-            };
-            let range = ROOF_STREAM_RADIUS / block + 1;
-            let b0x = (ptx - s.center.0).div_euclid(block);
-            let b0z = (ptz - s.center.1).div_euclid(block);
-            for bx in (b0x - range)..=(b0x + range) {
-                for bz in (b0z - range)..=(b0z + range) {
-                    if let Some(site) = ha_shared::geography::building_in_block(body, s, bx, bz) {
-                        want.push((
-                            RoofRect { body: body as u8, z: 0, min: site.min, w: site.w, h: site.h, art: None },
-                            Some(generated_building_art(&site)),
-                        ));
+            let mut seen: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
+            // Paso de 4 tiles: el edificio más chico mide 5 de lado, así que
+            // ninguno se cuela entre dos muestras.
+            let step = 4i64;
+            let r = ROOF_STREAM_RADIUS;
+            for dz in (-r..=r).step_by(step as usize) {
+                for dx in (-r..=r).step_by(step as usize) {
+                    let (tx, tz) = (ptx + dx, ptz + dz);
+                    let Some((x, z0, w, h)) =
+                        ha_shared::city::roofed_rect(body, &s, tx, tz)
+                    else {
+                        continue;
+                    };
+                    if !seen.insert((x, z0)) {
+                        continue;
                     }
+                    let site = ha_shared::geography::BuildingSite {
+                        min: (x, z0),
+                        w,
+                        h,
+                        door: (x + w / 2, z0 + h - 1),
+                    };
+                    want.push((
+                        RoofRect { body: body as u8, z: 0, min: site.min, w, h, art: None },
+                        Some(generated_building_art(&site)),
+                    ));
                 }
             }
         }
@@ -221,8 +282,9 @@ fn stream_roofs(
         commands.spawn((
             BuildingRoof { min: r.min, w: r.w, h: r.h, body, z },
             roof_sprite(&art, art_key, size),
-            // Encima de todo el mundo Y-sorted (~2.0) y del ghost de build (5.7).
-            Transform::from_xyz(pos.x, pos.y, 6.0),
+            // Banda de techos: encima de todo el mundo Y-sorted y del ghost de
+            // build (5.7). Ver `crate::layers` para la escalera completa.
+            Transform::from_xyz(pos.x, pos.y, crate::layers::OVERHEAD),
         ));
     }
 }
@@ -270,17 +332,30 @@ fn fade_roofs(
 /// usás y al alejarte se ve cerrarse completa en vez de saltar de golpe.
 fn animate_doors(
     mut commands: Commands,
+    time: Res<Time>,
     art: Res<ArtLibrary>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
     player: Query<&Transform, With<Player>>,
     mut doors: Query<(Entity, &mut DoorArt, &mut Sprite)>,
 ) {
     let Ok(player_tf) = player.get_single() else {
         return;
     };
+    let dt = time.delta_secs();
     let ptx = player_tf.translation.x / TILE_M;
     let ptz = -player_tf.translation.y / TILE_M;
     for (ent, mut door, mut sprite) in &mut doors {
+        let key = door.art;
+        // ¿Terminó la transición que estaba corriendo? → pose de reposo.
+        if door.t > 0.0 {
+            door.t -= dt;
+            if door.t <= 0.0 {
+                door.t = 0.0;
+                let rest = if door.open { "open" } else { "closed" };
+                set_door_pose(&mut commands, ent, &art, key, rest, &mut sprite, door_render_size());
+            }
+            continue; // mientras se abre/cierra no se cambia de idea a mitad
+        }
         let dx = ptx - (door.tx as f32 + 0.5);
         let dz = ptz - (door.tz as f32 + 0.5);
         let near = (dx * dx + dz * dz).sqrt() < DOOR_OPEN_DIST;
@@ -288,20 +363,41 @@ fn animate_doors(
             continue;
         }
         door.open = near;
-        sfx.send(crate::audio::PlaySfx(if near {
-            crate::audio::Sfx::DoorOpen
-        } else {
-            crate::audio::Sfx::DoorClose
-        }));
-        let pose = if near { "open" } else { "closed" };
-        if let Some(s) = art.pose_sprite("door/wood", pose, Vec2::splat(TILE_M)) {
-            *sprite = s;
-            // Tira de frames → que corra la transición hasta el final y se quede
-            // ahí; recorte suelto → sin animador (y sacamos el anterior).
-            match art.pose("door/wood", pose).and_then(|(_, a)| a) {
-                Some(anim) => commands.entity(ent).insert(anim.once()),
-                None => commands.entity(ent).remove::<crate::art2d::ArtAnimated>(),
-            };
+        sfx.send(crate::audio::PlaySfxAt(
+            if near { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
+            render_xy((door.tx as f32 + 0.5) * TILE_M, (door.tz as f32 + 0.5) * TILE_M),
+        ));
+        // Con transición autorada se reproduce entera; sin ella, salto directo.
+        let (pose, secs) = match door_transition(&art, key, near) {
+            Some((p, s)) => (p, s),
+            None => (if near { "open" } else { "closed" }, 0.0),
+        };
+        door.t = secs;
+        set_door_pose(&mut commands, ent, &art, key, pose, &mut sprite, door_render_size());
+    }
+}
+
+/// Pone una pose en un sprite de puerta y le engancha (o le quita) el animador.
+/// Las transiciones corren en modo `once`: llegan al último frame y se clavan
+/// ahí, así la puerta no "late" mientras está abierta.
+pub(crate) fn set_door_pose(
+    commands: &mut Commands,
+    ent: Entity,
+    art: &ArtLibrary,
+    key: &str,
+    pose: &str,
+    sprite: &mut Sprite,
+    size: Vec2,
+) {
+    let Some(s) = art.pose_sprite(key, pose, size) else { return };
+    *sprite = s;
+    match art.pose(key, pose).and_then(|(_, a)| a) {
+        Some(anim) => {
+            let looping = matches!(pose, "locked");
+            commands.entity(ent).insert(if looping { anim } else { anim.once() });
+        }
+        None => {
+            commands.entity(ent).remove::<crate::art2d::ArtAnimated>();
         }
     }
 }

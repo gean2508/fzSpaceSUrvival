@@ -133,6 +133,7 @@ pub(crate) fn try_place_on_hold(
     pending: Res<PendingMachinePlacement>,
     ctx: PlacementCtx,
     tiles: Res<TileWorld>,
+    cursor: Res<crate::input::AimCursor>,
     player: Query<(&Transform, &SimState), With<Player>>,
     mut world: ResMut<MachineWorld>,
     mut inv: ResMut<PlayerInventory>,
@@ -171,9 +172,9 @@ pub(crate) fn try_place_on_hold(
     let Ok((_tf, sim)) = player.get_single() else {
         return;
     };
-    // Top-down: place a couple tiles in front of the player (facing dir).
-    let tx = sim.body.x + sim.body.rot.cos() * 2.4;
-    let tz = sim.body.z + sim.body.rot.sin() * 2.4;
+    // Cenital: la máquina cae DONDE TOCASTE (o un par de celdas al frente si el
+    // punto no vale — mando/atajo).
+    let (tx, tz) = crate::input::place_point(&cursor, sim, 2.4);
     let _ = &tiles;
 
     if !editor.creative {
@@ -217,11 +218,15 @@ fn spawn_machine_visual(
 ) {
     // Drop-in pack art first (machines/<id>.png), then the item icon (which
     // itself may be pack art via items/<id>.png), then procedural raster.
-    let image = art
-        .get(&format!("machines/{machine_id}"))
-        .unwrap_or_else(|| icons.get(machine_id, images));
-    let mut sprite = Sprite::from_image(image);
-    sprite.custom_size = Some(Vec2::splat(1.8));
+    //
+    // `world_sprite` y no `get`: el slot puede estar recortado de un atlas (o
+    // tener poses), y con el handle a pelo se plantaba la HOJA ENTERA en el mundo.
+    let size = Vec2::splat(1.8);
+    let mut sprite = art
+        .world_sprite(&format!("machines/{machine_id}"), size)
+        .map(|(s, _)| s)
+        .unwrap_or_else(|| icons.icon(machine_id, images).sprite(size));
+    sprite.custom_size = Some(size);
     let _ = body;
     let r = crate::world2d::render_xy(tx, tz);
     commands

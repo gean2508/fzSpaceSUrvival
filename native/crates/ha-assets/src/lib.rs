@@ -1,32 +1,28 @@
-//! `ha-assets` — sistema de assets data-driven de Starship.
+//! `ha-assets` — modelo de datos del arte del juego.
 //!
-//! Fuente de verdad = `manifest.ron`. El código sólo conoce IDs lógicos
-//! (`"flora/arbol_roble"`); píxeles, rects y pivotes viven en datos. Este crate
-//! es **headless** (sin Bevy) para que la CLI, el server y los tests lo usen.
+//! El código sólo conoce **IDs lógicos** (`"decor/tree_roble"`,
+//! `"floor/piso#madera"`); los píxeles, rects, poses, huellas y capas viven en
+//! `crates/ha-game/assets/art/manifest.json`, que escribe el usuario desde
+//! HA Studio (`./editor_assets`). Este crate es **headless** (sin Bevy) para que
+//! la CLI, el editor y los tests lo usen sin arrastrar el motor.
 //!
-//! F1 (este archivo): spec del formato + structs serde + round-trip.
-//! F2+: `scan`, `catalog`, `registry` se apoyan en estos tipos.
+//! - `art_manifest` — el formato del manifest (fuente de verdad del arte).
+//! - `slots` — catálogo de qué IDs existen y cómo se llaman en castellano.
+//! - `pngs` — listado de hojas para el selector del editor.
+//! - `chargen_index` — capas del generador de personaje (creador + retratos).
+//!
+//! Ver `biblia.md` §8.
 
 pub mod art_manifest;
-pub mod catalog;
-pub mod manifest;
-pub mod registry;
+pub mod chargen_index;
+pub mod pngs;
 pub mod slots;
 
-#[cfg(feature = "scan")]
-pub mod scan;
-
 pub use art_manifest::{
+    namespace_layer, placement_center_tiles, placement_min_tile, split_variant, variant_key,
     ArtAnim, ArtEntry, ArtLayer, ArtManifest, ArtValue, CellRect, CollisionFootprint, Emission,
-    Pose, StripDir,
+    ObjectDef, Pose, StripDir, VariantDef, VARIANT_SEP,
 };
-pub use catalog::generate_catalog;
-pub use manifest::{
-    AnchorKind, Anim, AnimLayout, Asset, Brush, Flags, Footprint, Hitbox, Manifest, ManifestError,
-    Pivot, Rect, Sheet, Source, YSort, CURRENT_MANIFEST_VERSION,
-};
-pub use registry::{AssetRegistry, PxRect, ValidationIssue};
-pub use slots::{game_slots, SlotDef};
-
-#[cfg(feature = "scan")]
-pub use scan::{list_pngs, scan_limezu_directory, ScanOptions, ScanReport};
+pub use chargen_index::{ChargenIndex, LayerOption, LookDef};
+pub use pngs::list_pngs;
+pub use slots::{category_label, game_slots, SlotDef};

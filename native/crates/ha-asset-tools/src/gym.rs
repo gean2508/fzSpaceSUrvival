@@ -1,4 +1,4 @@
-//! Gym de NEUROEVOLUCIÓN para la fauna (B4.1b, `ANALISIS_IA_FRUGAL.md`).
+//! Gym de NEUROEVOLUCIÓN para la fauna (`biblia.md` §6).
 //!
 //! "Fase Cámara" de HIVE_OS: evoluciona OFFLINE (a toda velocidad, sin render) un
 //! genoma IAFZ-64 que aprende a FORRAJEAR en el mundo REAL del juego

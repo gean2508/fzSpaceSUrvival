@@ -19,7 +19,13 @@ VERSION_CODE=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$VERS
 VERSION_NAME=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$VERSION_JSON','utf8')).version)")
 
 cd "$ANDROID"
-./gradlew assembleDebug -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME"
+# `assembleRelease`, no `assembleDebug`: un APK debug lleva `debuggable=true`,
+# que apaga optimizaciones de ART y activa los chequeos JNI en cada llamada
+# nativa — o sea, se pagaba en el dispositivo con menos margen. El Rust ya salía
+# optimizado (`release-native`); lo que faltaba era que el envoltorio Java también.
+# Se firma con la clave de debug (ver `app/build.gradle`) porque esto se instala
+# de costado, no por Play.
+./gradlew assembleRelease -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME"
 
-APK="$ANDROID/app/build/outputs/apk/debug/app-debug.apk"
+APK="$ANDROID/app/build/outputs/apk/release/app-release.apk"
 echo "✓ APK → $APK"

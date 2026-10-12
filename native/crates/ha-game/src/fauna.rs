@@ -9,13 +9,32 @@
 //!
 //! El gym (`./editor_assets gym`) SIEMBRA competencia base (forrajeo); la emergencia
 //! social sale de la vida multi-agente acá. Arte = quad de color hasta `npc/fauna`.
+//!
+//! ## SE FUE EL ANILLO (no reintroducir)
+//!
+//! Hasta acá la fauna ambiental vivía en un **anillo alrededor del jugador**: se sembraba
+//! a tu lado al pisar la superficie y el bicho que se alejaba más de `STREAM_R` se
+//! teletransportaba al borde opuesto. Garantizaba tener vida al lado y por eso mismo
+//! **mataba la exploración**: el mundo no tenía lugares, tenía un radio.
+//!
+//! Ahora la fuente de verdad es `ha_shared::ecology`: el mundo se parte en REGIONES con
+//! capacidad de carga sacada del BIOMA y una cadena alimenticia (plantas → herbívoros →
+//! carnívoros) que avanza **en todos los cuerpos, estés o no ahí**. Este módulo sólo
+//! MATERIALIZA como entidades las regiones cercanas y devuelve los números al salir:
+//!
+//! - Un bosque hierve de vida y un desierto está vacío — hay que ir a buscarla.
+//! - Nada se teletransporta. Un animal que se aleja vuelve a ser población en su región.
+//! - Cazar un valle lo deja vacío de verdad, y tarda en recuperarse.
+//!
+//! El VIVARIO (residentes colocados en creativo) nunca tuvo anillo y sigue igual.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use ha_shared::ecology::{self, Capacity, Population, Trophic};
 use ha_shared::fauna_brain::sense;
 use ha_shared::CelestialBody;
 
@@ -29,13 +48,27 @@ use crate::world2d::{
 /// Genoma colmena SEMILLA (forrajeo, del gym). Cada nacimiento lo hereda mutado.
 const GENOME: &[u8] = include_bytes!("../../iafz-sys/genomes/FAUNA.adn");
 
-const START_HERD: i32 = 12;
-const MAX_POP: usize = 40; // tope de población (perf)
-/// Radio (m) de "mundo vivo": la fauna que se aleja se REUBICA al borde opuesto →
-/// siempre hay vida alrededor del jugador, población acotada (no drena FPS/batería).
-const STREAM_R: f32 = 42.0;
+/// Tope de fauna ambiental VIVA como entidad (perf/batería). No es un tope de mundo: la
+/// población de más allá sigue existiendo como número en `ha_shared::ecology`.
+const MAX_LIVE: usize = 32;
 const MAX_FAUNA_ID: i32 = 48; // ids de cerebro reservados a la fauna (0..48)
-const FOOD_N: usize = 24;
+/// Ventana de MATERIALIZACIÓN, en regiones alrededor de la tuya (1 → 3×3 = 192 m de lado
+/// con `ecology::REGION == 64`). Supera de sobra el radio de render, así ningún animal
+/// "aparece" delante tuyo: entra caminando o ya estaba ahí.
+const SIM_RINGS: i32 = 1;
+/// Ventana que se MANTIENE EN MEMORIA (con su población) alrededor tuyo: da vecinos a la
+/// migración, así la manada que se va de tu vista tiene adónde ir.
+const AWARE_RINGS: i32 = 2;
+/// Cada cuánto (s de mundo) corre el paso de ecología de TODAS las regiones conocidas.
+const ECO_TICK: f32 = 4.0;
+/// Tope de regiones guardadas en memoria/disco. Se podan primero las que volvieron a su
+/// equilibrio (indistinguibles del valor perezoso), así el guardado no crece sin fin.
+const MAX_KNOWN_REGIONS: usize = 3_000;
+/// Cuántos puntos de forraje puede llegar a mostrar una región (el resto es biomasa que
+/// existe pero no está dibujada).
+const MAX_FORAGE_REGION: usize = 6;
+/// Cuánta biomasa vale un punto de forraje dibujado.
+const FORAGE_UNIT: f32 = 1.5;
 const VEL: f32 = 2.6;
 const TURN: f32 = 2.3;
 const EAT_D2: f32 = 0.55;
@@ -87,6 +120,22 @@ pub fn spawn_species_label(i: usize) -> &'static str {
     L.get(i).copied().unwrap_or("Fauna")
 }
 
+
+/// Slot de arte del hueco `i` de la paleta creativa — para que la TARJETA de la
+/// mochila muestre el bicho en vez de un cuadrado. Son los slots terrestres (la
+/// fauna inventada por planeta no tiene slot asignable); si el pack no los trae, la
+/// tarjeta cae al icono de ítem que le pasa `hud.rs`.
+pub fn spawn_species_art(i: usize) -> &'static str {
+    const K: [&str; SPAWN_PALETTE_SLOTS] = [
+        "npc/fauna_cow",
+        "npc/fauna_chicken",
+        "npc/fauna_sheep",
+        "npc/fauna_pig",
+        "npc/fauna_dog",
+        "npc/fauna_cow",
+    ];
+    K.get(i).copied().unwrap_or("npc/fauna_cow")
+}
 
 /// Radio (m) de RENDER/simulación de residentes alrededor del jugador (F2). Más allá,
 /// el residente se OCULTA y se CONGELA (no se despawnea): sigue como dato en su lugar y
@@ -354,6 +403,11 @@ struct Animal {
     x: f32,
     z: f32,
     species: usize,
+    /// Región de ecología donde está contado. Al cruzar el borde, el censo se MUEVE de
+    /// región (no se teletransporta el animal): así una manada emigra de verdad.
+    region: (i32, i32),
+    /// Su lugar en la cadena alimenticia. Sale de la especie del planeta (`hostile`).
+    trophic: Trophic,
     /// Visual + conducta resueltos de la `SpeciesDef` del planeta al spawnear (evita
     /// consultar el catálogo en el loop caliente).
     color: [f32; 3],
@@ -382,6 +436,11 @@ struct FaunaPose(String);
 struct FoodDot {
     x: f32,
     z: f32,
+    /// Región que lo sostiene (`None` = feeder colocado a mano, que no sale de ninguna
+    /// biomasa y por eso no se agota).
+    region: Option<(i32, i32)>,
+    /// Índice del ancla determinista dentro de la región (para no duplicar el mismo mato).
+    slot: u32,
 }
 
 /// Pool de ids de cerebro (C global) + censo. Reciclamos ids al morir.
@@ -389,13 +448,94 @@ struct FoodDot {
 struct FaunaWorld {
     free_ids: Vec<i32>,
     alive: usize,
-    ready: bool,
 }
 
 impl Default for FaunaWorld {
     fn default() -> Self {
-        Self { free_ids: (0..MAX_FAUNA_ID).rev().collect(), alive: 0, ready: false }
+        Self { free_ids: (0..MAX_FAUNA_ID).rev().collect(), alive: 0 }
     }
+}
+
+// --- ECOLOGÍA DE MUNDO (reemplazo del anillo) --------------------------------------
+//
+// La población vive como NÚMERO por región y por cuerpo; las entidades son sólo la vista
+// cercana. `ha_shared::ecology` tiene el modelo (determinista y testeado); acá está el
+// pegamento con Bevy: persistencia, paso periódico y materialización.
+
+/// Una región conocida: su capacidad (fija, sale del bioma) y su población (lo que pasó).
+#[derive(Clone, Copy, Serialize, Deserialize)]
+struct EcoCell {
+    pop: Population,
+    #[serde(skip)]
+    cap: Option<Capacity>,
+}
+
+#[derive(Resource, Default)]
+struct EcologyWorld {
+    /// `(cuerpo, rx, rz)` → estado. Lo que NO está acá vale su equilibrio: una región no
+    /// visitada ya estaba viva, con la vida que su bioma sostiene.
+    cells: HashMap<(u8, i32, i32), EcoCell>,
+    /// Regiones MATERIALIZADAS ahora mismo (ahí manda la entidad, no la aritmética).
+    live: HashSet<(u8, i32, i32)>,
+    loaded: bool,
+    save_acc: f32,
+}
+
+impl EcologyWorld {
+    fn cap(&mut self, body: CelestialBody, rx: i32, rz: i32) -> Capacity {
+        let key = (body as u8, rx, rz);
+        if let Some(c) = self.cells.get(&key).and_then(|c| c.cap) {
+            return c;
+        }
+        let cap = ecology::carrying_capacity(body, rx, rz);
+        let e = self.cells.entry(key).or_insert(EcoCell {
+            pop: ecology::equilibrium(cap),
+            cap: Some(cap),
+        });
+        e.cap = Some(cap);
+        cap
+    }
+
+    /// Población de la región, creándola perezosamente en su equilibrio.
+    fn pop(&mut self, body: CelestialBody, rx: i32, rz: i32) -> Population {
+        self.cap(body, rx, rz);
+        self.cells.get(&(body as u8, rx, rz)).map(|c| c.pop).unwrap_or_default()
+    }
+
+    fn set_pop(&mut self, body: CelestialBody, rx: i32, rz: i32, pop: Population) {
+        self.cap(body, rx, rz);
+        if let Some(c) = self.cells.get_mut(&(body as u8, rx, rz)) {
+            c.pop = pop;
+        }
+    }
+
+    /// Suma `d` cabezas al nivel trófico de una región (negativo = muertes). Es el ÚNICO
+    /// camino por el que una entidad afecta al censo del mundo — así nunca se pierde ni se
+    /// inventa un animal al materializar/desmaterializar.
+    fn add_head(&mut self, body: CelestialBody, rx: i32, rz: i32, trophic: Trophic, d: f32) {
+        let mut p = self.pop(body, rx, rz);
+        match trophic {
+            Trophic::Herbivore => p.herbivores = (p.herbivores + d).max(0.0),
+            Trophic::Carnivore => p.carnivores = (p.carnivores + d).max(0.0),
+        }
+        self.set_pop(body, rx, rz, p);
+    }
+
+    fn eat_forage(&mut self, body: CelestialBody, rx: i32, rz: i32) {
+        let mut p = self.pop(body, rx, rz);
+        p.plants = (p.plants - FORAGE_UNIT).max(0.0);
+        self.set_pop(body, rx, rz, p);
+    }
+}
+
+fn ecology_json() -> PathBuf {
+    vivarium_dir().join("ecology.json")
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct EcologySave {
+    /// `(cuerpo, rx, rz, población)` — la capacidad no se guarda: sale del terreno.
+    cells: Vec<(u8, i32, i32, Population)>,
 }
 
 // --- ESTIGMERGIA (B4.4): campo de feromonas para comunicación EMERGENTE. ---
@@ -482,21 +622,25 @@ impl Plugin for FaunaPlugin {
             .init_resource::<VivariumWorld>()
             .init_resource::<FaunaCatalog>()
             .init_resource::<SignalField>()
+            .init_resource::<EcologyWorld>()
             .add_event::<SpawnResidentEvent>()
             .add_event::<SpawnFoodEvent>()
             .add_systems(
                 Update,
                 (
                     manage_vivarium,
-                    spawn_fauna,
+                    tick_ecology,
+                    stream_regions,
                     spawn_residents,
                     spawn_placed_food,
                     tick_fauna,
-                    cull_residents,
+                    cull_fauna,
                     vivarium_temperature,
                     save_vivarium_periodic,
+                    save_ecology_periodic,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(crate::game_phase::world_active),
             )
             .add_systems(Startup, spawn_vivarium_overlay)
             .add_systems(Update, (update_vivarium_overlay, update_fauna_sightings));
@@ -510,58 +654,381 @@ fn scatter(seed: u32, i: usize, radius: f32) -> (f32, f32) {
     (ang.cos() * r, ang.sin() * r)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_fauna(
+/// Paso de ECOLOGÍA: avanza la cadena alimenticia de TODAS las regiones conocidas, de
+/// todos los cuerpos, estés o no parado ahí. Es aritmética sobre un `HashMap` chico
+/// (`MAX_KNOWN_REGIONS`), no entidades: por eso el mundo puede seguir vivo sin costar FPS.
+///
+/// Las regiones MATERIALIZADAS sólo avanzan su vegetación — su fauna la están simulando
+/// las entidades de verdad, y contarla dos veces sería inventar animales.
+fn tick_ecology(
+    time: Res<Time>,
+    region: Res<RegionRuntime>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut eco: ResMut<EcologyWorld>,
+    player: Query<&Transform, With<Player>>,
+    mut acc: Local<f32>,
+) {
+    if !eco.loaded {
+        load_ecology(&mut eco);
+    }
+    *acc += time.delta_secs();
+    if *acc < ECO_TICK {
+        return;
+    }
+    let dt = *acc;
+    *acc = 0.0;
+
+    // Las regiones alrededor tuyo se traen a memoria (con su equilibrio si es la primera
+    // vez): la migración necesita vecinos para que la manada tenga adónde irse.
+    let mut here = None;
+    if surface_region_active(&region).is_some() {
+        if let Ok(pt) = player.get_single() {
+            let body = active_surface_body(&ctx, &planet);
+            let (rx, rz) = ecology::region_of(pt.translation.x, -pt.translation.y);
+            for dz in -AWARE_RINGS..=AWARE_RINGS {
+                for dx in -AWARE_RINGS..=AWARE_RINGS {
+                    eco.cap(body, rx + dx, rz + dz);
+                }
+            }
+            here = Some((body as u8, rx, rz));
+        }
+    }
+
+    // 1) Paso propio de cada región.
+    let keys: Vec<(u8, i32, i32)> = eco.cells.keys().copied().collect();
+    for key in &keys {
+        let Some(body) = crate::world2d::body_from_u8(key.0) else { continue };
+        let cap = eco.cap(body, key.1, key.2);
+        let live = eco.live.contains(key);
+        if let Some(c) = eco.cells.get_mut(key) {
+            c.pop = if live {
+                ecology::step_flora(c.pop, cap, dt)
+            } else {
+                ecology::step(c.pop, cap, dt)
+            };
+        }
+    }
+
+    // 2) Difusión hacia el vecino de la derecha y el de abajo (cada par, una vez). Las
+    //    regiones materializadas se saltan: ahí la migración la hacen las patas.
+    for key in &keys {
+        let Some(body) = crate::world2d::body_from_u8(key.0) else { continue };
+        for (dx, dz) in [(1, 0), (0, 1)] {
+            let other = (key.0, key.1 + dx, key.2 + dz);
+            if !eco.cells.contains_key(&other) {
+                continue;
+            }
+            // Entre DOS regiones materializadas no se difunde: ahí la migración la hacen
+            // las patas (`tick_fauna` muda el censo al cruzar el borde) y sumar las dos
+            // cosas contaría el mismo viaje dos veces. Pero de fuera HACIA DENTRO sí: si
+            // no, el prado donde te plantás se vacía solo según los bichos se dispersan y
+            // nada vuelve a entrar — el jugador quieto veía morir el bosque.
+            if eco.live.contains(key) && eco.live.contains(&other) {
+                continue;
+            }
+            let (ca, cb) = (eco.cap(body, key.1, key.2), eco.cap(body, other.1, other.2));
+            let (pa, pb) = (eco.cells[key].pop, eco.cells[&other].pop);
+            let (na, nb) = ecology::migrate(pa, ca, pb, cb, dt);
+            eco.cells.get_mut(key).unwrap().pop = na;
+            eco.cells.get_mut(&other).unwrap().pop = nb;
+        }
+    }
+
+    // 3) Poda: lo que volvió a su equilibrio y está lejos vale exactamente el valor
+    //    perezoso, así que guardarlo no aporta nada. Memoria acotada para siempre.
+    if eco.cells.len() > MAX_KNOWN_REGIONS {
+        let live: HashSet<(u8, i32, i32)> = eco.live.clone();
+        let mut drop_keys: Vec<(u8, i32, i32)> = Vec::new();
+        for key in &keys {
+            if live.contains(key) {
+                continue;
+            }
+            if let Some((hb, hx, hz)) = here {
+                if key.0 == hb && (key.1 - hx).abs() <= AWARE_RINGS && (key.2 - hz).abs() <= AWARE_RINGS {
+                    continue;
+                }
+            }
+            let Some(body) = crate::world2d::body_from_u8(key.0) else { continue };
+            let cap = eco.cap(body, key.1, key.2);
+            if ecology::is_settled(eco.cells[key].pop, cap) {
+                drop_keys.push(*key);
+            }
+        }
+        for k in drop_keys {
+            eco.cells.remove(&k);
+            if eco.cells.len() <= MAX_KNOWN_REGIONS {
+                break;
+            }
+        }
+    }
+}
+
+/// MATERIALIZACIÓN (el reemplazo del anillo): las regiones de la ventana `SIM_RINGS` se
+/// convierten en entidades reales — tantos animales como dice su población y tantos matos
+/// de forraje como biomasa dibujable tenga. Las que salen de la ventana se devuelven a
+/// número (sin morir: siguen vivas en su región).
+///
+/// Ningún animal se coloca "alrededor tuyo": van a los CLAROS deterministas de su región
+/// (`ecology::region_point`), que son los mismos siempre. Si la región cercana no sostiene
+/// fauna, no hay fauna — eso es un desierto, y está bien que lo sea.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn stream_regions(
     mut commands: Commands,
     region: Res<RegionRuntime>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
+    tiles: Res<TileWorld>,
     art: Res<crate::art2d::ArtLibrary>,
     mut world: ResMut<FaunaWorld>,
+    mut eco: ResMut<EcologyWorld>,
     mut catalog: ResMut<FaunaCatalog>,
     player: Query<&Transform, With<Player>>,
-    entities: Query<Entity, (Or<(With<Animal>, With<FoodDot>)>, Without<Resident>)>,
+    animals: Query<(Entity, &Animal), Without<Resident>>,
+    foods: Query<(Entity, &FoodDot), Without<PlacedFood>>,
 ) {
     if surface_region_active(&region).is_none() {
-        for e in &entities {
+        for (e, _) in &animals {
+            commands.entity(e).despawn_recursive();
+        }
+        for (e, _) in &foods {
             commands.entity(e).despawn_recursive();
         }
         *world = FaunaWorld::default(); // pool ambiental (los residentes los maneja manage_vivarium)
-        return;
-    }
-    if world.ready {
+        eco.live.clear();
         return;
     }
     let Ok(pt) = player.get_single() else {
         return;
     };
-    world.ready = true;
-    let (px, pz) = (pt.translation.x, -pt.translation.y);
-    // F5: fauna del PLANETA donde estás (no vacas en Marte).
     let body = active_surface_body(&ctx, &planet);
     let defs = catalog.get(body).to_vec();
     if defs.is_empty() {
         return;
     }
+    let (prx, prz) = ecology::region_of(pt.translation.x, -pt.translation.y);
 
-    for i in 0..FOOD_N {
-        let (dx, dz) = scatter(0xF00D, i, 24.0);
-        let (x, z) = (px + dx, pz + dz);
-        commands.spawn((
-            FoodDot { x, z },
-            Sprite::from_color(Color::srgb(0.85, 0.25, 0.35), Vec2::splat(0.5)),
-            Transform::from_xyz(x, -z, sort_z(z) - 0.1),
-        ));
+    // Ventana deseada, de la más cercana a la más lejana (el tope de entidades se gasta
+    // primero donde el jugador realmente mira).
+    let mut want: Vec<(i32, i32)> = Vec::new();
+    for dz in -SIM_RINGS..=SIM_RINGS {
+        for dx in -SIM_RINGS..=SIM_RINGS {
+            want.push((prx + dx, prz + dz));
+        }
     }
-    for i in 0..START_HERD {
-        let Some(brain) = world.free_ids.pop() else { break };
+    want.sort_by_key(|&(x, z)| (x - prx).abs() + (z - prz).abs());
+    let want_set: HashSet<(i32, i32)> = want.iter().copied().collect();
+
+    // --- Desmaterializar lo que quedó fuera (o de otro cuerpo): vuelve a ser número. ---
+    let mut live_count: HashMap<(i32, i32), (usize, usize)> = HashMap::new(); // (herb, carn)
+    for (e, a) in &animals {
+        if want_set.contains(&a.region) {
+            let c = live_count.entry(a.region).or_default();
+            match a.trophic {
+                Trophic::Herbivore => c.0 += 1,
+                Trophic::Carnivore => c.1 += 1,
+            }
+        } else {
+            commands.entity(e).despawn_recursive();
+            world.free_ids.push(a.brain);
+            world.alive = world.alive.saturating_sub(1);
+        }
+    }
+    let mut live_forage: HashMap<(i32, i32), HashSet<u32>> = HashMap::new();
+    for (e, f) in &foods {
+        match f.region {
+            Some(r) if want_set.contains(&r) => {
+                live_forage.entry(r).or_default().insert(f.slot);
+            }
+            _ => commands.entity(e).despawn_recursive(),
+        }
+    }
+    eco.live = want.iter().map(|&(x, z)| (body as u8, x, z)).collect();
+
+    // El DEPREDADOR tiene TERRITORIO: su capacidad por región es una fracción (un carnívoro
+    // no cabe en 64 m de bosque) y redondearla región a región lo borraría del mundo. Se
+    // cuenta sobre la VENTANA entera y se coloca uno por región, en las que su bioma lo
+    // admite. El herbívoro sí se cuenta por región: pasta donde hay pasto.
+    let carn_total: f32 = want.iter().map(|&(x, z)| eco.pop(body, x, z).carnivores).sum();
+    let carn_live: usize = live_count.values().map(|c| c.1).sum();
+    let mut carn_budget = (carn_total.floor() as usize).saturating_sub(carn_live);
+
+    // --- Materializar lo que falta, respetando el tope global de entidades. ---
+    //
+    // Dos pasadas, y el orden importa: los DEPREDADORES primero, en TODA la ventana. Son
+    // pocos y son la mitad interesante de la cadena; si van detrás, las decenas de
+    // herbívoros de la región más cercana se comen el presupuesto de entidades y no se ve
+    // un solo cazador aunque el mundo tenga cinco (pasó, medido con `HA_ECOTEST`).
+    let spawn_one = |commands: &mut Commands,
+                         world: &mut FaunaWorld,
+                         rx: i32,
+                         rz: i32,
+                         i: usize,
+                         trophic: Trophic| {
+        if world.alive >= MAX_LIVE {
+            return false;
+        }
+        let hostile = trophic == Trophic::Carnivore;
+        // La especie sale del planeta (F5) y del nivel trófico: los depredadores del
+        // cuerpo si los hay, si no el catálogo entero teñido de hostil.
+        let idx = pick_species(&defs, hostile, rx, rz, i as u32);
+        let mut def = defs[idx].clone();
+        def.hostile = hostile;
+        let slot = herd_slot(trophic, i as u32);
+        let Some((x, z)) = free_spot(&tiles, body, rx, rz, slot) else { return false };
+        let Some(brain) = world.free_ids.pop() else { return false };
         iafz_sys::load_bytes(brain, GENOME);
         iafz_sys::reset_echo(brain);
         world.alive += 1;
-        let (dx, dz) = scatter(0xA417, i as usize, 8.0);
-        let (x, z) = (px + dx, pz + dz);
-        let idx = i as usize % defs.len();
-        spawn_animal(&mut commands, &art, brain, x, z, dz.atan2(dx), 1.0, idx, &defs[idx]);
+        let heading = (brain as f32) * 2.399963;
+        spawn_animal(commands, &art, brain, x, z, heading, 0.8, idx, &def, (rx, rz), trophic);
+        true
+    };
+
+    for &(rx, rz) in &want {
+        if carn_budget == 0 {
+            break;
+        }
+        let have = live_count.get(&(rx, rz)).copied().unwrap_or((0, 0));
+        // Un depredador por región como mucho, y sólo donde su bioma lo sostiene.
+        if have.1 > 0 || eco.pop(body, rx, rz).carnivores <= 0.03 {
+            continue;
+        }
+        if spawn_one(&mut commands, &mut world, rx, rz, 0, Trophic::Carnivore) {
+            carn_budget -= 1;
+        }
+    }
+
+    for (rx, rz) in want {
+        let pop = eco.pop(body, rx, rz);
+        let have = live_count.get(&(rx, rz)).copied().unwrap_or((0, 0));
+        // Tantas cabezas como dice el censo (la parte fraccionaria es la cría que todavía
+        // no nació — nunca se redondea hacia arriba, o el mundo inventaría vida).
+        for i in have.0..pop.herbivores.floor() as usize {
+            if !spawn_one(&mut commands, &mut world, rx, rz, i, Trophic::Herbivore)
+                && world.alive >= MAX_LIVE
+            {
+                break;
+            }
+        }
+
+        // Forraje: la biomasa de la región, dibujada. Se come → baja la biomasa → tarda en
+        // rebrotar (y rebrota en el MISMO claro, que es cómo se aprende un terreno).
+        let shown = (pop.plants / FORAGE_UNIT).floor() as usize;
+        let target = shown.min(MAX_FORAGE_REGION);
+        let live = live_forage.entry((rx, rz)).or_default();
+        for slot in 0..target as u32 {
+            if live.contains(&slot) {
+                continue;
+            }
+            let Some((x, z)) = free_spot(&tiles, body, rx, rz, 100 + slot) else { continue };
+            commands.spawn((
+                FoodDot { x, z, region: Some((rx, rz)), slot },
+                Sprite::from_color(Color::srgb(0.85, 0.25, 0.35), Vec2::splat(0.5)),
+                // Marca pintada en el suelo: banda de piso, nunca tapa a un animal.
+                Transform::from_xyz(x, -z, crate::layers::FLOOR),
+            ));
+        }
+    }
+}
+
+/// El nivel trófico de una especie: `hostile` es el depredador de la cadena.
+fn trophic_of(def: &SpeciesDef) -> Trophic {
+    if def.hostile {
+        Trophic::Carnivore
+    } else {
+        Trophic::Herbivore
+    }
+}
+
+/// Ancla determinista del individuo `i` de un nivel trófico dentro de su región. Los
+/// herbívoros comparten pocos claros (salen en MANADA); el depredador va aparte.
+fn herd_slot(trophic: Trophic, i: u32) -> u32 {
+    match trophic {
+        Trophic::Herbivore => 200 + i,
+        Trophic::Carnivore => 300 + i,
+    }
+}
+
+/// Primer punto CAMINABLE cerca del ancla `slot` de la región (prueba unas pocas
+/// alternativas deterministas). `None` = la región está tapada ahí; se materializa menos
+/// fauna, que es preferible a incrustar un animal dentro de una roca.
+fn free_spot(
+    tiles: &TileWorld,
+    body: CelestialBody,
+    rx: i32,
+    rz: i32,
+    slot: u32,
+) -> Option<(f32, f32)> {
+    for k in 0..4u32 {
+        let (x, z) = ecology::region_point(body, rx, rz, slot.wrapping_add(k * 7919));
+        if !tiles.solid_at(body, x.floor() as i64, z.floor() as i64) {
+            return Some((x, z));
+        }
+    }
+    None
+}
+
+/// Elige la especie del planeta que toca a este individuo. Si el cuerpo tiene especies
+/// depredadoras propias, el carnívoro sale de ésas; si no, se tiñe una de hostil (los
+/// mundos amables también tienen quien cace — la cadena no puede quedar coja).
+fn pick_species(defs: &[SpeciesDef], hostile: bool, rx: i32, rz: i32, i: u32) -> usize {
+    let pool: Vec<usize> = defs
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| d.hostile == hostile)
+        .map(|(i, _)| i)
+        .collect();
+    let h = (rx as u32)
+        .wrapping_mul(0x9E37_79B9)
+        .wrapping_add((rz as u32).wrapping_mul(0x85EB_CA6B))
+        .wrapping_add(i);
+    if pool.is_empty() {
+        (h as usize) % defs.len()
+    } else {
+        pool[(h as usize) % pool.len()]
+    }
+}
+
+// --- Persistencia de la ecología ---------------------------------------------------
+
+fn load_ecology(eco: &mut EcologyWorld) {
+    eco.loaded = true;
+    let Ok(raw) = std::fs::read_to_string(ecology_json()) else {
+        return;
+    };
+    let Ok(save) = serde_json::from_str::<EcologySave>(&raw) else {
+        return;
+    };
+    for (b, rx, rz, pop) in save.cells {
+        eco.cells.insert((b, rx, rz), EcoCell { pop, cap: None });
+    }
+}
+
+/// Vuelca la ecología a disco cada `VIV_SAVE_EVERY` y al pausar la app — lo que cazaste (y
+/// lo que se recuperó solo) sobrevive a cerrar el juego.
+fn save_ecology_periodic(
+    time: Res<Time>,
+    mut eco: ResMut<EcologyWorld>,
+    mut was_paused: Local<bool>,
+) {
+    if !eco.loaded {
+        return;
+    }
+    let paused = is_app_paused();
+    let flush_now = paused && !*was_paused;
+    *was_paused = paused;
+    eco.save_acc += time.delta_secs();
+    if !flush_now && eco.save_acc < VIV_SAVE_EVERY {
+        return;
+    }
+    eco.save_acc = 0.0;
+    let save = EcologySave {
+        cells: eco.cells.iter().map(|(&(b, x, z), c)| (b, x, z, c.pop)).collect(),
+    };
+    let _ = std::fs::create_dir_all(vivarium_dir());
+    if let Ok(json) = serde_json::to_string(&save) {
+        let _ = std::fs::write(ecology_json(), json);
     }
 }
 
@@ -603,7 +1070,19 @@ fn spawn_residents(
         if ev.hostile {
             def.hostile = true;
         }
-        let e = spawn_animal(&mut commands, &art, brain, ev.x, ev.z, heading, 0.85, ev.species, &def);
+        let e = spawn_animal(
+            &mut commands,
+            &art,
+            brain,
+            ev.x,
+            ev.z,
+            heading,
+            0.85,
+            ev.species,
+            &def,
+            ecology::region_of(ev.x, ev.z),
+            trophic_of(&def),
+        );
         commands.entity(e).insert(Resident { uid });
     }
 }
@@ -623,10 +1102,12 @@ fn spawn_placed_food(
     for ev in events.read() {
         let r = render_xy(ev.x, ev.z);
         commands.spawn((
-            FoodDot { x: ev.x, z: ev.z },
+            FoodDot { x: ev.x, z: ev.z, region: None, slot: 0 },
             PlacedFood,
             Sprite::from_color(Color::srgb(0.35, 0.85, 0.35), Vec2::splat(0.6)),
-            Transform::from_xyz(r.x, r.y, sort_z(ev.z) - 0.1),
+            // Comida tirada al piso: banda de piso (antes era `sort_z − 0.1`, o
+            // sea 100 m de desempate — funcionaba de casualidad cerca del origen).
+            Transform::from_xyz(r.x, r.y, crate::layers::FLOOR),
         ));
     }
 }
@@ -734,6 +1215,8 @@ fn spawn_animal(
     energy: f32,
     species: usize,
     def: &SpeciesDef,
+    region: (i32, i32),
+    trophic: Trophic,
 ) -> Entity {
     let sprite = art.sprite_or_color(
         &def.key,
@@ -748,6 +1231,8 @@ fn spawn_animal(
                 x,
                 z,
                 species,
+                region,
+                trophic,
                 color: def.color,
                 art_key: def.key.clone(),
                 hostile: def.hostile,
@@ -777,11 +1262,13 @@ fn tick_fauna(
     mut vivarium: ResMut<VivariumWorld>,
     mut catalog: ResMut<FaunaCatalog>,
     mut field: ResMut<SignalField>,
+    mut eco: ResMut<EcologyWorld>,
     player: Query<&Transform, (With<Player>, Without<Animal>, Without<FoodDot>)>,
     mut animals: Query<(Entity, &mut Animal, &mut Needs, &mut Transform, &mut Sprite, &mut FaunaPose, Option<&Resident>), (Without<FoodDot>, Without<Player>)>,
-    mut foods: Query<(&mut FoodDot, &mut Transform, Option<&PlacedFood>), (Without<Animal>, Without<Player>)>,
+    foods: Query<(Entity, &FoodDot, Option<&PlacedFood>), (Without<Animal>, Without<Player>)>,
     mut acc: Local<f32>,
 ) {
+    let _probe = crate::debug::probe("tick_fauna");
     // BATERÍA: el cerebro de la fauna corre a ~15 Hz (no 60), acumulando el dt →
     // misma velocidad, 4× menos `think`/movimiento. En pausa el dt es 0 (Time
     // Virtual pausado) → no acumula → no corre → cero drenaje en segundo plano.
@@ -795,33 +1282,39 @@ fn tick_fauna(
     field.decay(dt); // las feromonas se evaporan
     let body = active_surface_body(&ctx, &planet);
     let defs = catalog.get(body).to_vec(); // F5: fauna del planeta (para los nacimientos)
-    // Centro del "mundo vivo" = el jugador (para el streaming de fauna/comida).
+    // El jugador ya NO es el centro del mundo vivo: sólo marca qué residentes se congelan
+    // (LOD) y a quién acecha un depredador. La fauna ambiental vive en su región.
     let (px, pz) = player
         .get_single()
         .map(|t| (t.translation.x, -t.translation.y))
         .unwrap_or((0.0, 0.0));
-    let food_pos: Vec<(f32, f32)> = foods.iter().map(|(f, ..)| (f.x, f.z)).collect();
+    let food_pos: Vec<(f32, f32)> = foods.iter().map(|(_, f, _)| (f.x, f.z)).collect();
     let neigh: Vec<(f32, f32)> = animals.iter().map(|(_, a, ..)| (a.x, a.z)).collect();
     // Presas (no hostiles) y depredadores (hostiles) para caza/predación.
     let prey_pos: Vec<(f32, f32)> =
         animals.iter().filter(|(_, a, ..)| !a.hostile).map(|(_, a, ..)| (a.x, a.z)).collect();
     // Sólo los depredadores HAMBRIENTOS cazan → menos muertes "sin sentido" (un
     // depredador saciado no mata por matar; la presa puede pasar cerca y vivir).
-    let predator_pos: Vec<(f32, f32)> = animals
+    let predator_pos: Vec<(Entity, f32, f32)> = animals
         .iter()
         .filter(|(_, a, n, ..)| a.hostile && n.hunger > 0.45)
-        .map(|(_, a, ..)| (a.x, a.z))
+        .map(|(e, a, ..)| (e, a.x, a.z))
         .collect();
 
-    let mut deaths: Vec<(Entity, i32, bool)> = Vec::new(); // entity, brain, is_resident
-    let mut births: Vec<(f32, f32, i32, f32, usize, bool)> = Vec::new(); // x,z,parent,heading,species,is_res
-    // Censo para la predación post-loop: (entity, x, z, hostil, es_residente, brain).
-    let mut census: Vec<(Entity, f32, f32, bool, bool, i32)> = Vec::new();
+    // Muertes/nacimientos llevan región y nivel trófico: el censo del mundo tiene que
+    // enterarse de cada cabeza que entra o sale (si no, materializar volvería a inventarla).
+    let mut deaths: Vec<(Entity, i32, bool, (i32, i32), Trophic)> = Vec::new();
+    // x, z, brain del padre, rumbo, especie, es_residente, nivel trófico.
+    let mut births: Vec<(f32, f32, i32, f32, usize, bool, Trophic)> = Vec::new();
+    // Censo para la predación post-loop: (entity, x, z, hostil, es_residente, brain, region, trofico).
+    let mut census: Vec<(Entity, f32, f32, bool, bool, i32, (i32, i32), Trophic)> = Vec::new();
+    // Forraje comido este tick: se despawnea y se le descuenta biomasa a su región.
+    let mut eaten: Vec<(Entity, (i32, i32))> = Vec::new();
 
     for (e, mut a, mut n, mut tf, mut sprite, mut pose, resident) in &mut animals {
         let is_res = resident.is_some();
         // F2: un residente LEJOS del jugador queda CONGELADO (no piensa/mueve/gasta) — sigue
-        // como dato en su lugar y `cull_residents` lo oculta; revive al acercarte. Así "no
+        // como dato en su lugar y `cull_fauna` lo oculta; revive al acercarte. Así "no
         // desaparece mi granja" pero tampoco cuesta cómputo/batería estando lejos.
         if is_res {
             let dr2 = (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz);
@@ -831,7 +1324,10 @@ fn tick_fauna(
         }
         // Psicología / metabolismo: hambre y SED suben; la sed acelera el desgaste
         // (deshidratación) → el animal necesita beber.
-        n.hunger = (n.hunger + dt * 0.02).min(1.0);
+        // El carnívoro tiene metabolismo LENTO: una presa lo sacia mucho tiempo. Con el
+        // mismo ritmo que el herbívoro cazaba cada 20 s y, entre pocos, vaciaban el valle.
+        let metab = if a.hostile { 0.006 } else { 0.02 };
+        n.hunger = (n.hunger + dt * metab).min(1.0);
         n.thirst = (n.thirst + dt * 0.018).min(1.0);
         // El hambre baja la energía pero NUNCA a cero (piso): sin muerte por inanición.
         n.energy = (n.energy - dt * 0.02 * (1.0 + n.thirst * 0.5)).clamp(STARVE_FLOOR, 1.0);
@@ -900,21 +1396,30 @@ fn tick_fauna(
             a.z = nz;
         }
 
-        // Comer.
-        for (mut f, mut ftf, placed) in &mut foods {
+        // Comer. El forraje del mundo se CONSUME: desaparece del suelo y le descuenta
+        // biomasa a su región, que la irá rebrotando (`ecology::step_flora`) en el mismo
+        // claro. Antes se teletransportaba a 20 m del animal — otra pieza del anillo.
+        // Sólo come si TIENE hambre: pasar por encima del pasto no lo arranca. Con la
+        // manada entera materializada, comer por contacto dejaba el prado pelado en un
+        // minuto y no había rebrote que aguantara.
+        for (fe, f, placed) in foods.iter().filter(|_| n.hunger > 0.4) {
             let (dx, dz) = (a.x - f.x, a.z - f.z);
             if dx * dx + dz * dz < EAT_D2 {
-                n.hunger = (n.hunger - 0.5).max(0.0);
-                n.energy = (n.energy + 0.3).min(1.0);
+                // Una comida tiene que RENDIR más de lo que gasta el metabolismo entre
+                // comidas (el hambre sólo deja comer cada ~20 s). Con +0.3 el balance era
+                // negativo: ningún herbívoro llegaba nunca a `REPRO_ENERGY`, así que la
+                // manada no se reponía y los depredadores la extinguían. Medido con
+                // `HA_ECOTEST HA_ECOSETTLE=90`.
+                n.hunger = (n.hunger - 0.7).max(0.0);
+                n.energy = (n.energy + 0.5).min(1.0);
                 a.eat_t = 0.5; // animación "eat"
-                // F8: el feeder COLOCADO no se agota ni se mueve (fuente permanente); la
-                // comida ambiental se reubica al ser comida.
+                // F8: el feeder COLOCADO (creativo) no se agota — fuente permanente.
                 if placed.is_none() {
-                    let (ox, oz) = scatter(a.x.to_bits() ^ f.z.to_bits(), a.brain as usize, 20.0);
-                    f.x = a.x + ox;
-                    f.z = a.z + oz;
-                    let r = render_xy(f.x, f.z);
-                    ftf.translation = Vec3::new(r.x, r.y, sort_z(f.z) - 0.1);
+                    if let Some(r) = f.region {
+                        if !eaten.iter().any(|(e, _)| *e == fe) {
+                            eaten.push((fe, r));
+                        }
+                    }
                 }
                 break;
             }
@@ -932,14 +1437,25 @@ fn tick_fauna(
             }
         }
 
+        // MIGRACIÓN REAL: si cruzó el borde de su región, el CENSO se muda con él. Nadie
+        // se teletransporta y nadie se pierde — la manada se va a otro valle caminando.
+        if !is_res {
+            let now = ecology::region_of(a.x, a.z);
+            if now != a.region {
+                eco.add_head(body, a.region.0, a.region.1, a.trophic, -1.0);
+                eco.add_head(body, now.0, now.1, a.trophic, 1.0);
+                a.region = now;
+            }
+        }
+
         // Censo para la predación post-loop (posición ya movida).
-        census.push((e, a.x, a.z, a.hostile, is_res, a.brain));
+        census.push((e, a.x, a.z, a.hostile, is_res, a.brain, a.region, a.trophic));
 
         // --- Ciclo de vida: reproducirse → EVOLUCIÓN. La muerte NO es por inanición (hay
         // piso de energía); llega por PREDACIÓN (post-loop) o el jugador. Esta rama sólo
         // dispara si algo externo baja la energía a 0 (futuro combate). ---
         if n.energy <= 0.0 {
-            deaths.push((e, a.brain, is_res));
+            deaths.push((e, a.brain, is_res, a.region, a.trophic));
         } else if n.energy >= REPRO_ENERGY {
             // Cada categoría se reproduce contra SU pool/censo (ambiental vs. residente),
             // reservando espacio por los nacimientos ya encolados de esa misma categoría.
@@ -947,12 +1463,20 @@ fn tick_fauna(
                 let pending = births.iter().filter(|b| b.5).count();
                 vivarium.alive + pending < MAX_RESIDENTS && vivarium.free_ids.len() > pending
             } else {
-                let pending = births.iter().filter(|b| !b.5).count();
-                world.alive + pending < MAX_POP && world.free_ids.len() > pending
+                // Lo que decide si nace una cría es la CAPACIDAD DE CARGA de la región, no
+                // el tope de entidades: ése es un presupuesto de dibujo. Mezclarlos era un
+                // bug real — el tope frenaba los nacimientos pero no la predación, así que
+                // una manada saturada se extinguía por un límite de render.
+                let cap = eco.cap(body, a.region.0, a.region.1);
+                let pop = eco.pop(body, a.region.0, a.region.1);
+                match a.trophic {
+                    Trophic::Herbivore => pop.herbivores < cap.herbivores,
+                    Trophic::Carnivore => pop.carnivores < cap.carnivores,
+                }
             };
             if can {
                 n.energy -= REPRO_COST;
-                births.push((a.x, a.z, a.brain, a.heading, a.species, is_res));
+                births.push((a.x, a.z, a.brain, a.heading, a.species, is_res, a.trophic));
             }
         }
 
@@ -968,18 +1492,10 @@ fn tick_fauna(
         };
         field.deposit(a.x, a.z, alarm, 0.5);
 
-        // MUNDO VIVO (sólo ambiental): si se alejó del radio, reubicarlo al borde
-        // (siempre hay vida alrededor sin spawnear de más). Los RESIDENTES no se
-        // streamean — viven donde los pusiste, confinados por paredes/puertas.
-        if !is_res {
-            let (rx, rz) = (a.x - px, a.z - pz);
-            if rx * rx + rz * rz > STREAM_R * STREAM_R {
-                let ang = (a.brain as f32) * 2.399963 + time.elapsed_secs() * 0.7;
-                a.x = px + ang.cos() * STREAM_R * 0.9;
-                a.z = pz + ang.sin() * STREAM_R * 0.9;
-                a.heading = ang + std::f32::consts::PI; // mirando hacia adentro
-            }
-        }
+        // (Acá vivía el ANILLO: el animal que se alejaba de `STREAM_R` se teletransportaba
+        // al borde opuesto para que siempre hubiera fauna al lado tuyo. Se fue a propósito
+        // — ver la cabecera del módulo. Ahora el que se aleja simplemente se aleja, y
+        // `stream_regions` lo devuelve al censo de su región cuando sale de la ventana.)
 
         // Render: posición + tinte por energía (vivo→apagado).
         let r = render_xy(a.x, a.z);
@@ -1019,38 +1535,33 @@ fn tick_fauna(
     // PREDACIÓN: un depredador MUY cerca de una presa la caza (muerte VISIBLE). Es la fuente
     // de muerte del ecosistema (en vez de la inanición) → mundo estable pero con selección
     // para evolucionar. O(presas × depredadores) con poblaciones chicas = barato.
+    let mut feasts: Vec<Entity> = Vec::new();
     if !predator_pos.is_empty() {
-        for &(e, x, z, hostile, is_res, brain) in &census {
+        for &(e, x, z, hostile, is_res, brain, reg, trophic) in &census {
             if hostile {
                 continue;
             }
-            let caught = predator_pos
+            let hunter = predator_pos
                 .iter()
-                .any(|&(qx, qz)| (qx - x) * (qx - x) + (qz - z) * (qz - z) < PREDATION_D2);
-            if caught {
-                deaths.push((e, brain, is_res));
+                .find(|&&(_, qx, qz)| (qx - x) * (qx - x) + (qz - z) * (qz - z) < PREDATION_D2);
+            if let Some(&(pe, ..)) = hunter {
+                deaths.push((e, brain, is_res, reg, trophic));
+                feasts.push(pe); // el que caza, COME (abajo)
             }
         }
     }
 
-    // La comida ambiental se streamea: las bayas lejanas reaparecen cerca del jugador.
-    // El feeder COLOCADO (F8) queda fijo donde lo pusiste.
-    for (mut f, mut ftf, placed) in &mut foods {
-        if placed.is_some() {
-            continue;
-        }
-        let (rx, rz) = (f.x - px, f.z - pz);
-        if rx * rx + rz * rz > STREAM_R * STREAM_R {
-            let ang = (f.x.to_bits() ^ f.z.to_bits()) as f32 * 0.001 + time.elapsed_secs();
-            f.x = px + ang.cos() * STREAM_R * 0.8;
-            f.z = pz + ang.sin() * STREAM_R * 0.8;
-            let r = render_xy(f.x, f.z);
-            ftf.translation = Vec3::new(r.x, r.y, sort_z(f.z) - 0.1);
-        }
+    // Forraje comido: se lo lleva del suelo y se le descuenta a la biomasa de la región.
+    // Rebrota solo con el tiempo (`ecology::step_flora`) — pastar de más deja el valle
+    // pelado, y eso se nota al volver.
+    for (fe, reg) in eaten {
+        commands.entity(fe).despawn_recursive();
+        eco.eat_forage(body, reg.0, reg.1);
     }
 
-    // Muertes: liberan su id de cerebro al pool correcto.
-    for (e, brain, is_res) in deaths {
+    // Muertes: liberan su id de cerebro al pool correcto Y bajan el censo de su región (la
+    // fauna ambiental es una VISTA de la población: si muere una cabeza, muere en el mundo).
+    for (e, brain, is_res, reg, trophic) in deaths {
         commands.entity(e).despawn_recursive();
         if is_res {
             vivarium.free_ids.push(brain);
@@ -1058,10 +1569,22 @@ fn tick_fauna(
         } else {
             world.free_ids.push(brain);
             world.alive = world.alive.saturating_sub(1);
+            eco.add_head(body, reg.0, reg.1, trophic, -1.0);
         }
     }
+    // El depredador COME de lo que caza: se le va el hambre y sube la energía. Sin esto
+    // (era el caso) un carnívoro nunca se saciaba y mataba sin parar — con el anillo casi
+    // no se materializaban depredadores y no se notaba; con la cadena alimenticia real
+    // vaciaba la región en un minuto.
+    for pe in feasts {
+        if let Ok((_, _, mut n, ..)) = animals.get_mut(pe) {
+            n.hunger = 0.0; // una presa entera SACIA: no vuelve a cazar hasta tener hambre
+            n.energy = (n.energy + 0.45).min(1.0);
+        }
+    }
+
     // Nacimientos: el hijo HEREDA el genoma del padre con mutación (evolución).
-    for (x, z, parent, heading, species, is_res) in births {
+    for (x, z, parent, heading, species, is_res, trophic) in births {
         let (ox, oz) = scatter((parent as u32) ^ x.to_bits(), 0, 1.2);
         if is_res {
             let Some(child) = vivarium.free_ids.pop() else { continue };
@@ -1089,15 +1612,33 @@ fn tick_fauna(
             let uid = vivarium.next_uid;
             vivarium.next_uid = vivarium.next_uid.wrapping_add(1);
             let def = &defs[species % defs.len()];
-            let e = spawn_animal(&mut commands, &art, child, x + ox, z + oz, heading + 1.0, 0.55, species, def);
+            let (cx, cz) = (x + ox, z + oz);
+            let e = spawn_animal(
+                &mut commands, &art, child, cx, cz, heading + 1.0, 0.55, species, def,
+                ecology::region_of(cx, cz), trophic_of(def),
+            );
             commands.entity(e).insert(Resident { uid });
         } else {
+            let (cx, cz) = (x + ox, z + oz);
+            let reg = ecology::region_of(cx, cz);
+            // El nacimiento SUMA una cabeza al MUNDO, siempre. Que además se dibuje
+            // depende del presupuesto de entidades: si no hay hueco, la cría existe como
+            // población y se materializa cuando lo haya (o cuando vuelvas).
+            eco.add_head(body, reg.0, reg.1, trophic, 1.0);
+            if world.alive >= MAX_LIVE {
+                continue;
+            }
             let Some(child) = world.free_ids.pop() else { continue };
             iafz_sys::mutate(parent, child, MUTATE_RATE); // copia padre→hijo + muta
             iafz_sys::reset_echo(child);
             world.alive += 1;
-            let def = &defs[species % defs.len()];
-            spawn_animal(&mut commands, &art, child, x + ox, z + oz, heading + 1.0, 0.55, species, def);
+            // La cría hereda el nivel trófico del padre (la especie puede venir teñida por
+            // `pick_species`, así que no se re-deriva de `def`).
+            let mut def = defs[species % defs.len()].clone();
+            def.hostile = trophic == Trophic::Carnivore;
+            spawn_animal(
+                &mut commands, &art, child, cx, cz, heading + 1.0, 0.55, species, &def, reg, trophic,
+            );
         }
     }
 }
@@ -1182,6 +1723,7 @@ fn manage_vivarium(
             let def = defs.get(rec.species).unwrap_or(&defs[0]);
             let e = spawn_animal(
                 &mut commands, &art, brain, rec.x, rec.z, rec.heading, rec.energy, rec.species, def,
+                ecology::region_of(rec.x, rec.z), trophic_of(def),
             );
             commands.entity(e).insert((
                 Resident { uid: rec.uid },
@@ -1190,6 +1732,68 @@ fn manage_vivarium(
         }
     }
     vivarium.active_body = current;
+}
+
+// --- Sonda de QA (HA_ECOTEST) ------------------------------------------------------
+
+/// Foto del estado ecológico de donde está el jugador. La usa el driver `HA_ECOTEST`
+/// (`debug/autodrive.rs`) para afirmar lo que el usuario pidió: **yermo vacío, bosque
+/// lleno**. Sin esto, "se fue el anillo" sería una afirmación sin comprobar.
+pub(crate) struct EcoProbe {
+    pub(crate) region: (i32, i32),
+    pub(crate) cap: Capacity,
+    pub(crate) pop: Population,
+    pub(crate) live_herb: usize,
+    pub(crate) live_carn: usize,
+    pub(crate) forage: usize,
+    pub(crate) known_regions: usize,
+    /// Totales de la VENTANA 3×3 (lo que de verdad se está simulando): una región sola
+    /// engaña, porque los animales cruzan de una a otra todo el rato.
+    pub(crate) win: Population,
+    /// Totales de TODAS las regiones conocidas del cuerpo. Es la única medida honesta de
+    /// "el mundo se está vaciando": la ventana baja sola cuando la manada se dispersa, y
+    /// eso es vida normal, no un colapso.
+    pub(crate) total: Population,
+}
+
+pub(crate) fn eco_probe(world: &mut World, body: CelestialBody, x: f32, z: f32) -> EcoProbe {
+    let (rx, rz) = ecology::region_of(x, z);
+    let (cap, pop, known_regions, win) = {
+        let mut eco = world.resource_mut::<EcologyWorld>();
+        let mut win = Population::default();
+        for dz in -SIM_RINGS..=SIM_RINGS {
+            for dx in -SIM_RINGS..=SIM_RINGS {
+                let p = eco.pop(body, rx + dx, rz + dz);
+                win.plants += p.plants;
+                win.herbivores += p.herbivores;
+                win.carnivores += p.carnivores;
+            }
+        }
+        (eco.cap(body, rx, rz), eco.pop(body, rx, rz), eco.cells.len(), win)
+    };
+    let total = {
+        let eco = world.resource::<EcologyWorld>();
+        let mut t = Population::default();
+        for (&(b, ..), c) in eco.cells.iter() {
+            if b == body as u8 {
+                t.plants += c.pop.plants;
+                t.herbivores += c.pop.herbivores;
+                t.carnivores += c.pop.carnivores;
+            }
+        }
+        t
+    };
+    let mut q = world.query_filtered::<&Animal, Without<Resident>>();
+    let (mut live_herb, mut live_carn) = (0, 0);
+    for a in q.iter(world) {
+        match a.trophic {
+            Trophic::Herbivore => live_herb += 1,
+            Trophic::Carnivore => live_carn += 1,
+        }
+    }
+    let mut qf = world.query_filtered::<&FoodDot, Without<PlacedFood>>();
+    let forage = qf.iter(world).count();
+    EcoProbe { region: (rx, rz), cap, pop, live_herb, live_carn, forage, known_regions, win, total }
 }
 
 /// F4 — Overlay de observación (DEBUG, sólo creativo): arriba-izquierda, ASCII-only, con
@@ -1214,9 +1818,15 @@ fn spawn_vivarium_overlay(mut commands: Commands) {
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_vivarium_overlay(
     editor: Res<crate::ui_editor::UiEditorState>,
     vivarium: Res<VivariumWorld>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut eco: ResMut<EcologyWorld>,
+    world: Res<FaunaWorld>,
+    player: Query<&Transform, With<Player>>,
     residents: Query<&Needs, With<Resident>>,
     mut overlay: Query<(&mut Text, &mut Visibility), With<VivariumOverlay>>,
 ) {
@@ -1239,8 +1849,33 @@ fn update_vivarium_overlay(
         0.0
     };
     let div = ((TEMP_MAX - vivarium.temperature) / (TEMP_MAX - TEMP_MIN)).clamp(0.0, 1.0);
+    // ECOLOGÍA: lo que hay que poder leer para saber si el mundo vive sin el anillo — en
+    // qué región estás, cuánto sostiene su bioma, cuánto hay de verdad, y cuántas regiones
+    // se están simulando de fondo. Si la fila `aqui` dice `cap h 0.0` estás en un yermo y
+    // que no haya fauna es CORRECTO: hay que ir a buscarla a otro lado.
+    let eco_line = match player.get_single() {
+        Ok(pt) => {
+            let body = active_surface_body(&ctx, &planet);
+            let (rx, rz) = ecology::region_of(pt.translation.x, -pt.translation.y);
+            let cap = eco.cap(body, rx, rz);
+            let pop = eco.pop(body, rx, rz);
+            format!(
+                "\nECO  region ({rx},{rz})  cap p{:.0} h{:.1} c{:.1}  vive p{:.1} h{:.1} c{:.1}  \
+                 entidades {}  regiones {}",
+                cap.plants,
+                cap.herbivores,
+                cap.carnivores,
+                pop.plants,
+                pop.herbivores,
+                pop.carnivores,
+                world.alive,
+                eco.cells.len(),
+            )
+        }
+        Err(_) => String::new(),
+    };
     let line = format!(
-        "VIVARIO  vivos {n}  nac {}  temp {:.1}  div {:.0}%  energia {:.0}%",
+        "VIVARIO  vivos {n}  nac {}  temp {:.1}  div {:.0}%  energia {:.0}%{eco_line}",
         vivarium.births,
         vivarium.temperature,
         div * 100.0,
@@ -1304,19 +1939,30 @@ fn vivarium_temperature(
     vivarium.temperature += (target - vivarium.temperature) * 0.5; // suavizado
 }
 
-/// F2 — Oculta los residentes lejos del jugador (se congelan en `tick_fauna`); visibles
-/// cerca. "Se renderizan sólo cuando estás cerca." Barato (≤ `MAX_RESIDENTS`).
-fn cull_residents(
-    player: Query<&Transform, (With<Player>, Without<Resident>)>,
-    mut residents: Query<(&Animal, &mut Visibility), With<Resident>>,
+/// F2 — Qué fauna se DIBUJA. Dos reglas, un solo dueño del `Visibility`:
+///
+/// 1. **Otra capa, no se ve.** Los animales viven en la superficie; desde el
+///    segundo piso que construiste o desde una cueva no se los ve, igual que no
+///    se ven los tiles ni el decor de abajo. Sin esto, subir a tu segundo piso te
+///    dejaba las vacas pastando sobre la losa.
+/// 2. **Residente lejos, no se ve** (se congela en `tick_fauna`): "se renderizan
+///    sólo cuando estás cerca". La fauna ambiental no necesita esta regla porque
+///    ya se desmaterializa por región.
+///
+/// Barato: una pasada por animal vivo, sin raíces cuadradas.
+fn cull_fauna(
+    tiles: Res<TileWorld>,
+    player: Query<&Transform, (With<Player>, Without<Animal>)>,
+    mut fauna: Query<(&Animal, &mut Visibility, Has<Resident>)>,
 ) {
     let Ok(pt) = player.get_single() else {
         return;
     };
+    let off_layer = tiles.z != 0;
     let (px, pz) = (pt.translation.x, -pt.translation.y);
-    for (a, mut vis) in &mut residents {
+    for (a, mut vis, resident) in &mut fauna {
         let dr2 = (a.x - px) * (a.x - px) + (a.z - pz) * (a.z - pz);
-        let want = if dr2 > RENDER_R * RENDER_R {
+        let want = if off_layer || (resident && dr2 > RENDER_R * RENDER_R) {
             Visibility::Hidden
         } else {
             Visibility::Visible
@@ -1392,6 +2038,7 @@ fn update_fauna_sightings(
     mut catalog: ResMut<FaunaCatalog>,
     mut sightings: ResMut<crate::sightings::WorldSightings>,
     live: Query<&Animal, With<Resident>>,
+    ambient: Query<&Animal, Without<Resident>>,
     mut acc: Local<f32>,
 ) {
     *acc += time.delta_secs();
@@ -1418,10 +2065,12 @@ fn update_fauna_sightings(
                 .push(Sighting { x: rec.x, z: rec.z, color, hostile });
         }
     }
-    // Cuerpo actual: residentes vivos.
+    // Cuerpo actual: residentes vivos + la fauna AMBIENTAL materializada. La ambiental ya
+    // tiene sitio propio en el mundo (antes se reubicaba en un anillo y publicarla no
+    // significaba nada), así que la cámara puede enseñar la manada que hay de verdad.
     if surface_region_active(&region).is_some() {
         let b = active_surface_body(&ctx, &planet) as u8;
-        for a in &live {
+        for a in live.iter().chain(ambient.iter()) {
             sightings
                 .fauna
                 .entry(b)

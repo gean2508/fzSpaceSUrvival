@@ -89,6 +89,28 @@ pub(crate) struct ActionTouchState {
 #[derive(Resource, Default)]
 pub struct ActionButtonsSpawned(bool);
 
+/// **El botón USAR ya no existe en tierra.** Tocar el mundo es la interacción
+/// (`input/world_touch.rs`), así que en superficie el botón no hacía nada más que
+/// ocupar el pulgar derecho. Sobrevive para lo único que todavía manda: BAJAR
+/// mientras volás (el controlador de vuelo lee `TouchActions::action` sostenido).
+#[derive(Resource, Default)]
+pub struct UseButtonActive(pub bool);
+
+/// Decide si el botón USAR pinta esta pantalla. Fuera del vuelo se esconde, y
+/// `layout_action_buttons` deja de publicar su rectángulo — así el dedo que cae
+/// donde ESTABA el botón le llega al mundo, que es lo que el ojo espera al no
+/// verlo.
+pub fn sync_use_button_active(
+    fly: Res<crate::creative_fly::CreativeFlight>,
+    flight: Res<crate::flight::Flight>,
+    mut active: ResMut<UseButtonActive>,
+) {
+    let want = fly.flying() || flight.active;
+    if active.0 != want {
+        active.0 = want;
+    }
+}
+
 pub fn spawn_action_ui(mut commands: Commands) {
     if !crate::platform::uses_touch_gameplay_ui() {
         return;
@@ -100,6 +122,7 @@ pub fn spawn_action_ui(mut commands: Commands) {
             ..default()
         },
         ActionUiRoot,
+        crate::game_ui::GameplayUi,
     ));
 }
 
@@ -149,7 +172,8 @@ pub fn ensure_action_buttons(
         cluster_cy,
         use_w,
         btn_h,
-        "USE",
+        // Sólo aparece volando, y ahí significa una cosa sola.
+        "BAJAR",
         ActionKind::Use,
         UiButtonTone::Use,
     );
@@ -182,6 +206,9 @@ fn spawn_button(
                 ..default()
             },
             FocusPolicy::Pass,
+            // Redondo del todo: `MAX` = radio media-altura, así el nodo queda
+            // circular cuando es cuadrado (ver `layout_action_buttons`).
+            BorderRadius::MAX,
             BorderColor(ui_theme::button_border(tone)),
             BackgroundColor(ui_theme::button_bg(tone, UiButtonState::Normal)),
         ))
@@ -214,6 +241,7 @@ fn spawn_button(
 pub fn layout_action_buttons(
     layout: Res<TouchLayout>,
     config: Res<UiLayoutConfig>,
+    use_active: Res<UseButtonActive>,
     mut root: Query<&mut Node, With<ActionUiRoot>>,
     mut buttons: Query<(&ActionButton, &mut Node, &Children), Without<ActionUiRoot>>,
     mut labels: Query<
@@ -229,29 +257,64 @@ pub fn layout_action_buttons(
     let Ok(mut root_node) = root.get_single_mut() else {
         return;
     };
-    root_node.width = Val::Px(layout.width);
-    root_node.height = Val::Px(layout.height);
+    // **Mismo cuidado que los sticks (`joystick::set_px`).** Este sistema corre
+    // en la misma cadena de `Update` que los pintores del joystick y escribía
+    // los MISMOS píxeles todos los frames: cada escritura marca el `Node` sucio
+    // y taffy relayoutea el árbol de UI completo. Los sticks ya lo evitaban con
+    // `bypass_change_detection`; los botones de acción se habían quedado afuera,
+    // así que el relayout por frame seguía pagándose igual.
+    {
+        let node = root_node.bypass_change_detection();
+        let mut dirty = crate::input::set_px(&mut node.width, layout.width);
+        dirty |= crate::input::set_px(&mut node.height, layout.height);
+        if dirty {
+            root_node.set_changed();
+        }
+    }
 
     let r = layout.radius;
     let mut block_rects = Vec::with_capacity(2);
     let mut use_rect = None;
     let mut jump_rect = None;
     for (button, mut node, children) in &mut buttons {
+        // **Circulares, no rectángulos.** Eran píldoras de 2.5:1 (r·1.38 × r·0.56):
+        // el mismo botón gris de cualquier app, y encima el que más se mira. Un
+        // disco es de la misma familia que el joystick y que los iconos redondos
+        // de las tarjetas, y el área táctil no cambia de tamaño real (USE queda un
+        // 20% más chico de ancho pero casi el doble de alto).
         let (editable, base_w, base_h) = match button.0 {
-            ActionKind::Use => (UiEditable::UseButton, r * 1.38, r * 0.56),
-            ActionKind::Jump => (UiEditable::JumpButton, r * 1.08, r * 0.56),
+            ActionKind::Use => (UiEditable::UseButton, r * 0.96, r * 0.96),
+            ActionKind::Jump => (UiEditable::JumpButton, r * 0.84, r * 0.84),
         };
+        // USAR fuera del vuelo: nodo escondido y sin rectángulo táctil.
+        let hidden = button.0 == ActionKind::Use && !use_active.0;
         let slot = config.slot(editable);
         let width = base_w * slot.scale;
         let height = base_h * slot.scale;
         let center = config.center(&layout, editable, Vec2::new(width, height));
         let cx = center.x;
         let cy = center.y;
-        node.left = Val::Px(cx - width * 0.5);
-        node.top = Val::Px(cy - height * 0.5);
-        node.width = Val::Px(width);
-        node.height = Val::Px(height);
-        node.border = UiRect::all(Val::Px(ui_theme::action_border_width()));
+        {
+            let n = node.bypass_change_detection();
+            let want_display = if hidden { Display::None } else { Display::Flex };
+            let mut dirty = n.display != want_display;
+            n.display = want_display;
+            dirty |= crate::input::set_px(&mut n.left, cx - width * 0.5);
+            dirty |= crate::input::set_px(&mut n.top, cy - height * 0.5);
+            dirty |= crate::input::set_px(&mut n.width, width);
+            dirty |= crate::input::set_px(&mut n.height, height);
+            let border = UiRect::all(Val::Px(ui_theme::action_border_width()));
+            if n.border != border {
+                n.border = border;
+                dirty = true;
+            }
+            if dirty {
+                node.set_changed();
+            }
+        }
+        if hidden {
+            continue;
+        }
         let rect = [
             cx - width * 0.5,
             cy - height * 0.5,
@@ -263,9 +326,14 @@ pub fn layout_action_buttons(
             ActionKind::Use => use_rect = Some(rect),
             ActionKind::Jump => jump_rect = Some(rect),
         };
+        // El tamaño de fuente cuesta todavía más que un `Node`: cambiarlo obliga
+        // a RE-MEDIR el texto antes de relayoutear. Sólo cuando cambió de verdad.
+        let font_size = (height * 0.38).clamp(11.0, 18.0);
         for child in children.iter() {
             if let Ok(mut font) = labels.get_mut(*child) {
-                font.font_size = (height * 0.38).clamp(11.0, 18.0);
+                if font.font_size != font_size {
+                    font.font_size = font_size;
+                }
             }
         }
     }

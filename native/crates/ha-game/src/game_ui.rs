@@ -9,6 +9,20 @@ use crate::input::TouchLayout;
 #[derive(Component)]
 pub struct GameUiRoot;
 
+/// UI que sólo tiene sentido DENTRO de la partida: el HUD entero, los sticks y
+/// botones táctiles, el velo de nubes, el overlay de reentrada, el feed de
+/// cámaras. Marcada así, `hide_gameplay_ui_outside_playing` la apaga en splash,
+/// menú y creación de personaje.
+///
+/// **Por qué hace falta si el menú ya dibuja un panel opaco encima.** "Encima" es
+/// una garantía de ORDEN, no de contenido: todo esto vive en la misma capa de UI
+/// que el menú y se sigue midiendo, extrayendo y dibujando durante el arranque.
+/// Basta un panel que no cubra hasta el borde, un empate de orden o un frame
+/// suelto en una transición para que el gameplay asome — el parpadeo que se veía
+/// al abrir el juego. Apagado, esos frames no tienen nada que mostrar.
+#[derive(Component)]
+pub struct GameplayUi;
+
 #[derive(Resource, Default)]
 pub struct GameUiRootReady(bool);
 
@@ -25,15 +39,29 @@ pub fn ui_center_left(layout: &TouchLayout, width: f32) -> f32 {
     layout.width * 0.5 - width * 0.5
 }
 
-pub fn menu_screen_rect(layout: &TouchLayout) -> [f32; 4] {
-    let left = ui_center_left(layout, MENU_W);
-    let top = layout.insets.top as f32 + 8.0;
-    [left, top, left + MENU_W, top + 26.0]
-}
-
 /// Full-screen touch block rect (top-left origin, same space as `TouchInput`).
 pub fn fullscreen_block_rect(layout: &TouchLayout) -> [f32; 4] {
     [0.0, 0.0, layout.width, layout.height]
+}
+
+/// Apaga/enciende toda la UI marcada [`GameplayUi`] según la fase. Corre cada
+/// frame a propósito (es una query de un puñado de raíces y sólo escribe cuando
+/// el valor cambia): así da igual en qué orden se creen las raíces respecto de la
+/// transición de estado — una que aparezca tarde queda apagada igual.
+pub fn hide_gameplay_ui_outside_playing(
+    phase: Res<State<crate::game_phase::GamePhase>>,
+    mut ui: Query<&mut Visibility, With<GameplayUi>>,
+) {
+    let want = if *phase.get() == crate::game_phase::GamePhase::Playing {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for mut vis in &mut ui {
+        if *vis != want {
+            *vis = want;
+        }
+    }
 }
 
 pub fn ensure_game_ui_root(mut commands: Commands, mut ready: ResMut<GameUiRootReady>) {
@@ -52,6 +80,7 @@ pub fn ensure_game_ui_root(mut commands: Commands, mut ready: ResMut<GameUiRootR
         },
         FocusPolicy::Pass,
         GameUiRoot,
+        GameplayUi,
         Name::new("GameUiRoot"),
     ));
 }
@@ -96,6 +125,22 @@ pub fn apply_bottom_center(node: &mut Node, layout: &TouchLayout, width: f32, bo
 }
 
 pub const MENU_BUTTON_WIDTH: f32 = MENU_W;
+pub const MENU_BUTTON_HEIGHT: f32 = 28.0;
+
+/// Borde de arriba del botón MENU, respetando el notch.
+pub fn menu_button_top(layout: &TouchLayout) -> f32 {
+    layout.insets.top as f32 + 6.0
+}
+
+/// Rect del botón MENU en el mismo espacio que `TouchInput` (origen arriba a la
+/// izquierda). Vive acá y no en `hud.rs` porque lo necesitan los dos lados: el
+/// que lo dibuja y el que bloquea el toque, para que el tap de abrir el menú no
+/// se lo lleve además la mirada/interacción del mundo.
+pub fn menu_button_rect(layout: &TouchLayout) -> [f32; 4] {
+    let left = ui_center_left(layout, MENU_W);
+    let top = menu_button_top(layout);
+    [left, top, left + MENU_W, top + MENU_BUTTON_HEIGHT]
+}
 
 /// Center a floating panel on the full screen (mobile + desktop).
 pub fn apply_center(node: &mut Node, layout: &TouchLayout, width: f32, height: f32) {

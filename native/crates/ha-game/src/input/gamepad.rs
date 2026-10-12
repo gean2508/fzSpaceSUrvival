@@ -156,6 +156,8 @@ pub(super) fn gamepad_hold_interact(
         hold.flight_hold = false;
         hold.eating = false;
         hold.placing_chest = false;
+        hold.placing_torch = false;
+        hold.placing_map = false;
         hold.locked_kind = None;
 
         if place_pressed {
@@ -204,10 +206,8 @@ pub(super) fn gamepad_hold_interact(
     }
 
     // Released before completion → cancel, same as touch/desktop.
-    if hold.active && !any_pressed && !hold.completed && !mouse_or_touch_hold(&hold) {
-        hold.cancelled = true;
-        hold.active = false;
-        hold.progress_ms = 0;
+    if !any_pressed && !mouse_or_touch_hold(&hold) {
+        hold.release(false);
     }
 }
 

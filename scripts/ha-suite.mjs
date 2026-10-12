@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * HA_SUITE (B1, PLAN_MAESTRO §3.B1) — corre TODOS los drivers de QA del juego
+ * HA_SUITE (biblia.md §11) — corre TODOS los drivers de QA del juego
  * (autodrive.rs), cada uno en su propio proceso, y AGREGA los bugs que emiten a
  * `bugreport.jsonl` (una línea JSON por invariante roto). Al final imprime un
  * resumen para que la IA (o vos) lea y resuelva uno por uno.

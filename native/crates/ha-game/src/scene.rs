@@ -5,7 +5,7 @@
 //! (B8) or via deliberate MENU teleports (`teleport_to_body`).
 
 use bevy::prelude::*;
-use ha_shared::topdown::{topdown_tile, Tile, TILE_M};
+use ha_shared::topdown::{topdown_tile, TILE_M};
 use ha_shared::{CelestialBody, WorldContext};
 
 use crate::sim::{Player, PlayerVisual, SimState};
@@ -24,7 +24,9 @@ pub fn walkable_spawn(body: CelestialBody, near_x: f32, near_z: f32) -> (f32, f3
                 }
                 let (tx, tz) = (bx + dx, bz + dz);
                 let t = topdown_tile(body, 0, tx, tz);
-                if !t.solid() && t != Tile::Water {
+                // Aparecer nadando en mitad del lago no es aparecer: `buildable_ground`
+                // pide tierra firme (ni líquido, ni rampa, ni pared).
+                if t.buildable_ground() {
                     return (tx as f32 * TILE_M + 0.5, tz as f32 * TILE_M + 0.5);
                 }
             }
@@ -84,23 +86,31 @@ impl Plugin for ScenePlugin {
         app.init_resource::<WorldContextRuntime>()
             .init_resource::<RegionRuntime>()
             // El jugador (y por lo tanto el mundo, que se streamea a su alrededor)
-            // NO existe hasta tocar JUGAR: se spawnea al entrar a `Playing`. Sin
-            // Player, `world2d::stream_tile_chunks` retorna temprano → cero worldgen
-            // durante splash/menú/creación de personaje.
-            .add_systems(OnEnter(crate::game_phase::GamePhase::Playing), spawn_player);
+            // NO existe hasta tocar JUGAR: se spawnea al entrar a `Loading`, o sea
+            // DETRÁS de la cortina. Sin Player, `world2d::stream_tile_chunks`
+            // retorna temprano → cero worldgen durante splash/menú/creación.
+            .add_systems(OnEnter(crate::game_phase::GamePhase::Loading), spawn_player);
     }
 }
 
-/// LimeZu character sheet grid: 16×32 frames, 56 cols × 20 rows.
-/// Row 0 base directions: 0 = down (front), 1 = up (back), 2 = side.
+/// Grilla de la hoja de personaje de LimeZu: 56 columnas × 20 filas de celdas
+/// [`ha_assets::chargen_index::CELL`] (32×64 — el pack a resolución nativa).
+/// Fila 0, direcciones base: el orden de la hoja es `R, U, L, D`.
 pub const CHAR_COLS: u32 = 56;
 pub const CHAR_ROWS: u32 = 20;
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut images: ResMut<Assets<Image>>,
+    mut jobs: ResMut<crate::chargen::ChargenJobs>,
+    cg: Res<crate::chargen::Chargen>,
     selected: Res<crate::game_phase::SelectedCharacter>,
+    // El degradado radial compartido (`PreStartup`): es lo que convierte el aura
+    // en LUZ en vez de un rectángulo de color. Ver `crate::sim::PlayerAura`.
+    glow: Option<Res<crate::light2d::GlowTexture>>,
 ) {
     let (sx, sz) = walkable_spawn(CelestialBody::Earth, EARTH_PAD_S + 4.0, 6.0);
     let mut body = ha_shared::MovementBody::new(5.2, ha_shared::topdown::PLAYER_RADIUS);
@@ -125,23 +135,37 @@ fn spawn_player(
     visual.from_z = sz;
     visual.to_z = sz;
     let r = render_xy(sx, sz);
-    let tf = Transform::from_xyz(r.x, r.y, sort_z(sz) + 1.0);
+    // z de arranque: el Y-sort real lo pisa `sim::apply_visual` en el primer
+    // frame. El `+1.0` que había acá valía UN KILÓMETRO de desempate.
+    let tf = Transform::from_xyz(r.x, r.y, sort_z(sz) + crate::layers::HAIR);
 
-    // LimeZu directional character (assets/art/player/character.png). Frame is
-    // 16×32 (1:2); drawn at a HUMAN ~1.9 m tall (0.95×1.9) so a person reads
-    // small against trees (4–8 m) and props — real proportions, not a giant.
+    // LimeZu directional character. Frame is 32×64 (1:2); drawn at a HUMAN ~1.9 m
+    // tall (0.95×1.9) so a person reads small against trees (4–8 m) and props —
+    // real proportions, not a giant.
+    //
+    // El personaje que armaste en la pantalla de creación se compone acá a UNA
+    // textura (`crate::chargen`): a partir de este punto es un sprite normal, con
+    // el mismo costo que la hoja horneada de siempre. Sin `look` (partida vieja o
+    // build sin capas) se carga esa hoja y la grilla es la del pack entero.
+    let composed = selected
+        .look
+        .and_then(|look| crate::chargen::sheet_for(look, &cg, &mut jobs, &mut images, &asset_server));
+    let (image, cols, rows) = match composed {
+        Some(handle) => (handle, cg.index.cols.max(1), cg.index.rows.max(1)),
+        None => (asset_server.load(selected.sheet.clone()), CHAR_COLS, CHAR_ROWS),
+    };
+    // La celda sale de `chargen_index::CELL`, no de un número escrito acá: si se
+    // vuelve a cambiar la resolución del pack, el atlas del jugador tiene que
+    // seguirla o se dibuja media cara.
+    let cell = ha_assets::chargen_index::CELL;
     let layout = layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::new(16, 32),
-        CHAR_COLS,
-        CHAR_ROWS,
+        UVec2::new(cell[0], cell[1]),
+        cols,
+        rows,
         None,
         None,
     ));
-    // Skin + tinte elegidos en la pantalla de creación (default = character.png).
-    let mut sprite = Sprite::from_atlas_image(
-        asset_server.load(selected.sheet.clone()),
-        TextureAtlas { layout, index: 0 },
-    );
+    let mut sprite = Sprite::from_atlas_image(image, TextureAtlas { layout, index: 0 });
     sprite.custom_size = Some(Vec2::new(0.95, 1.9));
     sprite.color = selected.tint_color();
     commands
@@ -151,6 +175,7 @@ fn spawn_player(
             // `sync_player_shadow` turns it on for Climb/Descend.
             p.spawn((
                 crate::sim::PlayerFlightShadow,
+                crate::sim::UnlitSprite,
                 Sprite::from_color(Color::srgba(0.0, 0.0, 0.0, 0.5), Vec2::new(0.9, 0.35)),
                 // Just below the character's feet (custom_size 0.95x1.9,
                 // centre-anchored → bottom at y=-0.95) so it reads as cast ON
@@ -158,13 +183,54 @@ fn spawn_player(
                 Transform::from_xyz(0.0, -1.0, -0.05),
                 Visibility::Hidden,
             ));
-            // Saiyan Ki aura — behind the character (z below the sprite). Hidden
-            // until `sync_player_aura` flares it while charging/flying. Gold glow;
-            // the user can texture logical slot `fx/aura_saiyan` later.
+
+            // AURA DE KI — tres halos radiales concéntricos, no un cuadro.
+            //
+            // El aura vieja era UN `Sprite::from_color` amarillo: un quad de color
+            // plano, o sea un rectángulo con bordes rectos y duros. De ahí el
+            // "cuadros amarillos cutres". Estas tres capas usan el degradado radial
+            // compartido (`light2d::GlowTexture`, alfa gaussiana que llega a 0 en el
+            // borde), así que no hay borde que ver, y al apilarse de ancho-tenue a
+            // chico-intenso el alfa acumulado crece hacia el centro: ESO es el
+            // volumen. Los tonos van de naranja profundo afuera a dorado casi blanco
+            // en el núcleo, que es lo que lee como fuego y no como pintura.
+            //
+            // Sin la textura (build sin `GlowTexture`) se cae al quad de color de
+            // antes: fea pero visible, nunca invisible.
+            let aura = |size: Vec2| -> Sprite {
+                match &glow {
+                    Some(g) => Sprite {
+                        image: g.0.clone(),
+                        custom_size: Some(size),
+                        color: Color::NONE,
+                        ..default()
+                    },
+                    None => Sprite::from_color(Color::NONE, size),
+                }
+            };
+            // Externa: el derrame naranja ancho — la "sombra de color" que separa
+            // al personaje del fondo y hace que el aura ocupe aire.
             p.spawn((
                 crate::sim::PlayerAura,
-                Sprite::from_color(Color::srgba(1.0, 0.86, 0.25, 0.0), Vec2::new(1.7, 2.6)),
-                Transform::from_xyz(0.0, 0.1, -0.03),
+                crate::sim::UnlitSprite,
+                aura(Vec2::new(3.4, 4.2)),
+                Transform::from_xyz(0.0, 0.15, -0.05),
+                Visibility::Hidden,
+            ));
+            // Media: el cuerpo ámbar de la llama.
+            p.spawn((
+                crate::sim::PlayerAuraMid,
+                crate::sim::UnlitSprite,
+                aura(Vec2::new(2.1, 2.9)),
+                Transform::from_xyz(0.0, 0.12, -0.04),
+                Visibility::Hidden,
+            ));
+            // Núcleo: el punto caliente pegado al cuerpo.
+            p.spawn((
+                crate::sim::PlayerAuraCore,
+                crate::sim::UnlitSprite,
+                aura(Vec2::new(1.25, 1.95)),
+                Transform::from_xyz(0.0, 0.08, -0.03),
                 Visibility::Hidden,
             ));
         });

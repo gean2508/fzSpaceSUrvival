@@ -3,32 +3,30 @@ dist/
 packages/*/dist/
 client/dist/
 server/dist/
-apps/desktop/dist/
 .env
 .env.local
 *.log
 .DS_Store
-apps/mobile/android/
-apps/mobile/ios/
-apps/mobile/credentials/hunger-arena-release.keystore
-apps/mobile/credentials/keystore.properties
-apps/desktop/src-tauri/target/
+.turbo/
+
+# Build del cliente nativo (Rust + Android). `native/target/` llega a 20 GB:
+# si el disco se llena, `rm -rf native/target/debug` (el build de Android usa
+# otro target dir). Ver biblia.md §12.
 native/target/
 native/android/.gradle/
 native/android/app/build/
 native/android/app/src/main/jniLibs/
-native/crates/ha-game/assets/models/*.glb
-models/*.glb
-.turbo/
 hunger-arena.apk
-tools/asset-viewer/node_modules/
-graphify-out/
 
-# Raw LimeZu asset packs (reference for top-down migration Fase 6 — no bundlear)
+# Grafo de código (regenerable con `graphify update .`).
+graphify-out/
+native/graphify-out/
+
+# Packs LimeZu crudos — material de referencia, ~1 GB. No se bundlean ni se suben.
 /PRUEBAS-CODIGOS/
 
-# IA frugal fuente (HIVE_OS) — 350M con venv; lo esencial (kernel C + genoma)
-# ya está vendorizado en native/crates/iafz-sys/. No versionar la fuente cruda.
+# IA frugal fuente (HIVE_OS) — lo esencial (kernel C + genoma) ya está
+# vendorizado en native/crates/iafz-sys/. No versionar la fuente cruda.
 /iagrufal-main/
 
 # Claude Code: config local de la máquina (permisos/locks), no del proyecto.
@@ -41,10 +39,13 @@ graphify-out/
 /structures.json
 /tiles.json
 /vessels.json
+/maps.json
 /society/
 /vivarium/
+/native/native/
 
 # Screenshots/log de los QA drivers (debug/perf.rs, autodrive.rs) — se
 # regeneran en cada corrida, no son fuente.
 /ha-shot-*.png
 /native/bugreport.jsonl
+/native/crates/ha-game/assets/art/manifest.json.bak

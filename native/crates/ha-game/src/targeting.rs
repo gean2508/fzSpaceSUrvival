@@ -1,23 +1,29 @@
-//! 2D targeting — pointer (touch/cursor) pick with proximity fallback.
+//! 2D targeting — **qué hay debajo del dedo**.
 //!
 //! Fills the same `LookTarget` contract the HUD/interaction systems already
 //! consume: entity targets (trees, rocks, ore, gems, machines, pad modules),
 //! diggable tiles (`block_cell`) and placement slots (`place_cell`).
+//!
+//! Sin dedo apoyado NO hay objetivo (ver `AimCursor::targeting`): antes había una
+//! mira que siempre estaba en algún lado, así que siempre había algo "apuntado" y
+//! el HUD siempre tenía algo que decir. Ahora la pantalla se queda callada hasta
+//! que tocás.
 
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use ha_shared::topdown::TILE_M;
 use ha_shared::{interact_reach_for, InteractTargetKind};
 
-use crate::camera::GameCamera;
-use crate::input::{LookPointer, EquippedItem};
+use crate::input::{AimCursor, EquippedItem, HoldInteractState, AIM_MAX_REACH};
 use crate::scene::{RegionId, RegionRuntime, WorldContextRuntime};
 use crate::sim::{Player, SimState};
 use crate::world2d::{active_surface_body, render_xy, ActivePlanet, TileWorld};
 
-/// Reach for digging/placing tiles (m).
-const TILE_REACH: f32 = 5.6;
-/// Pointer pick radius around sprites (m).
+/// Reach for digging/placing tiles (m) — el mismo brazo que valida el toque.
+const TILE_REACH: f32 = AIM_MAX_REACH;
+/// Radio de picado alrededor del centro del sprite (m), para lo que no declara
+/// tamaño. Los que sí lo declaran se pican por su RECTÁNGULO: tocar la copa de un
+/// árbol tiene que agarrar el árbol, y la copa está dos metros por encima de su
+/// centro.
 const POINT_PICK_RADIUS: f32 = 1.35;
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -44,8 +50,12 @@ pub struct TargetingPlugin;
 
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<LookTarget>()
-            .add_systems(Update, update_look_target);
+        app.init_resource::<LookTarget>().add_systems(
+            Update,
+            update_look_target
+                .after(crate::input::InputSet::Pointer)
+                .before(crate::input::InputSet::Gesture),
+        );
     }
 }
 
@@ -101,7 +111,8 @@ pub(crate) fn target_allowed_in_region(kind: InteractTargetKind, region: RegionI
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn update_look_target(
-    cursor: Res<crate::input::AimCursor>,
+    cursor: Res<AimCursor>,
+    hold: Res<HoldInteractState>,
     region: Res<RegionRuntime>,
     ctx: Res<WorldContextRuntime>,
     planet: Res<ActivePlanet>,
@@ -109,10 +120,21 @@ fn update_look_target(
     equipped: Res<EquippedItem>,
     build_mode: Res<crate::input::BuildModeActive>,
     player: Query<(&Transform, &SimState), With<Player>>,
-    targets: Query<(Entity, &GlobalTransform, &InteractTarget)>,
+    targets: Query<(Entity, &GlobalTransform, &InteractTarget, Option<&Sprite>)>,
     mut current: ResMut<LookTarget>,
 ) {
     if current.locked {
+        return;
+    }
+    // **Una acción en curso CONGELA su objetivo.** El dedo tiembla, y el árbol
+    // que empezaste a talar tiene que seguir siendo ése hasta que termines o
+    // sueltes (soltar lo cancela desde el gesto). Sin esto, un temblor de dos
+    // píxeles a mitad del hachazo lo transfería al arbusto de al lado.
+    if hold.active || hold.completed {
+        return;
+    }
+    if !cursor.targeting() {
+        *current = LookTarget::default();
         return;
     }
     let Ok((player_tf, sim)) = player.get_single() else {
@@ -140,13 +162,31 @@ fn update_look_target(
         }
     };
 
-    // Pick the interactable closest to the aim cursor (within its footprint).
-    for (entity, gtf, target) in &targets {
+    // Lo tocado: se pica por el RECTÁNGULO del sprite cuando declara tamaño (así
+    // tocar la copa agarra el árbol y no el pasto de atrás), y por un radio
+    // alrededor del centro cuando no. Entre varios candidatos gana el que tiene
+    // el centro más cerca del dedo.
+    for (entity, gtf, target, sprite) in &targets {
         let center = gtf.translation().truncate();
-        let d = center.distance(pick);
-        if d <= POINT_PICK_RADIUS {
-            consider(entity, target.kind, center, target.id, d);
+        let size = sprite.and_then(|s| s.custom_size);
+        let hit = match size {
+            Some(s) => {
+                let half = s.abs() * 0.5;
+                (pick.x - center.x).abs() <= half.x && (pick.y - center.y).abs() <= half.y
+            }
+            None => center.distance(pick) <= POINT_PICK_RADIUS,
+        };
+        if !hit {
+            continue;
         }
+        // El alcance se mide al PIE del sprite, no a su centro: un árbol alto
+        // tiene el centro un par de metros "arriba" en pantalla, y medir hasta
+        // ahí lo dejaba fuera del brazo estando parado al lado del tronco.
+        let foot = match size {
+            Some(s) => Vec2::new(center.x, center.y - s.y.abs() * 0.5 + 0.3),
+            None => center,
+        };
+        consider(entity, target.kind, foot, target.id, center.distance(pick));
     }
 
     if let Some((entity, kind, distance, hit, id)) = best {

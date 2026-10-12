@@ -47,35 +47,159 @@ pub enum ArtLayer {
     Light,
 }
 
-/// Huella de colisión en el PLANO del suelo (vista cenital), en celdas de tile.
-/// El editor pinta una grilla `w×h`, marca la celda ANCLA (la que coincide con la
-/// posición del asset en el mundo) y qué celdas son sólidas. El juego, al colocar
-/// el asset en la celda ancla, marca sólidas las celdas `(ancla + offset)`. Permite
-/// montañas sólidas, cráteres caminables (anillo sólido + centro libre) y assets
-/// grandes que bloquean su base — no solo 1 celda. `None`/vacío = colisión default
-/// por tipo (1 celda). Opcional y retro-compatible (A1, `PLAN_MAESTRO §3.A`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+/// Capa que le corresponde a una clave por **convención de namespace**, cuando
+/// el slot no la declaró explícitamente. Un `floor/*` es un piso: no hay caso en
+/// que un piso deba dibujarse encima del jugador, y esperar a que alguien tilde
+/// la casilla asset por asset sólo garantiza que el bug reaparezca en el próximo
+/// piso que se agregue. El resto queda sin default (→ `Object`) porque ahí la
+/// intención SÍ es ambigua: un `decor/*` puede ser un arbusto o un charco.
+pub fn namespace_layer(key: &str) -> Option<ArtLayer> {
+    match key.split('/').next()? {
+        "floor" | "stairs" => Some(ArtLayer::Floor),
+        _ => None,
+    }
+}
+
+/// Huella de colisión en el PLANO del suelo (vista cenital). El editor pinta una
+/// grilla de `w×h` TILES —subdividida en `res` sub-celdas por tile— sobre el
+/// sprite, marca la celda ANCLA (la que coincide con la posición del asset en el
+/// mundo) y qué sub-celdas son sólidas. Permite montañas sólidas, cráteres
+/// caminables (anillo sólido + centro libre), assets grandes que bloquean su base
+/// y, con `res > 1`, colisión **perfilada al sprite** en vez de al tile: un poste
+/// de farol frena en sus 25 cm, no en el metro entero. `None`/vacío = colisión
+/// default por tipo (1 celda). Retro-compatible (`biblia.md` §8): sin
+/// `res` se lee como 1 y `solid` vuelve a ser una celda por tile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CollisionFootprint {
     pub w: u32,
     pub h: u32,
     /// Celda ancla dentro de la grilla (col,row) — coincide con la posición mundo.
     pub ax: u32,
     pub az: u32,
-    /// Celdas sólidas (col,row) dentro de la grilla `w×h`.
+    /// Celdas sólidas dentro de la grilla `(w*res)×(h*res)`, en SUB-CELDAS.
     pub solid: Vec<(u32, u32)>,
+    /// **ESCALONES**: sub-celdas que son un desnivel que se sube y se baja a pie.
+    /// No frenan a quien camina —por eso no están en `solid`— pero sí quedan
+    /// marcadas como el borde que son, para que las use quien no puede treparlas
+    /// (vehículos, y la navegación de los NPC cuando la haya).
+    ///
+    /// Es el equivalente autorado del bordillo del relieve
+    /// (`ha_shared::relief::climbable_edge`): lo mismo que el terreno genera solo
+    /// en sus terrazas, acá lo pintás a mano sobre el sprite de una roca, una
+    /// tarima o un muro bajo.
+    ///
+    /// **Se sube y se baja por el mismo sitio, a propósito.** Un escalón que sólo
+    /// se pudiera bajar es una trampa: te dejás caer y quedás encerrado abajo. La
+    /// simetría es lo que garantiza que marcar escalones nunca pueda dejar a
+    /// nadie atrapado, ni en un lado recto ni en una esquina.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub step: Vec<(u32, u32)>,
+    /// Sub-celdas por tile con las que se pintó `solid`: 1 = una celda por tile
+    /// (formato viejo), 2/4 = colisión más fina que el tile — la que hace que la
+    /// caja siga la silueta del sprite (un farol delgado no bloquea el metro
+    /// entero). Ausente en manifests viejos → 1, o sea el comportamiento de antes.
+    #[serde(default = "fp_res")]
+    pub res: u32,
+}
+
+fn fp_res() -> u32 {
+    1
+}
+
+impl Default for CollisionFootprint {
+    fn default() -> Self {
+        Self { w: 0, h: 0, ax: 0, az: 0, solid: Vec::new(), step: Vec::new(), res: 1 }
+    }
 }
 
 impl CollisionFootprint {
-    /// Offsets `(dx,dz)` de las celdas sólidas RELATIVOS al ancla (los que el juego
-    /// suma a la celda de colocación para marcar sólido).
-    pub fn solid_offsets(&self) -> impl Iterator<Item = (i32, i32)> + '_ {
-        let (ax, az) = (self.ax as i32, self.az as i32);
-        self.solid.iter().map(move |&(c, r)| (c as i32 - ax, r as i32 - az))
+    /// Sub-celdas por tile, saneado (nunca 0).
+    pub fn res(&self) -> u32 {
+        self.res.max(1)
     }
+
+    /// Offsets `(dx,dz)` de los TILES sólidos relativos al ancla. Con `res > 1`
+    /// un tile cuenta como sólido si alguna de sus sub-celdas lo es — es la vista
+    /// gruesa, para quien razona por celdas (constructor, IA de navegación).
+    pub fn solid_offsets(&self) -> impl Iterator<Item = (i32, i32)> + '_ {
+        let (res, ax, az) = (self.res() as i32, self.ax as i32, self.az as i32);
+        let mut seen = std::collections::BTreeSet::new();
+        self.solid
+            .iter()
+            .map(move |&(c, r)| (c as i32 / res - ax, r as i32 / res - az))
+            .filter(move |o| seen.insert(*o))
+    }
+
+    /// Cajas sólidas en TILES (1 tile = 1 m), como `[x0, z0, x1, z1]` relativas a
+    /// la esquina mínima del tile ANCLA. Es la colisión fina: con `res = 4` cada
+    /// caja mide 0.25 m y el conjunto perfila al sprite.
+    pub fn solid_rects(&self) -> impl Iterator<Item = [f32; 4]> + '_ {
+        let s = 1.0 / self.res() as f32;
+        let (ax, az) = (self.ax as f32, self.az as f32);
+        self.solid.iter().map(move |&(c, r)| {
+            let (x0, z0) = (c as f32 * s - ax, r as f32 * s - az);
+            [x0, z0, x0 + s, z0 + s]
+        })
+    }
+
+    /// Cajas de ESCALÓN en tiles, mismo sistema de coordenadas que
+    /// [`Self::solid_rects`]. No frenan al que camina; existen para quien no
+    /// puede treparlas.
+    pub fn step_rects(&self) -> impl Iterator<Item = [f32; 4]> + '_ {
+        let s = 1.0 / self.res() as f32;
+        let (ax, az) = (self.ax as f32, self.az as f32);
+        self.step.iter().map(move |&(c, r)| {
+            let (x0, z0) = (c as f32 * s - ax, r as f32 * s - az);
+            [x0, z0, x0 + s, z0 + s]
+        })
+    }
+
     /// ¿Tiene al menos una celda sólida? (vacío = como si no hubiera huella).
+    /// Los escalones no cuentan: una huella con SÓLO escalones no frena a nadie
+    /// a pie, así que para la colisión de caminado es como no tener huella.
     pub fn is_empty(&self) -> bool {
         self.solid.is_empty()
     }
+
+    /// Celda ANCLA por defecto de un asset de `w×h` tiles: columna del medio, fila
+    /// del pie. Es donde "se para" el asset, o sea la celda que apuntás con el
+    /// mouse en el editor de mundo.
+    pub fn default_anchor(w: u32, h: u32) -> (u32, u32) {
+        (w.saturating_sub(1) / 2, h.saturating_sub(1))
+    }
+}
+
+/// Esquina mínima (en tiles) que ocupa un asset de `cells = (w,h)` tiles anclado
+/// en la celda `(tx, tz)` con ancla `(ax, az)`.
+///
+/// **Regla única de colocación**: el sprite ocupa los tiles
+/// `[tx-ax, tx-ax+w) × [tz-az, tz-az+h)`, así que la grilla de la huella cae
+/// SIEMPRE alineada al grid del mundo (nada de medios tiles con anchos pares) y
+/// lo que ves en el editor es exactamente lo que el juego dibuja y colisiona.
+pub fn placement_min_tile(tx: i64, tz: i64, anchor: (u32, u32)) -> (i64, i64) {
+    (tx - anchor.0 as i64, tz - anchor.1 as i64)
+}
+
+/// Centro del sprite, en TILES (1 tile = 1 m), para dibujarlo anclado en la celda
+/// `(tx, tz)`: la celda ANCLA del asset queda centrada sobre la celda apuntada.
+///
+/// A tamaño natural (`size == cells`) equivale a [`placement_min_tile`] — el
+/// sprite cae clavado en el grid. Escalado, el ancla sigue en el mismo punto (el
+/// asset crece alrededor de donde lo pusiste, no se va de paseo).
+pub fn placement_center_tiles(
+    tx: i64,
+    tz: i64,
+    cells: (u32, u32),
+    anchor: (u32, u32),
+    size: [f32; 2],
+) -> [f32; 2] {
+    let (w, h) = (cells.0.max(1) as f32, cells.1.max(1) as f32);
+    let fx = (anchor.0 as f32 + 0.5) / w;
+    let fz = (anchor.1 as f32 + 0.5) / h;
+    [
+        tx as f32 + 0.5 + size[0] * (0.5 - fx),
+        tz as f32 + 0.5 + size[1] * (0.5 - fz),
+    ]
 }
 
 /// **Emisión de luz** de un slot: el asset ilumina su entorno con un halo suave
@@ -232,7 +356,7 @@ pub struct ArtEntry {
     /// Colisión de caminado: si el asset (decor) bloquea el paso del jugador.
     /// `None` = default por tipo (árboles bloquean, el resto no). El editor lo
     /// expone como casilla por slot. Primer paso hacia la colisión por-celda
-    /// precisa (relieves/cráteres) — ver `PLAN_COLISIONES_Y_CIUDADES.md`.
+    /// precisa (relieves/cráteres) — ver `biblia.md` §8.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collides: Option<bool>,
     /// Huella de colisión multi-celda (A1). `None` = colisión de 1 celda por el
@@ -242,6 +366,17 @@ pub struct ArtEntry {
     /// Luz que emite este asset (halo suave). `None` = no ilumina. Ver `Emission`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emission: Option<Emission>,
+    /// Capa de dibujo del SLOT entero (no de una pose): decide en qué banda z
+    /// se planta el asset en el mundo. `Floor` va DEBAJO del jugador (charcos,
+    /// caminos, alfombras, plataformas pintadas en el editor de mundo), `Roof`
+    /// va encima de todo y se transparenta cuando el jugador está debajo, y
+    /// `Object`/`Wall` es el Y-sort de siempre. `None` = `Object` (compat).
+    ///
+    /// Existe aparte de `Pose::layer` porque la mayoría de los decor NO tienen
+    /// poses, y sin esto no había manera de declarar "esto es piso" — que es lo
+    /// que hacía que lo dibujado en el editor de mundo tapara al jugador.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<ArtLayer>,
 }
 
 impl ArtEntry {
@@ -257,6 +392,7 @@ impl ArtEntry {
             collides: None,
             footprint: None,
             emission: None,
+            layer: None,
         }
     }
 }
@@ -316,11 +452,74 @@ impl ArtValue {
     }
 }
 
+// ---------------------------------------------------------------------------
+// VARIANTES — un objeto lógico, varios materiales/skins
+// ---------------------------------------------------------------------------
+
+/// Separador de variante dentro de una clave de sprite: `"floor/piso#madera"`.
+/// Elegido porque NUNCA aparece en una clave lógica del juego (`categoria/nombre`)
+/// ni en una ruta de archivo, así que la clave de una variante sigue siendo una
+/// clave normal del mapa `sprites` → el juego, el loader y el editor la leen sin
+/// ninguna rama nueva. Ver `variant_key` / `split_variant`.
+pub const VARIANT_SEP: char = '#';
+
+/// Clave de sprite de una variante: `("floor/piso", "madera")` → `"floor/piso#madera"`.
+pub fn variant_key(base: &str, variant: &str) -> String {
+    format!("{base}{VARIANT_SEP}{variant}")
+}
+
+/// Parte una clave en `(objeto base, variante)`. Sin `#` → `(clave, None)`.
+pub fn split_variant(key: &str) -> (&str, Option<&str>) {
+    match key.split_once(VARIANT_SEP) {
+        Some((base, v)) if !v.is_empty() => (base, Some(v)),
+        _ => (key, None),
+    }
+}
+
+/// Una variante declarada de un objeto: `id` es lo que va a la clave del sprite
+/// (`madera` → `floor/piso#madera`) y lo que el juego pide en runtime; `label` es
+/// el nombre lindo para el editor y para el menú de construcción.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VariantDef {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+}
+
+impl VariantDef {
+    /// Nombre a mostrar: el label si lo pusiste, si no el id.
+    pub fn display(&self) -> &str {
+        if self.label.is_empty() {
+            &self.id
+        } else {
+            &self.label
+        }
+    }
+}
+
+/// Declaración de un objeto CON variantes (piso, pared, techo…). Vive aparte de
+/// `sprites` a propósito: así una variante existe (y aparece en el editor y en el
+/// juego) desde el momento en que la creás, incluso antes de tener arte asignado.
+/// El arte de cada variante es la entrada `"<objeto>#<id>"` de `sprites`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ObjectDef {
+    /// Nombre a mostrar del objeto (`"Piso"`). Vacío = usar la clave.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// Variantes en el orden en que las querés ver/ofrecer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variants: Vec<VariantDef>,
+}
+
 /// El art-manifest del juego.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ArtManifest {
     #[serde(default)]
     pub sprites: BTreeMap<String, ArtValue>,
+    /// Objetos con variantes, por clave base (`"floor/piso"`). Ausente en los
+    /// manifests viejos → se omite al serializar si está vacío (diff cero).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub objects: BTreeMap<String, ObjectDef>,
 }
 
 impl ArtManifest {
@@ -340,8 +539,17 @@ impl ArtManifest {
         e.anim = anim;
     }
 
-    /// Devuelve la entrada completa del slot (creándola/normalizándola). Si el
-    /// PNG cambió, resetea los recortes (eran de otra hoja).
+    /// Devuelve la entrada completa del slot (creándola/normalizándola).
+    ///
+    /// Cambiar de hoja resetea SÓLO lo que está atado a los píxeles de la hoja
+    /// vieja (`grid`/`rect`/`strip`): esas coordenadas no significan nada en la
+    /// hoja nueva. Todo lo demás —poses guardadas, huella de colisión, luz,
+    /// capa, override de colisión— es del OBJETO, no de la imagen, y sobrevive.
+    ///
+    /// Antes acá había un `*entry = ArtEntry::new(png)` que borraba la entrada
+    /// entera: guardabas la animación "abierta" de una puerta desde otro PNG y
+    /// perdías la "cerrada", su huella y su luz de un saque. Ése era el
+    /// "no me guarda las dos animaciones".
     pub fn full_mut(&mut self, key: &str, png: String) -> &mut ArtEntry {
         let slot = self
             .sprites
@@ -353,7 +561,23 @@ impl ArtManifest {
         }
         let ArtValue::Full(entry) = slot else { unreachable!() };
         if entry.png != png {
-            *entry = ArtEntry::new(png);
+            // Las poses que no traían hoja propia vivían en la hoja VIEJA: se la
+            // anclamos explícitamente para que sigan dibujándose igual.
+            let old_png = std::mem::replace(&mut entry.png, png);
+            let old_grid = entry.grid;
+            if let Some(poses) = entry.poses.as_mut() {
+                for pose in poses.values_mut() {
+                    if pose.png.is_none() {
+                        pose.png = Some(old_png.clone());
+                        pose.grid = pose.grid.or(old_grid);
+                    }
+                }
+            }
+            entry.grid = None;
+            entry.rect = None;
+            entry.strip = None;
+            entry.strip_dir = None;
+            entry.anim = None;
         }
         entry
     }
@@ -387,6 +611,34 @@ impl ArtManifest {
         }
     }
 
+    /// Tamaño del slot en TILES según su recorte (`rect`/pose/`strip`) — una casa
+    /// de 5×4 celdas mide 5×4 tiles. `None` = el slot es un PNG suelto sin recorte
+    /// y hay que deducirlo de sus píxeles (el que llama tiene la textura).
+    pub fn slot_cells(&self, key: &str) -> Option<(u32, u32)> {
+        let ArtValue::Full(e) = self.sprites.get(key)? else { return None };
+        e.rect
+            .map(|r| (r.w, r.h))
+            .or_else(|| {
+                e.poses
+                    .as_ref()
+                    .and_then(|m| {
+                        m.get("idle_down").or_else(|| m.get("center")).or_else(|| m.values().next())
+                    })
+                    .map(|p| (p.rect.w, p.rect.h))
+            })
+            .or_else(|| e.strip.map(|s| (s.w, s.h)))
+            .map(|(w, h)| (w.max(1), h.max(1)))
+    }
+
+    /// Celda ANCLA del slot: la que coincide con la celda que apuntás al colocarlo.
+    /// La de su huella si la pintó el usuario; si no, el pie/centro de `cells`.
+    pub fn anchor(&self, key: &str, cells: (u32, u32)) -> (u32, u32) {
+        match self.footprint(key) {
+            Some(f) => (f.ax.min(cells.0.saturating_sub(1)), f.az.min(cells.1.saturating_sub(1))),
+            None => CollisionFootprint::default_anchor(cells.0, cells.1),
+        }
+    }
+
     /// Setea/limpia la huella del slot (editor). `None` o vacía la borra.
     /// Normaliza `Path`→`Full` para poder guardarla.
     pub fn set_footprint(&mut self, key: &str, footprint: Option<CollisionFootprint>) {
@@ -396,6 +648,41 @@ impl ArtManifest {
         }
         if let ArtValue::Full(e) = slot {
             e.footprint = footprint.filter(|f| !f.is_empty());
+        }
+    }
+
+    /// Capa de dibujo del slot. Prioridad: la del slot (`ArtEntry::layer`), si no
+    /// la de su única pose etiquetada (assets viejos), si no la convención de
+    /// namespace ([`namespace_layer`]), si no `None` = `Object`.
+    pub fn slot_layer(&self, key: &str) -> Option<ArtLayer> {
+        let (base, _) = split_variant(key);
+        let Some(ArtValue::Full(e)) = self.sprites.get(key).or_else(|| self.sprites.get(base))
+        else {
+            return namespace_layer(base);
+        };
+        if e.layer.is_some() {
+            return e.layer;
+        }
+        // Un slot de una sola pose etiquetada ES esa capa (p.ej. un decal que se
+        // recortó como pose "floor"). Con varias poses no se asume nada: ahí la
+        // capa es de cada parte y la decide quien las instancia (building.rs).
+        if let Some(poses) = e.poses.as_ref().filter(|m| m.len() == 1) {
+            if let Some(l) = poses.values().next().and_then(|p| p.layer) {
+                return Some(l);
+            }
+        }
+        namespace_layer(base)
+    }
+
+    /// Setea/limpia la capa del slot (combo del editor de assets). Normaliza
+    /// `Path`→`Full` para poder guardarla.
+    pub fn set_slot_layer(&mut self, key: &str, layer: Option<ArtLayer>) {
+        let Some(slot) = self.sprites.get_mut(key) else { return };
+        if let ArtValue::Path(p) = slot {
+            *slot = ArtValue::Full(ArtEntry::new(std::mem::take(p)));
+        }
+        if let ArtValue::Full(e) = slot {
+            e.layer = layer;
         }
     }
 
@@ -518,6 +805,86 @@ impl ArtManifest {
         match self.sprites.get(key) {
             Some(ArtValue::Full(e)) => e.poses.as_ref(),
             _ => None,
+        }
+    }
+
+    // ── variantes ───────────────────────────────────────────────────────────
+
+    /// Variantes DECLARADAS de un objeto (tengan arte o no), en orden.
+    pub fn variants(&self, base: &str) -> &[VariantDef] {
+        self.objects.get(base).map(|o| o.variants.as_slice()).unwrap_or(&[])
+    }
+
+    /// Nombre a mostrar del objeto (label declarado, o la hoja de la clave).
+    pub fn object_label<'a>(&'a self, base: &'a str) -> &'a str {
+        match self.objects.get(base).map(|o| o.label.as_str()) {
+            Some(l) if !l.is_empty() => l,
+            _ => base.rsplit('/').next().unwrap_or(base),
+        }
+    }
+
+    /// Declara (o renombra) una variante. Idempotente: si el `id` ya existe sólo
+    /// actualiza el label, así el orden que ves en el editor no salta. Devuelve la
+    /// clave de sprite de la variante (`"floor/piso#madera"`).
+    pub fn declare_variant(&mut self, base: &str, id: &str, label: &str) -> String {
+        let obj = self.objects.entry(base.to_string()).or_default();
+        match obj.variants.iter_mut().find(|v| v.id == id) {
+            Some(v) => v.label = label.to_string(),
+            None => obj.variants.push(VariantDef { id: id.to_string(), label: label.to_string() }),
+        }
+        variant_key(base, id)
+    }
+
+    /// Borra una variante: su declaración Y su arte. Si el objeto queda sin
+    /// variantes, se va del mapa `objects` (nada de basura en el JSON).
+    pub fn remove_variant(&mut self, base: &str, id: &str) {
+        if let Some(obj) = self.objects.get_mut(base) {
+            obj.variants.retain(|v| v.id != id);
+            if obj.variants.is_empty() && obj.label.is_empty() {
+                self.objects.remove(base);
+            }
+        }
+        self.sprites.remove(&variant_key(base, id));
+    }
+
+    /// Mueve una variante en la lista (`dir` = -1 arriba / +1 abajo). El orden es
+    /// el que verá el jugador en el menú de materiales.
+    pub fn move_variant(&mut self, base: &str, id: &str, dir: i32) {
+        let Some(obj) = self.objects.get_mut(base) else { return };
+        let Some(i) = obj.variants.iter().position(|v| v.id == id) else { return };
+        let j = (i as i32 + dir).clamp(0, obj.variants.len() as i32 - 1) as usize;
+        if i != j {
+            obj.variants.swap(i, j);
+        }
+    }
+
+    /// Variantes del objeto que YA tienen arte asignado, en el orden declarado.
+    /// Es lo que el juego puede dibujar de verdad (una variante declarada sin PNG
+    /// no se ofrece: se caería al arte base).
+    pub fn variants_with_art(&self, base: &str) -> Vec<&VariantDef> {
+        self.variants(base)
+            .iter()
+            .filter(|v| self.sprites.contains_key(&variant_key(base, &v.id)))
+            .collect()
+    }
+
+    /// Arte efectivo de `base` para la variante pedida: la entrada de la variante
+    /// si existe, si no la del objeto base (fallback: una variante sin arte propio
+    /// se ve como el objeto genérico en vez de desaparecer).
+    pub fn resolve(&self, base: &str, variant: Option<&str>) -> Option<&ArtValue> {
+        variant
+            .and_then(|v| self.sprites.get(&variant_key(base, v)))
+            .or_else(|| self.sprites.get(base))
+    }
+
+    /// Clave de sprite a usar para `(base, variante)` — la de la variante si tiene
+    /// arte, si no la base. Devolver la CLAVE (y no el valor) es lo que necesita el
+    /// juego: con ella pide sprite, poses, colisión, huella y luz por los mismos
+    /// caminos de siempre.
+    pub fn resolved_key(&self, base: &str, variant: Option<&str>) -> String {
+        match variant {
+            Some(v) if self.sprites.contains_key(&variant_key(base, v)) => variant_key(base, v),
+            _ => base.to_string(),
         }
     }
 }
@@ -657,12 +1024,58 @@ mod tests {
             ax: 1,
             az: 1,
             solid: vec![(0, 0), (1, 0), (2, 0), (0, 1), (2, 1), (0, 2), (1, 2), (2, 2)],
+            step: Vec::new(), res: 1,
         };
         let offs: std::collections::HashSet<(i32, i32)> = fp.solid_offsets().collect();
         assert!(offs.contains(&(-1, -1)) && offs.contains(&(1, 1))); // esquinas del anillo
         assert!(!offs.contains(&(0, 0))); // el centro (ancla) es caminable
         assert_eq!(offs.len(), 8);
         assert!(!fp.is_empty());
+    }
+
+    #[test]
+    fn subtile_footprint_hugs_the_sprite() {
+        // Farol de 1×2 tiles perfilado a 4 sub-celdas: sólo el poste (media celda
+        // de ancho, apoyado en el suelo) bloquea — no el metro entero.
+        let fp = CollisionFootprint {
+            w: 1,
+            h: 2,
+            ax: 0,
+            az: 1,
+            solid: vec![(1, 6), (2, 6), (1, 7), (2, 7)],
+            step: Vec::new(), res: 4,
+        };
+        // Vista gruesa: un solo tile, el del pie (offset 0,0 respecto del ancla).
+        let offs: Vec<(i32, i32)> = fp.solid_offsets().collect();
+        assert_eq!(offs, vec![(0, 0)]);
+        // Vista fina: cuatro cajas de 0.25 m en el cuarto inferior-centro del tile.
+        let rects: Vec<[f32; 4]> = fp.solid_rects().collect();
+        assert_eq!(rects.len(), 4);
+        assert_eq!(rects[0], [0.25, 0.5, 0.5, 0.75]);
+        assert_eq!(rects[3], [0.5, 0.75, 0.75, 1.0]);
+        // El borde del tile queda LIBRE: pasás rozando el farol sin frenarte.
+        assert!(rects.iter().all(|r| r[0] >= 0.25 && r[2] <= 0.75));
+    }
+
+    #[test]
+    fn placement_is_grid_aligned_for_even_widths() {
+        // Un asset de 2 tiles de ancho tiene ancla en su columna izquierda: al
+        // colocarlo en (10, 5) ocupa (10..12, 5), nunca medio tile corrido.
+        assert_eq!(CollisionFootprint::default_anchor(2, 3), (0, 2));
+        assert_eq!(placement_min_tile(10, 5, (0, 2)), (10, 3));
+        // Ancho impar: la columna del medio cae justo sobre la celda apuntada.
+        assert_eq!(CollisionFootprint::default_anchor(3, 4), (1, 3));
+        assert_eq!(placement_min_tile(10, 5, (1, 3)), (9, 2));
+    }
+
+    #[test]
+    fn old_footprints_without_res_still_load() {
+        let json = r#"{ "sprites": { "decor/x": { "png": "a.png",
+            "footprint": { "w": 1, "h": 1, "ax": 0, "az": 0, "solid": [[0,0]] } } } }"#;
+        let m = ArtManifest::from_json(json).unwrap();
+        let fp = m.footprint("decor/x").unwrap();
+        assert_eq!(fp.res(), 1);
+        assert_eq!(fp.solid_rects().collect::<Vec<_>>(), vec![[0.0, 0.0, 1.0, 1.0]]);
     }
 
     #[test]
@@ -701,6 +1114,67 @@ mod tests {
     }
 
     #[test]
+    fn variants_live_in_one_object_and_fall_back_to_base() {
+        // El caso que pidió el usuario: UN objeto "piso" con varias variantes,
+        // cada una con SU asset, todo centralizado en el mismo objeto.
+        let mut m = ArtManifest::default();
+        m.objects.entry("floor/piso".into()).or_default().label = "Piso".into();
+        let k_wood = m.declare_variant("floor/piso", "madera", "Madera");
+        let k_stone = m.declare_variant("floor/piso", "piedra", "Piedra");
+        m.declare_variant("floor/piso", "metal", "Metal"); // declarada, sin arte todavía
+        assert_eq!(k_wood, "floor/piso#madera");
+
+        m.set(&k_wood, "art/floor/piso__madera.png".into(), None);
+        m.set(&k_stone, "art/floor/piso__piedra.png".into(), None);
+        m.set("floor/piso", "art/floor/piso.png".into(), None); // genérico
+
+        assert_eq!(m.variants("floor/piso").len(), 3, "las 3 se declaran");
+        assert_eq!(m.variants_with_art("floor/piso").len(), 2, "sólo 2 tienen PNG");
+        assert_eq!(m.object_label("floor/piso"), "Piso");
+
+        // Resolución: variante con arte → la suya; sin arte → cae al base.
+        assert_eq!(m.resolve("floor/piso", Some("madera")).unwrap().png(), "art/floor/piso__madera.png");
+        assert_eq!(m.resolve("floor/piso", Some("metal")).unwrap().png(), "art/floor/piso.png");
+        assert_eq!(m.resolved_key("floor/piso", Some("piedra")), "floor/piso#piedra");
+        assert_eq!(m.resolved_key("floor/piso", Some("metal")), "floor/piso");
+        assert_eq!(m.resolved_key("floor/piso", None), "floor/piso");
+
+        // Una variante es una entrada normal: se le puede recortar, animar y dar
+        // colisión/luz como a cualquier slot (misma API, cero ramas nuevas).
+        m.set_rect(&k_stone, "art/atlas/pisos.png".into(), (32, 32), CellRect { col: 2, row: 1, w: 1, h: 1 });
+        m.set_collides(&k_stone, Some(false));
+        assert_eq!(m.get(&k_stone).unwrap().rect().unwrap().col, 2);
+        assert_eq!(m.collides(&k_stone), Some(false));
+
+        // Orden (= el que verá el jugador en el menú de materiales).
+        m.move_variant("floor/piso", "piedra", -1);
+        assert_eq!(m.variants("floor/piso")[0].id, "piedra");
+
+        // Round-trip por JSON.
+        let json = m.to_json().unwrap();
+        assert_eq!(m, ArtManifest::from_json(&json).unwrap());
+
+        // Borrar la variante se lleva su declaración y su arte.
+        m.remove_variant("floor/piso", "piedra");
+        assert!(m.get(&k_stone).is_none());
+        assert_eq!(m.variants("floor/piso").len(), 2);
+    }
+
+    #[test]
+    fn variant_keys_split_and_old_manifests_stay_identical() {
+        assert_eq!(split_variant("floor/piso#madera"), ("floor/piso", Some("madera")));
+        assert_eq!(split_variant("floor/piso"), ("floor/piso", None));
+        assert_eq!(split_variant("floor/piso#"), ("floor/piso#", None), "sufijo vacío = sin variante");
+        // Un manifest sin objetos no gana NI UN campo en el JSON (retro-compat).
+        let mut m = ArtManifest::default();
+        m.set("decor/tree", "art/decor/tree.png".into(), None);
+        assert!(!m.to_json().unwrap().contains("objects"));
+        // Y un manifest viejo sigue cargando (sin `objects`).
+        let old = r#"{ "sprites": { "decor/tree": "art/decor/tree.png" } }"#;
+        assert!(ArtManifest::from_json(old).unwrap().objects.is_empty());
+    }
+
+    #[test]
     fn footprint_roundtrip_and_default_absent() {
         let mut m = ArtManifest::default();
         m.set("decor/mountain", "art/decor/mountain.png".into(), None);
@@ -708,7 +1182,14 @@ mod tests {
         assert!(!m.to_json().unwrap().contains("footprint"));
         m.set_footprint(
             "decor/mountain",
-            Some(CollisionFootprint { w: 2, h: 2, ax: 0, az: 1, solid: vec![(0, 1), (1, 1)] }),
+            Some(CollisionFootprint {
+                w: 2,
+                h: 2,
+                ax: 0,
+                az: 1,
+                solid: vec![(0, 1), (1, 1)],
+                step: Vec::new(), res: 1,
+            }),
         );
         let back = ArtManifest::from_json(&m.to_json().unwrap()).unwrap();
         assert_eq!(m, back);
@@ -716,5 +1197,45 @@ mod tests {
         // Huella vacía se descarta (equivale a sin huella).
         m.set_footprint("decor/mountain", Some(CollisionFootprint::default()));
         assert!(m.footprint("decor/mountain").is_none());
+    }
+
+    #[test]
+    fn slot_layer_roundtrip_and_fallbacks() {
+        let mut m = ArtManifest::default();
+        m.set("decor/charco", "art/decor/charco.png".into(), None);
+        // Sin capa: no ensucia el JSON y el juego lo trata como objeto.
+        assert!(!m.to_json().unwrap().contains("\"layer\""));
+        assert_eq!(m.slot_layer("decor/charco"), None);
+
+        m.set_slot_layer("decor/charco", Some(ArtLayer::Floor));
+        let back = ArtManifest::from_json(&m.to_json().unwrap()).unwrap();
+        assert_eq!(back.slot_layer("decor/charco"), Some(ArtLayer::Floor));
+        // Las variantes heredan la capa del objeto base: `#madera` y `#piedra`
+        // son el mismo mueble, no dos capas.
+        assert_eq!(back.slot_layer("decor/charco#hielo"), Some(ArtLayer::Floor));
+
+        // Convención de namespace: un piso es piso aunque nadie lo etiquete —
+        // incluso si el slot todavía no existe en el manifest.
+        assert_eq!(m.slot_layer("floor/wood"), Some(ArtLayer::Floor));
+        assert_eq!(m.slot_layer("decor/tree_roble"), None);
+
+        m.set_slot_layer("decor/charco", None);
+        assert_eq!(m.slot_layer("decor/charco"), None);
+    }
+
+    #[test]
+    fn single_tagged_pose_sets_the_slot_layer() {
+        // Assets que ya venían etiquetados por pose (antes de que existiera la
+        // capa por slot) siguen funcionando sin re-etiquetar nada.
+        let mut m = ArtManifest::default();
+        m.set("decor/alfombra", "art/decor/alfombra.png".into(), None);
+        m.set_pose(
+            "decor/alfombra",
+            "art/decor/alfombra.png".into(),
+            (32, 32),
+            "floor",
+            Pose { layer: Some(ArtLayer::Floor), ..Pose::still(CellRect { col: 0, row: 0, w: 2, h: 2 }) },
+        );
+        assert_eq!(m.slot_layer("decor/alfombra"), Some(ArtLayer::Floor));
     }
 }

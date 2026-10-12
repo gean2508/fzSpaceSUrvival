@@ -49,7 +49,20 @@ fn apply_world_edits(
     mut decor_free: ResMut<crate::world2d::DecorFreeCells>,
 ) {
     let edits = load_embedded_world_edits();
-    let (mut nt, mut ns) = (0usize, 0usize);
+    let (mut nt, mut ns, mut ng) = (0usize, 0usize, 0usize);
+    // SOLAR DE LOS ASSETS COLOCADOS, PRIMERO. Un asset con `ground` reemplaza el
+    // terreno de toda su huella, así que plantar una casa deja de ser "dibujar un
+    // sprite encima del bosque": el suelo se adapta al tamaño del asset. Va por la
+    // misma vía que los tiles pintados (`author_tile`), de modo que un solar
+    // autorado y uno pintado son la misma cosa para la colisión, el decor y la
+    // persistencia — y va ANTES para que un camino que pintaste a mano sobre el
+    // solar gane sobre él, que es el orden en que lo dibujaste.
+    for t in edits.stamped_ground() {
+        if let Some(body) = crate::world2d::body_from_u8(t.body) {
+            tiles.author_tile(body, t.z, t.x, t.zc, t.tile);
+            ng += 1;
+        }
+    }
     for t in &edits.tiles {
         if let Some(body) = crate::world2d::body_from_u8(t.body) {
             // `author_tile` y no `place_tile`: respeta la CAPA del edit, pisa
@@ -70,11 +83,11 @@ fn apply_world_edits(
     decor_free.set(free);
     // Decor autorado (árboles/props colocados en el editor) → recurso que el streaming pinta.
     let nd = edits.decor.len();
-    authored.0 = edits.decor;
+    authored.set(edits.decor);
     if nt > 0 || ns > 0 || nd > 0 {
         eprintln!(
-            "ha-world: autorado aplicado — {nt} tiles, {ns} estructuras, {nd} decor, \
-             {nf} celdas sin decor procedural"
+            "ha-world: autorado aplicado — {nt} tiles, {ng} celdas de solar, {ns} estructuras, \
+             {nd} decor, {nf} celdas sin decor procedural"
         );
     }
 }

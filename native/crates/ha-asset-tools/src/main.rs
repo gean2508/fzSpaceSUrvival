@@ -1,31 +1,33 @@
-//! `ha-asset-tools` — CLI de dev del sistema de assets.
+//! `ha-asset-tools` — HA Studio: los editores del juego (assets, imagen, mundo,
+//! sonido, fauna) más un par de comandos de horneado.
 //!
-//! F2: `scan` — barre un árbol LimeZu y genera/actualiza un `manifest.ron`
-//! esqueleto (un asset por PNG single). La IA nunca toca píxeles: sólo referencia
-//! los IDs lógicos que salen de acá.
+//! Sin argumentos abre el Studio. Ver `biblia.md` §8.
 //!
-//! Uso:
-//!   ha-asset-tools scan --root <dir> --out <manifest.ron> [--prefix P]
-//!                       [--grid 16] [--max N] [--merge]
+//! Los subcomandos `scan` y `catalog` se borraron (31 jul 2026): generaban
+//! `manifest.ron` y `CATALOGO.md`, un sistema paralelo que nunca se usó (0
+//! assets). El pixel se cura a mano en el editor y la verdad vive en
+//! `crates/ha-game/assets/art/manifest.json`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
-
-use ha_assets::{generate_catalog, scan_limezu_directory, Manifest, ScanOptions};
 
 mod chargen;
 mod gui;
 mod gym;
 mod gym_gui;
 mod imglab;
+mod slot_audit;
 mod sound_gui;
+mod studio;
 mod world_gui;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
-        Some("scan") => cmd_scan(&args[1..]),
-        Some("catalog") => cmd_catalog(&args[1..]),
+        // `studio` = TODOS los editores en una sola ventana (espacios de trabajo
+        // al estilo Blender). Es el default: los subcomandos de abajo siguen
+        // abriendo cada editor solo, por si querés dos ventanas a la vez.
+        Some("studio") => studio::run_studio(),
         Some("gui") => gui::run_gui(),
         Some("sound") => sound_gui::run_sound_gui(),
         Some("mundo") => world_gui::run_world_gui(),
@@ -33,10 +35,13 @@ fn main() -> ExitCode {
         Some("gym-gui") => gym_gui::run_gym_gui(),
         Some("chargen") => cmd_chargen(&args[1..]),
         Some("sound-init") => cmd_sound_init(&args[1..]),
-        Some("-h") | Some("--help") | None => {
+        Some("-h") | Some("--help") => {
             print_usage();
             ExitCode::SUCCESS
         }
+        // Sin argumentos: abrí el Studio (lo que el usuario quiere el 99% de las
+        // veces). La ayuda sigue a un `--help` de distancia.
+        None => studio::run_studio(),
         Some(other) => {
             eprintln!("subcomando desconocido: {other}\n");
             print_usage();
@@ -47,25 +52,20 @@ fn main() -> ExitCode {
 
 fn print_usage() {
     eprintln!(
-        "ha-asset-tools — sistema de assets\n\n\
+        "ha-asset-tools — HA Studio, los editores del juego\n\n\
          COMANDOS:\n\
-         \x20 scan --root <dir> --out <manifest.ron> [--prefix P] [--grid 32] [--max N] [--merge]\n\
-         \x20 catalog --manifest <manifest.ron> --out <CATALOGO.md>\n\
-         \x20 gui       # editor visual de assets (dev; necesita display)\n\
+         \x20 studio    # TODO EN UNO: assets + imagen + mundo + sonido + fauna (default)\n\
+         \x20 gui       # sólo el editor de assets/objetos (ventana aparte)\n\
          \x20 sound     # editor de sonido / mini-DAW (edita assets/audio.json)\n\
          \x20 mundo     # editor de MUNDO WYSIWYG (H1: vista del mundo procedural)\n\
          \x20 gym       # entrena la fauna por neuroevolución (headless, CLI)\n\
          \x20 gym-gui   # visor de ADN: lista genomas .adn, evalúa/muta/cruza con preview\n\
          \x20 chargen [--root <pack>] [--out <art/>] [--npcs 20] [--seed 7] [--scale 2] [--player]\n\
          \x20           # hornea personajes por CAPAS (pack LimeZu Character_Generator)\n\
-         \x20 sound-init [--force]  # (re)genera assets/audio.json con el diseño default\n\n\
-         \x20   --root    directorio LimeZu a barrer (recursivo)\n\
-         \x20   --out     archivo a escribir\n\
-         \x20   --prefix  categoría para los IDs (def: art)\n\
-         \x20   --grid    tamaño de celda px (def: 32)\n\
-         \x20   --max     corta tras N archivos (prueba)\n\
-         \x20   --merge   funde sobre el --out existente (respeta IDs curados)\n\
-         \x20   --manifest  manifest.ron de entrada (catalog)"
+         \x20 chargen --capas [--ui-root <pack Modern UI>]\n\
+         \x20           # ademas exporta las capas recortadas + retratos al juego\n\
+         \x20           # (es lo que come el creador de personaje y el menu de NPC)\n\
+         \x20 sound-init [--force]  # (re)genera assets/audio.json con el diseño default"
     );
 }
 
@@ -74,17 +74,24 @@ fn print_usage() {
 fn cmd_chargen(args: &[String]) -> ExitCode {
     let mut root = PathBuf::from("PRUEBAS-CODIGOS/Character_Generator");
     let mut out = PathBuf::from("native/crates/ha-game/assets/art");
-    let (mut npcs, mut seed, mut scale, mut player) = (20usize, 7u64, 2u32, false);
+    let mut ui_root =
+        PathBuf::from("PRUEBAS-CODIGOS/modernuserinterface-win/32x32/Portrait_Generator_32x32");
+    // `scale` 1 = sin downscale. Era 2 (media escala, celda 16×32) y ahora todo
+    // el arte del juego es el del pack a 32×32: la celda es 32×64.
+    let (mut npcs, mut seed, mut scale, mut player) = (20usize, 7u64, 1u32, false);
+    let mut capas = false;
     let mut i = 0;
     while i < args.len() {
         let val = args.get(i + 1);
         match args[i].as_str() {
             "--root" => { root = val.map(PathBuf::from).unwrap_or(root); i += 2; }
             "--out" => { out = val.map(PathBuf::from).unwrap_or(out); i += 2; }
+            "--ui-root" => { ui_root = val.map(PathBuf::from).unwrap_or(ui_root); i += 2; }
             "--npcs" => { npcs = val.and_then(|v| v.parse().ok()).unwrap_or(npcs); i += 2; }
             "--seed" => { seed = val.and_then(|v| v.parse().ok()).unwrap_or(seed); i += 2; }
             "--scale" => { scale = val.and_then(|v| v.parse().ok()).unwrap_or(scale); i += 2; }
             "--player" => { player = true; i += 1; }
+            "--capas" => { capas = true; i += 1; }
             other => { eprintln!("flag desconocida: {other}"); return ExitCode::FAILURE; }
         }
     }
@@ -116,37 +123,45 @@ fn cmd_chargen(args: &[String]) -> ExitCode {
         keys.len(),
         out.display()
     );
-    ExitCode::SUCCESS
-}
 
-fn cmd_catalog(args: &[String]) -> ExitCode {
-    let mut manifest_path: Option<PathBuf> = None;
-    let mut out: Option<PathBuf> = None;
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--manifest" => { manifest_path = args.get(i + 1).map(PathBuf::from); i += 2; }
-            "--out" => { out = args.get(i + 1).map(PathBuf::from); i += 2; }
-            other => { eprintln!("flag desconocida: {other}"); return ExitCode::FAILURE; }
+    if capas {
+        // Las capas se exportan desde `32x32`, la resolución nativa del pack y
+        // la única que usa el juego: la celda es 32×64 y no hay downscale.
+        let half = match chargen::Catalog::load(&root, "32x32") {
+            Ok(c) => c,
+            Err(e) => { eprintln!("chargen --capas: {e}"); return ExitCode::FAILURE; }
+        };
+        let portraits = match chargen::PortraitPack::load(&ui_root) {
+            Ok(p) => p,
+            Err(e) => { eprintln!("chargen --capas: {e}"); return ExitCode::FAILURE; }
+        };
+        // Los looks del horneado de arriba, para que el retrato de cada aldeano
+        // sea EL SUYO y no una cara al azar.
+        let looks = chargen::npc_looks(&cat, npcs, seed);
+        let index = match chargen::export_layers(&half, &portraits, &out, &looks) {
+            Ok(idx) => idx,
+            Err(e) => { eprintln!("chargen --capas: {e}"); return ExitCode::FAILURE; }
+        };
+        let idx_path = out.join("chargen").join("index.json");
+        let json = match index.to_json() {
+            Ok(j) => j,
+            Err(e) => { eprintln!("chargen --capas: {e}"); return ExitCode::FAILURE; }
+        };
+        if let Err(e) = std::fs::write(&idx_path, json + "\n") {
+            eprintln!("chargen --capas: {}: {e}", idx_path.display());
+            return ExitCode::FAILURE;
         }
+        eprintln!(
+            "chargen --capas: {} pieles · {} ojos · {} ropas · {} peinados · {} accesorios ({} con retrato) -> {}",
+            index.bodies.len(),
+            index.eyes.len(),
+            index.outfits.len(),
+            index.hair.len(),
+            index.accessories.len(),
+            index.accessories.iter().filter(|a| a.portrait.is_some()).count(),
+            idx_path.display()
+        );
     }
-    let Some(manifest_path) = manifest_path else { eprintln!("falta --manifest"); return ExitCode::FAILURE; };
-    let Some(out) = out else { eprintln!("falta --out"); return ExitCode::FAILURE; };
-
-    let manifest = match std::fs::read_to_string(&manifest_path).ok().map(|s| Manifest::from_ron_str(&s)) {
-        Some(Ok(m)) => m,
-        Some(Err(e)) => { eprintln!("parse {}: {e}", manifest_path.display()); return ExitCode::FAILURE; }
-        None => { eprintln!("no pude leer {}", manifest_path.display()); return ExitCode::FAILURE; }
-    };
-    let md = generate_catalog(&manifest);
-    if let Some(parent) = out.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Err(e) = std::fs::write(&out, md) {
-        eprintln!("no pude escribir {}: {e}", out.display());
-        return ExitCode::FAILURE;
-    }
-    eprintln!("✓ catalog: {} assets → {}", manifest.assets.len(), out.display());
     ExitCode::SUCCESS
 }
 
@@ -166,71 +181,5 @@ fn cmd_sound_init(args: &[String]) -> ExitCode {
             eprintln!("no pude escribir {}: {e}", path.display());
             ExitCode::FAILURE
         }
-    }
-}
-
-fn cmd_scan(args: &[String]) -> ExitCode {
-    let mut root: Option<PathBuf> = None;
-    let mut out: Option<PathBuf> = None;
-    let mut prefix = "art".to_string();
-    let mut grid: u32 = 32;
-    let mut max: Option<usize> = None;
-    let mut merge = false;
-
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--root" => { root = args.get(i + 1).map(PathBuf::from); i += 2; }
-            "--out" => { out = args.get(i + 1).map(PathBuf::from); i += 2; }
-            "--prefix" => { prefix = arg_or_bail(args.get(i + 1), "--prefix"); i += 2; }
-            "--grid" => { grid = arg_or_bail(args.get(i + 1), "--grid").parse().unwrap_or(32); i += 2; }
-            "--max" => { max = args.get(i + 1).and_then(|s| s.parse().ok()); i += 2; }
-            "--merge" => { merge = true; i += 1; }
-            other => { eprintln!("flag desconocida: {other}"); return ExitCode::FAILURE; }
-        }
-    }
-
-    let Some(root) = root else { eprintln!("falta --root"); return ExitCode::FAILURE; };
-    let Some(out) = out else { eprintln!("falta --out"); return ExitCode::FAILURE; };
-    if !root.is_dir() {
-        eprintln!("--root no es un directorio: {}", root.display());
-        return ExitCode::FAILURE;
-    }
-
-    let existing: Option<Manifest> = if merge && out.exists() {
-        match std::fs::read_to_string(&out).ok().and_then(|s| Manifest::from_ron_str(&s).ok()) {
-            Some(m) => Some(m),
-            None => { eprintln!("no pude leer/parsear el --out existente para --merge"); return ExitCode::FAILURE; }
-        }
-    } else {
-        None
-    };
-
-    let opts = ScanOptions { grid: (grid, grid), id_prefix: prefix, max_files: max };
-    let (manifest, report) = scan_limezu_directory(&root, existing.as_ref(), &opts);
-
-    let ron = match manifest.to_ron_string() {
-        Ok(s) => s,
-        Err(e) => { eprintln!("serialize: {e}"); return ExitCode::FAILURE; }
-    };
-    if let Some(parent) = out.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Err(e) = std::fs::write(&out, ron) {
-        eprintln!("no pude escribir {}: {e}", out.display());
-        return ExitCode::FAILURE;
-    }
-
-    eprintln!(
-        "✓ scan: {} PNG leídos, {} assets añadidos, {} saltados → {} ({} assets totales)",
-        report.scanned, report.added, report.skipped, out.display(), manifest.assets.len()
-    );
-    ExitCode::SUCCESS
-}
-
-fn arg_or_bail(v: Option<&String>, flag: &str) -> String {
-    match v {
-        Some(s) => s.clone(),
-        None => { eprintln!("{flag} necesita un valor"); std::process::exit(2); }
     }
 }

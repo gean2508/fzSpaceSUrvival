@@ -42,7 +42,14 @@ impl Plugin for BootUiPlugin {
                 (menu_button_system, settings_button_system, menu_screenshot)
                     .run_if(in_state(GamePhase::MainMenu)),
             )
-            .add_systems(Update, (animate_bg, boot_pulse));
+            .add_systems(Update, (animate_bg, boot_pulse))
+            .add_systems(
+                Update,
+                (
+                    void_clear_outside_playing,
+                    crate::game_ui::hide_gameplay_ui_outside_playing,
+                ),
+            );
     }
 }
 
@@ -60,6 +67,7 @@ struct SplashTimer(f32);
 
 /// Carga los frames del fondo animado. En desktop lee `art/ui/menu_bg/` ordenado
 /// por nombre; en Android (sin readdir del APK) queda vacío → fondo sólido.
+#[cfg_attr(target_os = "android", allow(unused_mut, unused_variables))]
 fn load_menu_bg(mut bg: ResMut<MenuBg>, asset_server: Res<AssetServer>) {
     #[cfg(not(target_os = "android"))]
     {
@@ -228,9 +236,11 @@ fn tick_splash(
     mut timer: ResMut<SplashTimer>,
     mut next: ResMut<NextState<GamePhase>>,
 ) {
-    // CI/agente: HA_AUTOPLAY salta el menú y arranca el gameplay directo.
+    // CI/agente: HA_AUTOPLAY salta el menú y arranca el gameplay directo (por
+    // la pantalla de carga, igual que un jugador: así los drivers de QA miden un
+    // mundo YA armado y no el suelo apareciendo a pedazos).
     if std::env::var("HA_AUTOPLAY").is_ok() {
-        next.set(GamePhase::Playing);
+        next.set(GamePhase::Loading);
         return;
     }
     timer.0 += time.delta_secs();
@@ -264,6 +274,25 @@ fn spawn_main_menu(mut commands: Commands, bg: Res<MenuBg>, touch: Res<TouchLayo
             menu_button(col, "AJUSTES", MenuAction::Settings, NEON_CYAN, btn_w, s);
             menu_button(col, "SALIR", MenuAction::Quit, NEON_MAGENTA, btn_w, s);
         });
+        // Si la partida anterior se cerró sola, acá se lee POR QUÉ. En Android el
+        // hook de pánico hace `process::exit(1)`: se cierra sin diálogo y sin
+        // rastro visible, y con el APK por URL nadie tiene un cable a mano para
+        // mirar `adb logcat -s ha-crash`.
+        if let Some(line) = crate::debug::last_crash_line() {
+            eprintln!("ha-crash previo: {line}");
+            root.spawn((
+                Text::new(line),
+                TextFont { font_size: (11.0 * s).clamp(9.0, 13.0), ..default() },
+                TextColor(NEON_MAGENTA),
+                Node {
+                    margin: UiRect::top(Val::Px(14.0 * s)),
+                    max_width: Val::Percent(90.0),
+                    ..default()
+                },
+                Name::new("LastCrashLine"),
+            ));
+            crate::debug::clear_last_crash();
+        }
     })
     // Panel de ajustes: overlay CENTRADO propio (oculto hasta tocar AJUSTES).
     // Antes era un hermano más de la columna: al abrirlo empujaba los botones
@@ -381,7 +410,7 @@ fn menu_button_system(
                     MenuAction::Load => {
                         if let Some(saved) = load_savegame() {
                             *selected = saved;
-                            next.set(GamePhase::Playing);
+                            next.set(GamePhase::Loading);
                         } else {
                             // Sin partida guardada → arranca creación de personaje.
                             next.set(GamePhase::CharacterCreate);
@@ -466,6 +495,20 @@ fn menu_screenshot(mut shot: ResMut<MenuShot>, mut commands: Commands, mut exit:
         shot.done = true;
         exit.send(AppExit::Success);
     }
+}
+
+/// Fuera de `Playing`, el color de fondo del render es el void del menú y no el
+/// cielo del mundo. Tercera capa del mismo arreglo: la cámara no mira la capa del
+/// mundo (`camera::WORLD_LAYER`), la UI de gameplay está apagada
+/// ([`crate::game_ui::GameplayUi`]) y lo único que queda debajo del menú es negro
+/// — ni un frame de cielo azul asomando en el arranque.
+fn void_clear_outside_playing(phase: Res<State<GamePhase>>, mut clear: ResMut<ClearColor>) {
+    // En `Loading` el mundo ya existe y el cielo maneja el color: forzar el void
+    // acá sería pelearse con `sky2d` todos los frames debajo de la cortina.
+    if crate::game_phase::world_active(phase) || clear.0 == VOID {
+        return;
+    }
+    clear.0 = VOID;
 }
 
 /// Latido de los acentos neón (subrayado + botones).

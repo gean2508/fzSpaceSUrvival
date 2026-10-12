@@ -3,6 +3,19 @@
 //! te lo recuerda (rencor) y su conducta reacciona. Reusa el patrón del vivario
 //! (`fauna.rs`): activación por cuerpo + persistencia. Ver `PLAN_SOCIEDAD_MEMORIA.md`.
 //! No podar lo emergente: la memoria abre reacciones, no impone guiones.
+//!
+//! ## LOS PUEBLOS ESTÁN DONDE DICE LA GEOGRAFÍA (no alrededor tuyo)
+//!
+//! Antes la sociedad se sembraba en tu posición al pisar el cuerpo: aterrizabas en mitad
+//! de la nada y te brotaban nueve aldeanos al lado. Se acabó. Ahora la gente vive en los
+//! ASENTAMIENTOS de `ha_shared::geography` (aldea / pueblo / ciudad, deterministas y con
+//! su sitio fijo en el planeta) y se siembra cuando el jugador **entra** en uno
+//! (`discover_settlements`). Si nunca caminás hasta un pueblo, no ves un alma — encontrar
+//! gente es parte de explorar, igual que encontrar fauna.
+//!
+//! Y el pueblo NO se congela cuando te vas: los NPCs lejos siguen su rutina en modo barato
+//! (`advance_far`) y la economía corre para todos los cuerpos (`tick_colony_economy`), así
+//! que al volver de noche los encontrás en sus casas y con el stock que les tocaba.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,7 +31,7 @@ use crate::platform::is_app_paused;
 use crate::scene::{RegionRuntime, WorldContextRuntime};
 use crate::sim::Player;
 use crate::world2d::{
-    active_surface_body, body_from_u8, render_xy, sort_z, surface_region_active, ActivePlanet,
+    active_surface_body, render_xy, sort_z, surface_region_active, ActivePlanet,
     TileWorld,
 };
 
@@ -28,6 +41,18 @@ const GENOME: &[u8] = include_bytes!("../../iafz-sys/genomes/FAUNA.adn");
 
 const NPC_ID_BASE: i32 = 72; // fauna 0..48, residentes 48..72, NPCs 72..120
 const MAX_NPCS: usize = 48;
+/// Cada cuántos segundos se mira si el jugador entró en un asentamiento sin sembrar.
+const DISCOVER_EVERY: f32 = 2.0;
+/// Cuánta gente tiene cada rango de asentamiento al fundarse. La ciudad no llega a los 48
+/// del tope de golpe: crece sola con los nacimientos si la colonia da de comer.
+fn tier_population(tier: ha_shared::geography::SettlementTier) -> u32 {
+    use ha_shared::geography::SettlementTier as T;
+    match tier {
+        T::Hamlet => 5,
+        T::Town => 11,
+        T::City => 18,
+    }
+}
 const NPC_VEL: f32 = 2.2;
 const NPC_TURN: f32 = 2.0;
 const RENDER_R: f32 = 80.0; // render/sim sólo cerca (como los residentes)
@@ -51,13 +76,18 @@ const NUM_SKINS: u64 = 20; // hojas horneadas por el Character Generator (npc/ch
 /// ahora comparten hoja y frame (16×32 = 1:2). Un humano de ~1,9 m.
 const NPC_SIZE: Vec2 = Vec2::new(0.95, 1.9);
 const HOME_WANDER_R: f32 = 5.0; // radio de deambular alrededor del hogar (pueblo)
-const IDOL_RADIUS: f32 = 30.0; // "congregación": la fe se contagia por el pueblo
-const IDOL_ORBIT: f32 = 2.8; // los fieles se juntan a ~este radio del ídolo
-const FAITH_GAIN: f32 = 0.09; // fe/s cerca del ídolo (convierte en ~7 s)
+/// **NINGÚN NPC CAMINA HACIA EL JUGADOR POR FE.** La secta existe, pero es del
+/// pueblo, no tuya: los fieles hacen su vida y se juntan a rezar en el santuario
+/// de SU pueblo (`shrine_of`). Antes el converso te tomaba de ídolo y te seguía
+/// —o te orbitaba a 2,8 m— así que el pueblo entero terminaba caminando atrás
+/// del jugador. Eso se fue entero; si volvés a ver un `toward_p` con `converted`
+/// al lado, es el bug de vuelta.
+const SHRINE_OFFSET: f32 = 7.5; // el santuario está a un costado de la plaza
+const PREACH_RADIUS: f32 = 6.0; // un fiel contagia a los vecinos de este radio
+const FAITH_SPREAD: f32 = 0.03; // fe/s de boca en boca (~20 s de charla al lado)
+const FAITH_COOL: f32 = 0.01; // fe/s que se pierde sin nadie que predique
 /// D8: única definición — `npc_menu.rs` la importa en vez de duplicarla.
 pub(crate) const CONVERT_AT: f32 = 0.6; // fe para convertirse en fiel
-const FOUND_MIN_FLOCK: usize = 3; // NPCs cerca para fundar la religión
-const FOUND_RADIUS: f32 = 13.0;
 const SAY_COOLDOWN: f32 = 7.0; // charla ambiental por NPC
 // --- S2: higiene de gameplay (auditoría PLAN_NPCS_Y_SOCIEDAD.md) ---
 const ATTACK_DAMAGE: f32 = 0.5; // dos golpes para matar (C1)
@@ -152,6 +182,65 @@ fn routine_phase(p: f32) -> RoutinePhase {
 fn workplace_of(home_x: f32, home_z: f32, uid: u64, family: u32) -> (f32, f32) {
     let a = (uid as f32) * 2.399_963_2 + (family as f32) * 0.7;
     (home_x + a.cos() * WORK_DIST, home_z + a.sin() * WORK_DIST)
+}
+
+/// Adónde tiene que estar este NPC según la hora: casa de noche, plaza a mediodía, su
+/// puesto el resto del día. Es el destino que comparten el LOD cercano (con cerebro,
+/// colisión y charla) y el LEJANO (barato, abajo).
+fn routine_target(
+    phase: RoutinePhase,
+    home: (f32, f32),
+    town: (f32, f32),
+    uid: u64,
+    family: u32,
+) -> (f32, f32) {
+    match phase {
+        RoutinePhase::Sleep | RoutinePhase::GoHome => home,
+        RoutinePhase::Plaza => town,
+        RoutinePhase::GoToWork | RoutinePhase::Work => workplace_of(home.0, home.1, uid, family),
+    }
+}
+
+/// LOD LEJANO: un NPC fuera del radio de render igual **cumple su horario**. Sin cerebro,
+/// sin colisión y sin charla — sólo camina hacia donde le toca estar y sus necesidades
+/// suben o bajan según llegue o no. Es lo que hace que el pueblo no sea una estatua cuando
+/// no lo estás mirando: si te vas al mediodía y volvés de noche, están todos en sus casas.
+///
+/// Devuelve la posición nueva. Barato: unas pocas operaciones por NPC, ≤ `MAX_NPCS`.
+fn advance_far(
+    pos: (f32, f32),
+    home: (f32, f32),
+    town: (f32, f32),
+    uid: u64,
+    family: u32,
+    phase: RoutinePhase,
+    needs: &mut Needs,
+    dt: f32,
+) -> (f32, f32) {
+    needs.food = (needs.food - NEEDS_FOOD_DECAY * dt).max(0.0);
+    needs.rest = (needs.rest - NEEDS_REST_DECAY * dt).max(0.0);
+    needs.belonging = (needs.belonging - NEEDS_BELONGING_DECAY * dt).max(0.0);
+
+    let (tx, tz) = routine_target(phase, home, town, uid, family);
+    let (dx, dz) = (tx - pos.0, tz - pos.1);
+    let d = (dx * dx + dz * dz).sqrt();
+    // Ya llegó: repone lo que repone estar ahí (mismas ganancias que el LOD cercano).
+    if d < 1.5 {
+        match phase {
+            RoutinePhase::Sleep => needs.rest = (needs.rest + NEEDS_HOME_REST_GAIN * dt).min(1.0),
+            RoutinePhase::Plaza => {
+                needs.belonging = (needs.belonging + NEEDS_PLAZA_GAIN * dt).min(1.0)
+            }
+            RoutinePhase::GoToWork | RoutinePhase::Work => {
+                needs.food = (needs.food + NEEDS_WORK_FOOD_GAIN * dt).min(1.0)
+            }
+            RoutinePhase::GoHome => {}
+        }
+        return pos;
+    }
+    // Camina en línea recta (lejos no hay nada que esquivar que el jugador pueda ver).
+    let step = (NPC_VEL * 0.75 * dt).min(d);
+    (pos.0 + dx / d * step, pos.1 + dz / d * step)
 }
 
 /// Oficio elegido por ESCASEZ (nunca a mano) — sólo se asigna a quien está `Wanderer`,
@@ -263,8 +352,12 @@ pub(crate) struct Npc {
     // --- Religión + propósito (runtime; se reconstruye cerca del ídolo) ---
     pub(crate) faith: f32,      // 0..1 devoción hacia el fundador; sube cerca del ídolo
     pub(crate) converted: bool, // fiel: sigue/venera al ídolo (fundador)
-    home_x: f32,      // ancla del "pueblo" (pos de spawn) — deambula cerca, no en círculos
+    home_x: f32,      // ancla de su CASA (pos de spawn) — deambula cerca, no en círculos
     home_z: f32,
+    /// Centro del PUEBLO al que pertenece (la plaza). Es el asentamiento de `geography`
+    /// donde nació; ya no hay "un centro por cuerpo", puede haber varios pueblos.
+    town_x: f32,
+    town_z: f32,
     say_cd: f32,      // cooldown de charla ambiental
     /// Últimas frases dichas (máx 5) — para el menú del NPC (tocar → ver historial).
     pub(crate) history: Vec<String>,
@@ -303,6 +396,12 @@ struct NpcRecord {
     home_x: Option<f32>,
     #[serde(default)]
     home_z: Option<f32>,
+    /// Plaza de SU pueblo. `None` en saves viejos (había un solo centro por cuerpo) → cae
+    /// a su casa, que es el comportamiento razonable para un aldeano sin pueblo.
+    #[serde(default)]
+    town_x: Option<f32>,
+    #[serde(default)]
+    town_z: Option<f32>,
     /// E4: últimas frases dichas — sobrevive a cambios de cuerpo/reinicio.
     #[serde(default)]
     history: Vec<String>,
@@ -338,8 +437,9 @@ struct SocietySave {
     next_family: u32,
     #[serde(default)]
     religion: ReligionSave,
-    /// S4/B2: centro fijo de asentamiento por cuerpo (dónde aterrizaste la primera vez) —
-    /// nunca se recalcula, así los nativos no "caminan" ni aparecen en el origen del mundo.
+    /// Asentamientos YA SEMBRADOS `(cuerpo, centro_x, centro_z)`. El sitio sale de
+    /// `geography::settlement_*` (fijo en el planeta), no de dónde aterrizaste; esta lista
+    /// sólo recuerda a cuáles ya les pusimos gente para no duplicarla al volver.
     #[serde(default)]
     centers: Vec<(u8, f32, f32)>,
     /// S4/B3: reputación acumulada por CUERPO (sobrevive a la extinción de una familia) —
@@ -363,8 +463,9 @@ pub(crate) struct Society {
     loaded: bool,
     active_body: Option<u8>,
     alive: usize,
-    /// S4/B2: centro fijo de asentamiento por cuerpo — se escribe UNA vez.
-    centers: HashMap<u8, (f32, f32)>,
+    /// Asentamientos ya sembrados (un cuerpo puede tener varios pueblos). Ver el campo
+    /// homónimo de `SocietySave`.
+    centers: Vec<(u8, f32, f32)>,
     /// S4/B3: reputación por cuerpo — sobrevive a familias extintas.
     body_rep: HashMap<u8, f32>,
     /// S6: recursos de la colonia por cuerpo — lo que producen/consumen los roles.
@@ -386,7 +487,7 @@ impl Default for Society {
             loaded: false,
             active_body: None,
             alive: 0,
-            centers: HashMap::new(),
+            centers: Vec::new(),
             body_rep: HashMap::new(),
             stock: HashMap::new(),
             dirty: false,
@@ -462,8 +563,11 @@ impl Society {
 }
 
 /// F7 — Estado de la RELIGIÓN que funda el jugador (+ su compañero como primer
-/// discípulo). Un solo culto por ahora; los NPCs cercanos ganan fe y se convierten
-/// en fieles que siguen/veneran al fundador (ídolo).
+/// discípulo). Un solo culto por ahora.
+///
+/// Se funda PREDICANDO: el primer aldeano que convencés (menú del NPC) funda el
+/// culto. De ahí en más crece solo, de vecino a vecino, y los fieles siguen
+/// haciendo su vida — **no te veneran caminándote atrás**. Ver `SHRINE_OFFSET`.
 #[derive(Resource, Default)]
 pub struct Religion {
     pub founded: bool,
@@ -471,17 +575,53 @@ pub struct Religion {
     pub followers: u32,
 }
 
+impl Religion {
+    /// Nace el culto. Idempotente: llamarla dos veces no lo re-funda ni le
+    /// cambia el nombre.
+    pub fn found(&mut self) {
+        if self.founded {
+            return;
+        }
+        self.founded = true;
+        self.name = "Los Hijos del Ki".to_string();
+        eprintln!("ha-religion: FUNDADA '{}' (primer converso)", self.name);
+    }
+}
+
+/// El santuario del pueblo: un punto fijo a un costado de su plaza. No es un
+/// edificio (no hay slot de arte todavía) — es el lugar al que van a rezar los
+/// fieles a la hora de la plaza. Determinista a partir del centro del pueblo,
+/// así que dos pueblos distintos tienen su propio santuario y el corro siempre
+/// se arma en el mismo sitio.
+pub(crate) fn shrine_of(town_x: f32, town_z: f32) -> (f32, f32) {
+    (town_x + SHRINE_OFFSET, town_z - SHRINE_OFFSET)
+}
+
 /// Frase por CONTEXTO (fe/reputación/religión) — ASCII-only. `variant` desempata
 /// para que no todos digan lo mismo. Es la base del "chat" con respuestas
 /// predefinidas según lo que venimos construyendo (culto, pueblo, rencor).
-pub(crate) fn npc_line(rep: f32, converted: bool, faith: f32, founded: bool, name: &str, variant: u64) -> String {
+/// `name` es el nombre de la RELIGION; `player` es como te llamaste vos en la
+/// pantalla de creacion. El saludo neutro te nombra: es lo que hace que el
+/// nombre que elegiste siga existiendo despues del menu y no sea un campo
+/// decorativo. Vacio o por defecto, se cae al "viajero" de siempre.
+pub(crate) fn npc_line(
+    rep: f32,
+    converted: bool,
+    faith: f32,
+    founded: bool,
+    name: &str,
+    player: &str,
+    variant: u64,
+) -> String {
     if converted {
+        // Nada de "te sigo": el fiel cree, no te escolta. Habla de SU culto y de
+        // SU santuario, que es donde va a estar cuando lo busques.
         let v = [
             format!("Alabado sea {name}!"),
-            "El Profeta nos guia.".to_string(),
+            "El Profeta nos enseno, el resto es nuestro.".to_string(),
             "Uno con el Ki.".to_string(),
             format!("Somos {name}."),
-            "Te seguire a las estrellas.".to_string(),
+            "Al mediodia rezamos en el santuario.".to_string(),
         ];
         return v[(variant as usize) % v.len()].clone();
     }
@@ -501,8 +641,14 @@ pub(crate) fn npc_line(rep: f32, converted: bool, faith: f32, founded: bool, nam
         ];
         return v[(variant as usize) % v.len()].clone();
     }
-    let v = ["Buen dia, viajero.", "El pueblo crece.", "Hay trabajo que hacer.", "Lindo dia."];
-    v[(variant as usize) % v.len()].to_string()
+    let who = if player.trim().is_empty() { "viajero" } else { player.trim() };
+    let v = [
+        format!("Buen dia, {who}."),
+        "El pueblo crece.".to_string(),
+        format!("{who}. Que andas buscando?"),
+        "Lindo dia.".to_string(),
+    ];
+    v[(variant as usize) % v.len()].clone()
 }
 
 pub struct SocietyPlugin;
@@ -511,13 +657,29 @@ impl Plugin for SocietyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Society>()
             .init_resource::<Religion>()
+            // La sociedad NPC vive SÓLO en partida. Antes se poblaba en el primer
+            // frame: había aldeanos caminando (y hablando) detrás del splash y del
+            // menú — el "gameplay" que asomaba al abrir el juego.
             .add_systems(
                 Update,
-                (manage_society, tick_society, harm_events, tick_colony_economy, save_society_periodic)
-                    .chain(),
+                (
+                    manage_society,
+                    discover_settlements,
+                    tick_society,
+                    tick_society_remote,
+                    harm_events,
+                    tick_colony_economy,
+                    save_society_periodic,
+                )
+                    .chain()
+                    .run_if(crate::game_phase::world_active),
             )
             .add_systems(Startup, (spawn_society_overlay, force_creative_debug))
-            .add_systems(Update, (update_society_overlay, update_npc_sightings));
+            .add_systems(
+                Update,
+                (update_society_overlay, update_npc_sightings)
+                    .run_if(crate::game_phase::world_active),
+            );
     }
 }
 
@@ -564,7 +726,7 @@ fn save_society(soc: &Society, live: &[NpcRecord], religion: &Religion) {
         next_uid: soc.next_uid,
         next_family: soc.next_family,
         religion: ReligionSave { founded: religion.founded, name: religion.name.clone() },
-        centers: soc.centers.iter().map(|(&b, &(x, z))| (b, x, z)).collect(),
+        centers: soc.centers.clone(),
         body_rep: soc.body_rep.iter().map(|(&b, &r)| (b, r)).collect(),
         stock: soc.stock.iter().map(|(&b, &s)| (b, s)).collect(),
     };
@@ -603,6 +765,8 @@ fn spawn_npc(
                 // `rec.x/z` la primera vez que un registro viejo no lo trae (migración).
                 home_x: rec.home_x.unwrap_or(rec.x),
                 home_z: rec.home_z.unwrap_or(rec.z),
+                town_x: rec.town_x.unwrap_or_else(|| rec.home_x.unwrap_or(rec.x)),
+                town_z: rec.town_z.unwrap_or_else(|| rec.home_z.unwrap_or(rec.z)),
                 say_cd: (rec.uid % 7) as f32, // desfasa el chatter
                 history: rec.history.clone(),
                 health: rec.health,
@@ -634,7 +798,6 @@ fn manage_society(
     mut religion: ResMut<Religion>,
     live: Query<&Npc>,
     live_ents: Query<Entity, With<Npc>>,
-    player: Query<&Transform, With<Player>>,
 ) {
     if !soc.loaded {
         let s = load_society();
@@ -644,7 +807,7 @@ fn manage_society(
         soc.next_family = s.next_family.max(soc.next_family);
         religion.founded = s.religion.founded; // A3
         religion.name = s.religion.name;
-        soc.centers = s.centers.into_iter().map(|(b, x, z)| (b, (x, z))).collect();
+        soc.centers = s.centers;
         soc.body_rep = s.body_rep.into_iter().collect();
         soc.stock = s.stock.into_iter().collect();
         soc.loaded = true;
@@ -676,6 +839,8 @@ fn manage_society(
                 converted: n.converted,
                 home_x: Some(n.home_x),
                 home_z: Some(n.home_z),
+                town_x: Some(n.town_x),
+                town_z: Some(n.town_z),
                 history: n.history.clone(),
                 health: n.health,
                 role: n.role,
@@ -688,42 +853,32 @@ fn manage_society(
         }
         soc.free_ids = (NPC_ID_BASE..NPC_ID_BASE + MAX_NPCS as i32).rev().collect();
         soc.alive = 0;
-        save_society(&soc, &[], &religion);
+        // NO se escribe a disco AQUÍ. Este bloque corre en el frame exacto en que
+        // cruzás a `RegionId::Space`, que es el frame en el que ya se están
+        // despawneando chunks, decoración, fauna, muros, cofres y máquinas: meterle
+        // encima un `write` síncrono es parte del tirón medido al despegar (picos de
+        // 200-490 ms en el Redmi). Se marca sucio y lo vuelca `save_society_periodic`,
+        // que además ya es el ÚNICO camino de escritura (invariante A1).
+        soc.dirty = true;
     }
     // Instancia el cuerpo nuevo.
     if let Some(nb) = current {
         let mut recs: Vec<NpcRecord> =
             soc.records.iter().filter(|r| r.body == nb).cloned().collect();
         soc.records.retain(|r| r.body != nb);
-        // Semilla si el cuerpo aún no tiene sociedad:
-        //  - Luna: TUS colonos (`colony.state.colonists`), amigables (cerca de hábitats).
-        //  - Otros planetas (F6.4): NATIVOS deterministas con disposición base según el
-        //    TEMPERAMENTO del planeta → culturas distintas (un mundo hostil = nativos que
-        //    ya te reciben con recelo).
-        if recs.is_empty() {
-            if nb == CelestialBody::Earth as u8 {
-                // Pueblo inicial en la Tierra (role-play): 9 aldeanos cordiales
-                // alrededor del JUGADOR → coexisten, forman familias, y son el
-                // rebaño que puede convertir a su religión.
-                let origin = fixed_center(&mut soc, nb, &player);
-                recs = seed_society(nb, 9, None, 0.4, origin, &mut soc);
-            } else if nb == CelestialBody::Moon as u8 && colony.state.colonists > 0 {
-                recs = seed_society(nb, colony.state.colonists, Some(&machines), 0.0, (0.0, 0.0), &mut soc);
-            } else if nb != CelestialBody::Earth as u8 && nb != CelestialBody::Moon as u8 {
-                if let Some(body) = body_from_u8(nb) {
-                    // B2/S4: se siembra en tu punto de aterrizaje REAL, fijado para
-                    // siempre — antes era `(0.0, 0.0)`, típicamente a kilómetros de
-                    // donde estás, así que la feature multi-planeta era invisible.
-                    let origin = fixed_center(&mut soc, nb, &player);
-                    // B3/S4: genocidiar una familia no lava la memoria del planeta — la
-                    // disposición cultural se combina con `body_rep`, que sobrevive.
-                    let disp = (planet_temperament_disposition(body) + soc.body_rep(nb))
-                        .clamp(-1.0, 1.0);
-                    let seed = (nb as u32).wrapping_mul(2_654_435_761);
-                    let count = 3 + (seed >> 5) % 7; // 3..9 nativos
-                    recs = seed_society(nb, count, None, disp, origin, &mut soc);
-                }
-            }
+        // Semilla al ENTRAR al cuerpo: SÓLO la base lunar, que es TUYA (los colonos que
+        // mandaste viven pegados a tus hábitats, no en un asentamiento procedural).
+        //
+        // Todo el resto de la gente del sistema solar la siembra `discover_settlements`
+        // cuando llegás a un pueblo de `geography`. Acá NO se mira dónde está el jugador:
+        // ése era el anillo de NPCs y ya no existe.
+        if recs.is_empty()
+            && nb == CelestialBody::Moon as u8
+            && colony.state.colonists > 0
+            && !already_seeded(&soc, nb, 0.0, 0.0)
+        {
+            recs = seed_society(nb, colony.state.colonists, Some(&machines), 0.0, (0.0, 0.0), &mut soc);
+            soc.centers.push((nb, 0.0, 0.0));
         }
         for rec in recs {
             let Some(brain) = soc.free_ids.pop() else { break };
@@ -743,19 +898,78 @@ fn manage_society(
     soc.active_body = current;
 }
 
-/// B2/S4: el centro de asentamiento de un cuerpo se fija la PRIMERA vez que se siembra
-/// (tu posición al aterrizar) y nunca se recalcula — se conserva en `Society.centers` y
-/// en `society.json`, así el pueblo no "camina" entre visitas ni reaparece en `(0,0)`.
-fn fixed_center(soc: &mut Society, body: u8, player: &Query<&Transform, With<Player>>) -> (f32, f32) {
-    if let Some(&c) = soc.centers.get(&body) {
-        return c;
+/// ¿Ya sembramos el asentamiento centrado en `(x, z)` de `body`? Se compara con holgura
+/// de un tile: el centro sale siempre del mismo cálculo determinista.
+fn already_seeded(soc: &Society, body: u8, x: f32, z: f32) -> bool {
+    soc.centers
+        .iter()
+        .any(|&(b, cx, cz)| b == body && (cx - x).abs() < 1.0 && (cz - z).abs() < 1.0)
+}
+
+/// DESCUBRIMIENTO: si el jugador entró en un asentamiento de `geography` que todavía no
+/// tiene gente, se funda ahí — en SU sitio, no en el tuyo. Es lo que reemplazó al "pueblo
+/// inicial de 9 aldeanos alrededor del jugador": ahora hay que llegar caminando (o
+/// volando) hasta un pueblo para conocer a alguien.
+#[allow(clippy::too_many_arguments)]
+fn discover_settlements(
+    time: Res<Time>,
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    region: Res<RegionRuntime>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    mut soc: ResMut<Society>,
+    player: Query<&Transform, With<Player>>,
+    mut acc: Local<f32>,
+) {
+    *acc += time.delta_secs();
+    if *acc < DISCOVER_EVERY {
+        return;
     }
-    let c = player
-        .get_single()
-        .map(|t| (t.translation.x, -t.translation.y))
-        .unwrap_or((0.0, 0.0));
-    soc.centers.insert(body, c);
-    c
+    *acc = 0.0;
+    if !soc.loaded || surface_region_active(&region).is_none() {
+        return;
+    }
+    let Ok(pt) = player.get_single() else {
+        return;
+    };
+    let body = active_surface_body(&ctx, &planet);
+    let nb = body as u8;
+    if soc.active_body != Some(nb) || soc.alive >= MAX_NPCS {
+        return;
+    }
+    let (ptx, ptz) = (pt.translation.x.floor() as i64, (-pt.translation.y).floor() as i64);
+    let Some(s) = ha_shared::geography::settlement_covering(body, ptx, ptz) else {
+        return; // fuera de todo pueblo: el mundo salvaje está vacío de gente, y así debe ser
+    };
+    let (cx, cz) = (s.center.0 as f32, s.center.1 as f32);
+    if already_seeded(&soc, nb, cx, cz) {
+        return;
+    }
+    // B3/S4: la disposición cultural del planeta se combina con la memoria del CUERPO —
+    // llegar a un pueblo nuevo del planeta donde masacraste al anterior no es empezar de cero.
+    let disp = (planet_temperament_disposition(body) + soc.body_rep(nb)).clamp(-1.0, 1.0);
+    let room = (MAX_NPCS - soc.alive) as u32;
+    let count = tier_population(s.tier).min(room);
+    if count == 0 {
+        return;
+    }
+    let recs = seed_society(nb, count, None, disp, (cx, cz), &mut soc);
+    soc.centers.push((nb, cx, cz));
+    let name = s.name.unwrap_or(match s.tier {
+        ha_shared::geography::SettlementTier::City => "ciudad",
+        ha_shared::geography::SettlementTier::Town => "pueblo",
+        ha_shared::geography::SettlementTier::Hamlet => "aldea",
+    });
+    eprintln!("ha-society: asentamiento '{name}' poblado en ({cx}, {cz}) con {count} vecinos");
+    for rec in recs {
+        let Some(brain) = soc.free_ids.pop() else { break };
+        iafz_sys::load_bytes(brain, GENOME);
+        iafz_sys::reset_echo(brain);
+        soc.alive += 1;
+        spawn_npc(&mut commands, &art, &rec, brain);
+    }
+    soc.dirty = true;
 }
 
 /// Disposición base de los nativos de un planeta según su carácter (espejo del
@@ -825,6 +1039,10 @@ fn seed_society(
             converted: false,
             home_x: Some(wx),
             home_z: Some(wz),
+            // La plaza es el centro de SU asentamiento (o su hábitat, en la Luna): a eso
+            // vuelve a mediodía, aunque en el cuerpo haya media docena de pueblos más.
+            town_x: Some(bx),
+            town_z: Some(bz),
             history: Vec::new(),
             health: 1.0,
             role: Role::Wanderer,
@@ -850,8 +1068,12 @@ fn tick_society(
     mut speech: ResMut<crate::dialog::SpeechQueue>,
     player: Query<&Transform, (With<Player>, Without<Npc>)>,
     mut npcs: Query<(Entity, &mut Npc, &mut Transform, &mut Sprite, &mut Visibility)>,
+    selected: Res<crate::game_phase::SelectedCharacter>,
     mut acc: Local<f32>,
 ) {
+    let _probe = crate::debug::probe("tick_society");
+    // El nombre que elegiste en la creacion: los aldeanos te saludan con el.
+    let player_name = selected.name.clone();
     const AI_HZ: f32 = 15.0;
     *acc += time.delta_secs();
     if *acc < 1.0 / AI_HZ {
@@ -866,43 +1088,55 @@ fn tick_society(
         .map(|t| (t.translation.x, -t.translation.y))
         .unwrap_or((0.0, 0.0));
     let neigh: Vec<(f32, f32)> = npcs.iter().map(|(_, n, ..)| (n.x, n.z)).collect();
+    // Los que ya creen: son los que PREDICAN a sus vecinos. La secta crece de
+    // boca en boca dentro del pueblo, sin que el jugador esté presente — antes
+    // crecía por proximidad al jugador, que es exactamente lo que lo convertía
+    // en un imán de gente.
+    let preachers: Vec<(f32, f32)> = npcs
+        .iter()
+        .filter(|(_, n, ..)| n.converted)
+        .map(|(_, n, ..)| (n.x, n.z))
+        .collect();
 
-    // FUNDAR la religión: si el fundador (jugador) reúne un rebaño de NPCs cordiales
-    // a su alrededor, nace el culto (su compañero es el primer discípulo). Una vez.
-    if has_player && !religion.founded {
-        let flock = npcs
-            .iter()
-            .filter(|(_, n, ..)| {
-                let d2 = (n.x - px) * (n.x - px) + (n.z - pz) * (n.z - pz);
-                d2 < FOUND_RADIUS * FOUND_RADIUS && soc.rep(n.family) > AGGRO_THRESHOLD
-            })
-            .count();
-        if flock >= FOUND_MIN_FLOCK {
-            religion.founded = true;
-            religion.name = "Los Hijos del Ki".to_string();
-            eprintln!("ha-religion: FUNDADA '{}' (rebaño {flock})", religion.name);
-            crate::dialog::say(
-                &mut speech,
-                px,
-                pz,
-                format!("Fundo {}!", religion.name),
-                Color::srgb(1.0, 0.9, 0.3),
-            );
-        }
-    }
     let mut followers = 0u32;
 
     // B6: la muerte por causa VISIBLE vive entera en `harm_events` (el único lugar que
     // puede matar hoy); acá no hay canal muerto que iterar.
-    let mut births: Vec<(f32, f32, i32, u32)> = Vec::new(); // x, z, brain padre, familia
+    // x, z, brain del padre, familia, plaza del pueblo (la cría hereda el pueblo).
+    let mut births: Vec<(f32, f32, i32, u32, (f32, f32))> = Vec::new();
 
+    let phase_now = routine_phase(day.phase());
+    // ¿Está el jugador en otra capa? (segundo piso, subsuelo, cueva.)
+    let off_layer = tiles.z != 0;
     for (e, mut n, mut tf, mut sprite, mut vis) in &mut npcs {
         let dr2 = (n.x - px) * (n.x - px) + (n.z - pz) * (n.z - pz);
-        // Cull + freeze lejos del jugador (barato; sigue como dato).
-        if dr2 > RENDER_R * RENDER_R {
+        // LOD LEJANO: se oculta y se apaga el cerebro, PERO sigue su rutina en barato — el
+        // pueblo no se congela porque le des la espalda. Antes acá había un `continue`
+        // seco y volvías a encontrarlos plantados donde los dejaste.
+        //
+        // **Otra capa cuenta como lejos.** La gente vive en la superficie: desde el
+        // segundo piso o desde una cueva no se la ve, igual que no se ven los tiles
+        // ni el decor de abajo (que sí se streamean por capa). Sin esto, subir a tu
+        // segundo piso te dejaba a los vecinos caminando por encima de tu losa.
+        // La rutina barata sigue corriendo, así que el pueblo no se congela porque
+        // subiste una escalera.
+        if dr2 > RENDER_R * RENDER_R || off_layer {
             if *vis != Visibility::Hidden {
                 *vis = Visibility::Hidden;
             }
+            n.age += dt;
+            let (nx, nz) = advance_far(
+                (n.x, n.z),
+                (n.home_x, n.home_z),
+                (n.town_x, n.town_z),
+                n.uid,
+                n.family,
+                phase_now,
+                &mut n.needs,
+                dt,
+            );
+            n.x = nx;
+            n.z = nz;
             continue;
         }
         if *vis != Visibility::Visible {
@@ -915,28 +1149,37 @@ fn tick_society(
         n.calm_cd = (n.calm_cd - dt).max(0.0);
         n.convert_cd = (n.convert_cd - dt).max(0.0);
 
-        use std::f32::consts::{FRAC_PI_2, PI, TAU};
+        use std::f32::consts::{PI, TAU};
         let rep = soc.rep(n.family);
 
         // --- FE + conversión (religión) ---
-        let near_idol =
-            religion.founded && has_player && dr2 < IDOL_RADIUS * IDOL_RADIUS && rep > AGGRO_THRESHOLD;
-        if near_idol {
-            n.faith = (n.faith + FAITH_GAIN * dt).min(1.0);
-            if !n.converted && n.faith >= CONVERT_AT {
-                n.converted = true;
-                crate::dialog::say_from(
-                    &mut speech,
-                    e,
-                    n.x,
-                    n.z,
-                    format!("Creo en {}!", religion.name),
-                    Color::srgb(1.0, 0.85, 0.3),
-                    false,
-                );
+        // La fe se contagia entre VECINOS, no por estar cerca del jugador. Vos
+        // fundás predicando (menú del NPC → PREDICAR) y a partir del primer
+        // creyente el culto se propaga solo por el pueblo, esté el fundador
+        // donde esté. Estar al lado de un aldeano ya no le hace nada.
+        if !n.converted {
+            let preached = religion.founded
+                && rep > AGGRO_THRESHOLD
+                && preachers.iter().any(|&(fx, fz)| {
+                    (n.x - fx) * (n.x - fx) + (n.z - fz) * (n.z - fz) < PREACH_RADIUS * PREACH_RADIUS
+                });
+            if preached {
+                n.faith = (n.faith + FAITH_SPREAD * dt).min(1.0);
+                if n.faith >= CONVERT_AT {
+                    n.converted = true;
+                    crate::dialog::say_from(
+                        &mut speech,
+                        e,
+                        n.x,
+                        n.z,
+                        format!("Creo en {}!", religion.name),
+                        Color::srgb(1.0, 0.85, 0.3),
+                        false,
+                    );
+                }
+            } else {
+                n.faith = (n.faith - FAITH_COOL * dt).max(0.0); // se enfría sin quien predique
             }
-        } else if !n.converted {
-            n.faith = (n.faith - 0.01 * dt).max(0.0); // se enfría lejos del ídolo
         }
         if n.converted {
             followers += 1;
@@ -952,22 +1195,20 @@ fn tick_society(
         n.needs.food = (n.needs.food - NEEDS_FOOD_DECAY * dt).max(0.0);
         n.needs.rest = (n.needs.rest - NEEDS_REST_DECAY * dt).max(0.0);
         n.needs.belonging = (n.needs.belonging - NEEDS_BELONGING_DECAY * dt).max(0.0);
-        let phase = routine_phase(day.phase());
+        let phase = phase_now;
 
         // --- PROPÓSITO: SIEMPRE hay un rumbo → nada de círculos sin sentido ---
         let toward_p = (pz - n.z).atan2(px - n.x);
         let mut resting = false;
-        let (goal, gain): (Option<f32>, f32) = if n.converted && has_player {
-            // Fiel: venera al ídolo — acércate si lejos, rodéalo si cerca.
-            let d = dr2.sqrt();
-            if d > IDOL_ORBIT + 0.6 {
-                (Some(toward_p), 1.1)
-            } else {
-                (Some(toward_p + FRAC_PI_2), 0.7) // orbita al ídolo
-            }
-        } else if rep <= AGGRO_THRESHOLD && dr2 < 24.0 * 24.0 {
+        // Ojo con lo que NO está acá: no hay rama de "fiel". Ser converso no
+        // cambia a dónde va el NPC salvo por el santuario de su propio pueblo
+        // (ver `RoutinePhase::Plaza`). Lo único que todavía camina hacia el
+        // jugador es quien te ODIA, y eso es una consecuencia de matarle a la
+        // familia, no de fe.
+        let (goal, gain): (Option<f32>, f32) = if has_player && rep <= AGGRO_THRESHOLD && dr2 < 24.0 * 24.0
+        {
             (Some(toward_p), 1.0) // te encara
-        } else if rep < -0.15 && dr2 < 20.0 * 20.0 {
+        } else if has_player && rep < -0.15 && dr2 < 20.0 * 20.0 {
             (Some(toward_p + PI), 0.9) // huye
         } else {
             // S5: rutina diaria — reemplaza el "deambula cerca de casa" fijo por un
@@ -996,17 +1237,22 @@ fn tick_society(
                     }
                 }
                 RoutinePhase::Plaza => {
-                    if let Some(&(cx, cz)) = soc.centers.get(&(body as u8)) {
-                        let cd2 = (n.x - cx) * (n.x - cx) + (n.z - cz) * (n.z - cz);
-                        if cd2 > PLAZA_ARRIVE_R * PLAZA_ARRIVE_R {
-                            (Some((cz - n.z).atan2(cx - n.x)), 0.85) // va a la plaza
-                        } else {
-                            n.needs.belonging = (n.needs.belonging + NEEDS_PLAZA_GAIN * dt).min(1.0);
-                            let drift = (n.uid as f32 * 1.7 + n.age * 0.25).sin() * 0.3;
-                            (Some(n.heading + drift), 0.15) // se junta con el pueblo
-                        }
+                    // La plaza de SU pueblo (puede haber varios en el mismo planeta).
+                    // Los fieles se apartan al SANTUARIO: a la misma hora, todos los
+                    // días, hay un corro dorado rezando a un costado de la plaza.
+                    // Ahí se ve la secta — en el mundo, no atrás tuyo.
+                    let (cx, cz) = if n.converted {
+                        shrine_of(n.town_x, n.town_z)
                     } else {
-                        (None, 0.0)
+                        (n.town_x, n.town_z)
+                    };
+                    let cd2 = (n.x - cx) * (n.x - cx) + (n.z - cz) * (n.z - cz);
+                    if cd2 > PLAZA_ARRIVE_R * PLAZA_ARRIVE_R {
+                        (Some((cz - n.z).atan2(cx - n.x)), 0.85) // va a la plaza
+                    } else {
+                        n.needs.belonging = (n.needs.belonging + NEEDS_PLAZA_GAIN * dt).min(1.0);
+                        let drift = (n.uid as f32 * 1.7 + n.age * 0.25).sin() * 0.3;
+                        (Some(n.heading + drift), 0.15) // se junta con el pueblo
                     }
                 }
                 RoutinePhase::GoHome => {
@@ -1025,8 +1271,8 @@ fn tick_society(
             n.heading += diff.clamp(-1.0, 1.0) * NPC_TURN * dt * gain;
         }
 
-        let aggro = rep <= AGGRO_THRESHOLD && dr2 < 24.0 * 24.0;
-        let flee = rep < -0.2 && rep > AGGRO_THRESHOLD && dr2 < 20.0 * 20.0;
+        let aggro = has_player && rep <= AGGRO_THRESHOLD && dr2 < 24.0 * 24.0;
+        let flee = has_player && rep < -0.2 && rep > AGGRO_THRESHOLD && dr2 < 20.0 * 20.0;
         let speed = if resting {
             0.0 // S5: duerme adentro, quieto — no camina en el sitio
         } else {
@@ -1035,9 +1281,9 @@ fn tick_society(
                     1.9
                 } else if flee {
                     1.6
-                } else if n.converted {
-                    1.3
                 } else {
+                    // El fiel ya no corre: antes iba 1.3× porque tenía que
+                    // alcanzarte. Camina como cualquier vecino.
                     0.9
                 }
         };
@@ -1061,7 +1307,7 @@ fn tick_society(
             && soc.body_health(body as u8, soc.alive as u32) >= BIRTH_MIN_HEALTH
         {
             n.energy -= NPC_REPRO_COST;
-            births.push((n.x, n.z, n.brain, n.family));
+            births.push((n.x, n.z, n.brain, n.family, (n.town_x, n.town_z)));
         }
 
         // --- CHAT ambiental por CONTEXTO (el mundo se siente vivo) ---
@@ -1075,6 +1321,7 @@ fn tick_society(
                 n.faith,
                 religion.founded,
                 &religion.name,
+                &player_name,
                 n.uid.wrapping_add(n.age as u64),
             );
             let col = if n.converted {
@@ -1109,7 +1356,7 @@ fn tick_society(
     }
 
     let body_u8 = soc.active_body.unwrap_or(0);
-    for (x, z, parent, family) in births {
+    for (x, z, parent, family, town) in births {
         let Some(child) = soc.free_ids.pop() else { break };
         iafz_sys::mutate(parent, child, NPC_MUTATE);
         iafz_sys::reset_echo(child);
@@ -1130,6 +1377,10 @@ fn tick_society(
             converted: false,
             home_x: Some(x + ox),
             home_z: Some(z + oz),
+            // El recién nacido hereda el PUEBLO de su padre: la plaza a la que irá a
+            // mediodía es la de su familia, no la del asentamiento más cercano.
+            town_x: Some(town.0),
+            town_z: Some(town.1),
             history: Vec::new(),
             health: 1.0,
             role: Role::Wanderer, // S6: el recién nacido elige oficio en el próximo tick
@@ -1188,6 +1439,42 @@ fn tick_colony_economy(time: Res<Time>, mut soc: ResMut<Society>, mut live: Quer
     }
 }
 
+/// Los pueblos de los OTROS cuerpos también cumplen su horario. Corre a 1 Hz sobre los
+/// `NpcRecord` guardados (aritmética pura, sin entidades ni render): un pueblo de Marte
+/// sigue yendo a trabajar mientras vos estás en la Tierra, y al aterrizar los encontrás
+/// donde les toca — no clavados donde los dejaste hace una semana.
+fn tick_society_remote(
+    time: Res<Time>,
+    day: Res<crate::sky2d::DayClock>,
+    mut soc: ResMut<Society>,
+    mut acc: Local<f32>,
+) {
+    *acc += time.delta_secs();
+    if *acc < 1.0 {
+        return;
+    }
+    let dt = *acc;
+    *acc = 0.0;
+    if !soc.loaded {
+        return;
+    }
+    let active = soc.active_body;
+    let phase = routine_phase(day.phase());
+    for r in soc.records.iter_mut() {
+        if Some(r.body) == active {
+            continue; // ése lo simulan las entidades vivas
+        }
+        let home = (r.home_x.unwrap_or(r.x), r.home_z.unwrap_or(r.z));
+        let town = (r.town_x.unwrap_or(home.0), r.town_z.unwrap_or(home.1));
+        let mut needs = r.needs;
+        let (nx, nz) = advance_far((r.x, r.z), home, town, r.uid, r.family, phase, &mut needs, dt);
+        r.x = nx;
+        r.z = nz;
+        r.needs = needs;
+        r.age += dt;
+    }
+}
+
 // --- Evento de DAÑO (crea el rencor) -----------------------------------------
 
 /// Un golpe de ATAQUE cerca del cursor daña al NPC más próximo (`ATTACK_DAMAGE`, dos
@@ -1206,7 +1493,7 @@ fn harm_events(
     mut speech: ResMut<crate::dialog::SpeechQueue>,
     mut cooldown: Local<f32>,
     time: Res<Time>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
 ) {
     *cooldown = (*cooldown - time.delta_secs()).max(0.0);
     if tap.slot.is_none() || *cooldown > 0.0 || !cursor.initialized {
@@ -1245,7 +1532,10 @@ fn harm_events(
     npc.health = (npc.health - ATTACK_DAMAGE).max(0.0);
     let dead = npc.health <= 0.0;
     drop(npc);
-    sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Dig));
+    sfx.send(crate::audio::PlaySfxAt(
+        crate::audio::Sfx::Dig,
+        crate::world2d::render_xy(vx, vz),
+    ));
     let body = soc.active_body.unwrap_or(0);
     if !dead {
         // Herido y no muerto: agresión atenuada (no el rencor completo de una muerte) y
@@ -1326,6 +1616,8 @@ fn save_society_periodic(
                 converted: n.converted,
                 home_x: Some(n.home_x),
                 home_z: Some(n.home_z),
+                town_x: Some(n.town_x),
+                town_z: Some(n.town_z),
                 history: n.history.clone(),
                 health: n.health,
                 role: n.role,
@@ -1362,7 +1654,8 @@ fn spawn_society_overlay(mut commands: Commands) {
         TextColor(Color::srgba(1.0, 0.85, 0.6, 0.92)),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(28.0),
+            // Debajo del overlay del VIVARIO, que ahora lleva dos líneas (censo + ECO).
+            top: Val::Px(46.0),
             left: Val::Px(8.0),
             ..default()
         },
@@ -1370,12 +1663,51 @@ fn spawn_society_overlay(mut commands: Commands) {
     ));
 }
 
+/// Asentamiento más cercano al jugador (nombre + distancia) — la brújula de QA para
+/// comprobar que la gente está donde dice la geografía y no alrededor tuyo. Barra las 3×3
+/// celdas de sitio vecinas; se llama con throttle, nunca por frame.
+fn nearest_settlement_line(body: CelestialBody, px: f32, pz: f32) -> String {
+    use ha_shared::geography::{settlement_in, SettlementTier, SITE_PERIOD};
+    let (sx, sz) = (
+        (px as i64).div_euclid(SITE_PERIOD),
+        (pz as i64).div_euclid(SITE_PERIOD),
+    );
+    let mut best: Option<(f32, &'static str, i64, i64)> = None;
+    for dz in -1..=1 {
+        for dx in -1..=1 {
+            let Some(s) = settlement_in(body, sx + dx, sz + dz) else { continue };
+            let (cx, cz) = (s.center.0 as f32, s.center.1 as f32);
+            let d = ((cx - px) * (cx - px) + (cz - pz) * (cz - pz)).sqrt();
+            let label = s.name.unwrap_or(match s.tier {
+                SettlementTier::City => "CIUDAD",
+                SettlementTier::Town => "PUEBLO",
+                SettlementTier::Hamlet => "ALDEA",
+            });
+            if best.map_or(true, |(bd, ..)| d < bd) {
+                best = Some((d, label, s.center.0, s.center.1));
+            }
+        }
+    }
+    match best {
+        Some((d, label, cx, cz)) => format!("{label} en ({cx},{cz}) a {d:.0} m"),
+        None => "ninguno en 2.6 km — sigue explorando".to_string(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn update_society_overlay(
     editor: Res<crate::ui_editor::UiEditorState>,
     soc: Res<Society>,
     day: Res<crate::sky2d::DayClock>,
+    time: Res<Time>,
+    region: Res<RegionRuntime>,
+    ctx: Res<WorldContextRuntime>,
+    planet: Res<ActivePlanet>,
+    player: Query<&Transform, With<Player>>,
     npcs: Query<&Npc>,
     mut overlay: Query<(&mut Text, &mut Visibility), With<SocietyOverlay>>,
+    mut acc: Local<f32>,
+    mut nearest: Local<String>,
 ) {
     let Ok((mut text, mut vis)) = overlay.get_single_mut() else {
         return;
@@ -1428,6 +1760,21 @@ fn update_society_overlay(
         rest_avg /= n as f32;
         belong_avg /= n as f32;
     }
+    // Brújula de asentamientos (throttle 2 s: `settlement_in` no es gratis).
+    *acc += time.delta_secs();
+    if *acc >= 2.0 || nearest.is_empty() {
+        *acc = 0.0;
+        *nearest = match (surface_region_active(&region), player.get_single()) {
+            (Some(()), Ok(pt)) => nearest_settlement_line(
+                active_surface_body(&ctx, &planet),
+                pt.translation.x,
+                -pt.translation.y,
+            ),
+            _ => "-".to_string(),
+        };
+    }
+    let nearest_txt: &str = nearest.as_str();
+    let seeded_here = soc.active_body().map_or(0, |b| soc.centers.iter().filter(|c| c.0 == b).count());
     let (hh, mm) = day.clock_hm();
     let routine = match routine_phase(day.phase()) {
         RoutinePhase::Sleep => "DUERME",
@@ -1440,7 +1787,8 @@ fn update_society_overlay(
         "SOCIEDAD  npcs {n}  familias {}  reput [{:+.2} .. {:+.2}]\n\
          COLONIA  salud {:.0}%  comida {:.1}  madera {:.1}  piedra {:.1}  \
          granj {farmers} min {miners} constr {builders} libre {wanderers}\n\
-         RUTINA  {hh:02}:{mm:02} {routine}  necesidad comida {:.0}% descanso {:.0}% pertenencia {:.0}%",
+         RUTINA  {hh:02}:{mm:02} {routine}  necesidad comida {:.0}% descanso {:.0}% pertenencia {:.0}%\n\
+         PUEBLOS  sembrados aqui {seeded_here}  mas cercano: {nearest_txt}",
         fams.len(),
         worst,
         best,
@@ -1548,5 +1896,55 @@ pub(crate) fn npc_role(faith: f32, converted: bool, rep: f32) -> &'static str {
         "CREYENTE"
     } else {
         "ALDEANO"
+    }
+}
+
+#[cfg(test)]
+mod religion_tests {
+    use super::*;
+
+    /// **Los fieles no te siguen.** El pedido es explícito y se rompió una vez:
+    /// el converso tomaba al jugador de ídolo y le caminaba atrás. La guardia es
+    /// sobre el fuente porque la conducta vive dentro de `tick_society`, que
+    /// necesita medio ECS para correr: si alguien vuelve a poner `toward_p`
+    /// (el rumbo hacia el jugador) en la misma rama que `converted`, esto salta.
+    #[test]
+    fn ningun_fiel_apunta_al_jugador() {
+        let src = include_str!("society.rs");
+        // Sólo el código del módulo, no este test (que nombra las dos cosas).
+        let code_only = src.split("mod religion_tests").next().unwrap_or(src);
+        for (i, line) in code_only.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or("");
+            assert!(
+                !(code.contains("toward_p") && code.contains("converted")),
+                "society.rs:{}: el fiel vuelve a caminar hacia el jugador — la secta \
+                 se junta en su santuario, no atras tuyo:\n  {line}",
+                i + 1
+            );
+        }
+    }
+
+    /// El santuario está al lado de la plaza de SU pueblo: lo bastante lejos
+    /// para que el corro de fieles se lea aparte, lo bastante cerca para seguir
+    /// siendo el mismo pueblo.
+    #[test]
+    fn el_santuario_esta_junto_a_la_plaza() {
+        let (sx, sz) = shrine_of(100.0, -40.0);
+        let d = ((sx - 100.0).powi(2) + (sz + 40.0).powi(2)).sqrt();
+        assert!(d > PLAZA_ARRIVE_R, "el santuario cae dentro de la plaza (d={d})");
+        assert!(d < 20.0, "el santuario quedo fuera del pueblo (d={d})");
+    }
+
+    /// Fundar es idempotente: predicarle a un segundo aldeano no re-funda el
+    /// culto ni le cambia el nombre.
+    #[test]
+    fn fundar_dos_veces_no_cambia_nada() {
+        let mut r = Religion::default();
+        r.found();
+        let name = r.name.clone();
+        r.found();
+        assert!(r.founded);
+        assert_eq!(r.name, name);
+        assert!(!name.is_empty());
     }
 }

@@ -7,10 +7,13 @@ use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 
 use super::BagPanelState;
 
-pub const GRID_COLS: usize = 4;
-/// 8 rows (32 slots) so the creative kit + a full survival haul fit; the grid
+/// 6 columnas: la mochila ahora ocupa la pantalla entera (ver `spawn_bag_panel`),
+/// así que caben seis celdas por fila sin apretarlas — con 4 quedaba una columnita
+/// de slots enormes en medio de un panel vacío.
+pub const GRID_COLS: usize = 6;
+/// 6 filas (36 slots) so the creative kit + a full survival haul fit; the grid
 /// section scrolls (`BagInventorySection` overflow) past the visible rows.
-pub const GRID_ROWS: usize = 8;
+pub const GRID_ROWS: usize = 6;
 pub const GRID_LEN: usize = GRID_COLS * GRID_ROWS;
 /// Item slots between hammer (0) and BAG (last) in the 10-slot hotbar.
 pub const HOTBAR_ITEM_SLOTS: usize = 8;
@@ -239,6 +242,28 @@ pub fn add_item_to_slots_rest(state: &mut InventoryUiState, item_id: &str, qty: 
         remaining -= put;
     }
     remaining
+}
+
+/// Quita `qty` unidades de `item_id` de los slots visibles (hotbar primero). Es
+/// la contracara de [`add_item_to_slots`] y la usa todo lo que CONSUME un ítem
+/// colocándolo en el mundo (mapa): descontar del `PlayerInventory` sin tocar los
+/// slots los deja desincronizados y el ítem "vuelve" al siguiente guardado.
+pub fn remove_from_slots(state: &mut InventoryUiState, item_id: &str, qty: u32) {
+    let mut remaining = qty;
+    for stack in state.hotbar.iter_mut().chain(state.grid.iter_mut()) {
+        if remaining == 0 {
+            break;
+        }
+        if stack.item_id.as_deref() != Some(item_id) {
+            continue;
+        }
+        let take = remaining.min(stack.qty);
+        stack.qty -= take;
+        remaining -= take;
+        if stack.qty == 0 {
+            *stack = Stack::default();
+        }
+    }
 }
 
 pub fn pick_up_stack(state: &mut InventoryUiState, slot: SlotId) -> bool {

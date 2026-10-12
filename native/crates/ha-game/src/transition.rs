@@ -20,9 +20,11 @@ use ha_shared::{body_atmo_top, CelestialBody};
 use crate::universe::{space_alt, view_h_for_alt};
 
 
-/// Opacidad máxima de la bruma atmosférica. Deliberadamente < 1: la continuidad
-/// se logra con LOD, no cegando al jugador.
-const MAX_HAZE: f32 = 0.28;
+/// Opacidad máxima de la bruma atmosférica, en el techo del aire. Deliberadamente
+/// < 1: la continuidad se logra con LOD, no cegando al jugador. Bajada de 0.28 a
+/// 0.16 — a 0.28 el mundo entero se leía a través de un velo lechoso y el color
+/// del terreno (lo que hace que reconozcas dónde estás) se perdía.
+const MAX_HAZE: f32 = 0.16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum TransitionMode {
@@ -105,10 +107,21 @@ pub fn haze_at(body: CelestialBody, alt: f32) -> f32 {
     if atmo <= 0.0 {
         return 0.0;
     }
-    // Campana sobre [0, 2·atmo] con el pico en el techo de la atmósfera.
+    // Campana sobre [0, 2·atmo] con el pico en el techo de la atmósfera, pero la
+    // subida es CÚBICA, no lineal.
+    //
+    // Con la subida lineal, volar a 1.4 km sobre tu propio mundo ya te ponía un
+    // 17 % de bruma encima —y a esa altura la capa de tiles finos ya se apagó, o
+    // sea que estabas mirando el mapa satelital a través de un velo—. El
+    // resultado era la queja: "salgo de la Tierra, vuelvo, y sólo se ve una
+    // niebla café o verde". La atmósfera tiene que notarse cuando estás ALTO,
+    // no mientras sobrevolás tu casa: cúbica deja el vuelo bajo y medio
+    // limpios (a media atmósfera, 2 % en vez de 14 %) y sigue cerrando la vista
+    // al asomarte al espacio, que es donde de verdad aporta.
     let x = (alt / atmo.max(1.0)).clamp(0.0, 2.0);
-    let bell = 1.0 - (x - 1.0).abs();
-    MAX_HAZE * bell.clamp(0.0, 1.0)
+    let up = x.min(1.0).powi(3);
+    let down = (2.0 - x).clamp(0.0, 1.0);
+    MAX_HAZE * up.min(down)
 }
 
 /// Cielo de superficie → vacío estrellado. Completo un poco por encima del

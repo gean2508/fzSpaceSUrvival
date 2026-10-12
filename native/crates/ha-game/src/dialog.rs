@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use crate::world2d::{render_xy, sort_z};
+use crate::world2d::render_xy;
 
 /// Escala del Text2d en el mundo (el font_size está en px; esto lo baja a unidades
 /// de mundo legibles cerca de un personaje). Ajustable si sale grande/chico.
@@ -51,7 +51,14 @@ pub struct DialogPlugin;
 impl Plugin for DialogPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpeechQueue>()
-            .add_systems(Update, (spawn_bubbles, tick_bubbles, follow_owner).chain());
+            // Sin partida no hay a quién oír: en el menú las burbujas de habla
+            // aparecían sobre el panel ("Uno con el Ki." flotando junto al título).
+            .add_systems(
+                Update,
+                (spawn_bubbles, tick_bubbles, follow_owner)
+                    .chain()
+                    .run_if(in_state(crate::game_phase::GamePhase::Playing)),
+            );
     }
 }
 
@@ -118,9 +125,15 @@ fn spawn_bubbles(
             Text2d::new(text),
             TextFont { font_size: 22.0, ..default() },
             TextColor(color),
-            // Al frente en el Y-sort; +stack en Z para que la de arriba no quede tapada.
+            // Encima de TODO el mundo (banda de techos), porque un globo tapado
+            // por un árbol no se lee. `+stack` para que la de arriba no quede
+            // tapada por la de abajo.
             Transform {
-                translation: Vec3::new(pos.x, pos.y, sort_z(z) + 5.0 + stack * 0.01),
+                translation: Vec3::new(
+                    pos.x,
+                    pos.y,
+                    crate::layers::OVERHEAD + 0.1 + stack * 0.01,
+                ),
                 scale: Vec3::splat(BUBBLE_SCALE),
                 ..default()
             },

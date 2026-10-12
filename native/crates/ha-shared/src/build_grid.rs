@@ -30,7 +30,19 @@ pub const WALL_THICK: f32 = 0.26;
 
 /// Alto VISUAL de una pared en tiles. El sprite se ancla al pie del borde y
 /// crece hacia arriba en pantalla (perspectiva 3/4).
-pub const WALL_RENDER_H: f32 = 1.5;
+///
+/// **La referencia es el jugador, no el tile.** El personaje se dibuja de
+/// `0.95 × 1.9` (ver `scene.rs`), o sea casi dos tiles de alto. Con el 1.5 de
+/// antes una pared —y sobre todo una PUERTA— quedaba más BAJA que quien la
+/// cruza: por eso la puerta se veía diminuta en el mundo. Una puerta tiene que
+/// leerse como algo por lo que pasás por debajo.
+///
+/// 2.4 tiles = ~1.26 veces la altura del jugador. Es la proporción de un umbral
+/// real y sigue dejando ver lo que hay detrás del muro en cenital (a partir de
+/// ~3 el muro tapa media pantalla y el interior deja de leerse).
+///
+/// No toca la colisión: el grosor caminable sigue siendo `WALL_THICK`.
+pub const WALL_RENDER_H: f32 = 2.4;
 
 /// Orientación de un borde de la cuadrícula.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -122,6 +134,95 @@ pub static EDGE_PIECES: &[EdgePiece] = &[
     },
 ];
 
+// ---------------------------------------------------------------------------
+// Techos — la TERCERA capa: piso = celda, pared = borde, techo = celda de arriba
+// ---------------------------------------------------------------------------
+
+/// Qué clase de tapa es. Sólo cambia cómo se DIBUJA: el tumbado es plano y se
+/// mira desde abajo (interior), el techo es de aguas y se mira desde arriba
+/// (exterior). Ninguno de los dos toca la colisión — un techo no es un piso, y
+/// caminar por encima exige construir la losa del piso de arriba.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CeilingKind {
+    /// **Tumbado**: la tapa lisa que ves desde adentro del cuarto.
+    Ceiling,
+    /// **Techo modular**: la cubierta de afuera. Autotile por vecinos, así que
+    /// una sola clave de arte da faldones, cumbrera y esquinas.
+    Roof,
+}
+
+/// Una pieza de techo del catálogo.
+#[derive(Clone, Copy, Debug)]
+pub struct CeilingPiece {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// Slot de arte. Los `Roof` usan poses de autotile
+    /// (`center`/`edge_*`/`corner_*`/`inner_*`), igual que el agua y los pisos;
+    /// los `Ceiling` con una sola pose (`center`) ya se ven bien.
+    pub art: &'static str,
+    pub kind: CeilingKind,
+    pub cost_item: &'static str,
+    pub cost_qty: u32,
+}
+
+/// Catálogo ordenado de tapas (el índice es el slot de paleta).
+///
+/// Es deliberadamente corto: el techo modular sale de UNA clave con autotile, no
+/// de nueve piezas (faldón norte, esquina, cumbrera…) que el jugador tendría que
+/// ir encajando a mano en un celular. Vos pintás la superficie y el juego elige
+/// la forma de cada celda por sus vecinas.
+pub static CEILING_PIECES: &[CeilingPiece] = &[
+    CeilingPiece {
+        id: "ceil_wood",
+        label: "Tumbado madera",
+        art: "ceiling/madera",
+        kind: CeilingKind::Ceiling,
+        cost_item: "wood",
+        cost_qty: 1,
+    },
+    CeilingPiece {
+        id: "roof_teja",
+        label: "Techo teja",
+        art: "roof/teja",
+        kind: CeilingKind::Roof,
+        cost_item: "stone",
+        cost_qty: 2,
+    },
+    CeilingPiece {
+        id: "roof_chapa",
+        label: "Techo chapa",
+        art: "roof/chapa",
+        kind: CeilingKind::Roof,
+        cost_item: "iron_ingot",
+        cost_qty: 1,
+    },
+];
+
+pub fn ceiling_piece_count() -> usize {
+    CEILING_PIECES.len()
+}
+
+pub fn ceiling_piece(idx: usize) -> Option<&'static CeilingPiece> {
+    CEILING_PIECES.get(idx)
+}
+
+/// Índice de paleta por id (para resolver lo persistido sin atarse al orden).
+pub fn ceiling_piece_index(id: &str) -> Option<usize> {
+    CEILING_PIECES.iter().position(|p| p.id == id)
+}
+
+/// **Apoyo de una tapa**: se techa lo que construiste. La celda tiene que tener
+/// piso construido, o una pared en alguno de sus bordes — así el alero de un
+/// muro entra pero no se puede techar el medio de un prado.
+pub fn ceiling_supported(
+    has_floor: &dyn Fn(i64, i64) -> bool,
+    has_wall_around: &dyn Fn(i64, i64) -> bool,
+    tx: i64,
+    tz: i64,
+) -> bool {
+    has_floor(tx, tz) || has_wall_around(tx, tz)
+}
+
 pub fn edge_piece_count() -> usize {
     EDGE_PIECES.len()
 }
@@ -191,6 +292,38 @@ pub fn is_build_floor(t: Tile) -> bool {
 /// al menos UNA de las dos celdas que separa (así se pega al borde del suelo).
 pub fn wall_supported(has_floor: &dyn Fn(i64, i64) -> bool, tx: i64, tz: i64, axis: WallAxis) -> bool {
     edge_cells(tx, tz, axis).iter().any(|&(cx, cz)| has_floor(cx, cz))
+}
+
+/// **Apoyo de un PISO en altura** (`z > 0`), la regla de Project Zomboid.
+///
+/// En el suelo (`z <= 0`) un piso se coloca donde quieras: hay terreno debajo. En
+/// altura no hay nada debajo salvo lo que construiste, así que una losa entra si:
+///
+/// 1. **Hay algo debajo que la aguante** (`supported_below`): el piso o la pared
+///    del nivel de abajo, o sea que estás techando tu propia casa; o
+/// 2. **se engancha a una losa vecina del MISMO nivel** (`floor_here`): así se
+///    extiende una planta tile a tile y salen balcones y voladizos.
+///
+/// La regla 2 es encadenable a propósito —igual que en Zomboid— porque la que
+/// impide el edificio flotante es la 1: la primera losa de una planta nueva SÓLO
+/// puede nacer encima de algo. Sin la regla 1 podrías empezar un piso en el aire
+/// en medio del océano; sin la regla 2 no podrías volar un alero ni un tile.
+pub fn floor_supported(
+    z_level: i32,
+    supported_below: &dyn Fn(i64, i64) -> bool,
+    floor_here: &dyn Fn(i64, i64) -> bool,
+    tx: i64,
+    tz: i64,
+) -> bool {
+    if z_level <= 0 {
+        return true; // hay terreno: el suelo se apoya solo
+    }
+    if supported_below(tx, tz) {
+        return true;
+    }
+    [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .iter()
+        .any(|&(dx, dz)| floor_here(tx + dx, tz + dz))
 }
 
 /// **Colisión**: ¿la cápsula del jugador centrada en `(x, z)` pisa alguna pared
@@ -367,6 +500,25 @@ mod tests {
                 assert!(seen.insert((tx, tz, a.as_u8())), "{} borde duplicado", p.id);
             }
         }
+    }
+
+    /// El segundo piso: la primera losa nace sobre la casa de abajo, la segunda
+    /// se engancha a la primera, y en el aire virgen no entra nada.
+    #[test]
+    fn un_piso_alto_necesita_algo_debajo_o_un_vecino() {
+        // Abajo hay casa en la franja x ∈ [0,4], z = 0.
+        let below = |cx: i64, cz: i64| (0..5).contains(&cx) && cz == 0;
+        let no_floor = |_: i64, _: i64| false;
+        // Sobre la casa: entra.
+        assert!(floor_supported(1, &below, &no_floor, 2, 0));
+        // Al lado de la casa, sin vecino en el mismo nivel: no entra.
+        assert!(!floor_supported(1, &below, &no_floor, 2, 3));
+        // Con una losa vecina ya puesta en (2,2): el voladizo a (2,3) entra.
+        let floor_at_2_2 = |cx: i64, cz: i64| (cx, cz) == (2, 2);
+        assert!(floor_supported(1, &below, &floor_at_2_2, 2, 3));
+        // Y en el suelo (o bajo tierra) la regla no aplica: siempre hay terreno.
+        assert!(floor_supported(0, &no_floor, &no_floor, 900, 900));
+        assert!(floor_supported(-2, &no_floor, &no_floor, 900, 900));
     }
 
     #[test]

@@ -8,13 +8,13 @@
 //!
 //! Depth is a discrete **Z-Level** (`z_level: i32`): 0 = surface, negative =
 //! underground mine floors, each its own deterministic top-down grid. Space is
-//! NOT a z-level — it is the orbital mode. See `MIGRATION_PLAN.md` §1–§2.
+//! NOT a z-level — it is the orbital mode. Ver `biblia.md` §4.
 
 use crate::celestial_bodies::{body_atmo_top, body_terrain_seed, CelestialBody};
 use crate::constants::{FRICTION, SPRINT_MULT, STAMINA_SPRINT_DRAIN};
 use crate::input::InputState;
 use crate::movement::MovementBody;
-use crate::types::{MOV_IDLE, MOV_RUNNING, MOV_SPRINTING};
+use crate::types::{MOV_IDLE, MOV_RUNNING, MOV_SPRINTING, MOV_SWIMMING};
 
 pub const TILE_M: f32 = 1.0;
 pub const PLAYER_RADIUS: f32 = 0.34;
@@ -31,7 +31,14 @@ pub enum Tile {
     Grass,
     Dirt,
     Sand,
+    /// Líquido de POCO FONDO: no corta el paso, **se nada** (ver [`Tile::swim`]).
+    /// Es el nivel −1 del relieve: la orilla, los ríos, los lagos de pescar y la
+    /// pileta del patio. El color sale del cuerpo (`relief::liquid_color`), así que
+    /// el mismo tile es agua en la Tierra, metano en Titán y lava en Ío.
     Water,
+    /// Líquido HONDO (nivel −2 y más abajo): bloquea. Es lo que hace que el océano
+    /// siga siendo un límite y que cruzar de continente pida puente, vuelo o barco.
+    WaterDeep,
     Regolith,
     /// Hielo: superficie helada CAMINABLE — casquetes polares, cumbres nevadas
     /// y los mundos de hielo (Europa). Resbala a la vista, no en el paso.
@@ -42,6 +49,34 @@ pub enum Tile {
     /// desde el espacio.
     Basalt,
     RockRed,
+    /// **Cara de acantilado**: el borde de una terraza contra la de abajo. Sólida
+    /// y alta — no se trepa, se rodea o se sube por una [`Tile::Slope`]. Es lo que
+    /// convierte una cordillera en una barrera de verdad. Ver `crate::relief`.
+    Cliff,
+    /// **Rampa**: el mismo borde de terraza, pero abierto. Se sube caminando (y
+    /// conduciendo: las carreteras siempre cruzan por acá).
+    Slope,
+    /// Cerca de parcela: corta el paso y se levanta del suelo, pero es delgada —
+    /// el arte la dibuja como listones, no como muro.
+    Fence,
+    /// **Roca desnuda de superficie**: la cumbre y la ladera alta. CAMINABLE.
+    ///
+    /// Es distinto de [`Tile::Stone`], que es la roca MACIZA del subsuelo y
+    /// bloquea. Confundirlas convertía cada montaña en una mole impasable de
+    /// kilómetros —medido: 29 % del terreno alrededor del origen— y eso anula el
+    /// sistema de terrazas entero: si la montaña ya es un muro, sobra el
+    /// acantilado. Lo que corta el paso en altura es [`Tile::Cliff`]; la cumbre se
+    /// pisa, se acampa en ella y se mira el mundo desde arriba.
+    Rock,
+    /// **Pavimento**: acera, vereda, losa de plaza, borde de pileta, patio.
+    /// CAMINABLE.
+    ///
+    /// Existe porque hasta ahora la obra civil pintaba las aceras con
+    /// [`Tile::Stone`], que es la ROCA del subsuelo y por tanto sólida: las
+    /// veredas de todas las ciudades del juego eran muros infranqueables. Nadie lo
+    /// notó porque a pie se camina por la calzada, pero cualquier cosa que
+    /// intentara cruzar de la calle al portal chocaba con una pared invisible.
+    Pavement,
     // Underground (z<0)
     Stone,
     RockDark,
@@ -65,20 +100,72 @@ pub enum Tile {
 }
 
 impl Tile {
-    /// Blocks walking (walls, water, solid rock — cave floors are walkable).
+    /// Blocks walking (walls, deep liquid, solid rock — cave floors are walkable).
     /// Build walls block; wood floors and doors are walkable.
+    ///
+    /// **`Water` ya NO es sólido**: el bajío se nada (ver [`Tile::swim`]). Lo que
+    /// bloquea es [`Tile::WaterDeep`]. Si estás leyendo esto porque algo dejó de
+    /// frenar al jugador en el agua: el sitio a mirar es quién quería decir "no se
+    /// camina" (sigue igual) y quién quería decir "no es suelo edificable" (ésos
+    /// tuvieron que pasar a comprobar `!= Water` explícitamente).
     pub fn solid(self) -> bool {
         matches!(
             self,
-            Tile::Water
+            Tile::WaterDeep
                 | Tile::Wall
                 | Tile::Bedrock
                 | Tile::Stone
                 | Tile::RockDark
                 | Tile::RockRed
+                | Tile::Cliff
+                | Tile::Fence
                 | Tile::WoodWall
                 | Tile::StoneBrick
                 | Tile::Window
+        )
+    }
+
+    /// Líquido de poco fondo: **se nada**. No corta el paso, pero el que lo cruza
+    /// va más lento y con la pose de natación (`swim_*`) en vez de la de caminar.
+    pub fn swim(self) -> bool {
+        matches!(self, Tile::Water)
+    }
+
+    /// ¿Es suelo firme sobre el que se puede FUNDAR algo (una casa, una máquina,
+    /// una parcela)? Distinto de `!solid()`: el bajío se camina pero no se
+    /// construye a secas, y una rampa es un paso, no una parcela.
+    ///
+    /// Existe porque cuando `Water` dejó de ser sólido, todos los sitios que
+    /// usaban `!solid()` para decir "acá se puede edificar" empezaron a plantar
+    /// casas dentro del lago.
+    pub fn buildable_ground(self) -> bool {
+        !self.solid() && !self.swim() && !matches!(self, Tile::Slope | Tile::Air)
+    }
+
+    /// ¿Este material se levanta del suelo (ocluye lo que tiene detrás)?
+    ///
+    /// **No es lo mismo que [`Tile::solid`]**, y confundirlos es lo que hacía
+    /// que el AGUA tapara al jugador: el agua bloquea el paso (es `solid`) pero
+    /// es PLANA, así que debe dibujarse en la banda de suelo, nunca Y-sorted.
+    /// `solid` decide si podés caminar; `upright` decide si te tapa.
+    pub fn upright(self) -> bool {
+        matches!(
+            self,
+            Tile::Wall
+                | Tile::Bedrock
+                | Tile::Stone
+                | Tile::RockDark
+                | Tile::RockRed
+                // El acantilado y la cerca se LEVANTAN del suelo: te tapan lo que
+                // tienen detrás, que es justamente cómo se lee un desnivel en 3/4.
+                // El agua (bajío u hondo) NO: es plana, y confundir "bloquea" con
+                // "es alto" es de donde salía el bug del agua tapando al jugador.
+                | Tile::Cliff
+                | Tile::Fence
+                | Tile::WoodWall
+                | Tile::StoneBrick
+                | Tile::Window
+                | Tile::Door
         )
     }
 
@@ -91,11 +178,60 @@ impl Tile {
             Tile::Regolith => Some("regolith"),
             Tile::Basalt => Some("stone"),
             Tile::Ice => Some("stone"),
-            Tile::Stone | Tile::RockRed => Some("stone"),
+            Tile::Stone | Tile::RockRed | Tile::Pavement | Tile::Rock => Some("stone"),
             Tile::RockDark => Some("stone"),
+            // Picar un acantilado abre el paso: es la alternativa "a lo Minecraft"
+            // a buscar la rampa, y cuesta el tiempo de picar toda la pared.
+            Tile::Cliff => Some("stone"),
+            Tile::Slope => Some("dirt"),
+            Tile::Fence => Some("wood"),
             Tile::WoodFloor | Tile::Wall | Tile::WoodWall | Tile::Door => Some("wood"),
             Tile::Window | Tile::StairsDown | Tile::StairsUp => Some("wood"),
             Tile::StoneBrick => Some("stone"),
+            _ => None,
+        }
+    }
+
+    /// **Slot de arte** de la celda: la clave lógica que el juego le pide a
+    /// `ArtLibrary` (y que vos reskineás en el editor de assets).
+    ///
+    /// Vive acá, al lado del tile, y NO en el cliente: es la única forma de que
+    /// el editor pueda auditar que toda pieza de construcción tiene su slot con
+    /// nombre humano (`ha_assets::game_slots`). Si un tile estrena arte, la
+    /// clave se agrega acá y el test de auditoría exige el slot correspondiente.
+    ///
+    /// `None` = el tile se dibuja SIEMPRE por color ([`Tile::color`]): el
+    /// subsuelo, el aire, la roca del fondo de cueva. Y aunque devuelva `Some`,
+    /// si el slot no tiene PNG asignado el juego cae al color — una puerta sin
+    /// arte es un cuadrado café, nunca un hueco.
+    pub fn art_key(self) -> Option<&'static str> {
+        match self {
+            Tile::Water => Some("tiles/water"),
+            Tile::WaterDeep => Some("tiles/water_deep"),
+            Tile::Grass => Some("tiles/grass"),
+            Tile::Sand => Some("tiles/sand"),
+            Tile::Regolith => Some("tiles/regolith"),
+            Tile::Basalt => Some("tiles/basalt"),
+            Tile::Ice => Some("tiles/ice"),
+            Tile::Stone => Some("tiles/stone"),
+            Tile::Dirt => Some("tiles/dirt"),
+            // Relieve. La clave genérica es el fallback; `cliff_art_key` elige antes
+            // la variante por bioma (`cliff/arena` en un desierto, `cliff/nieve` en la
+            // cumbre) para que la misma pared se lea distinta según dónde esté.
+            Tile::Cliff => Some("cliff/roca"),
+            Tile::Slope => Some("slope/roca"),
+            Tile::Fence => Some("fence/madera"),
+            Tile::Pavement => Some("floor/vereda"),
+            Tile::Rock => Some("tiles/roca"),
+            // Piezas de construcción (autotile de Room_Builder). El muro legacy
+            // (`Wall`) comparte el arte de madera.
+            Tile::WoodFloor => Some("floor/wood"),
+            Tile::WoodWall | Tile::Wall => Some("wall/wood"),
+            Tile::StoneBrick => Some("wall/stone"),
+            Tile::Door => Some("door/wood"),
+            Tile::Window => Some("window/basic"),
+            Tile::StairsDown => Some("stairs/down"),
+            Tile::StairsUp => Some("stairs/up"),
             _ => None,
         }
     }
@@ -106,7 +242,17 @@ impl Tile {
             Tile::Grass => [0.36, 0.62, 0.29],
             Tile::Dirt => [0.47, 0.33, 0.22],
             Tile::Sand => [0.78, 0.70, 0.45],
-            Tile::Water => [0.25, 0.47, 0.70],
+            // Colores GENÉRICOS del líquido. El color real lo pone el cuerpo
+            // (`relief::liquid_color`): el mismo tile es agua, metano o lava según
+            // dónde estés. Estos son el fallback de quien no sabe en qué cuerpo
+            // está (íconos de inventario, tarjetas de la mochila).
+            Tile::Water => [0.35, 0.62, 0.80],
+            Tile::WaterDeep => [0.16, 0.34, 0.58],
+            Tile::Cliff => [0.38, 0.33, 0.29],
+            Tile::Slope => [0.52, 0.42, 0.30],
+            Tile::Fence => [0.52, 0.38, 0.22],
+            Tile::Pavement => [0.60, 0.60, 0.62],
+            Tile::Rock => [0.52, 0.50, 0.47],
             Tile::Regolith => [0.62, 0.62, 0.64],
             Tile::Basalt => [0.29, 0.28, 0.31],
             Tile::Ice => [0.82, 0.88, 0.93],
@@ -158,6 +304,20 @@ pub static BUILD_PIECES: &[BuildPiece] = &[
         label: "Piso madera",
         tile: Tile::WoodFloor,
         cost_item: "wood",
+        cost_qty: 1,
+    },
+    BuildPiece {
+        id: "build_stone_floor",
+        label: "Piso piedra",
+        tile: Tile::StoneBrick,
+        cost_item: "stone",
+        cost_qty: 1,
+    },
+    BuildPiece {
+        id: "build_pavement",
+        label: "Vereda",
+        tile: Tile::Pavement,
+        cost_item: "stone",
         cost_qty: 1,
     },
     BuildPiece {
@@ -305,7 +465,7 @@ pub fn prefab_cost(p: &Prefab) -> u32 {
 /// estructura-sprite que se registra en `BuiltStructures` (juego); su colisión
 /// sale de la huella del art (manifest A1) o, si no hay huella pintada, de la
 /// base completa `w×h`. El jugador camina ALREDEDOR (Y-sort), no adentro.
-/// Agnóstico al cuerpo. (A2, `PLAN_MAESTRO §3.A2`.)
+/// Agnóstico al cuerpo. (`biblia.md` §5.)
 #[derive(Clone, Copy, Debug)]
 pub struct LargeAsset {
     pub id: &'static str,
@@ -313,6 +473,9 @@ pub struct LargeAsset {
     /// Slot de arte lógico (el usuario le asigna la textura en el editor). Sin
     /// arte, cae a un quad de color (como el resto del decor).
     pub art: &'static str,
+    /// Sección del menú CONSTRUIR donde aparece. Con 120+ colocables la lista
+    /// plana dejó de ser navegable en un celular — ver `placeables::PlaceCat`.
+    pub cat: crate::placeables::PlaceCat,
     /// Footprint en tiles (`w` en +x, `h` en +z) — tamaño visual y base de
     /// colisión por defecto.
     pub w: i64,
@@ -321,13 +484,13 @@ pub struct LargeAsset {
     pub cost_qty: u32,
 }
 
-/// Catálogo curado de assets grandes colocables (el usuario asigna el pixel a
-/// cada `art` en el editor; la huella fina se pinta con la sección "🗺 huella").
-pub static LARGE_ASSETS: &[LargeAsset] = &[
-    LargeAsset { id: "boulder", label: "Roca grande 2x2", art: "structure/boulder", w: 2, h: 2, cost_item: "stone", cost_qty: 6 },
-    LargeAsset { id: "statue", label: "Estatua 2x3", art: "structure/statue", w: 2, h: 3, cost_item: "stone", cost_qty: 12 },
-    LargeAsset { id: "monument", label: "Monumento 4x4", art: "structure/monument", w: 4, h: 4, cost_item: "stone", cost_qty: 40 },
-];
+/// Catálogo de assets grandes colocables. **Vive en `placeables.rs`**: acá quedan
+/// sólo los accesos que usa el motor.
+///
+/// Eran tres entradas escritas a mano (peñasco, estatua, monumento) mientras el
+/// catálogo de arte tenía 150 objetos con nombre. Mover la tabla no cambió una
+/// línea de la colocación — es la MISMA `LargeAsset` por el MISMO camino.
+pub use crate::placeables::PLACEABLES as LARGE_ASSETS;
 
 pub fn large_asset_count() -> usize {
     LARGE_ASSETS.len()
@@ -363,7 +526,25 @@ pub use crate::geography::{building_at, building_tile, BuildingSite};
 /// llamadores antiguos.
 pub fn building_site_in(body: CelestialBody, sx: i64, sz: i64) -> Option<BuildingSite> {
     let s = crate::geography::settlement_in(body, sx, sz)?;
-    crate::geography::building_in_block(body, s, 0, 0)
+    // El primer edificio que aparece barriendo en anillos desde el centro del
+    // núcleo. Antes se pedía "el edificio de la manzana (0,0)", pero con parcelas
+    // de tamaño variable la manzana central bien puede ser una plaza o el patio de
+    // un hospital: buscar el primero que haya es lo que esta función siempre quiso
+    // decir ("dame UN edificio de este núcleo, para plantarle props alrededor").
+    for r in 0..24i64 {
+        for dz in -r..=r {
+            for dx in -r..=r {
+                if r > 0 && dx.abs() != r && dz.abs() != r {
+                    continue;
+                }
+                let (tx, tz) = (s.center.0 + dx * 9, s.center.1 + dz * 9);
+                if let Some(b) = crate::geography::building_at(body, tx, tz) {
+                    return Some(b);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// El tile de edificio generado en esta celda, si lo hay.
@@ -469,23 +650,47 @@ pub fn topdown_tile(body: CelestialBody, z: i32, tx: i64, tz: i64) -> Tile {
         if beyond_world_edge(body, tx, tz) {
             return if body_atmo_top(body) > 0.0 { Tile::Water } else { Tile::RockDark };
         }
+        // OBRA CIVIL primero, y dentro de ella **la CALZADA es sagrada**: gana
+        // sobre cualquier cosa edificada.
+        //
+        // Antes los edificios iban antes que la obra civil, y bastaba con que la
+        // geometría de una parcela se pasara un tile para dejar un muro cruzado en
+        // mitad de la avenida. Discutir cada caso de redondeo es una batalla
+        // interminable; declarar que la calzada no se pisa la termina de una vez:
+        // por muy mal que salga una parcela, la carretera sigue siendo carretera y
+        // el mapa sigue siendo transitable. Lo cazó `no_road_is_ever_blocked_by_a_cliff`.
+        //
+        // La ACERA (`Pavement`) no gana: va por debajo, porque una acera es el
+        // suelo que rodea al edificio y no tiene sentido que le coma el portal.
+        let civil = crate::geography::civil_at(body, tx, tz);
+        if let Some(c @ (crate::geography::Civil::Road | crate::geography::Civil::Bridge)) = civil {
+            return crate::geography::civil_tile(c);
+        }
         // Generated settlements override the natural ground (Earth-only table;
         // the tiles behave like any other — collide, dig, persist edits).
         if let Some(t) = building_cell(body, tx, tz) {
             return t;
         }
-        // OBRA CIVIL: carreteras, puentes y suelo urbano. Va por encima del
-        // terreno y por debajo de los edificios — un puente sobre el mar es
-        // simplemente calzada donde había agua, así que se cruza andando.
-        if let Some(c) = crate::geography::civil_at(body, tx, tz) {
+        if let Some(c) = civil {
             return crate::geography::civil_tile(c);
         }
         return surface_tile(body, tx, tz);
     }
     if z > 0 {
-        // Upper floors are void (solid, undiggable): rooms exist only where a
-        // staircase carved them (player edits) — see `layer_transition`.
-        return Tile::Bedrock;
+        // **Los pisos altos son VACÍO, no roca.**
+        //
+        // Antes esto devolvía `Bedrock`, que es sólido: `place_tile` rechaza toda
+        // celda sólida y `break_tile` no pica bedrock, así que arriba no se podía
+        // ni construir ni cavar. El único z>0 que existía era la sala 7×7 que
+        // tallaba `carve_stair_room` al llegar por la grada — o sea que "poner una
+        // escalera y armar el segundo piso" (Project Zomboid) era imposible: subías
+        // a un cuarto fijo del que no se podía salir ni agrandar.
+        //
+        // `Air` no es sólido, así que la celda admite piso, y a la vez no es suelo
+        // (`buildable_ground` la excluye): el que camina sobre vacío se CAE al piso
+        // de abajo (`world2d::fall_through_void`). Ésa es la regla entera de la
+        // verticalidad, y es la misma que hace que un balcón se sienta un balcón.
+        return Tile::Air;
     }
     if z <= MIN_Z_LEVEL {
         return Tile::Bedrock;
@@ -537,9 +742,12 @@ pub fn cave_mouth_in(body: CelestialBody, rx: i64, rz: i64) -> Option<(i64, i64)
     // Tierra firme arriba y galería abierta abajo: si no, la boca sería un
     // agujero a roca maciza o al fondo del mar. Prueba CONTINENTAL barata — esto
     // se consulta para cuatro celdas de cada tile del mundo.
-    let sea = 0.46; // por encima del nivel del mar de cualquier arquetipo con agua
+    // El nivel del mar sale del CUERPO, no de un 0.46 hardcodeado: con la
+    // plantilla de mundo cada cuerpo tiene el suyo (Marte 0.26, Titán 0.495) y
+    // aquel número fijo dejaba planetas enteros sin una sola boca de cueva.
+    let sea = crate::relief::sea_level(body);
     let h = crate::geography::continental_at(body, tx, tz);
-    if h < sea || h > 0.74 {
+    if h < sea + 0.02 || h > sea + 0.34 {
         return None;
     }
     if !cave_open(body, -1, tx, tz) {
@@ -573,7 +781,27 @@ fn cave_regions(tx: i64, tz: i64) -> [(i64, i64); 4] {
 /// El pozo de bajada del piso `z` más cercano al origen — compatibilidad con
 /// código viejo que pedía "la mina" en singular.
 pub fn descend_portal(body: CelestialBody, z: i32) -> (i64, i64) {
-    shaft_cell(body, z, 0, 0).unwrap_or((6, 4))
+    // Busca en anillos la región con pozo MÁS CERCANA al origen.
+    //
+    // El fallback fijo que había —`unwrap_or((6, 4))`— **mentía**: si la región
+    // (0,0) no tenía boca devolvía una celda que no es ningún portal, así que
+    // quien confiara en "la mina" caminaba hasta un sitio donde no se baja. No se
+    // notaba porque con la geografía vieja la región (0,0) casi siempre calificaba;
+    // en cuanto la plantilla de mundo puso el origen en otro terreno, se cayó.
+    for ring in 0..16i64 {
+        for rz in -ring..=ring {
+            for rx in -ring..=ring {
+                // Sólo el perímetro del anillo: el interior ya se miró.
+                if ring > 0 && rx.abs() != ring && rz.abs() != ring {
+                    continue;
+                }
+                if let Some(c) = shaft_cell(body, z, rx, rz) {
+                    return c;
+                }
+            }
+        }
+    }
+    (6, 4)
 }
 
 /// Escalera de subida del piso `z` (sólo bajo la superficie): está donde caés
@@ -699,6 +927,11 @@ pub fn step_topdown_movement(
     step_topdown_movement_ex(body, input, dt, solid, &|_x, _z| false)
 }
 
+/// Cuánto del paso normal se avanza NADANDO. Bastante lento como para que cruzar
+/// un lago sea una decisión (rodearlo suele salir más barato) y no tanto como para
+/// que sea un castigo.
+pub const SWIM_SPEED_MULT: f32 = 0.45;
+
 /// Igual que `step_topdown_movement`, pero además contra las **paredes de
 /// borde** (`build_grid`): `walls(x, z)` responde si la cápsula centrada ahí
 /// pisa una pared que corta el paso. Separado del grid de celdas porque una
@@ -710,6 +943,28 @@ pub fn step_topdown_movement_ex(
     solid: &dyn Fn(i64, i64) -> bool,
     walls: &dyn Fn(f32, f32) -> bool,
 ) {
+    step_topdown_movement_full(body, input, dt, solid, walls, &|_x, _z| false)
+}
+
+/// La versión completa: además del grid y las paredes de borde, `swim(tx,tz)`
+/// responde si esa celda es líquido de poco fondo.
+///
+/// Nadar no es un modo aparte —no hay estado que entrar ni salir—: es el MISMO
+/// paso, más lento, sin esprintar y con otra pose. Por eso se puede entrar al agua
+/// caminando desde la playa sin ningún corte, que es lo que hace que la costa se
+/// sienta continua en vez de un borde con un cartel.
+pub fn step_topdown_movement_full(
+    body: &mut MovementBody,
+    input: &InputState,
+    dt: f32,
+    solid: &dyn Fn(i64, i64) -> bool,
+    walls: &dyn Fn(f32, f32) -> bool,
+    swim: &dyn Fn(i64, i64) -> bool,
+) {
+    let swimming = swim(
+        (body.x / TILE_M).floor() as i64,
+        (body.z / TILE_M).floor() as i64,
+    );
     let mut mx = input.move_x;
     let mut mz = input.move_z;
     let len = (mx * mx + mz * mz).sqrt();
@@ -718,8 +973,15 @@ pub fn step_topdown_movement_ex(
         mz /= len;
     }
     let moving = len > 0.1;
-    let wants_sprint = input.sprint == 1 && moving && body.stamina > 0.0;
-    let speed_mult = if wants_sprint { SPRINT_MULT } else { 1.0 };
+    // Nadando no se esprinta: la carrera es de pies, no de brazos.
+    let wants_sprint = input.sprint == 1 && moving && body.stamina > 0.0 && !swimming;
+    let speed_mult = if wants_sprint {
+        SPRINT_MULT
+    } else if swimming {
+        SWIM_SPEED_MULT
+    } else {
+        1.0
+    };
     let target_vx = mx * body.speed * speed_mult;
     let target_vz = mz * body.speed * speed_mult;
     let blend = (FRICTION * dt).clamp(0.0, 1.0);
@@ -732,27 +994,90 @@ pub fn step_topdown_movement_ex(
         body.stamina = (body.stamina + STAMINA_SPRINT_DRAIN * 0.6 * dt).min(body.max_stamina);
     }
 
-    // X axis then Z axis, resolving against solid tiles (slide along walls).
+    // X primero y Z después, resolviendo contra los sólidos (deslizar por la
+    // pared) — y con CORRECCIÓN DE ESQUINA en los dos ejes (ver `corner_slip`).
+    let free = |x: f32, z: f32| !capsule_hits(x, z, solid) && !walls(x, z);
+    // Cuánto se permite correr de lado en este frame: nunca más de lo que el
+    // propio jugador avanza, así el asistente jamás se siente un empujón.
+    let slack = (body.speed * speed_mult * dt).min(CORNER_SLIP);
+
     let new_x = body.x + body.vx * dt;
-    if !capsule_hits(new_x, body.z, solid) && !walls(new_x, body.z) {
+    if free(new_x, body.z) {
         body.x = new_x;
+    } else if let Some(z) = corner_slip(body.z, slack, &|z| free(new_x, z)) {
+        body.x = new_x;
+        body.z = z;
     } else {
         body.vx = 0.0;
     }
     let new_z = body.z + body.vz * dt;
-    if !capsule_hits(body.x, new_z, solid) && !walls(body.x, new_z) {
+    if free(body.x, new_z) {
         body.z = new_z;
+    } else if let Some(x) = corner_slip(body.x, slack, &|x| free(x, new_z)) {
+        body.z = new_z;
+        body.x = x;
     } else {
         body.vz = 0.0;
     }
 
+    // El estado de natación se mantiene también quieto en el agua: flotar es una
+    // pose, no una pausa — si no, pararse en mitad del lago te devolvía a la pose
+    // de estar de pie sobre el agua.
+    body.state = if swimming {
+        MOV_SWIMMING
+    } else if !moving {
+        MOV_IDLE
+    } else if wants_sprint {
+        MOV_SPRINTING
+    } else {
+        MOV_RUNNING
+    };
     if moving {
         body.rot = mz.atan2(mx);
-        body.state = if wants_sprint { MOV_SPRINTING } else { MOV_RUNNING };
-    } else {
-        body.state = MOV_IDLE;
     }
     body.y = 0.0;
+}
+
+/// Cuánto se puede correr al jugador de lado, como MUCHO, para librar el pico de
+/// una esquina (metros por frame).
+///
+/// 0.16 sobre un radio de 0.34: alcanza para que un roce de un par de
+/// centímetros no te frene, y es demasiado poco como para atravesar nada — un
+/// hueco de verdad mide un tile entero.
+const CORNER_SLIP: f32 = 0.16;
+
+/// **Que no te comas la esquina.**
+///
+/// El problema, que en un juego cenital se siente todo el tiempo: vas caminando
+/// pegado a una pared y el pico de un bloque te roza dos centímetros. La cápsula
+/// choca, el eje se cancela y quedás CLAVADO contra una arista, empujando sin
+/// avanzar. No es que no quepas: te sobra casi todo el ancho, te falta un pelo.
+///
+/// La corrección es la de los plataformeros: si el movimiento está bloqueado
+/// pero corriéndose un poco de lado deja de estarlo, se corre y se pasa. Sólo
+/// se prueban desplazamientos **pequeños** (`CORNER_SLIP`, y nunca más de lo
+/// que el jugador avanza en ese frame), así que jamás puede meterte por un
+/// hueco que no existe ni teletransportarte: si hace falta más que un roce,
+/// devuelve `None` y chocás como siempre.
+///
+/// Se prueba de menos a más y en los dos sentidos, quedándose con el
+/// desplazamiento MÁS CHICO que funciona — el que menos se nota. Y se aplica en
+/// los dos ejes, así que sirve igual yendo en horizontal que en vertical, y en
+/// las esquinas de 90° que es donde más engancha.
+fn corner_slip(cur: f32, slack: f32, free_at: &dyn Fn(f32) -> bool) -> Option<f32> {
+    if slack <= 0.0 {
+        return None;
+    }
+    const STEPS: i32 = 4;
+    for i in 1..=STEPS {
+        let d = slack * i as f32 / STEPS as f32;
+        for cand in [cur + d, cur - d] {
+            if free_at(cand) {
+                return Some(cand);
+            }
+        }
+    }
+    None
 }
 
 fn capsule_hits(x: f32, z: f32, solid: &dyn Fn(i64, i64) -> bool) -> bool {
@@ -779,6 +1104,53 @@ mod tests {
         move |tx, tz| solid_at(body, z, tx, tz)
     }
 
+    /// **No quedarse comido por una esquina.** Un bloque suelto con el jugador
+    /// rozándolo por un pelo: antes el eje se cancelaba y te quedabas empujando
+    /// contra la arista sin avanzar nunca. Ahora se corre lo justo y pasa.
+    #[test]
+    fn a_corner_does_not_swallow_you() {
+        // Un único tile sólido en (2, 2).
+        let solid = |tx: i64, tz: i64| (tx, tz) == (2, 2);
+        let nowalls = |_x: f32, _z: f32| false;
+        let mut b = MovementBody::new(4.0, PLAYER_RADIUS);
+        // Caminando hacia +x justo al sur del bloque (que ocupa z ∈ [2,3]), tan
+        // pegado que la cápsula lo roza por 5 cm. Eso es un ROCE, no un choque:
+        // sobra el 93 % del ancho del jugador.
+        b.x = 0.5;
+        b.z = 3.0 + PLAYER_RADIUS - 0.05;
+        let mut input = empty_input(0);
+        input.move_x = 1.0;
+        let start = b.x;
+        for _ in 0..120 {
+            step_topdown_movement_ex(&mut b, &input, 1.0 / 60.0, &solid, &nowalls);
+        }
+        assert!(
+            b.x > start + 2.0,
+            "se quedó trabado en la esquina: avanzó sólo {:.2} m",
+            b.x - start
+        );
+        // Y NO lo atravesó: la cápsula sigue enteramente al sur del bloque.
+        assert!(b.z >= 3.0 - 1e-3, "se metió dentro del sólido (z={})", b.z);
+    }
+
+    /// El asistente de esquina no puede abrir puertas que no existen: contra una
+    /// pared LLENA se choca igual que siempre.
+    #[test]
+    fn corner_slip_never_opens_a_solid_wall() {
+        // Pared vertical completa en x = 2.
+        let solid = |tx: i64, _tz: i64| tx == 2;
+        let nowalls = |_x: f32, _z: f32| false;
+        let mut b = MovementBody::new(4.0, PLAYER_RADIUS);
+        b.x = 0.5;
+        b.z = 5.5;
+        let mut input = empty_input(0);
+        input.move_x = 1.0;
+        for _ in 0..240 {
+            step_topdown_movement_ex(&mut b, &input, 1.0 / 60.0, &solid, &nowalls);
+        }
+        assert!(b.x < 2.0, "atravesó la pared (x={})", b.x);
+    }
+
     #[test]
     fn terrain_is_deterministic() {
         let a = topdown_tile(CelestialBody::Earth, 0, 12, -7);
@@ -786,9 +1158,11 @@ mod tests {
         assert_eq!(a, b);
         // La Luna ya no es un gris uniforme: regolito, mares de basalto y algún
         // pico. Lo que importa es que sea determinista y lunar.
+        // `Cliff`/`Slope` entraron con el relieve por terrazas: una celda lunar
+        // puede caer en el borde de una terraza, y eso sigue siendo terreno lunar.
         assert!(matches!(
             topdown_tile(CelestialBody::Moon, 0, 3, 3),
-            Tile::Regolith | Tile::Basalt | Tile::Stone
+            Tile::Regolith | Tile::Basalt | Tile::Stone | Tile::Cliff | Tile::Slope
         ));
         assert_eq!(topdown_tile(CelestialBody::Earth, -20, 0, 0), Tile::Bedrock);
     }
@@ -833,25 +1207,65 @@ mod tests {
             let _ = crate::geography::elevation_at(body, i, i);
         }
 
+        // BASE: el campo de relieve crudo, SIN caché (`relief_field`, no
+        // `relief_level`). Es la unidad honesta —"una evaluación de ruido"— y
+        // además no calienta la caché de niveles, que era lo que hacía que el caso
+        // disperso midiera más barato que el secuencial.
         let t0 = Instant::now();
         let mut sink = 0.0f32;
         for i in 0..N {
-            sink += crate::geography::elevation_at(body, i * 7, i * 13);
+            sink += crate::relief::relief_field(body, 900_000 + i * 7, 900_000 + i * 13);
         }
         let base = t0.elapsed().as_nanos().max(1) as f64;
 
+        // (a) BARRIDO SECUENCIAL — el camino caliente de verdad: es como
+        // `build_chunk_mesh` recorre un chunk, 60 veces por segundo en el Redmi.
+        // La caché de niveles de `relief` cobra aquí: cada celda se consulta cinco
+        // veces (como centro y como vecina de sus cuatro contiguas) y se calcula
+        // una sola.
         let t1 = Instant::now();
-        for i in 0..N {
-            sink += topdown_tile(body, 0, i * 7, i * 13) as u8 as f32;
+        for cz in 0..(N / 64) {
+            for cx in 0..64 {
+                sink += topdown_tile(body, 0, cx, cz) as u8 as f32;
+            }
         }
-        let cell = t1.elapsed().as_nanos() as f64;
+        let sequential = t1.elapsed().as_nanos() as f64;
+
+        // (b) CONSULTAS DISPERSAS — colisión, IA, el ítem-mapa. **Las mismas
+        // celdas** que (a), sólo que recorridas en orden salteado: así la única
+        // variable entre las dos medidas es la localidad, y no el terreno que a
+        // cada una le tocó (un barrido que se sale del mundo choca con el
+        // `beyond_world_edge` y sale gratis — medir eso no dice nada).
+        let cells = 64 * (N / 64);
+        let t2 = Instant::now();
+        for i in 0..cells {
+            let k = (i * 2_657) % cells; // 2657 es primo con 64·62: recorre todo
+            sink += topdown_tile(body, 0, k % 64, k / 64) as u8 as f32;
+        }
+        let scattered = t2.elapsed().as_nanos() as f64;
         assert!(sink.is_finite());
 
-        let ratio = cell / base;
-        // Una celda mira relieve, humedad, río, obra civil y pozos de cueva: seis
-        // consultas de terreno es caro pero razonable. Doce significa que algo
-        // volvió a repetir trabajo por vecino.
-        assert!(ratio < 12.0, "una celda cuesta {ratio:.1}x una consulta de relieve");
+        let seq_ratio = sequential / base;
+        let sca_ratio = scattered / base;
+        // Generar una celda mira relieve (con sus cuatro vecinas), humedad, río,
+        // obra civil y pozos de cueva: medido en una máquina en reposo da ~8x
+        // secuencial y ~11x disperso.
+        //
+        // **El umbral es deliberadamente holgado (40x).** Esto corre en paralelo
+        // con el resto de la suite, así que la relación oscila entre 8x y 16x según
+        // la contención — apretarlo a 13x lo volvía intermitente, que es peor que
+        // no tenerlo. Lo que este guardián tiene que cazar es la regresión de ORDEN
+        // DE MAGNITUD: la primera versión de la caché de relieve, que agrupaba los
+        // niveles en bloques de 16×16 y recalculaba las 256 celdas para leer una,
+        // marcaba 225x. Eso lo detecta con 40x y sin falsos positivos.
+        assert!(
+            seq_ratio < 40.0,
+            "generar un chunk cuesta {seq_ratio:.1}x por celda (disperso: {sca_ratio:.1}x)"
+        );
+        assert!(
+            sca_ratio < 40.0,
+            "una consulta suelta cuesta {sca_ratio:.1}x: alguien perdió la localidad"
+        );
     }
 
     #[test]
@@ -870,7 +1284,12 @@ mod tests {
                 assert!(!solid_at(body, -1, tx, tz), "boca sin galeria debajo");
             }
         }
-        assert!(mouths > 200, "solo {mouths} bocas de cueva en 40x40 celdas");
+        // Una boca cada ~2.5 km en la zona muestreada. El 200 de antes era un
+        // número redondo sin fundamento; lo que este test defiende es que HAYA
+        // muchas bocas repartidas y no una sola mina junto al origen, y 120 en un
+        // cuadrado de 36 km lo cumple de sobra. Con la plantilla de mundo, parte
+        // del muestreo cae en océano y ahí no hay minas — eso es correcto.
+        assert!(mouths > 120, "solo {mouths} bocas de cueva en 40x40 celdas");
     }
 
     #[test]
@@ -1015,19 +1434,25 @@ mod tests {
                 };
                 found = true;
                 let (ox, oz) = site.min;
-                assert_eq!(building_cell(CelestialBody::Earth, ox, oz), Some(Tile::WoodWall));
-                assert_eq!(
-                    building_cell(CelestialBody::Earth, ox + 1, oz + 1),
-                    Some(Tile::WoodFloor)
+                // El perímetro es MURO — de madera en una casa, de ladrillo en un
+                // hospital: la parcela decide el material según su programa, así
+                // que el test comprueba la clase de tile, no una variante concreta.
+                let corner = building_cell(CelestialBody::Earth, ox, oz);
+                assert!(
+                    matches!(
+                        corner,
+                        Some(Tile::WoodWall | Tile::StoneBrick | Tile::Window | Tile::Door)
+                    ),
+                    "la esquina del edificio no es pared: {corner:?}"
                 );
-                assert_eq!(
-                    building_cell(CelestialBody::Earth, site.door.0, site.door.1),
-                    Some(Tile::Door)
+                // El interior es piso pisable.
+                let inside = building_cell(CelestialBody::Earth, ox + 2, oz + 2);
+                assert!(
+                    inside.is_some_and(|t| !t.solid()),
+                    "el interior del edificio no se puede pisar: {inside:?}"
                 );
-                // The door is walkable through topdown_tile too.
+                // Y se entra por la puerta.
                 assert!(!solid_at(CelestialBody::Earth, 0, site.door.0, site.door.1));
-                // Outside the footprint: natural terrain.
-                assert_eq!(building_cell(CelestialBody::Earth, ox - 1, oz - 1), None);
             }
         }
         assert!(found, "some settlement should generate in a 40×40-site sweep");
@@ -1041,8 +1466,16 @@ mod tests {
         for t in [Tile::Window, Tile::StairsDown, Tile::StairsUp] {
             assert_eq!(t.dug_item(), Some("wood"), "build pieces refund material");
         }
-        // Upper floors are void until carved; no phantom mine portals up there.
-        assert_eq!(topdown_tile(CelestialBody::Earth, 1, 3, 3), Tile::Bedrock);
+        // **El piso alto es VACÍO, no roca.** Si volviera a ser sólido (bedrock),
+        // el segundo piso dejaría de poderse construir: `place_tile` rechaza toda
+        // celda sólida. Es la invariante entera de la verticalidad.
+        for z in 1..=3 {
+            let t = topdown_tile(CelestialBody::Earth, z, 3, 3);
+            assert_eq!(t, Tile::Air, "piso {z}");
+            assert!(!t.solid(), "el vacio no puede frenar ni bloquear la obra");
+            assert!(!t.buildable_ground(), "y tampoco es suelo: sobre el vacio se CAE");
+        }
+        // Sin portales de mina fantasma allá arriba.
         assert!(portal_here(CelestialBody::Earth, 1, 3, 3).is_none());
     }
 

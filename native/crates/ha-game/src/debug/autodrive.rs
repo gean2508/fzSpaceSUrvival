@@ -82,6 +82,41 @@ impl Plugin for AutoDrivePlugin {
         // ciudad más cercana y captura a tres alturas — calle, barrio y región.
         // Es la verificación VISUAL de la geografía: que haya calles, fachadas y
         // carreteras saliendo hacia los pueblos vecinos, no sólo tests en verde.
+        // Retrato NOCTURNO de la iluminación (HA_NIGHTTEST=1): planta al jugador
+        // en una ciudad, clava el reloj en medianoche y captura el mismo encuadre
+        // a tres zooms. Es el test VISUAL de `light2d` + `night_veil.wgsl`: el
+        // gradiente del pozo, el color de la sombra, la nitidez del mundo debajo
+        // y la forma de las sombras proyectadas se miran, no se afirman.
+        if std::env::var("HA_NIGHTTEST").is_ok() {
+            app.init_resource::<FlyTestState>();
+            #[cfg(not(target_os = "android"))]
+            app.add_systems(
+                Update,
+                night_test_drive
+                    .before(crate::input::desktop_input::desktop_keyboard_actions)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            #[cfg(target_os = "android")]
+            app.add_systems(Update, night_test_drive.after(crate::creative_fly::sync_flight_mirror));
+            return;
+        }
+        // Ecología + sociedad SIN ANILLO (HA_ECOTEST=1): planta al jugador en un yermo, en
+        // un bosque y en una ciudad, y afirma lo que el diseño promete — el desierto está
+        // vacío de fauna Y de gente, el bosque tiene manada, y la gente está en el pueblo.
+        // Es el test del cambio "la vida ya no gira alrededor del jugador".
+        if std::env::var("HA_ECOTEST").is_ok() {
+            app.init_resource::<FlyTestState>();
+            #[cfg(not(target_os = "android"))]
+            app.add_systems(
+                Update,
+                eco_test_drive
+                    .before(crate::input::desktop_input::desktop_keyboard_actions)
+                    .after(crate::creative_fly::sync_flight_mirror),
+            );
+            #[cfg(target_os = "android")]
+            app.add_systems(Update, eco_test_drive.after(crate::creative_fly::sync_flight_mirror));
+            return;
+        }
         if std::env::var("HA_CITYTEST").is_ok() {
             app.init_resource::<FlyTestState>();
             #[cfg(not(target_os = "android"))]
@@ -216,10 +251,20 @@ fn hold_with_fresh_edges(world: &mut World, key: KeyCode, now: f32, period: f32)
     press(world, key);
 }
 
-const FLYTEST_DIR: &str =
-    "/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/cad6eec6-9b35-4c76-b5dd-17834cd68598/scratchpad";
+/// Segundos que se le dan a la etapa 0 para subir hasta encuadrar el planeta.
+///
+/// **Es una función de la escala del mundo, no un número.** Los 40 s de antes se
+/// calibraron con una Tierra de 1.5 km de radio; el cuerpo mide ahora 30 km
+/// (`cosmic_scale`, ×20), la meta de la etapa es "subir un radio" y el ascenso es
+/// exponencial pero arranca a 30 m/s, así que el mismo vuelo tarda ~60 s y el
+/// driver se declaraba STUCK sobre un vuelo perfectamente sano. Con margen: si
+/// tarda más del doble, algo se rompió de verdad.
+const CLIMB_BUDGET_S: f32 = 100.0;
 
-/// (B1 · `PLAN_MAESTRO §3.B1`) Anexa un bug machine-readable (una línea JSON) al
+const FLYTEST_DIR: &str =
+    "/tmp/claude-1000/-home-fzion-Documents-mods-phaser-arena/72d453c4-af77-44a5-a73a-8f189d97d0b8/scratchpad";
+
+/// (`biblia.md` §11) Anexa un bug machine-readable (una línea JSON) al
 /// archivo `HA_BUGREPORT` (default `bugreport.jsonl`). Cada driver lo llama al
 /// romper un invariante; el runner `HA_SUITE` (scripts/ha-suite.mjs) agrega todo
 /// para que la IA lea y resuelva. Doble uso: primer formato del log de
@@ -300,7 +345,7 @@ fn fly_test_drive(world: &mut World) {
                 // ~1.8 s so the disc screenshot lands before the descent tests.
                 let cleared = world.resource::<FlyTestState>().cleared_at;
                 if cleared == 0.0 {
-                    let vh = world.resource::<crate::camera::CameraZoom>().view_h;
+                    let vh = world.resource::<crate::camera::CameraZoom>().live_view_h;
                     eprintln!("ha-flytest: climbed CLEAR (cover={cover:.2} view_h={vh:.0}) — should see Earth disc");
                     world.resource_mut::<FlyTestState>().cleared_at = now;
                 } else {
@@ -312,8 +357,11 @@ fn fly_test_drive(world: &mut World) {
                         advance_stage(world, now);
                     }
                 }
-            } else if now > 40.0 {
-                eprintln!("ha-flytest: STUCK — never cleared clouds (cover={cover:.2} phase={phase:?})");
+            } else if now > CLIMB_BUDGET_S {
+                let ki = world.resource::<crate::flight::Flight>().ki;
+                eprintln!(
+                    "ha-flytest: STUCK — never cleared clouds (cover={cover:.2} phase={phase:?} alt={alt:.0} armed={armed} framed={framed} ki={ki:.1})"
+                );
                 std::process::exit(1);
             }
         }
@@ -339,10 +387,15 @@ fn fly_test_drive(world: &mut World) {
             eprintln!("ha-flytest: forced mid-descent (alt=150) for the abort test");
             advance_stage(world, now);
         }
-        // 2: let the DEFAULT auto-fall run a beat first (bonus coverage: also
-        // confirms the "release everything, it still lands on its own" path).
+        // 2: descend under USE for a beat first.
+        //
+        // Antes esto soltaba todo y esperaba la "caída por defecto". Esa caída ya
+        // no existe: volar anula la gravedad y soltar los botones deja FLOTANDO
+        // (pedido del 29 jul 2026). Así que ahora se mantiene USAR, que es la
+        // manera de bajar — y de paso el test cubre el control real en vez de un
+        // comportamiento automático que el jugador no quería.
         2 => {
-            release_all(world);
+            hold_with_fresh_edges(world, KeyCode::KeyF, now, 0.4);
             if now - world.resource::<FlyTestState>().stage_entered > 1.5 {
                 advance_stage(world, now);
             }
@@ -363,8 +416,8 @@ fn fly_test_drive(world: &mut World) {
                 std::process::exit(1);
             }
         }
-        // 4: force mid-descent again (one-shot) and this time let it land for
-        // real (natural default fall, no input), covering full touchdown.
+        // 4: force mid-descent again (one-shot) and this time bajar hasta el suelo
+        // con USAR, cubriendo el aterrizaje completo.
         4 => {
             release_all(world);
             {
@@ -376,9 +429,9 @@ fn fly_test_drive(world: &mut World) {
             world.resource_mut::<FlyTestState>().suppress_jump_until = now + 1.6; // synthetic, not a real jump
             advance_stage(world, now); // one-shot: don't re-force every frame
         }
-        // 5: just wait for the natural fall to touch down.
+        // 5: mantener USAR hasta tocar suelo.
         _ => {
-            release_all(world);
+            hold_with_fresh_edges(world, KeyCode::KeyF, now, 0.4);
         }
     }
 
@@ -393,7 +446,7 @@ fn fly_test_drive(world: &mut World) {
         };
         let cloud = world.resource::<crate::transition::FlightTransition>().cover;
         let region = format!("{:?}", world.resource::<crate::scene::RegionRuntime>().active);
-        let view_h = world.resource::<crate::camera::CameraZoom>().view_h;
+        let view_h = world.resource::<crate::camera::CameraZoom>().live_view_h;
         eprintln!(
             "ha-flytest[{shots}] t={now:.1} alt={alt:.0} cloud={cloud:.2} orbit={orbit} phase={phase:?} region={region} view_h={view_h:.0}"
         );
@@ -413,7 +466,7 @@ fn fly_test_drive(world: &mut World) {
         let region = format!("{:?}", world.resource::<crate::scene::RegionRuntime>().active);
         let in_space = region.contains("Space");
         let rocket_active = world.resource::<crate::flight::Flight>().active;
-        let view_h = world.resource::<crate::camera::CameraZoom>().view_h;
+        let view_h = world.resource::<crate::camera::CameraZoom>().live_view_h;
         let camera_stuck_out = view_h > 200.0; // surface view is ~30 m
         let mut fail = false;
         if in_space {
@@ -432,7 +485,10 @@ fn fly_test_drive(world: &mut World) {
         eprintln!("ha-flytest: DONE");
         std::process::exit(if max_jump > 1.5 || fail { 1 } else { 0 });
     }
-    if now > 60.0 {
+    // El presupuesto TOTAL cuelga del de la subida: la etapa 0 sola se lleva la
+    // mayor parte (subir un radio de la Tierra), y las etapas de descenso
+    // arrancan de una altura forzada, así que 60 s más alcanzan de sobra.
+    if now > CLIMB_BUDGET_S + 60.0 {
         eprintln!("ha-flytest: TIMEOUT (FAIL, stage={stage})");
         std::process::exit(1);
     }
@@ -537,7 +593,7 @@ fn moon_test_drive(world: &mut World) {
         2 => {
             place_creative_orbit(world, 700.0);
             if now - world.resource::<FlyTestState>().stage_entered > 1.0 {
-                let vh = world.resource::<crate::camera::CameraZoom>().view_h;
+                let vh = world.resource::<crate::camera::CameraZoom>().live_view_h;
                 eprintln!("ha-moontest: FAR orbit alt=700 view_h={vh:.0} — Moon disc small");
                 shot(world, &format!("{FLYTEST_DIR}/moon-disc-far.png"));
                 advance_stage(world, now);
@@ -549,7 +605,7 @@ fn moon_test_drive(world: &mut World) {
             place_creative_orbit(world, 180.0);
             let dt = now - world.resource::<FlyTestState>().stage_entered;
             if dt > 1.0 && world.resource::<FlyTestState>().cleared_at == 0.0 {
-                let vh = world.resource::<crate::camera::CameraZoom>().view_h;
+                let vh = world.resource::<crate::camera::CameraZoom>().live_view_h;
                 eprintln!("ha-moontest: NEAR orbit alt=180 view_h={vh:.0} — Moon disc BIG");
                 shot(world, &format!("{FLYTEST_DIR}/moon-disc-near.png"));
                 world.resource_mut::<FlyTestState>().cleared_at = now;
@@ -675,6 +731,10 @@ struct SmokeState {
     start_x: f32,
     cell: (i64, i64),
     done: bool,
+    /// Ya se capturó el mapa colgado (la etapa 13 dispara por ESTADO, no por
+    /// reloj: en debug el juego corre a 8 FPS y una ventana de tiempo se cuela
+    /// entre dos frames).
+    map_shot: bool,
 }
 
 
@@ -746,6 +806,393 @@ fn unlock(world: &mut World) {
     let mut h = world.resource_mut::<HoldInteractState>();
     h.completed = false;
     h.placing_block = false;
+}
+
+
+// ---------------------------------------------------------------------------
+// HA_NIGHTTEST — retrato nocturno: el test visual del sistema de luces
+// ---------------------------------------------------------------------------
+
+/// Planta al jugador en la ciudad más cercana, clava el reloj en la noche
+/// cerrada y captura el mismo sitio a tres zooms. `HA_NIGHTPHASE=<0..1>` mueve
+/// la hora (0 = medianoche) por si hace falta mirar el crepúsculo.
+fn night_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 {
+        return;
+    }
+    // El reloj se CLAVA cada frame: un ciclo dura una hora, y sin fijarlo las tres
+    // capturas saldrían a horas distintas y no se podrían comparar entre sí.
+    let phase = std::env::var("HA_NIGHTPHASE")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.02);
+    world.resource_mut::<crate::sky2d::DayClock>().t =
+        crate::sky2d::DAY_SECS * (3.0 + phase);
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+    let stage = world.resource::<FlyTestState>().stage;
+    let body = ha_shared::CelestialBody::Earth;
+
+    if stage == 0 {
+        let mut best: Option<(i64, (i64, i64))> = None;
+        for sx in -25..25 {
+            for sz in -25..25 {
+                let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                if s.tier != ha_shared::geography::SettlementTier::City {
+                    continue;
+                }
+                let d = s.center.0.abs() + s.center.1.abs();
+                if best.map_or(true, |(bd, _)| d < bd) {
+                    best = Some((d, s.center));
+                }
+            }
+        }
+        let Some((_, (cx, cz))) = best else {
+            eprintln!("ha-nighttest: NO HAY NINGUNA CIUDAD");
+            std::process::exit(1);
+        };
+        let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+        if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
+            sim.body.x = cx as f32;
+            sim.body.z = cz as f32;
+            vis.from_x = cx as f32;
+            vis.to_x = cx as f32;
+            vis.from_z = cz as f32;
+            vis.to_z = cz as f32;
+        }
+        eprintln!("ha-nighttest: ciudad en ({cx}, {cz}) — fase {phase}");
+        advance_stage(world, now);
+        return;
+    }
+
+    // Mismo sitio, tres encuadres: la cara del jugador contra una antorcha, la
+    // manzana entera (para ver cómo se funden varios pozos) y el barrio.
+    let beats: [(f32, f32, &str); 3] = [
+        (3.0, 0.0, "night-0-close"),
+        (6.0, 60.0, "night-1-block"),
+        (9.0, 260.0, "night-2-district"),
+    ];
+    let shots = world.resource::<FlyTestState>().shots as usize;
+    if shots >= beats.len() {
+        eprintln!("ha-nighttest: DONE");
+        std::process::exit(0);
+    }
+    let (at, alt, name) = beats[shots];
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    {
+        let mut fly = world.resource_mut::<crate::creative_fly::CreativeFlight>();
+        if alt > 0.0 {
+            fly.phase = crate::creative_fly::Phase::Climb;
+            fly.vert = alt;
+            fly.alt = alt;
+            fly.vy = 0.0;
+        }
+    }
+    if now - entered > at {
+        // Cuántas sombras hay VIVAS. Es la diferencia entre "no se ven las
+        // sombras porque son sutiles" y "el sistema no está colgando ninguna":
+        // sin este número se tunea a ciegas el alpha de algo que no existe.
+        let n = world.query::<&crate::light2d::GroundShadow>().iter(world).count();
+        let sky = *world.resource::<crate::sky2d::SkyLight>();
+        // El tamaño REAL de una sombra cualquiera: sin esto se tunea a ciegas
+        // (una sombra puede existir, estar bien orientada y medir 4 px).
+        let cam_p = world
+            .query_filtered::<&GlobalTransform, With<crate::camera::GameCamera>>()
+            .iter(world)
+            .next()
+            .map(|g| g.translation())
+            .unwrap_or_default();
+        let mut q = world.query_filtered::<
+            (&Sprite, &GlobalTransform, &ViewVisibility),
+            With<crate::light2d::GroundShadow>,
+        >();
+        let mut best: Option<(f32, Vec2, Vec3, bool, [f32; 4])> = None;
+        for (sp, gt, vv) in q.iter(world) {
+            let t = gt.translation();
+            let d = t.truncate().distance(cam_p.truncate());
+            if best.map_or(true, |(bd, ..)| d < bd) {
+                let c = sp.color.to_srgba();
+                best = Some((
+                    d,
+                    sp.custom_size.unwrap_or_default(),
+                    t,
+                    vv.get(),
+                    [c.red, c.green, c.blue, c.alpha],
+                ));
+            }
+        }
+        eprintln!("ha-nighttest: sombra más cercana = {best:?}");
+        let sz = best.map(|b| b.1);
+        eprintln!(
+            "ha-nighttest: {name} — sombras={n} sky(str={:.2} elev={:.2} dir={:.2},{:.2}) size={:?}",
+            sky.strength, sky.elevation, sky.dir.x, sky.dir.y, sz
+        );
+        shot(world, &format!("{FLYTEST_DIR}/{name}.png"));
+        world.resource_mut::<FlyTestState>().shots += 1;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HA_ECOTEST — el mundo vive por su cuenta (se fue el anillo de fauna/NPCs)
+// ---------------------------------------------------------------------------
+
+/// Teletransporta al jugador a `(x, z)` de la superficie actual. Mismo camino que usan
+/// `HA_CITYTEST`/`HA_NIGHTTEST`: se escribe el estado del sim y el visual de una vez para
+/// que la cámara no interpole media región.
+fn teleport_surface(world: &mut World, x: f32, z: f32) {
+    let mut q = world.query_filtered::<(&mut SimState, &mut PlayerVisual), With<Player>>();
+    if let Ok((mut sim, mut vis)) = q.get_single_mut(world) {
+        sim.body.x = x;
+        sim.body.z = z;
+        vis.from_x = x;
+        vis.to_x = x;
+        vis.from_z = z;
+        vis.to_z = z;
+    }
+}
+
+/// Busca en la Tierra la región con MÁS capacidad de depredador (el bosque de verdad) y
+/// una región YERMA lejos de todo pueblo. Determinista: el mismo par en cada corrida.
+fn eco_pick_sites() -> ((f32, f32), (f32, f32)) {
+    use ha_shared::ecology::{carrying_capacity, region_center};
+    let body = ha_shared::CelestialBody::Earth;
+    let (mut best, mut best_cap) = ((0i32, 0i32), -1.0f32);
+    let mut barren: Option<(i32, i32)> = None;
+    for rx in -60..60 {
+        for rz in -60..60 {
+            let cap = carrying_capacity(body, rx, rz);
+            if cap.carnivores > best_cap {
+                best_cap = cap.carnivores;
+                best = (rx, rz);
+            }
+            if barren.is_none() && cap.is_barren() {
+                // Yermo de VERDAD: la región Y sus ocho vecinas. La ventana de simulación
+                // es 3×3, así que en el borde de un desierto se ve —correctamente— la
+                // manada del prado de al lado; para afirmar "acá no hay nada" hay que
+                // estar en mitad de la nada. Y sin asentamiento encima, o el test de "no
+                // hay gente en el descampado" mediría otra cosa.
+                let deep = (-1..=1).all(|dx| {
+                    (-1..=1).all(|dz| carrying_capacity(body, rx + dx, rz + dz).is_barren())
+                });
+                let (cx, cz) = region_center(rx, rz);
+                if deep
+                    && ha_shared::geography::settlement_covering(body, cx as i64, cz as i64)
+                        .is_none()
+                {
+                    barren = Some((rx, rz));
+                }
+            }
+        }
+    }
+    let (bx, bz) = region_center(best.0, best.1);
+    let (dx, dz) = barren.map(|(a, b)| region_center(a, b)).unwrap_or((0.0, 0.0));
+    ((bx, bz), (dx, dz))
+}
+
+/// Tres estampas y tres afirmaciones:
+///
+/// 1. **YERMO** — en una región sin forraje y sin pueblo no hay ni un animal ni un NPC.
+///    Con el anillo viejo esto era IMPOSIBLE: la fauna se sembraba donde estuvieras.
+/// 2. **BOSQUE** — la región con más capacidad tiene manada de verdad, materializada en
+///    sus claros, y forraje en el suelo.
+/// 3. **CIUDAD** — la gente está en el asentamiento de `geography`, y llega sola al entrar.
+fn eco_test_drive(world: &mut World) {
+    let now = world.resource::<Time>().elapsed_secs();
+    if now < 3.0 {
+        return;
+    }
+    world.resource_mut::<crate::ui_editor::UiEditorState>().creative = true;
+    let body = ha_shared::CelestialBody::Earth;
+    let stage = world.resource::<FlyTestState>().stage;
+    let entered = world.resource::<FlyTestState>().stage_entered;
+    // Cuánto se le da al mundo para asentarse en cada parada (la ecología corre a 4 s y el
+    // descubrimiento de pueblos a 2 s: con 12 s han corrido varias veces).
+    let settle: f32 = std::env::var("HA_ECOSETTLE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(12.0);
+
+    // Stage 0: elegir sitios y plantarse en el YERMO.
+    if stage == 0 {
+        let (forest, barren) = eco_pick_sites();
+        world.insert_resource(EcoSites { forest, barren, forest_herb: 0.0 });
+        teleport_surface(world, barren.0, barren.1);
+        eprintln!("ha-ecotest: yermo en ({:.0}, {:.0})", barren.0, barren.1);
+        advance_stage(world, now);
+        return;
+    }
+    // La etapa de ciudad usa una espera CORTA: el salto de varios kilómetros hasta el
+    // asentamiento reencuadra la región, y dejar 90 s ahí sólo da tiempo a que el jugador
+    // derive lejos del sitio que queríamos comprobar.
+    let wait = match stage {
+        4 => 0.5,
+        5 => settle.min(12.0),
+        _ => settle,
+    };
+    if now - entered < wait {
+        return;
+    }
+    let sites = *world.resource::<EcoSites>();
+
+    match stage {
+        1 => {
+            let (x, z) = sites.barren;
+            let p = crate::fauna::eco_probe(world, body, x, z);
+            let npcs = count_npcs_near(world, 120.0);
+            let at = player_xz(world);
+            eprintln!(
+                "ha-ecotest: YERMO pedido ({x:.0},{z:.0}) jugador ({:.0},{:.0}) region {:?} \
+                 cap {:?} pop {:?} fauna {}+{} forraje {} npcs-cerca {npcs}",
+                at.0, at.1, p.region, p.cap, p.pop, p.live_herb, p.live_carn, p.forage
+            );
+            shot(world, &format!("{FLYTEST_DIR}/eco-0-yermo.png"));
+            if p.live_herb + p.live_carn > 0 || p.forage > 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — hay fauna en un yermo (¿volvió el anillo?)");
+                report_bug("ecologia", "yermo sin fauna", "se materializo fauna sin capacidad");
+                std::process::exit(1);
+            }
+            if npcs > 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — hay NPCs en el descampado ({npcs})");
+                report_bug("sociedad", "descampado sin npcs", "se sembraron NPCs fuera de un pueblo");
+                std::process::exit(1);
+            }
+            teleport_surface(world, sites.forest.0, sites.forest.1);
+            eprintln!("ha-ecotest: bosque en ({:.0}, {:.0})", sites.forest.0, sites.forest.1);
+            advance_stage(world, now);
+        }
+        2 => {
+            let (x, z) = sites.forest;
+            let p = crate::fauna::eco_probe(world, body, x, z);
+            let at = player_xz(world);
+            eprintln!(
+                "ha-ecotest: BOSQUE pedido ({x:.0},{z:.0}) jugador ({:.0},{:.0}) region {:?} \
+                 cap {:?} pop {:?} ventana3x3 {:?} cuerpo {:?} fauna {}+{} forraje {} regiones {}",
+                at.0, at.1, p.region, p.cap, p.pop, p.win, p.total, p.live_herb, p.live_carn,
+                p.forage, p.known_regions
+            );
+            shot(world, &format!("{FLYTEST_DIR}/eco-1-bosque.png"));
+            if p.live_herb == 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — el mejor bosque del planeta no tiene fauna");
+                report_bug("ecologia", "bosque con manada", "capacidad alta sin animales materializados");
+                std::process::exit(1);
+            }
+            if p.forage == 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — no hay forraje donde el bioma lo da");
+                report_bug("ecologia", "forraje visible", "plantas > 0 pero nada dibujado");
+                std::process::exit(1);
+            }
+            world.resource_mut::<EcoSites>().forest_herb = p.total.herbivores;
+            advance_stage(world, now);
+        }
+        3 => {
+            // SOSTENIBILIDAD: tras un rato largo con la manada Y los depredadores
+            // materializados, el bosque no puede haberse autodestruido — ni pelado de
+            // pasto ni vaciado de presas. Es lo que separa una cadena alimenticia de una
+            // extinción con pasos extra.
+            let (x, z) = sites.forest;
+            let p = crate::fauna::eco_probe(world, body, x, z);
+            eprintln!(
+                "ha-ecotest: BOSQUE +{settle:.0}s pop {:?} ventana3x3 {:?} cuerpo {:?} fauna {}+{} forraje {}",
+                p.pop, p.win, p.total, p.live_herb, p.live_carn, p.forage
+            );
+            if p.live_herb == 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — los depredadores vaciaron el bosque");
+                report_bug("ecologia", "cadena sostenible", "herbivoros extintos con el jugador presente");
+                std::process::exit(1);
+            }
+            if p.pop.plants <= 0.5 {
+                eprintln!("ha-ecotest: INVARIANT roto — el prado quedo pelado y no rebrota");
+                report_bug("ecologia", "rebrote", "plantas ~0 tras pastoreo");
+                std::process::exit(1);
+            }
+            // La caza no puede llevarse a la mitad de la manada en un rato: si pasa, los
+            // nacimientos no compensan a la predación y el mundo se vacía solo con mirarlo.
+            // Se mide sobre el CUERPO entero: la ventana 3×3 baja sola cuando la manada se
+            // dispersa hacia afuera, y eso es vida normal. Lo que no puede pasar es que el
+            // planeta pierda la mitad de sus herbívoros mientras mirás.
+            let before = sites.forest_herb;
+            if before > 0.0 && p.total.herbivores < before * 0.5 {
+                eprintln!(
+                    "ha-ecotest: INVARIANT roto — el planeta cayo de {before:.2} a {:.2} herbivoros en {settle:.0}s",
+                    p.total.herbivores
+                );
+                report_bug("ecologia", "predacion equilibrada", "la caza supera con creces a la natalidad");
+                std::process::exit(1);
+            }
+            // A la ciudad más cercana: ahí tiene que haber gente, y llegar sola.
+            let mut best: Option<(i64, (i64, i64))> = None;
+            for sx in -25..25 {
+                for sz in -25..25 {
+                    let Some(s) = ha_shared::geography::settlement_in(body, sx, sz) else { continue };
+                    if s.tier != ha_shared::geography::SettlementTier::City {
+                        continue;
+                    }
+                    let d = s.center.0.abs() + s.center.1.abs();
+                    if best.map_or(true, |(bd, _)| d < bd) {
+                        best = Some((d, s.center));
+                    }
+                }
+            }
+            let Some((_, (cx, cz))) = best else {
+                eprintln!("ha-ecotest: NO HAY NINGUNA CIUDAD");
+                std::process::exit(1);
+            };
+            world.insert_resource(EcoCity { x: cx as f32, z: cz as f32 });
+            eprintln!("ha-ecotest: ciudad en ({cx}, {cz})");
+            advance_stage(world, now);
+        }
+        4 => {
+            let c = *world.resource::<EcoCity>();
+            teleport_surface(world, c.x, c.z);
+            advance_stage(world, now);
+        }
+        _ => {
+            let npcs = count_npcs_near(world, 200.0);
+            let at = player_xz(world);
+            eprintln!("ha-ecotest: CIUDAD jugador ({:.0},{:.0}) npcs-cerca {npcs}", at.0, at.1);
+            shot(world, &format!("{FLYTEST_DIR}/eco-2-ciudad.png"));
+            if npcs == 0 {
+                eprintln!("ha-ecotest: INVARIANT roto — la ciudad esta desierta");
+                report_bug("sociedad", "ciudad poblada", "entrar a un asentamiento no sembro gente");
+                std::process::exit(1);
+            }
+            eprintln!("ha-ecotest: DONE");
+            std::process::exit(0);
+        }
+    }
+}
+
+#[derive(Resource, Clone, Copy)]
+struct EcoCity {
+    x: f32,
+    z: f32,
+}
+
+#[derive(Resource, Clone, Copy)]
+struct EcoSites {
+    forest: (f32, f32),
+    barren: (f32, f32),
+    /// Herbívoros de la región del bosque en la primera medición — para comparar tras el
+    /// rato largo y ver si la cadena se sostiene o se está comiendo a sí misma.
+    forest_herb: f32,
+}
+
+/// NPCs **cerca** del jugador. Ojo: `manage_society` instancia todos los del cuerpo (los
+/// lejanos van ocultos y en LOD barato), así que contar entidades a secas mediría el
+/// planeta entero, no "hay gente donde estoy".
+fn count_npcs_near(world: &mut World, r: f32) -> usize {
+    let (px, pz) = player_xz(world);
+    let mut q = world.query::<&crate::society::Npc>();
+    q.iter(world)
+        .filter(|n| (n.x - px) * (n.x - px) + (n.z - pz) * (n.z - pz) < r * r)
+        .count()
+}
+
+fn player_xz(world: &mut World) -> (f32, f32) {
+    let mut q = world.query_filtered::<&Transform, With<Player>>();
+    q.get_single(world)
+        .map(|t| (t.translation.x, -t.translation.y))
+        .unwrap_or((0.0, 0.0))
 }
 
 // ---------------------------------------------------------------------------
@@ -838,6 +1285,13 @@ struct TripTestState {
 /// distancia Tierra–Luna, que es la condición para poder apuntar y viajar.
 const TRIP_CRUISE_ALT: f32 = 200_000.0;
 
+/// NOTA sobre los presupuestos de tiempo de este driver: `creative_fly_step` acota
+/// el paso a 1/20 s, así que en una máquina que va a 10 fps el mundo avanza a la
+/// MITAD de tiempo real. Los plazos de acá están en segundos de reloj, así que
+/// tienen que llevar ese margen: el ascenso a crucero son ~16 s simulados, y con
+/// el tope de paso eso puede ser el doble o el triple de reloj en un PC lento. Un
+/// plazo justo no detecta un bug, detecta una GPU vieja.
+
 /// Viaje completo por el camino REAL del jugador (teclas, sin forzar estado):
 /// despegar de la Tierra, cruzar hasta la Luna, aterrizar, volver a despegar y
 /// regresar a la Tierra. Es literalmente el reporte del usuario ("salgo al
@@ -888,7 +1342,7 @@ fn trip_test_drive(world: &mut World) {
                 shot(world, &format!("{FLYTEST_DIR}/trip-0-earth-orbit.png"));
                 eprintln!("ha-triptest: crucero sobre la Tierra (alt={alt:.0} view_h={view_h:.0})");
                 advance(world, 1);
-            } else if dt > 30.0 {
+            } else if dt > 70.0 {
                 report_bug("trip", "no_climb_from_earth", &format!("alt={alt:.0}"));
                 std::process::exit(1);
             }
@@ -1099,7 +1553,7 @@ fn cycle_test_drive(world: &mut World) {
     let body = CYCLE_BODIES[body_idx];
     let phase = world.resource::<crate::creative_fly::CreativeFlight>().phase;
     let dt = now - stage_t;
-    let mut set = |w: &mut World, st: u8| {
+    let set = |w: &mut World, st: u8| {
         let mut s = w.resource_mut::<CycleTestState>();
         s.stage = st;
         s.stage_t = now;
@@ -1199,6 +1653,33 @@ struct BuildTestState {
     walls_before: usize,
     start_x: f32,
     failed: bool,
+    /// Reintentos del paso en curso (ver `bt_retry`).
+    retries: u32,
+}
+
+/// Tope de reintentos de un paso de colocación antes de darlo por fallado.
+const BT_MAX_RETRIES: u32 = 30;
+
+/// **Repetir el paso hasta que la pieza esté puesta de verdad.**
+///
+/// El driver marca `HoldInteractState::completed` a mano, pero ese recurso lo
+/// reescribe el pipeline de input real todos los frames: según en qué orden
+/// caigan los sistemas ese frame, el hold se consume o se pisa antes de que
+/// `apply_build_hold` lo vea. Colocar "una pieza por paso" perdía una de cada
+/// tantas, y la prueba fallaba con 10 paredes de 12 sin que hubiera nada roto.
+///
+/// Reintentar hasta comprobar el efecto convierte al driver en determinista sin
+/// tocar el juego: se mide lo que quedó puesto, no lo que se intentó.
+fn bt_retry(world: &mut World, step: u32, now: f32) -> bool {
+    let mut st = world.resource_mut::<BuildTestState>();
+    st.retries += 1;
+    if st.retries > BT_MAX_RETRIES {
+        st.retries = 0;
+        return false;
+    }
+    st.step = step;
+    st.next_t = now + 0.05;
+    true
 }
 
 /// Bordes del perímetro del cuarto de prueba, en orden.
@@ -1241,6 +1722,79 @@ fn bt_wall_count(world: &mut World) -> usize {
     world.resource::<crate::walls::BuiltWalls>().list.len()
 }
 
+/// **Un solar despejado para el cuarto de prueba.**
+///
+/// Antes el cuarto se plantaba a ciegas en `(jugador+1, jugador-1)`. Si ahí caía
+/// una roca, un acantilado o un charco, la prueba fallaba —"3 celdas sin piso",
+/// "el jugador no avanzó hacia el muro"— sin que hubiera nada roto: el resultado
+/// dependía de dónde hubiera nacido el jugador. Un driver que sale cara o cruz no
+/// sólo miente, TAPA las regresiones de verdad, porque uno se acostumbra a verlo
+/// en rojo.
+///
+/// Se busca en espiral el primer solar `BT_SIDE+5` de lado con todas sus celdas
+/// libres (ni sólido, ni decor cosechable), dejando un tile de margen para que el
+/// muro este tenga a dónde apoyarse.
+fn bt_clear_base(world: &mut World) -> (i64, i64) {
+    let (px, pz) = player_cell(world);
+    let body = bt_body(world);
+    let side = BT_SIDE + 5;
+    let mut best = (px + 1, pz - 1);
+    for r in 1..=12i64 {
+        for dz in -r..=r {
+            for dx in -r..=r {
+                if dx.abs() != r && dz.abs() != r {
+                    continue; // sólo el anillo nuevo
+                }
+                let cand = (px + dx, pz + dz);
+                let flora = world.resource::<crate::harvest::FloraHarvest>();
+                let tiles = world.resource::<TileWorld>();
+                let z = tiles.z;
+                let clear = (0..side).all(|oz| {
+                    (0..side).all(|ox| {
+                        let (cx, cz) = (cand.0 + ox, cand.1 + oz);
+                        !tiles.solid_at(body, cx, cz)
+                            && !crate::world2d::cell_build_blocked(flora, body, z, cx, cz)
+                    })
+                });
+                if clear {
+                    return cand;
+                }
+            }
+        }
+    }
+    eprintln!("ha-verify: BUILDTEST sin solar despejado cerca — se usa {best:?}");
+    best = (px + 1, pz - 1);
+    best
+}
+
+/// La celda AISLADA del solar de prueba: tiene piso pero ninguna pared, así que
+/// la losa que se le apoye encima depende SÓLO de ella. Es lo que hace medible el
+/// derrumbe (C5): dentro del cuarto, el anillo de paredes sostiene el piso de
+/// arriba y no se cae nada — que es lo correcto, pero no prueba nada.
+fn bt_lone_cell(base: (i64, i64)) -> (i64, i64) {
+    (base.0 + 6, base.1 + 1)
+}
+
+/// Índice de paleta de la grada hacia arriba (por id, no por posición: reordenar
+/// el catálogo no puede hacer que la prueba coloque una vereda).
+fn bt_stairs_up_piece() -> usize {
+    ha_shared::topdown::BUILD_PIECES
+        .iter()
+        .position(|p| p.id == "build_stairs_up")
+        .unwrap_or(0)
+}
+
+/// Planta al jugador en el centro de un punto del mundo, quieto.
+fn bt_teleport(world: &mut World, x: f32, z: f32) {
+    let mut q = world.query_filtered::<&mut SimState, With<Player>>();
+    if let Ok(mut sim) = q.get_single_mut(world) {
+        sim.body.x = x;
+        sim.body.z = z;
+        sim.body.vx = 0.0;
+        sim.body.vz = 0.0;
+    }
+}
+
 fn build_test_drive(world: &mut World) {
     let now = world.resource::<Time>().elapsed_secs();
     if now < 2.0 || !player_ready(world) {
@@ -1263,7 +1817,9 @@ fn build_test_drive(world: &mut World) {
         st.step += 1;
         st.next_t = now + 0.05;
     }
-    let floors = (BT_SIDE * BT_SIDE) as u32;
+    // +1: la losa AISLADA de `bt_lone_cell`, la única sin paredes alrededor y por
+    // eso la única que puede quedarse sin apoyo cuando se pica lo de abajo.
+    let floors = (BT_SIDE * BT_SIDE) as u32 + 1;
     let edges_n = bt_edges((0, 0)).len() as u32;
 
     match step {
@@ -1274,17 +1830,35 @@ fn build_test_drive(world: &mut World) {
             world.resource_mut::<crate::input::BuildModeActive>().active = true;
             world.resource_mut::<crate::input::AimCursor>().locked = true;
             world.resource_mut::<crate::build::SelectedBuildPiece>().0 = 0;
-            let (px, pz) = player_cell(world);
-            world.resource_mut::<BuildTestState>().base = (px + 1, pz - 1);
+            let base = bt_clear_base(world);
+            world.resource_mut::<BuildTestState>().base = base;
         }
         // Piso: una celda por paso, por el camino real (LookTarget + hold).
         s if s >= 1 && s <= floors => {
             let base = world.resource::<BuildTestState>().base;
             let i = (s - 1) as i64;
-            let (cx, cz) = (base.0 + i % BT_SIDE, base.1 + i / BT_SIDE);
-            world.resource_mut::<crate::build::SelectedBuildPiece>().0 = 0;
-            lock_place_target(world, cx, cz);
-            complete_build_hold(world);
+            let (cx, cz) = if i == BT_SIDE * BT_SIDE {
+                bt_lone_cell(base)
+            } else {
+                (base.0 + i % BT_SIDE, base.1 + i / BT_SIDE)
+            };
+            let body = bt_body(world);
+            let done = {
+                let flora = world.resource::<crate::harvest::FloraHarvest>();
+                let tiles = world.resource::<TileWorld>();
+                tiles.tile_at(body, cx, cz) == ha_shared::topdown::Tile::WoodFloor
+                    // Una celda con un árbol encima no admite piso, y está bien:
+                    // ese paso se da por cumplido en vez de reintentar 30 veces.
+                    || crate::world2d::cell_build_blocked(flora, body, tiles.z, cx, cz)
+            };
+            if done {
+                world.resource_mut::<BuildTestState>().retries = 0;
+            } else {
+                world.resource_mut::<crate::build::SelectedBuildPiece>().0 = 0;
+                lock_place_target(world, cx, cz);
+                complete_build_hold(world);
+                bt_retry(world, s, now);
+            }
         }
         // ¿Quedó el piso? Y pasamos a la pared de madera (pieza de borde).
         s if s == floors + 1 => {
@@ -1314,12 +1888,32 @@ fn build_test_drive(world: &mut World) {
         s if s > floors + 1 && s <= floors + 1 + edges_n => {
             let base = world.resource::<BuildTestState>().base;
             let (tx, tz, axis) = bt_edges(base)[(s - floors - 2) as usize];
-            world.resource_mut::<BuildTestState>().aim = bt_aim_for(tx, tz, axis);
-            world.resource_mut::<crate::input::AimCursor>().world = bt_aim_for(tx, tz, axis);
-            // El borde se toma de la mira, pero el targeting debe estar "en
-            // alcance": con una celda apuntada alcanza.
-            lock_place_target(world, tx, tz);
-            complete_build_hold(world);
+            let body = bt_body(world);
+            let (placed, supported) = {
+                let tiles = world.resource::<TileWorld>();
+                let z = tiles.z;
+                let has_floor = |cx: i64, cz: i64| {
+                    ha_shared::build_grid::is_build_floor(tiles.tile_at(body, cx, cz))
+                };
+                let sup = ha_shared::build_grid::wall_supported(&has_floor, tx, tz, axis);
+                let walls = world.resource::<crate::walls::BuiltWalls>();
+                (walls.at(body, z, tx, tz, axis).is_some(), sup)
+            };
+            // Ya puesta —o imposible de poner porque no hay piso de ningún lado—:
+            // el paso cumplió. Volver a colocar sobre un borde ocupado lo
+            // DEMOLERÍA, que es justo el error que hay que no cometer acá.
+            if placed || !supported {
+                world.resource_mut::<BuildTestState>().retries = 0;
+            } else {
+                let aim = bt_aim_for(tx, tz, axis);
+                world.resource_mut::<BuildTestState>().aim = aim;
+                world.resource_mut::<crate::input::AimCursor>().world = aim;
+                // El borde se toma de la mira, pero el targeting debe estar "en
+                // alcance": con una celda apuntada alcanza.
+                lock_place_target(world, tx, tz);
+                complete_build_hold(world);
+                bt_retry(world, s, now);
+            }
         }
         // ¿Se levantó el anillo completo?
         s if s == floors + edges_n + 2 => {
@@ -1348,8 +1942,14 @@ fn build_test_drive(world: &mut World) {
             // Pared SIN piso a ningún lado (3 tiles al norte del cuarto, dentro
             // del alcance): la regla de apoyo debe rechazarla.
             let far = (base.0, base.1 - 3);
-            world.resource_mut::<BuildTestState>().aim =
-                bt_aim_for(far.0, far.1, ha_shared::build_grid::WallAxis::H);
+            let aim = bt_aim_for(far.0, far.1, ha_shared::build_grid::WallAxis::H);
+            world.resource_mut::<BuildTestState>().aim = aim;
+            // También en el acto, no sólo en `st.aim`: `apply_build_hold` puede
+            // consumir el hold en ESTE frame, y con la mira vieja el gesto caía
+            // sobre el último borde del perímetro —que sí está ocupado— y lo
+            // DEMOLÍA. La prueba de "pared sin piso" terminaba midiendo un
+            // derribo, y el conteo bajaba en vez de quedarse igual.
+            world.resource_mut::<crate::input::AimCursor>().world = aim;
             lock_place_target(world, far.0, far.1);
             complete_build_hold(world);
         }
@@ -1391,8 +1991,8 @@ fn build_test_drive(world: &mut World) {
                 st.step = s; // repetir este paso hasta cumplir el tiempo
             }
         }
-        // Veredicto: no cruzó el muro, pero sí avanzó hasta él.
-        _ => {
+        // Veredicto del muro: no lo cruzó, pero sí avanzó hasta él.
+        s if s == floors + edges_n + 5 => {
             release_all(world);
             let base = world.resource::<BuildTestState>().base;
             let x = player_x(world);
@@ -1413,17 +2013,216 @@ fn build_test_drive(world: &mut World) {
                 );
                 world.resource_mut::<BuildTestState>().failed = true;
             }
+            world.resource_mut::<crate::input::AimCursor>().locked = true;
+        }
+        // --- SEGUNDO PISO (Project Zomboid) ------------------------------------
+        // Grada arriba en una esquina del cuarto.
+        s if s == floors + edges_n + 6 => {
+            let base = world.resource::<BuildTestState>().base;
+            let body = bt_body(world);
+            let there = world.resource::<TileWorld>().tile_at(body, base.0, base.1)
+                == ha_shared::topdown::Tile::StairsUp;
+            if there {
+                world.resource_mut::<BuildTestState>().retries = 0;
+            } else {
+                world.resource_mut::<crate::build::SelectedBuildPiece>().0 = bt_stairs_up_piece();
+                lock_place_target(world, base.0, base.1);
+                complete_build_hold(world);
+                bt_retry(world, s, now);
+            }
+        }
+        // ¿Entró la grada? Y nos paramos encima para subir.
+        s if s == floors + edges_n + 7 => {
+            let base = world.resource::<BuildTestState>().base;
+            let body = bt_body(world);
+            let t = world.resource::<TileWorld>().tile_at(body, base.0, base.1);
+            if t != ha_shared::topdown::Tile::StairsUp {
+                report_bug("build", "stairs_placed", &format!("la grada no entró: {t:?}"));
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            unlock(world);
+            bt_teleport(world, base.0 as f32 + 0.5, base.1 as f32 + 0.5);
+        }
+        // ¿Subimos? El rellano de llegada tiene que ser piso pisable, no roca.
+        s if s == floors + edges_n + 8 => {
+            let base = world.resource::<BuildTestState>().base;
+            let body = bt_body(world);
+            let (z, landing) = {
+                let tiles = world.resource::<TileWorld>();
+                // El rellano: la celda de al lado de la bajada es piso construido.
+                (tiles.z, tiles.tile_at(body, base.0 + 1, base.1))
+            };
+            if z != 1 {
+                // `layer_transition` corre en `Update` y lee la posición del
+                // jugador: entre el teletransporte y esta comprobación puede no
+                // haber pasado ningún frame suyo. Se insiste (volviendo a
+                // plantarlo en la grada) antes de cantar el fallo, si no la
+                // prueba mide la velocidad de la máquina en vez del juego.
+                if bt_retry(world, s, now) {
+                    bt_teleport(world, base.0 as f32 + 0.5, base.1 as f32 + 0.5);
+                    return;
+                }
+                report_bug("build", "stairs_go_up", &format!("z={z} tras pisar la grada"));
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            world.resource_mut::<BuildTestState>().retries = 0;
+            if landing != ha_shared::topdown::Tile::WoodFloor {
+                report_bug("build", "stairs_landing", &format!("rellano = {landing:?}"));
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            world.resource_mut::<crate::input::AimCursor>().locked = true;
+            world.resource_mut::<crate::build::SelectedBuildPiece>().0 = 0; // piso madera
+        }
+        // Losa SOBRE el cuarto de abajo: entra (hay casa debajo).
+        s if s == floors + edges_n + 9 => {
+            let base = world.resource::<BuildTestState>().base;
+            let lone = bt_lone_cell(base);
+            let body = bt_body(world);
+            // Dos losas: una SOBRE el cuarto (la aguanta la casa) y otra sobre la
+            // celda aislada (la aguanta sólo su piso). La segunda es la que
+            // después tiene que derrumbarse.
+            let falta = {
+                let tiles = world.resource::<TileWorld>();
+                let piso = ha_shared::topdown::Tile::WoodFloor;
+                if tiles.tile_at(body, base.0 + 2, base.1 + 2) != piso {
+                    Some((base.0 + 2, base.1 + 2))
+                } else if tiles.tile_at(body, lone.0, lone.1) != piso {
+                    Some(lone)
+                } else {
+                    None
+                }
+            };
+            match falta {
+                None => world.resource_mut::<BuildTestState>().retries = 0,
+                Some((cx, cz)) => {
+                    world.resource_mut::<crate::build::SelectedBuildPiece>().0 = 0;
+                    lock_place_target(world, cx, cz);
+                    complete_build_hold(world);
+                    bt_retry(world, s, now);
+                }
+            }
+        }
+        // Losa EN EL AIRE, lejos de todo: la regla de apoyo la rechaza.
+        s if s == floors + edges_n + 10 => {
+            let base = world.resource::<BuildTestState>().base;
+            let body = bt_body(world);
+            let up = world.resource::<TileWorld>().tile_at(body, base.0 + 2, base.1 + 2);
+            if up != ha_shared::topdown::Tile::WoodFloor {
+                report_bug(
+                    "build",
+                    "upper_floor_places",
+                    &format!("no se pudo construir el segundo piso sobre la casa: {up:?}"),
+                );
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            lock_place_target(world, base.0 + 30, base.1 + 30);
+            complete_build_hold(world);
+        }
+        // Veredicto del aire + salir de la losa para CAER al piso de abajo.
+        s if s == floors + edges_n + 11 => {
+            let base = world.resource::<BuildTestState>().base;
+            let body = bt_body(world);
+            let air = world.resource::<TileWorld>().tile_at(body, base.0 + 30, base.1 + 30);
+            if air != ha_shared::topdown::Tile::Air {
+                report_bug(
+                    "build",
+                    "upper_floor_needs_support",
+                    &format!("se construyó un piso flotante en el vacío: {air:?}"),
+                );
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            unlock(world);
+            world.resource_mut::<crate::input::AimCursor>().locked = false;
+            // El retrato del segundo piso. Se saca en su PROPIO paso y el salto al
+            // vacío espera al siguiente: la captura de Bevy llega uno o dos frames
+            // más tarde, así que sacarla y caerse en el mismo paso retrataba el
+            // piso de abajo con el cartel "PISO 2" todavía puesto — un falso
+            // positivo perfecto de "los vecinos caminan sobre tu losa".
+            shot(world, &format!("{FLYTEST_DIR}/buildtest-piso2.png"));
+            world.resource_mut::<BuildTestState>().next_t = now + 0.6;
+        }
+        // Recién ahora: salir de la losa para CAER al piso de abajo.
+        s if s == floors + edges_n + 12 => {
+            let base = world.resource::<BuildTestState>().base;
+            bt_teleport(world, base.0 as f32 + 30.5, base.1 as f32 + 30.5);
+        }
+        // C4 — DEMOLER con el gesto: mantener sobre el piso lo saca y devuelve el
+        // material. Se pica la losa AISLADA de la planta baja.
+        s if s == floors + edges_n + 13 => {
+            let base = world.resource::<BuildTestState>().base;
+            let lone = bt_lone_cell(base);
+            let body = bt_body(world);
+            let z = world.resource::<TileWorld>().z;
+            if z != 0 {
+                // Todavía cayendo: esperar sin gastar el intento.
+                bt_retry(world, s, now);
+                return;
+            }
+            let sigue = world.resource::<TileWorld>().tile_at(body, lone.0, lone.1)
+                == ha_shared::topdown::Tile::WoodFloor;
+            if !sigue {
+                world.resource_mut::<BuildTestState>().retries = 0;
+            } else {
+                bt_teleport(world, lone.0 as f32 + 0.5, lone.1 as f32 + 0.5);
+                lock_block_target(world, lone.0, lone.1);
+                complete_hold(world, false);
+                bt_retry(world, s, now);
+            }
+        }
+        // C4 + C5 — veredicto: el piso se fue, y con él la losa que aguantaba.
+        s if s == floors + edges_n + 14 => {
+            let base = world.resource::<BuildTestState>().base;
+            let lone = bt_lone_cell(base);
+            let body = bt_body(world);
+            let (abajo, arriba) = {
+                let tiles = world.resource::<TileWorld>();
+                (
+                    tiles.tile_at_level(body, 0, lone.0, lone.1),
+                    tiles.tile_at_level(body, 1, lone.0, lone.1),
+                )
+            };
+            if abajo == ha_shared::topdown::Tile::WoodFloor {
+                report_bug(
+                    "build",
+                    "floor_can_be_demolished",
+                    "mantener sobre el piso no lo saco",
+                );
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            if arriba == ha_shared::topdown::Tile::WoodFloor {
+                report_bug(
+                    "build",
+                    "unsupported_upper_floor_collapses",
+                    "la losa de arriba quedo flotando sin nada debajo",
+                );
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
+            unlock(world);
+        }
+        // Veredicto final.
+        _ => {
+            let z = world.resource::<TileWorld>().z;
+            // La caída la resuelve `fall_through_void` en `Update`: se le dan los
+            // frames de este arco (que se repite) antes de cantar el fallo.
+            if z != 0 && step >= floors + edges_n + 17 {
+                report_bug(
+                    "build",
+                    "void_drops_you",
+                    &format!("salir de la losa no te bajó de piso: z={z}"),
+                );
+                world.resource_mut::<BuildTestState>().failed = true;
+            }
             let walls = bt_wall_count(world);
             let failed = world.resource::<BuildTestState>().failed;
             eprintln!(
-                "ha-verify: BUILDTEST {} — paredes={walls} x={x:.2} (muro en {wall_x:.2})",
+                "ha-verify: BUILDTEST {} — paredes={walls} z={z}",
                 if failed { "FAIL" } else { "DONE" }
             );
             shot(world, &format!("{FLYTEST_DIR}/buildtest-room.png"));
             // Un par de frames para que el screenshot llegue al disco.
             let mut st = world.resource_mut::<BuildTestState>();
             st.next_t = now + 1.5;
-            if st.step > floors + edges_n + 8 {
+            if st.step > floors + edges_n + 18 {
                 std::process::exit(if failed { 1 } else { 0 });
             }
         }
@@ -1533,6 +2332,103 @@ fn tester_poll_command(world: &mut World, now: f32) {
                 z.user_zoom_mult = 1.0;
                 eprintln!("ha-tester: zoom view_h={h}");
             }
+        }
+        // `equip <item_id>`: pone algo en la mano sin pasar por la hotbar. Nació
+        // para QA de iluminación (una antorcha es la única luz CÁLIDA que se puede
+        // pasear a voluntad, y el aura de Ki es azul pálida: no sirve para juzgar
+        // si el borde del charco se funde con la noche).
+        _ if cmd.starts_with("equip ") => {
+            let id = cmd[6..].trim().to_string();
+            eprintln!("ha-tester: equip '{id}'");
+            world.resource_mut::<crate::input::EquippedItem>().item_id = id;
+        }
+        // `torches`: clava una de cada variante en círculo alrededor del jugador.
+        // QA de iluminación: es la única forma de ver las cinco a la vez.
+        "torches" => {
+            let (px, pz, body, zlvl) = {
+                let mut q = world.query_filtered::<&SimState, With<Player>>();
+                let p = q.get_single(world).map(|s| (s.body.x, s.body.z)).unwrap_or((0.0, 0.0));
+                let body = {
+                    let ctx = world.resource::<crate::scene::WorldContextRuntime>();
+                    let planet = world.resource::<crate::world2d::ActivePlanet>();
+                    crate::world2d::active_surface_body(ctx, planet)
+                };
+                let z = world.resource::<crate::world2d::TileWorld>().z;
+                (p.0, p.1, body, z)
+            };
+            let mut t = world.resource_mut::<crate::torches::PlacedTorches>();
+            let n = crate::torches::TORCH_VARIANTS.len();
+            for i in 0..n {
+                let a = i as f32 / n as f32 * std::f32::consts::TAU;
+                t.list.push(crate::torches::PlacedTorch {
+                    body: body as u8,
+                    z: zlvl,
+                    x: px + a.cos() * 7.0,
+                    zz: pz + a.sin() * 7.0,
+                    mount: crate::torches::TorchMount::Floor,
+                    variant: i as u8,
+                });
+            }
+            eprintln!("ha-tester: {n} antorchas alrededor de ({px:.0},{pz:.0})");
+        }
+        // `menu` / `menu off`: abre y cierra el menú de MENU sin un dedo. Nació
+        // para verificar el scroll del menú (`game_menu::scroll_game_menu`): en
+        // escritorio no hay tecla que lo abra, así que sin esto la única prueba
+        // del panel era el teléfono.
+        "menu" | "menu on" => {
+            world.resource_mut::<crate::ui_editor::UiEditorState>().menu_open = true;
+            eprintln!("ha-tester: menu abierto");
+        }
+        "menu off" => {
+            world.resource_mut::<crate::ui_editor::UiEditorState>().menu_open = false;
+            eprintln!("ha-tester: menu cerrado");
+        }
+        // `bolsa [construir|craftear|inventario]`: abre la mochila en una
+        // pestaña. Con `scroll <px>` encima es la unica forma de comprobar sin
+        // telefono que la lista LLEGA HASTA EL FINAL — el bug de "la ultima fila
+        // queda cortada y no me deja seguir bajando".
+        _ if cmd.starts_with("bolsa") => {
+            let tab = match cmd.split_whitespace().nth(1).unwrap_or("construir") {
+                "craftear" | "craft" => crate::hud::BagTab::Craft,
+                "inventario" | "inv" => crate::hud::BagTab::Inventory,
+                _ => crate::hud::BagTab::Build,
+            };
+            // Tercera palabra: la categoria de CONSTRUIR. `piezas` (la ficha por
+            // defecto) tiene cinco entradas y no scrollea — para probar el
+            // scroll hace falta una llena, como `agua`.
+            use ha_shared::placeables::PlaceCat;
+            let group = match cmd.split_whitespace().nth(2) {
+                Some("agua") => Some(PlaceCat::Agua),
+                Some("naturaleza") => Some(PlaceCat::Naturaleza),
+                Some("muebles") => Some(PlaceCat::Mueble),
+                Some("calle") => Some(PlaceCat::Calle),
+                Some("edificios") => Some(PlaceCat::Edificio),
+                Some("patio") => Some(PlaceCat::Parcela),
+                Some("vehiculos") => Some(PlaceCat::Vehiculo),
+                Some("estructuras") => Some(PlaceCat::Estructura),
+                _ => None,
+            };
+            let mut bag = world.resource_mut::<crate::hud::BagPanelState>();
+            bag.open = true;
+            bag.tab = tab;
+            if let Some(cat) = group {
+                let g = crate::hud::BagPanelState::build_group_of(cat);
+                bag.set_build_group(g);
+            }
+            eprintln!("ha-tester: mochila abierta");
+        }
+        "bolsa off" => {
+            world.resource_mut::<crate::hud::BagPanelState>().open = false;
+        }
+        // `scroll <px>`: empuja la lista abierta. Negativo sube.
+        _ if cmd.starts_with("scroll ") => {
+            let dy: f32 = cmd[7..].trim().parse().unwrap_or(0.0);
+            let mut q = world
+                .query_filtered::<&mut bevy::ui::ScrollPosition, With<crate::hud::BagScrollView>>();
+            for mut sp in q.iter_mut(world) {
+                sp.offset_y = (sp.offset_y + dy).max(0.0);
+            }
+            eprintln!("ha-tester: scroll {dy:+.0} px");
         }
         "earth" => tester_teleport(world, ha_shared::CelestialBody::Earth),
         "luna" | "moon" => tester_teleport(world, ha_shared::CelestialBody::Moon),
@@ -1752,6 +2648,7 @@ fn smoke_drive(world: &mut World) {
                 let mut c = world.resource_mut::<crate::input::AimCursor>();
                 c.world = bevy::prelude::Vec2::new(px + 2.5, pz - 1.5);
                 c.initialized = true;
+                c.active = true;
             }
             let x = player_x(world);
             shot(world, "ha-verify-topdown-boot.png");
@@ -1855,24 +2752,58 @@ fn smoke_drive(world: &mut World) {
                 let mut c = world.resource_mut::<crate::input::AimCursor>();
                 c.world = bevy::prelude::Vec2::new(tx as f32 + 0.5, tz as f32 + 0.5);
                 c.initialized = true;
+                c.active = true;
             }
-            // Open the bag's CONSTRUIR tab for a capture, then close it.
-            if dt < 0.5 {
+            // **Las TRES pestañas de la mochila, una captura cada una.** Era sólo
+            // CONSTRUIR; con la ventana a pantalla completa y las tarjetas con
+            // icono, cualquier regresión de UI (un icono que sale como hoja de
+            // atlas, un nombre que no entra, una tarjeta que desborda) se ve en
+            // estas tres imágenes y en ninguna otra parte.
+            // Ventanas ANCHAS (0,4 s) a propósito: con frames de 0,2 s en debug,
+            // las de 0,2 s que había antes se saltaban enteras y la captura de
+            // CONSTRUIR no salía nunca — el archivo quedaba con la imagen de la
+            // corrida anterior, que es peor que no tenerla.
+            if dt < 2.6 {
+                let group = if dt < 0.9 {
+                    0 // PIEZAS, la ficha por defecto
+                } else {
+                    // Una categoría del pack: es la que prueba de verdad que
+                    // filtrar rehace la lista con los colocables importados.
+                    crate::hud::BagPanelState::build_group_of(
+                        ha_shared::placeables::PlaceCat::Mueble,
+                    )
+                };
                 let mut bag = world.resource_mut::<crate::hud::BagPanelState>();
                 bag.open = true;
-                bag.tab = crate::hud::BagTab::Build;
+                bag.set_build_group(group);
+                bag.tab = match dt {
+                    _ if dt < 1.7 => crate::hud::BagTab::Build,
+                    _ if dt < 2.2 => crate::hud::BagTab::Craft,
+                    _ => crate::hud::BagTab::Inventory,
+                };
             }
-            if dt > 0.3 && dt < 0.5 {
+            if dt > 0.4 && dt < 0.8 {
                 shot(world, "ha-verify-bag-build.png");
             }
-            if dt >= 0.5 {
+            if dt > 1.3 && dt < 1.6 {
+                shot(world, "ha-verify-bag-build-muebles.png");
+            }
+            if dt > 1.2 && dt < 1.6 {
+                shot(world, "ha-verify-bag-craft.png");
+            }
+            if dt > 2.0 && dt < 2.4 {
+                shot(world, "ha-verify-bag-inventory.png");
+            }
+            if dt >= 2.6 {
                 world.resource_mut::<crate::hud::BagPanelState>().open = false;
             }
-            if dt > 0.9 && dt < 1.1 {
+            // Después de cerrar la mochila: si no, esta captura sale con el panel
+            // encima y no muestra el fantasma de construcción, que es lo suyo.
+            if dt > 2.8 && dt < 3.2 {
                 shot(world, "ha-verify-topdown-build.png");
             }
             // Place only after the captures, so the ghost shows on empty ground.
-            if dt > 1.2 {
+            if dt > 3.3 {
                 let mut h = world.resource_mut::<HoldInteractState>();
                 h.active = false;
                 h.completed = true;
@@ -1882,10 +2813,65 @@ fn smoke_drive(world: &mut World) {
                 .resource::<TileWorld>()
                 .tile_at(ha_shared::CelestialBody::Earth, tx, tz)
                 == ha_shared::topdown::Tile::WoodFloor;
-            if built && dt > 1.3 || dt > 4.0 {
+            if built && dt > 2.2 || dt > 5.0 {
                 eprintln!("ha-verify: build {}", if built { "PASS" } else { "FAIL" });
                 unlock(world);
                 world.resource_mut::<crate::input::BuildModeActive>().active = false;
+                world.resource_mut::<SmokeState>().phase = 13;
+                world.resource_mut::<SmokeState>().entered = now;
+            }
+        }
+        13 => {
+            // **El MAPA como objeto** (`map_item.rs`): se equipa, se abre en la
+            // mano con tu posición marcada, y manteniendo USE queda colgado
+            // retratando el sector donde estás.
+            //
+            // Todo dispara por ESTADO y no por ventana de reloj: en debug esto
+            // corre a 8-20 FPS y un `dt > 1.4 && dt < 1.5` se pierde entre dos
+            // frames (así este paso fallaba una vez sí y otra no).
+            if dt < 1.2 {
+                use crate::hud::inventory_ui::{SlotId, Stack};
+                world
+                    .resource_mut::<PlayerInventory>()
+                    .add(crate::map_item::MAP_SMALL, 2);
+                // Equipar se hace COMO EL JUGADOR: el ítem en la hotbar y ese
+                // hueco seleccionado. Escribir `EquippedItem` a mano no sirve —
+                // `equip_from_hotbar_selection` lo pisa con lo que haya elegido.
+                let mut ui = world.resource_mut::<crate::hud::inventory_ui::InventoryUiState>();
+                ui.hotbar[1] = Stack {
+                    item_id: Some(crate::map_item::MAP_SMALL.to_string()),
+                    qty: 2,
+                };
+                ui.selected = Some(SlotId::Hotbar(1));
+            }
+            if dt > 0.8 && dt < 1.0 {
+                shot(world, "ha-verify-map-hand.png");
+            }
+            let placed = world.resource::<crate::map_item::PlacedMapWorld>().placed.len();
+            // Colgarlo: el mismo camino que usa el jugador (hold completado). Se
+            // insiste hasta que entre uno.
+            if dt > 1.2 && placed == 0 {
+                let mut h = world.resource_mut::<HoldInteractState>();
+                h.active = false;
+                h.completed = true;
+                h.placing_map = true;
+            }
+            // "Está en la lista" y "se dibuja" son cosas distintas: se cuenta
+            // también el sprite colgado.
+            let drawn = world
+                .query::<&crate::map_item::PlacedMapEntity>()
+                .iter(world)
+                .count();
+            if placed > 0 && drawn > 0 && !world.resource::<SmokeState>().map_shot {
+                world.resource_mut::<SmokeState>().map_shot = true;
+                shot(world, "ha-verify-map-placed.png");
+            }
+            if (world.resource::<SmokeState>().map_shot && dt > 2.5) || dt > 8.0 {
+                eprintln!(
+                    "ha-verify: map {} (colgados={placed} sprites={drawn})",
+                    if placed > 0 && drawn > 0 { "PASS" } else { "FAIL" }
+                );
+                world.resource_mut::<crate::input::EquippedItem>().item_id = "hammer".to_string();
                 world.resource_mut::<SmokeState>().phase = 2;
                 world.resource_mut::<SmokeState>().entered = now;
             }
@@ -1921,7 +2907,7 @@ fn smoke_drive(world: &mut World) {
         }
         3 => {
             // The layer_transition should have dropped us to z=-1.
-            if dt > 1.5 {
+            if dt > 2.1 {
                 let z = world.resource::<TileWorld>().z;
                 eprintln!(
                     "ha-verify: descend {} (z={z})",

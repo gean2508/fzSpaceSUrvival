@@ -31,6 +31,30 @@ pub struct PlacedStructure {
     pub art: String,
     #[serde(default)]
     pub solid: Vec<(u32, u32)>,
+    /// **Hacia dónde MIRA** el objeto, en cuartos de vuelta: 0 = sur (de frente a
+    /// cámara, el reposo), 1 = oeste, 2 = norte, 3 = este.
+    ///
+    /// No se rota el sprite: en pixel art girar los píxeles 90° deja una cama
+    /// tumbada de costado. La orientación elige una POSE del slot
+    /// (`sur`/`oeste`/`norte`/`este`), que el usuario recorta en el editor como ya
+    /// recorta las de las paredes; sin esas poses el objeto se dibuja como
+    /// siempre y sólo cambia su huella. `#[serde(default)]` = las partidas viejas
+    /// entran como orientación 0.
+    #[serde(default)]
+    pub rot: u8,
+}
+
+/// Nombre de pose de cada cuarto de vuelta. En castellano, como el resto de lo
+/// que el usuario ve en el editor.
+pub const FACING_POSES: [&str; 4] = ["sur", "oeste", "norte", "este"];
+
+/// Huella `(w, h)` de un objeto `w×h` orientado: los cuartos impares la giran.
+pub fn footprint_rotated(w: i64, h: i64, rot: u8) -> (i64, i64) {
+    if rot % 2 == 1 {
+        (h, w)
+    } else {
+        (w, h)
+    }
 }
 
 /// Un decor autorado (árbol/roca/flora/prop) colocado a mano en una celda desde el editor.
@@ -49,6 +73,60 @@ pub struct PlacedDecor {
     /// que una casa se viera como un arbusto.
     #[serde(default)]
     pub size: Option<[f32; 2]>,
+    /// **El suelo que el asset ESTAMPA bajo su huella.**
+    ///
+    /// Antes un asset colocado se limitaba a dibujarse ENCIMA: plantabas una casa
+    /// sobre el bosque y abajo seguía habiendo pasto y árboles asomando por los
+    /// bordes. Con esto la colocación reemplaza el terreno de todas las celdas que
+    /// ocupa — y como la huella sale del recorte del slot, **el solar se adapta
+    /// solo al tamaño del asset**: una universidad estampa su solar entero y una
+    /// maceta no toca nada.
+    ///
+    /// `None` = no toca el terreno (comportamiento histórico, para props sueltos).
+    #[serde(default)]
+    pub ground: Option<Tile>,
+    /// Huella del asset en TILES, tal como la vio el editor al colocarlo
+    /// (`ArtManifest::slot_cells`). Se guarda en vez de re-deducirla en el juego
+    /// para que recortar el sprite distinto MÁS TARDE no mueva solares ya
+    /// autorados. `None` = deducir de `size`.
+    #[serde(default)]
+    pub cells: Option<[u32; 2]>,
+    /// Celda ancla dentro de la huella (`ArtManifest::anchor`). Misma razón.
+    #[serde(default)]
+    pub anchor: Option<[u32; 2]>,
+}
+
+impl PlacedDecor {
+    /// Huella en tiles: la guardada por el editor, o la deducida de `size`
+    /// redondeado (1 tile = 1 m). Nunca menor que 1×1.
+    pub fn footprint_cells(&self) -> (u32, u32) {
+        if let Some([w, h]) = self.cells {
+            return (w.max(1), h.max(1));
+        }
+        let s = self.size.unwrap_or([1.0, 1.0]);
+        (s[0].round().max(1.0) as u32, s[1].round().max(1.0) as u32)
+    }
+
+    /// Celda ancla dentro de la huella: la guardada, o la de por defecto (columna
+    /// del medio, fila del pie) — la misma regla que `CollisionFootprint::default_anchor`,
+    /// replicada acá porque `ha-shared` no depende de `ha-assets`.
+    pub fn footprint_anchor(&self) -> (u32, u32) {
+        let (w, h) = self.footprint_cells();
+        match self.anchor {
+            Some([ax, az]) => (ax.min(w - 1), az.min(h - 1)),
+            None => ((w - 1) / 2, h - 1),
+        }
+    }
+
+    /// Celdas `(x, z)` del mundo que el asset ocupa. Es la huella alineada al
+    /// grid: `[x-ax, x-ax+w) × [zc-az, zc-az+h)`, la MISMA regla que
+    /// `ha_assets::placement_min_tile` usa para dibujar y colisionar.
+    pub fn covered_cells(&self) -> impl Iterator<Item = (i64, i64)> + '_ {
+        let (w, h) = self.footprint_cells();
+        let (ax, az) = self.footprint_anchor();
+        let (min_x, min_z) = (self.x - ax as i64, self.zc - az as i64);
+        (0..h as i64).flat_map(move |dz| (0..w as i64).map(move |dx| (min_x + dx, min_z + dz)))
+    }
 }
 
 /// Una celda "limpia": el decor PROCEDURAL (árboles/rocas/flora/props) no se
@@ -86,7 +164,26 @@ impl WorldEdits {
     pub fn decor_free_cells(&self) -> impl Iterator<Item = (u8, i32, i64, i64)> + '_ {
         let painted = self.tiles.iter().map(|t| (t.body, t.z, t.x, t.zc));
         let erased = self.cleared.iter().map(|c| (c.body, c.z, c.x, c.zc));
-        painted.chain(erased)
+        // Un asset que ESTAMPA suelo (una casa, una universidad) también reclama
+        // sus celdas: si no, el bosque procedural seguiría creciendo por dentro y
+        // asomando entre las paredes. Los props que no tocan el terreno
+        // (`ground: None`) no reclaman nada — una maceta no despeja un bosque.
+        let stamped = self
+            .decor
+            .iter()
+            .filter(|d| d.ground.is_some())
+            .flat_map(|d| d.covered_cells().map(move |(x, z)| (d.body, d.z, x, z)));
+        painted.chain(erased).chain(stamped)
+    }
+
+    /// Tiles que las colocaciones de assets ESTAMPAN en el terreno. El juego los
+    /// aplica igual que los `tiles` pintados a mano — misma capa, mismo
+    /// `author_tile` —, así que un solar autorado y uno pintado son la misma cosa
+    /// para todo lo que viene después (colisión, decor, persistencia).
+    pub fn stamped_ground(&self) -> impl Iterator<Item = TileEdit> + '_ {
+        self.decor.iter().filter_map(|d| d.ground.map(|t| (d, t))).flat_map(|(d, tile)| {
+            d.covered_cells().map(move |(x, zc)| TileEdit { body: d.body, z: d.z, x, zc, tile })
+        })
     }
 }
 
@@ -107,6 +204,7 @@ mod tests {
                 h: 4,
                 art: "structure/monument".into(),
                 solid: vec![(1, 1), (2, 1)],
+                rot: 3,
             }],
             decor: vec![PlacedDecor {
                 body: 0,
@@ -115,6 +213,9 @@ mod tests {
                 zc: 4,
                 key: "decor/tree_roble".into(),
                 size: Some([3.0, 3.2]),
+                ground: None,
+                cells: None,
+                anchor: None,
             }],
             cleared: vec![ClearedCell { body: 0, z: 0, x: 9, zc: 9 }],
         };
@@ -144,5 +245,58 @@ mod tests {
         // Compat: un archivo sin `cleared` sigue cargando.
         let old = r#"{"tiles":[],"structures":[],"decor":[]}"#;
         assert!(serde_json::from_str::<WorldEdits>(old).unwrap().cleared.is_empty());
+    }
+
+    /// El asset colocado ESTAMPA su solar: el suelo se adapta al tamaño del
+    /// asset, no al revés. Una casa de 6×4 tapa 24 celdas de terreno, ni una más.
+    #[test]
+    fn a_placed_asset_stamps_the_ground_under_its_whole_footprint() {
+        let uni = PlacedDecor {
+            body: 0,
+            z: 0,
+            x: 100,
+            zc: 200,
+            key: "building/universidad".into(),
+            size: Some([6.0, 4.0]),
+            ground: Some(Tile::Stone),
+            cells: Some([6, 4]),
+            anchor: None, // → default: columna del medio (2), fila del pie (3)
+        };
+        let cells: Vec<_> = uni.covered_cells().collect();
+        assert_eq!(cells.len(), 24, "la huella tiene que ser 6x4 celdas");
+        // Ancla en (100,200) con anchor (2,3) ⇒ esquina min en (98, 197).
+        assert!(cells.contains(&(98, 197)), "esquina min");
+        assert!(cells.contains(&(103, 200)), "esquina max");
+        assert!(!cells.contains(&(104, 200)), "no se pasa de la huella");
+
+        let w = WorldEdits { decor: vec![uni], ..Default::default() };
+        let stamped: Vec<_> = w.stamped_ground().collect();
+        assert_eq!(stamped.len(), 24);
+        assert!(stamped.iter().all(|t| t.tile == Tile::Stone));
+        // Y esas 24 celdas dejan de generar decor procedural: nada de árboles
+        // creciendo dentro de la universidad.
+        assert_eq!(w.decor_free_cells().count(), 24);
+    }
+
+    /// Un prop suelto (`ground: None`) NO toca el terreno ni despeja el bosque —
+    /// es el comportamiento histórico y hay que conservarlo.
+    #[test]
+    fn a_prop_without_ground_leaves_the_world_alone() {
+        let w = WorldEdits {
+            decor: vec![PlacedDecor {
+                body: 0,
+                z: 0,
+                x: 3,
+                zc: 4,
+                key: "nature/flores_rojas".into(),
+                size: Some([1.0, 1.0]),
+                ground: None,
+                cells: None,
+                anchor: None,
+            }],
+            ..Default::default()
+        };
+        assert_eq!(w.stamped_ground().count(), 0);
+        assert_eq!(w.decor_free_cells().count(), 0);
     }
 }

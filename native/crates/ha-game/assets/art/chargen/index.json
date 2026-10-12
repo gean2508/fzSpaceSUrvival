@@ -1,0 +1,3190 @@
+{
+  "cell": [
+    32,
+    64
+  ],
+  "cols": 56,
+  "rows": 20,
+  "portrait_cell": [
+    64,
+    64
+  ],
+  "portrait_cols": 30,
+  "portrait_rows": 1,
+  "bodies": [
+    {
+      "png": "art/chargen/cuerpo/000.png",
+      "label": "PIEL 1",
+      "style": 1,
+      "color": 0,
+      "portrait": "art/retrato/piel/000.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/001.png",
+      "label": "PIEL 2",
+      "style": 2,
+      "color": 0,
+      "portrait": "art/retrato/piel/001.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/002.png",
+      "label": "PIEL 3",
+      "style": 3,
+      "color": 0,
+      "portrait": "art/retrato/piel/002.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/003.png",
+      "label": "PIEL 4",
+      "style": 4,
+      "color": 0,
+      "portrait": "art/retrato/piel/003.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/004.png",
+      "label": "PIEL 5",
+      "style": 5,
+      "color": 0,
+      "portrait": "art/retrato/piel/004.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/005.png",
+      "label": "PIEL 6",
+      "style": 6,
+      "color": 0,
+      "portrait": "art/retrato/piel/005.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/006.png",
+      "label": "PIEL 7",
+      "style": 7,
+      "color": 0,
+      "portrait": "art/retrato/piel/006.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/007.png",
+      "label": "PIEL 8",
+      "style": 8,
+      "color": 0,
+      "portrait": "art/retrato/piel/007.png"
+    },
+    {
+      "png": "art/chargen/cuerpo/008.png",
+      "label": "PIEL 9",
+      "style": 9,
+      "color": 0,
+      "portrait": "art/retrato/piel/008.png"
+    }
+  ],
+  "eyes": [
+    {
+      "png": "art/chargen/ojos/000.png",
+      "label": "OJOS 1",
+      "style": 1,
+      "color": 0,
+      "portrait": "art/retrato/ojos/000.png"
+    },
+    {
+      "png": "art/chargen/ojos/001.png",
+      "label": "OJOS 2",
+      "style": 2,
+      "color": 0,
+      "portrait": "art/retrato/ojos/001.png"
+    },
+    {
+      "png": "art/chargen/ojos/002.png",
+      "label": "OJOS 3",
+      "style": 3,
+      "color": 0,
+      "portrait": "art/retrato/ojos/002.png"
+    },
+    {
+      "png": "art/chargen/ojos/003.png",
+      "label": "OJOS 4",
+      "style": 4,
+      "color": 0,
+      "portrait": "art/retrato/ojos/003.png"
+    },
+    {
+      "png": "art/chargen/ojos/004.png",
+      "label": "OJOS 5",
+      "style": 5,
+      "color": 0,
+      "portrait": "art/retrato/ojos/004.png"
+    },
+    {
+      "png": "art/chargen/ojos/005.png",
+      "label": "OJOS 6",
+      "style": 6,
+      "color": 0,
+      "portrait": "art/retrato/ojos/005.png"
+    },
+    {
+      "png": "art/chargen/ojos/006.png",
+      "label": "OJOS 7",
+      "style": 7,
+      "color": 0,
+      "portrait": "art/retrato/ojos/006.png"
+    }
+  ],
+  "outfits": [
+    {
+      "png": "art/chargen/ropa/000.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/001.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/002.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/003.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/004.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/005.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 6,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/006.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 7,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/007.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 8,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/008.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 9,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/009.png",
+      "label": "ROPA 01",
+      "style": 1,
+      "color": 10,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/010.png",
+      "label": "ROPA 02",
+      "style": 2,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/011.png",
+      "label": "ROPA 02",
+      "style": 2,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/012.png",
+      "label": "ROPA 02",
+      "style": 2,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/013.png",
+      "label": "ROPA 02",
+      "style": 2,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/014.png",
+      "label": "ROPA 03",
+      "style": 3,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/015.png",
+      "label": "ROPA 03",
+      "style": 3,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/016.png",
+      "label": "ROPA 03",
+      "style": 3,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/017.png",
+      "label": "ROPA 03",
+      "style": 3,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/018.png",
+      "label": "ROPA 04",
+      "style": 4,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/019.png",
+      "label": "ROPA 04",
+      "style": 4,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/020.png",
+      "label": "ROPA 04",
+      "style": 4,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/021.png",
+      "label": "ROPA 05",
+      "style": 5,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/022.png",
+      "label": "ROPA 05",
+      "style": 5,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/023.png",
+      "label": "ROPA 05",
+      "style": 5,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/024.png",
+      "label": "ROPA 05",
+      "style": 5,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/025.png",
+      "label": "ROPA 05",
+      "style": 5,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/026.png",
+      "label": "ROPA 06",
+      "style": 6,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/027.png",
+      "label": "ROPA 06",
+      "style": 6,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/028.png",
+      "label": "ROPA 06",
+      "style": 6,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/029.png",
+      "label": "ROPA 06",
+      "style": 6,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/030.png",
+      "label": "ROPA 07",
+      "style": 7,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/031.png",
+      "label": "ROPA 07",
+      "style": 7,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/032.png",
+      "label": "ROPA 07",
+      "style": 7,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/033.png",
+      "label": "ROPA 07",
+      "style": 7,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/034.png",
+      "label": "ROPA 08",
+      "style": 8,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/035.png",
+      "label": "ROPA 08",
+      "style": 8,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/036.png",
+      "label": "ROPA 08",
+      "style": 8,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/037.png",
+      "label": "ROPA 09",
+      "style": 9,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/038.png",
+      "label": "ROPA 09",
+      "style": 9,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/039.png",
+      "label": "ROPA 09",
+      "style": 9,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/040.png",
+      "label": "ROPA 10",
+      "style": 10,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/041.png",
+      "label": "ROPA 10",
+      "style": 10,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/042.png",
+      "label": "ROPA 10",
+      "style": 10,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/043.png",
+      "label": "ROPA 10",
+      "style": 10,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/044.png",
+      "label": "ROPA 10",
+      "style": 10,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/045.png",
+      "label": "ROPA 11",
+      "style": 11,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/046.png",
+      "label": "ROPA 11",
+      "style": 11,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/047.png",
+      "label": "ROPA 11",
+      "style": 11,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/048.png",
+      "label": "ROPA 11",
+      "style": 11,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/049.png",
+      "label": "ROPA 12",
+      "style": 12,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/050.png",
+      "label": "ROPA 12",
+      "style": 12,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/051.png",
+      "label": "ROPA 12",
+      "style": 12,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/052.png",
+      "label": "ROPA 13",
+      "style": 13,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/053.png",
+      "label": "ROPA 13",
+      "style": 13,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/054.png",
+      "label": "ROPA 13",
+      "style": 13,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/055.png",
+      "label": "ROPA 13",
+      "style": 13,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/056.png",
+      "label": "ROPA 14",
+      "style": 14,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/057.png",
+      "label": "ROPA 14",
+      "style": 14,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/058.png",
+      "label": "ROPA 14",
+      "style": 14,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/059.png",
+      "label": "ROPA 14",
+      "style": 14,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/060.png",
+      "label": "ROPA 14",
+      "style": 14,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/061.png",
+      "label": "ROPA 15",
+      "style": 15,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/062.png",
+      "label": "ROPA 15",
+      "style": 15,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/063.png",
+      "label": "ROPA 15",
+      "style": 15,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/064.png",
+      "label": "ROPA 16",
+      "style": 16,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/065.png",
+      "label": "ROPA 16",
+      "style": 16,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/066.png",
+      "label": "ROPA 16",
+      "style": 16,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/067.png",
+      "label": "ROPA 17",
+      "style": 17,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/068.png",
+      "label": "ROPA 17",
+      "style": 17,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/069.png",
+      "label": "ROPA 17",
+      "style": 17,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/070.png",
+      "label": "ROPA 18",
+      "style": 18,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/071.png",
+      "label": "ROPA 18",
+      "style": 18,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/072.png",
+      "label": "ROPA 18",
+      "style": 18,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/073.png",
+      "label": "ROPA 18",
+      "style": 18,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/074.png",
+      "label": "ROPA 19",
+      "style": 19,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/075.png",
+      "label": "ROPA 19",
+      "style": 19,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/076.png",
+      "label": "ROPA 19",
+      "style": 19,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/077.png",
+      "label": "ROPA 19",
+      "style": 19,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/078.png",
+      "label": "ROPA 20",
+      "style": 20,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/079.png",
+      "label": "ROPA 20",
+      "style": 20,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/080.png",
+      "label": "ROPA 20",
+      "style": 20,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/081.png",
+      "label": "ROPA 21",
+      "style": 21,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/082.png",
+      "label": "ROPA 21",
+      "style": 21,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/083.png",
+      "label": "ROPA 21",
+      "style": 21,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/084.png",
+      "label": "ROPA 21",
+      "style": 21,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/085.png",
+      "label": "ROPA 22",
+      "style": 22,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/086.png",
+      "label": "ROPA 22",
+      "style": 22,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/087.png",
+      "label": "ROPA 22",
+      "style": 22,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/088.png",
+      "label": "ROPA 22",
+      "style": 22,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/089.png",
+      "label": "ROPA 23",
+      "style": 23,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/090.png",
+      "label": "ROPA 23",
+      "style": 23,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/091.png",
+      "label": "ROPA 23",
+      "style": 23,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/092.png",
+      "label": "ROPA 23",
+      "style": 23,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/093.png",
+      "label": "ROPA 24",
+      "style": 24,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/094.png",
+      "label": "ROPA 24",
+      "style": 24,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/095.png",
+      "label": "ROPA 24",
+      "style": 24,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/096.png",
+      "label": "ROPA 24",
+      "style": 24,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/097.png",
+      "label": "ROPA 25",
+      "style": 25,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/098.png",
+      "label": "ROPA 25",
+      "style": 25,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/099.png",
+      "label": "ROPA 25",
+      "style": 25,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/100.png",
+      "label": "ROPA 25",
+      "style": 25,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/101.png",
+      "label": "ROPA 25",
+      "style": 25,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/102.png",
+      "label": "ROPA 26",
+      "style": 26,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/103.png",
+      "label": "ROPA 26",
+      "style": 26,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/104.png",
+      "label": "ROPA 26",
+      "style": 26,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/105.png",
+      "label": "ROPA 27",
+      "style": 27,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/106.png",
+      "label": "ROPA 27",
+      "style": 27,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/107.png",
+      "label": "ROPA 27",
+      "style": 27,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/108.png",
+      "label": "ROPA 28",
+      "style": 28,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/109.png",
+      "label": "ROPA 28",
+      "style": 28,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/110.png",
+      "label": "ROPA 28",
+      "style": 28,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/111.png",
+      "label": "ROPA 28",
+      "style": 28,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/112.png",
+      "label": "ROPA 29",
+      "style": 29,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/113.png",
+      "label": "ROPA 29",
+      "style": 29,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/114.png",
+      "label": "ROPA 29",
+      "style": 29,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/115.png",
+      "label": "ROPA 29",
+      "style": 29,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/116.png",
+      "label": "ROPA 30",
+      "style": 30,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/117.png",
+      "label": "ROPA 30",
+      "style": 30,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/118.png",
+      "label": "ROPA 30",
+      "style": 30,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/119.png",
+      "label": "ROPA 31",
+      "style": 31,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/120.png",
+      "label": "ROPA 31",
+      "style": 31,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/121.png",
+      "label": "ROPA 31",
+      "style": 31,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/122.png",
+      "label": "ROPA 31",
+      "style": 31,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/123.png",
+      "label": "ROPA 31",
+      "style": 31,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/124.png",
+      "label": "ROPA 32",
+      "style": 32,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/125.png",
+      "label": "ROPA 32",
+      "style": 32,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/126.png",
+      "label": "ROPA 32",
+      "style": 32,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/127.png",
+      "label": "ROPA 32",
+      "style": 32,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/128.png",
+      "label": "ROPA 32",
+      "style": 32,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/129.png",
+      "label": "ROPA 33",
+      "style": 33,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/130.png",
+      "label": "ROPA 33",
+      "style": 33,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/ropa/131.png",
+      "label": "ROPA 33",
+      "style": 33,
+      "color": 3,
+      "portrait": null
+    }
+  ],
+  "hair": [
+    {
+      "png": "art/chargen/pelo/000.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 1,
+      "portrait": "art/retrato/pelo/000.png"
+    },
+    {
+      "png": "art/chargen/pelo/001.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 2,
+      "portrait": "art/retrato/pelo/001.png"
+    },
+    {
+      "png": "art/chargen/pelo/002.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 3,
+      "portrait": "art/retrato/pelo/002.png"
+    },
+    {
+      "png": "art/chargen/pelo/003.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 4,
+      "portrait": "art/retrato/pelo/003.png"
+    },
+    {
+      "png": "art/chargen/pelo/004.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 5,
+      "portrait": "art/retrato/pelo/004.png"
+    },
+    {
+      "png": "art/chargen/pelo/005.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 6,
+      "portrait": "art/retrato/pelo/005.png"
+    },
+    {
+      "png": "art/chargen/pelo/006.png",
+      "label": "PELO 01",
+      "style": 1,
+      "color": 7,
+      "portrait": "art/retrato/pelo/006.png"
+    },
+    {
+      "png": "art/chargen/pelo/007.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 1,
+      "portrait": "art/retrato/pelo/007.png"
+    },
+    {
+      "png": "art/chargen/pelo/008.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 2,
+      "portrait": "art/retrato/pelo/008.png"
+    },
+    {
+      "png": "art/chargen/pelo/009.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 3,
+      "portrait": "art/retrato/pelo/009.png"
+    },
+    {
+      "png": "art/chargen/pelo/010.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 4,
+      "portrait": "art/retrato/pelo/010.png"
+    },
+    {
+      "png": "art/chargen/pelo/011.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 5,
+      "portrait": "art/retrato/pelo/011.png"
+    },
+    {
+      "png": "art/chargen/pelo/012.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 6,
+      "portrait": "art/retrato/pelo/012.png"
+    },
+    {
+      "png": "art/chargen/pelo/013.png",
+      "label": "PELO 02",
+      "style": 2,
+      "color": 7,
+      "portrait": "art/retrato/pelo/013.png"
+    },
+    {
+      "png": "art/chargen/pelo/014.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 1,
+      "portrait": "art/retrato/pelo/014.png"
+    },
+    {
+      "png": "art/chargen/pelo/015.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 2,
+      "portrait": "art/retrato/pelo/015.png"
+    },
+    {
+      "png": "art/chargen/pelo/016.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 3,
+      "portrait": "art/retrato/pelo/016.png"
+    },
+    {
+      "png": "art/chargen/pelo/017.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 4,
+      "portrait": "art/retrato/pelo/017.png"
+    },
+    {
+      "png": "art/chargen/pelo/018.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 5,
+      "portrait": "art/retrato/pelo/018.png"
+    },
+    {
+      "png": "art/chargen/pelo/019.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 6,
+      "portrait": "art/retrato/pelo/019.png"
+    },
+    {
+      "png": "art/chargen/pelo/020.png",
+      "label": "PELO 03",
+      "style": 3,
+      "color": 7,
+      "portrait": "art/retrato/pelo/020.png"
+    },
+    {
+      "png": "art/chargen/pelo/021.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 1,
+      "portrait": "art/retrato/pelo/021.png"
+    },
+    {
+      "png": "art/chargen/pelo/022.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 2,
+      "portrait": "art/retrato/pelo/022.png"
+    },
+    {
+      "png": "art/chargen/pelo/023.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 3,
+      "portrait": "art/retrato/pelo/023.png"
+    },
+    {
+      "png": "art/chargen/pelo/024.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 4,
+      "portrait": "art/retrato/pelo/024.png"
+    },
+    {
+      "png": "art/chargen/pelo/025.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 5,
+      "portrait": "art/retrato/pelo/025.png"
+    },
+    {
+      "png": "art/chargen/pelo/026.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 6,
+      "portrait": "art/retrato/pelo/026.png"
+    },
+    {
+      "png": "art/chargen/pelo/027.png",
+      "label": "PELO 04",
+      "style": 4,
+      "color": 7,
+      "portrait": "art/retrato/pelo/027.png"
+    },
+    {
+      "png": "art/chargen/pelo/028.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 1,
+      "portrait": "art/retrato/pelo/028.png"
+    },
+    {
+      "png": "art/chargen/pelo/029.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 2,
+      "portrait": "art/retrato/pelo/029.png"
+    },
+    {
+      "png": "art/chargen/pelo/030.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 3,
+      "portrait": "art/retrato/pelo/030.png"
+    },
+    {
+      "png": "art/chargen/pelo/031.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 4,
+      "portrait": "art/retrato/pelo/031.png"
+    },
+    {
+      "png": "art/chargen/pelo/032.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 5,
+      "portrait": "art/retrato/pelo/032.png"
+    },
+    {
+      "png": "art/chargen/pelo/033.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 6,
+      "portrait": "art/retrato/pelo/033.png"
+    },
+    {
+      "png": "art/chargen/pelo/034.png",
+      "label": "PELO 05",
+      "style": 5,
+      "color": 7,
+      "portrait": "art/retrato/pelo/034.png"
+    },
+    {
+      "png": "art/chargen/pelo/035.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 1,
+      "portrait": "art/retrato/pelo/035.png"
+    },
+    {
+      "png": "art/chargen/pelo/036.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 2,
+      "portrait": "art/retrato/pelo/036.png"
+    },
+    {
+      "png": "art/chargen/pelo/037.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 3,
+      "portrait": "art/retrato/pelo/037.png"
+    },
+    {
+      "png": "art/chargen/pelo/038.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 4,
+      "portrait": "art/retrato/pelo/038.png"
+    },
+    {
+      "png": "art/chargen/pelo/039.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 5,
+      "portrait": "art/retrato/pelo/039.png"
+    },
+    {
+      "png": "art/chargen/pelo/040.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 6,
+      "portrait": "art/retrato/pelo/040.png"
+    },
+    {
+      "png": "art/chargen/pelo/041.png",
+      "label": "PELO 06",
+      "style": 6,
+      "color": 7,
+      "portrait": "art/retrato/pelo/041.png"
+    },
+    {
+      "png": "art/chargen/pelo/042.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 1,
+      "portrait": "art/retrato/pelo/042.png"
+    },
+    {
+      "png": "art/chargen/pelo/043.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 2,
+      "portrait": "art/retrato/pelo/043.png"
+    },
+    {
+      "png": "art/chargen/pelo/044.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 3,
+      "portrait": "art/retrato/pelo/044.png"
+    },
+    {
+      "png": "art/chargen/pelo/045.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 4,
+      "portrait": "art/retrato/pelo/045.png"
+    },
+    {
+      "png": "art/chargen/pelo/046.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 5,
+      "portrait": "art/retrato/pelo/046.png"
+    },
+    {
+      "png": "art/chargen/pelo/047.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 6,
+      "portrait": "art/retrato/pelo/047.png"
+    },
+    {
+      "png": "art/chargen/pelo/048.png",
+      "label": "PELO 07",
+      "style": 7,
+      "color": 7,
+      "portrait": "art/retrato/pelo/048.png"
+    },
+    {
+      "png": "art/chargen/pelo/049.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 1,
+      "portrait": "art/retrato/pelo/049.png"
+    },
+    {
+      "png": "art/chargen/pelo/050.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 2,
+      "portrait": "art/retrato/pelo/050.png"
+    },
+    {
+      "png": "art/chargen/pelo/051.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 3,
+      "portrait": "art/retrato/pelo/051.png"
+    },
+    {
+      "png": "art/chargen/pelo/052.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 4,
+      "portrait": "art/retrato/pelo/052.png"
+    },
+    {
+      "png": "art/chargen/pelo/053.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 5,
+      "portrait": "art/retrato/pelo/053.png"
+    },
+    {
+      "png": "art/chargen/pelo/054.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 6,
+      "portrait": "art/retrato/pelo/054.png"
+    },
+    {
+      "png": "art/chargen/pelo/055.png",
+      "label": "PELO 08",
+      "style": 8,
+      "color": 7,
+      "portrait": "art/retrato/pelo/055.png"
+    },
+    {
+      "png": "art/chargen/pelo/056.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 1,
+      "portrait": "art/retrato/pelo/056.png"
+    },
+    {
+      "png": "art/chargen/pelo/057.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 2,
+      "portrait": "art/retrato/pelo/057.png"
+    },
+    {
+      "png": "art/chargen/pelo/058.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 3,
+      "portrait": "art/retrato/pelo/058.png"
+    },
+    {
+      "png": "art/chargen/pelo/059.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 4,
+      "portrait": "art/retrato/pelo/059.png"
+    },
+    {
+      "png": "art/chargen/pelo/060.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 5,
+      "portrait": "art/retrato/pelo/060.png"
+    },
+    {
+      "png": "art/chargen/pelo/061.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 6,
+      "portrait": "art/retrato/pelo/061.png"
+    },
+    {
+      "png": "art/chargen/pelo/062.png",
+      "label": "PELO 09",
+      "style": 9,
+      "color": 7,
+      "portrait": "art/retrato/pelo/062.png"
+    },
+    {
+      "png": "art/chargen/pelo/063.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 1,
+      "portrait": "art/retrato/pelo/063.png"
+    },
+    {
+      "png": "art/chargen/pelo/064.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 2,
+      "portrait": "art/retrato/pelo/064.png"
+    },
+    {
+      "png": "art/chargen/pelo/065.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 3,
+      "portrait": "art/retrato/pelo/065.png"
+    },
+    {
+      "png": "art/chargen/pelo/066.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 4,
+      "portrait": "art/retrato/pelo/066.png"
+    },
+    {
+      "png": "art/chargen/pelo/067.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 5,
+      "portrait": "art/retrato/pelo/067.png"
+    },
+    {
+      "png": "art/chargen/pelo/068.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 6,
+      "portrait": "art/retrato/pelo/068.png"
+    },
+    {
+      "png": "art/chargen/pelo/069.png",
+      "label": "PELO 10",
+      "style": 10,
+      "color": 7,
+      "portrait": "art/retrato/pelo/069.png"
+    },
+    {
+      "png": "art/chargen/pelo/070.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 1,
+      "portrait": "art/retrato/pelo/070.png"
+    },
+    {
+      "png": "art/chargen/pelo/071.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 2,
+      "portrait": "art/retrato/pelo/071.png"
+    },
+    {
+      "png": "art/chargen/pelo/072.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 3,
+      "portrait": "art/retrato/pelo/072.png"
+    },
+    {
+      "png": "art/chargen/pelo/073.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 4,
+      "portrait": "art/retrato/pelo/073.png"
+    },
+    {
+      "png": "art/chargen/pelo/074.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 5,
+      "portrait": "art/retrato/pelo/074.png"
+    },
+    {
+      "png": "art/chargen/pelo/075.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 6,
+      "portrait": "art/retrato/pelo/075.png"
+    },
+    {
+      "png": "art/chargen/pelo/076.png",
+      "label": "PELO 11",
+      "style": 11,
+      "color": 7,
+      "portrait": "art/retrato/pelo/076.png"
+    },
+    {
+      "png": "art/chargen/pelo/077.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 1,
+      "portrait": "art/retrato/pelo/077.png"
+    },
+    {
+      "png": "art/chargen/pelo/078.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 2,
+      "portrait": "art/retrato/pelo/078.png"
+    },
+    {
+      "png": "art/chargen/pelo/079.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 3,
+      "portrait": "art/retrato/pelo/079.png"
+    },
+    {
+      "png": "art/chargen/pelo/080.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 4,
+      "portrait": "art/retrato/pelo/080.png"
+    },
+    {
+      "png": "art/chargen/pelo/081.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 5,
+      "portrait": "art/retrato/pelo/081.png"
+    },
+    {
+      "png": "art/chargen/pelo/082.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 6,
+      "portrait": "art/retrato/pelo/082.png"
+    },
+    {
+      "png": "art/chargen/pelo/083.png",
+      "label": "PELO 12",
+      "style": 12,
+      "color": 7,
+      "portrait": "art/retrato/pelo/083.png"
+    },
+    {
+      "png": "art/chargen/pelo/084.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 1,
+      "portrait": "art/retrato/pelo/084.png"
+    },
+    {
+      "png": "art/chargen/pelo/085.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 2,
+      "portrait": "art/retrato/pelo/085.png"
+    },
+    {
+      "png": "art/chargen/pelo/086.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 3,
+      "portrait": "art/retrato/pelo/086.png"
+    },
+    {
+      "png": "art/chargen/pelo/087.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 4,
+      "portrait": "art/retrato/pelo/087.png"
+    },
+    {
+      "png": "art/chargen/pelo/088.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 5,
+      "portrait": "art/retrato/pelo/088.png"
+    },
+    {
+      "png": "art/chargen/pelo/089.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 6,
+      "portrait": "art/retrato/pelo/089.png"
+    },
+    {
+      "png": "art/chargen/pelo/090.png",
+      "label": "PELO 13",
+      "style": 13,
+      "color": 7,
+      "portrait": "art/retrato/pelo/090.png"
+    },
+    {
+      "png": "art/chargen/pelo/091.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 1,
+      "portrait": "art/retrato/pelo/091.png"
+    },
+    {
+      "png": "art/chargen/pelo/092.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 2,
+      "portrait": "art/retrato/pelo/092.png"
+    },
+    {
+      "png": "art/chargen/pelo/093.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 3,
+      "portrait": "art/retrato/pelo/093.png"
+    },
+    {
+      "png": "art/chargen/pelo/094.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 4,
+      "portrait": "art/retrato/pelo/094.png"
+    },
+    {
+      "png": "art/chargen/pelo/095.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 5,
+      "portrait": "art/retrato/pelo/095.png"
+    },
+    {
+      "png": "art/chargen/pelo/096.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 6,
+      "portrait": "art/retrato/pelo/096.png"
+    },
+    {
+      "png": "art/chargen/pelo/097.png",
+      "label": "PELO 14",
+      "style": 14,
+      "color": 7,
+      "portrait": "art/retrato/pelo/097.png"
+    },
+    {
+      "png": "art/chargen/pelo/098.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 1,
+      "portrait": "art/retrato/pelo/098.png"
+    },
+    {
+      "png": "art/chargen/pelo/099.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 2,
+      "portrait": "art/retrato/pelo/099.png"
+    },
+    {
+      "png": "art/chargen/pelo/100.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 3,
+      "portrait": "art/retrato/pelo/100.png"
+    },
+    {
+      "png": "art/chargen/pelo/101.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 4,
+      "portrait": "art/retrato/pelo/101.png"
+    },
+    {
+      "png": "art/chargen/pelo/102.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 5,
+      "portrait": "art/retrato/pelo/102.png"
+    },
+    {
+      "png": "art/chargen/pelo/103.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 6,
+      "portrait": "art/retrato/pelo/103.png"
+    },
+    {
+      "png": "art/chargen/pelo/104.png",
+      "label": "PELO 15",
+      "style": 15,
+      "color": 7,
+      "portrait": "art/retrato/pelo/104.png"
+    },
+    {
+      "png": "art/chargen/pelo/105.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 1,
+      "portrait": "art/retrato/pelo/105.png"
+    },
+    {
+      "png": "art/chargen/pelo/106.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 2,
+      "portrait": "art/retrato/pelo/106.png"
+    },
+    {
+      "png": "art/chargen/pelo/107.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 3,
+      "portrait": "art/retrato/pelo/107.png"
+    },
+    {
+      "png": "art/chargen/pelo/108.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 4,
+      "portrait": "art/retrato/pelo/108.png"
+    },
+    {
+      "png": "art/chargen/pelo/109.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 5,
+      "portrait": "art/retrato/pelo/109.png"
+    },
+    {
+      "png": "art/chargen/pelo/110.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 6,
+      "portrait": "art/retrato/pelo/110.png"
+    },
+    {
+      "png": "art/chargen/pelo/111.png",
+      "label": "PELO 16",
+      "style": 16,
+      "color": 7,
+      "portrait": "art/retrato/pelo/111.png"
+    },
+    {
+      "png": "art/chargen/pelo/112.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 1,
+      "portrait": "art/retrato/pelo/112.png"
+    },
+    {
+      "png": "art/chargen/pelo/113.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 2,
+      "portrait": "art/retrato/pelo/113.png"
+    },
+    {
+      "png": "art/chargen/pelo/114.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 3,
+      "portrait": "art/retrato/pelo/114.png"
+    },
+    {
+      "png": "art/chargen/pelo/115.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 4,
+      "portrait": "art/retrato/pelo/115.png"
+    },
+    {
+      "png": "art/chargen/pelo/116.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 5,
+      "portrait": "art/retrato/pelo/116.png"
+    },
+    {
+      "png": "art/chargen/pelo/117.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 6,
+      "portrait": "art/retrato/pelo/117.png"
+    },
+    {
+      "png": "art/chargen/pelo/118.png",
+      "label": "PELO 17",
+      "style": 17,
+      "color": 7,
+      "portrait": "art/retrato/pelo/118.png"
+    },
+    {
+      "png": "art/chargen/pelo/119.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 1,
+      "portrait": "art/retrato/pelo/119.png"
+    },
+    {
+      "png": "art/chargen/pelo/120.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 2,
+      "portrait": "art/retrato/pelo/120.png"
+    },
+    {
+      "png": "art/chargen/pelo/121.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 3,
+      "portrait": "art/retrato/pelo/121.png"
+    },
+    {
+      "png": "art/chargen/pelo/122.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 4,
+      "portrait": "art/retrato/pelo/122.png"
+    },
+    {
+      "png": "art/chargen/pelo/123.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 5,
+      "portrait": "art/retrato/pelo/123.png"
+    },
+    {
+      "png": "art/chargen/pelo/124.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 6,
+      "portrait": "art/retrato/pelo/124.png"
+    },
+    {
+      "png": "art/chargen/pelo/125.png",
+      "label": "PELO 18",
+      "style": 18,
+      "color": 7,
+      "portrait": "art/retrato/pelo/125.png"
+    },
+    {
+      "png": "art/chargen/pelo/126.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 1,
+      "portrait": "art/retrato/pelo/126.png"
+    },
+    {
+      "png": "art/chargen/pelo/127.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 2,
+      "portrait": "art/retrato/pelo/127.png"
+    },
+    {
+      "png": "art/chargen/pelo/128.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 3,
+      "portrait": "art/retrato/pelo/128.png"
+    },
+    {
+      "png": "art/chargen/pelo/129.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 4,
+      "portrait": "art/retrato/pelo/129.png"
+    },
+    {
+      "png": "art/chargen/pelo/130.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 5,
+      "portrait": "art/retrato/pelo/130.png"
+    },
+    {
+      "png": "art/chargen/pelo/131.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 6,
+      "portrait": "art/retrato/pelo/131.png"
+    },
+    {
+      "png": "art/chargen/pelo/132.png",
+      "label": "PELO 19",
+      "style": 19,
+      "color": 7,
+      "portrait": "art/retrato/pelo/132.png"
+    },
+    {
+      "png": "art/chargen/pelo/133.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 1,
+      "portrait": "art/retrato/pelo/133.png"
+    },
+    {
+      "png": "art/chargen/pelo/134.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 2,
+      "portrait": "art/retrato/pelo/134.png"
+    },
+    {
+      "png": "art/chargen/pelo/135.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 3,
+      "portrait": "art/retrato/pelo/135.png"
+    },
+    {
+      "png": "art/chargen/pelo/136.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 4,
+      "portrait": "art/retrato/pelo/136.png"
+    },
+    {
+      "png": "art/chargen/pelo/137.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 5,
+      "portrait": "art/retrato/pelo/137.png"
+    },
+    {
+      "png": "art/chargen/pelo/138.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 6,
+      "portrait": "art/retrato/pelo/138.png"
+    },
+    {
+      "png": "art/chargen/pelo/139.png",
+      "label": "PELO 20",
+      "style": 20,
+      "color": 7,
+      "portrait": "art/retrato/pelo/139.png"
+    },
+    {
+      "png": "art/chargen/pelo/140.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 1,
+      "portrait": "art/retrato/pelo/140.png"
+    },
+    {
+      "png": "art/chargen/pelo/141.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 2,
+      "portrait": "art/retrato/pelo/141.png"
+    },
+    {
+      "png": "art/chargen/pelo/142.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 3,
+      "portrait": "art/retrato/pelo/142.png"
+    },
+    {
+      "png": "art/chargen/pelo/143.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 4,
+      "portrait": "art/retrato/pelo/143.png"
+    },
+    {
+      "png": "art/chargen/pelo/144.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 5,
+      "portrait": "art/retrato/pelo/144.png"
+    },
+    {
+      "png": "art/chargen/pelo/145.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 6,
+      "portrait": "art/retrato/pelo/145.png"
+    },
+    {
+      "png": "art/chargen/pelo/146.png",
+      "label": "PELO 21",
+      "style": 21,
+      "color": 7,
+      "portrait": "art/retrato/pelo/146.png"
+    },
+    {
+      "png": "art/chargen/pelo/147.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 1,
+      "portrait": "art/retrato/pelo/147.png"
+    },
+    {
+      "png": "art/chargen/pelo/148.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 2,
+      "portrait": "art/retrato/pelo/148.png"
+    },
+    {
+      "png": "art/chargen/pelo/149.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 3,
+      "portrait": "art/retrato/pelo/149.png"
+    },
+    {
+      "png": "art/chargen/pelo/150.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 4,
+      "portrait": "art/retrato/pelo/150.png"
+    },
+    {
+      "png": "art/chargen/pelo/151.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 5,
+      "portrait": "art/retrato/pelo/151.png"
+    },
+    {
+      "png": "art/chargen/pelo/152.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 6,
+      "portrait": "art/retrato/pelo/152.png"
+    },
+    {
+      "png": "art/chargen/pelo/153.png",
+      "label": "PELO 22",
+      "style": 22,
+      "color": 7,
+      "portrait": "art/retrato/pelo/153.png"
+    },
+    {
+      "png": "art/chargen/pelo/154.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 1,
+      "portrait": "art/retrato/pelo/154.png"
+    },
+    {
+      "png": "art/chargen/pelo/155.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 2,
+      "portrait": "art/retrato/pelo/155.png"
+    },
+    {
+      "png": "art/chargen/pelo/156.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 3,
+      "portrait": "art/retrato/pelo/156.png"
+    },
+    {
+      "png": "art/chargen/pelo/157.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 4,
+      "portrait": "art/retrato/pelo/157.png"
+    },
+    {
+      "png": "art/chargen/pelo/158.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 5,
+      "portrait": "art/retrato/pelo/158.png"
+    },
+    {
+      "png": "art/chargen/pelo/159.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 6,
+      "portrait": "art/retrato/pelo/159.png"
+    },
+    {
+      "png": "art/chargen/pelo/160.png",
+      "label": "PELO 23",
+      "style": 23,
+      "color": 7,
+      "portrait": "art/retrato/pelo/160.png"
+    },
+    {
+      "png": "art/chargen/pelo/161.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 1,
+      "portrait": "art/retrato/pelo/161.png"
+    },
+    {
+      "png": "art/chargen/pelo/162.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 2,
+      "portrait": "art/retrato/pelo/162.png"
+    },
+    {
+      "png": "art/chargen/pelo/163.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 3,
+      "portrait": "art/retrato/pelo/163.png"
+    },
+    {
+      "png": "art/chargen/pelo/164.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 4,
+      "portrait": "art/retrato/pelo/164.png"
+    },
+    {
+      "png": "art/chargen/pelo/165.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 5,
+      "portrait": "art/retrato/pelo/165.png"
+    },
+    {
+      "png": "art/chargen/pelo/166.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 6,
+      "portrait": "art/retrato/pelo/166.png"
+    },
+    {
+      "png": "art/chargen/pelo/167.png",
+      "label": "PELO 24",
+      "style": 24,
+      "color": 7,
+      "portrait": "art/retrato/pelo/167.png"
+    },
+    {
+      "png": "art/chargen/pelo/168.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 1,
+      "portrait": "art/retrato/pelo/168.png"
+    },
+    {
+      "png": "art/chargen/pelo/169.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 2,
+      "portrait": "art/retrato/pelo/169.png"
+    },
+    {
+      "png": "art/chargen/pelo/170.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 3,
+      "portrait": "art/retrato/pelo/170.png"
+    },
+    {
+      "png": "art/chargen/pelo/171.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 4,
+      "portrait": "art/retrato/pelo/171.png"
+    },
+    {
+      "png": "art/chargen/pelo/172.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 5,
+      "portrait": "art/retrato/pelo/172.png"
+    },
+    {
+      "png": "art/chargen/pelo/173.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 6,
+      "portrait": "art/retrato/pelo/173.png"
+    },
+    {
+      "png": "art/chargen/pelo/174.png",
+      "label": "PELO 25",
+      "style": 25,
+      "color": 7,
+      "portrait": "art/retrato/pelo/174.png"
+    },
+    {
+      "png": "art/chargen/pelo/175.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 1,
+      "portrait": "art/retrato/pelo/175.png"
+    },
+    {
+      "png": "art/chargen/pelo/176.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 2,
+      "portrait": "art/retrato/pelo/176.png"
+    },
+    {
+      "png": "art/chargen/pelo/177.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 3,
+      "portrait": "art/retrato/pelo/177.png"
+    },
+    {
+      "png": "art/chargen/pelo/178.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 4,
+      "portrait": "art/retrato/pelo/178.png"
+    },
+    {
+      "png": "art/chargen/pelo/179.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 5,
+      "portrait": "art/retrato/pelo/179.png"
+    },
+    {
+      "png": "art/chargen/pelo/180.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 6,
+      "portrait": "art/retrato/pelo/180.png"
+    },
+    {
+      "png": "art/chargen/pelo/181.png",
+      "label": "PELO 26",
+      "style": 26,
+      "color": 7,
+      "portrait": "art/retrato/pelo/181.png"
+    },
+    {
+      "png": "art/chargen/pelo/182.png",
+      "label": "PELO 27",
+      "style": 27,
+      "color": 1,
+      "portrait": "art/retrato/pelo/182.png"
+    },
+    {
+      "png": "art/chargen/pelo/183.png",
+      "label": "PELO 27",
+      "style": 27,
+      "color": 2,
+      "portrait": "art/retrato/pelo/183.png"
+    },
+    {
+      "png": "art/chargen/pelo/184.png",
+      "label": "PELO 27",
+      "style": 27,
+      "color": 3,
+      "portrait": "art/retrato/pelo/184.png"
+    },
+    {
+      "png": "art/chargen/pelo/185.png",
+      "label": "PELO 27",
+      "style": 27,
+      "color": 4,
+      "portrait": "art/retrato/pelo/185.png"
+    },
+    {
+      "png": "art/chargen/pelo/186.png",
+      "label": "PELO 27",
+      "style": 27,
+      "color": 5,
+      "portrait": "art/retrato/pelo/186.png"
+    },
+    {
+      "png": "art/chargen/pelo/187.png",
+      "label": "PELO 27",
+      "style": 27,
+      "color": 6,
+      "portrait": "art/retrato/pelo/187.png"
+    },
+    {
+      "png": "art/chargen/pelo/188.png",
+      "label": "PELO 28",
+      "style": 28,
+      "color": 1,
+      "portrait": "art/retrato/pelo/188.png"
+    },
+    {
+      "png": "art/chargen/pelo/189.png",
+      "label": "PELO 28",
+      "style": 28,
+      "color": 2,
+      "portrait": "art/retrato/pelo/189.png"
+    },
+    {
+      "png": "art/chargen/pelo/190.png",
+      "label": "PELO 28",
+      "style": 28,
+      "color": 3,
+      "portrait": "art/retrato/pelo/190.png"
+    },
+    {
+      "png": "art/chargen/pelo/191.png",
+      "label": "PELO 28",
+      "style": 28,
+      "color": 4,
+      "portrait": "art/retrato/pelo/191.png"
+    },
+    {
+      "png": "art/chargen/pelo/192.png",
+      "label": "PELO 28",
+      "style": 28,
+      "color": 5,
+      "portrait": "art/retrato/pelo/192.png"
+    },
+    {
+      "png": "art/chargen/pelo/193.png",
+      "label": "PELO 28",
+      "style": 28,
+      "color": 6,
+      "portrait": "art/retrato/pelo/193.png"
+    },
+    {
+      "png": "art/chargen/pelo/194.png",
+      "label": "PELO 29",
+      "style": 29,
+      "color": 1,
+      "portrait": "art/retrato/pelo/194.png"
+    },
+    {
+      "png": "art/chargen/pelo/195.png",
+      "label": "PELO 29",
+      "style": 29,
+      "color": 2,
+      "portrait": "art/retrato/pelo/195.png"
+    },
+    {
+      "png": "art/chargen/pelo/196.png",
+      "label": "PELO 29",
+      "style": 29,
+      "color": 3,
+      "portrait": "art/retrato/pelo/196.png"
+    },
+    {
+      "png": "art/chargen/pelo/197.png",
+      "label": "PELO 29",
+      "style": 29,
+      "color": 4,
+      "portrait": "art/retrato/pelo/197.png"
+    },
+    {
+      "png": "art/chargen/pelo/198.png",
+      "label": "PELO 29",
+      "style": 29,
+      "color": 5,
+      "portrait": "art/retrato/pelo/198.png"
+    },
+    {
+      "png": "art/chargen/pelo/199.png",
+      "label": "PELO 29",
+      "style": 29,
+      "color": 6,
+      "portrait": "art/retrato/pelo/199.png"
+    }
+  ],
+  "accessories": [
+    {
+      "png": "art/chargen/accesorio/000.png",
+      "label": "MARIQUITA",
+      "style": 1,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/000.png"
+    },
+    {
+      "png": "art/chargen/accesorio/001.png",
+      "label": "MARIQUITA",
+      "style": 1,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/001.png"
+    },
+    {
+      "png": "art/chargen/accesorio/002.png",
+      "label": "MARIQUITA",
+      "style": 1,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/002.png"
+    },
+    {
+      "png": "art/chargen/accesorio/003.png",
+      "label": "MARIQUITA",
+      "style": 1,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/003.png"
+    },
+    {
+      "png": "art/chargen/accesorio/004.png",
+      "label": "ABEJA",
+      "style": 2,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/005.png",
+      "label": "ABEJA",
+      "style": 2,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/006.png",
+      "label": "ABEJA",
+      "style": 2,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/007.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/008.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/009.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/010.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/011.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 5,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/012.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 6,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/013.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 7,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/014.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 8,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/015.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 9,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/016.png",
+      "label": "MOCHILA",
+      "style": 3,
+      "color": 10,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/017.png",
+      "label": "GORRA",
+      "style": 4,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/017.png"
+    },
+    {
+      "png": "art/chargen/accesorio/018.png",
+      "label": "GORRA",
+      "style": 4,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/018.png"
+    },
+    {
+      "png": "art/chargen/accesorio/019.png",
+      "label": "GORRA",
+      "style": 4,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/019.png"
+    },
+    {
+      "png": "art/chargen/accesorio/020.png",
+      "label": "GORRA",
+      "style": 4,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/020.png"
+    },
+    {
+      "png": "art/chargen/accesorio/021.png",
+      "label": "GORRA",
+      "style": 4,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/021.png"
+    },
+    {
+      "png": "art/chargen/accesorio/022.png",
+      "label": "GORRA",
+      "style": 4,
+      "color": 6,
+      "portrait": "art/retrato/accesorio/022.png"
+    },
+    {
+      "png": "art/chargen/accesorio/023.png",
+      "label": "GORRA DINO",
+      "style": 5,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/023.png"
+    },
+    {
+      "png": "art/chargen/accesorio/024.png",
+      "label": "GORRA DINO",
+      "style": 5,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/024.png"
+    },
+    {
+      "png": "art/chargen/accesorio/025.png",
+      "label": "GORRA DINO",
+      "style": 5,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/025.png"
+    },
+    {
+      "png": "art/chargen/accesorio/026.png",
+      "label": "GORRA DE POLICIA",
+      "style": 6,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/026.png"
+    },
+    {
+      "png": "art/chargen/accesorio/027.png",
+      "label": "GORRA DE POLICIA",
+      "style": 6,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/027.png"
+    },
+    {
+      "png": "art/chargen/accesorio/028.png",
+      "label": "GORRA DE POLICIA",
+      "style": 6,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/028.png"
+    },
+    {
+      "png": "art/chargen/accesorio/029.png",
+      "label": "GORRA DE POLICIA",
+      "style": 6,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/029.png"
+    },
+    {
+      "png": "art/chargen/accesorio/030.png",
+      "label": "GORRA DE POLICIA",
+      "style": 6,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/030.png"
+    },
+    {
+      "png": "art/chargen/accesorio/031.png",
+      "label": "GORRA DE POLICIA",
+      "style": 6,
+      "color": 6,
+      "portrait": "art/retrato/accesorio/031.png"
+    },
+    {
+      "png": "art/chargen/accesorio/032.png",
+      "label": "PASAMONTANAS",
+      "style": 7,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/032.png"
+    },
+    {
+      "png": "art/chargen/accesorio/033.png",
+      "label": "PASAMONTANAS",
+      "style": 7,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/033.png"
+    },
+    {
+      "png": "art/chargen/accesorio/034.png",
+      "label": "PASAMONTANAS",
+      "style": 7,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/034.png"
+    },
+    {
+      "png": "art/chargen/accesorio/035.png",
+      "label": "SOMBRERO DETECTIVE",
+      "style": 8,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/035.png"
+    },
+    {
+      "png": "art/chargen/accesorio/036.png",
+      "label": "SOMBRERO DETECTIVE",
+      "style": 8,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/036.png"
+    },
+    {
+      "png": "art/chargen/accesorio/037.png",
+      "label": "SOMBRERO DETECTIVE",
+      "style": 8,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/037.png"
+    },
+    {
+      "png": "art/chargen/accesorio/038.png",
+      "label": "CEREBRO ZOMBI",
+      "style": 9,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/038.png"
+    },
+    {
+      "png": "art/chargen/accesorio/039.png",
+      "label": "CEREBRO ZOMBI",
+      "style": 9,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/039.png"
+    },
+    {
+      "png": "art/chargen/accesorio/040.png",
+      "label": "CEREBRO ZOMBI",
+      "style": 9,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/040.png"
+    },
+    {
+      "png": "art/chargen/accesorio/041.png",
+      "label": "TORNILLO",
+      "style": 10,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/041.png"
+    },
+    {
+      "png": "art/chargen/accesorio/042.png",
+      "label": "TORNILLO",
+      "style": 10,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/042.png"
+    },
+    {
+      "png": "art/chargen/accesorio/043.png",
+      "label": "TORNILLO",
+      "style": 10,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/043.png"
+    },
+    {
+      "png": "art/chargen/accesorio/044.png",
+      "label": "GORRO DE LANA",
+      "style": 11,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/044.png"
+    },
+    {
+      "png": "art/chargen/accesorio/045.png",
+      "label": "GORRO DE LANA",
+      "style": 11,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/045.png"
+    },
+    {
+      "png": "art/chargen/accesorio/046.png",
+      "label": "GORRO DE LANA",
+      "style": 11,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/046.png"
+    },
+    {
+      "png": "art/chargen/accesorio/047.png",
+      "label": "GORRO DE LANA",
+      "style": 11,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/047.png"
+    },
+    {
+      "png": "art/chargen/accesorio/048.png",
+      "label": "GORRO DE LANA",
+      "style": 11,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/048.png"
+    },
+    {
+      "png": "art/chargen/accesorio/049.png",
+      "label": "BIGOTE",
+      "style": 12,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/049.png"
+    },
+    {
+      "png": "art/chargen/accesorio/050.png",
+      "label": "BIGOTE",
+      "style": 12,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/050.png"
+    },
+    {
+      "png": "art/chargen/accesorio/051.png",
+      "label": "BIGOTE",
+      "style": 12,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/051.png"
+    },
+    {
+      "png": "art/chargen/accesorio/052.png",
+      "label": "BIGOTE",
+      "style": 12,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/052.png"
+    },
+    {
+      "png": "art/chargen/accesorio/053.png",
+      "label": "BIGOTE",
+      "style": 12,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/053.png"
+    },
+    {
+      "png": "art/chargen/accesorio/054.png",
+      "label": "BARBA",
+      "style": 13,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/054.png"
+    },
+    {
+      "png": "art/chargen/accesorio/055.png",
+      "label": "BARBA",
+      "style": 13,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/055.png"
+    },
+    {
+      "png": "art/chargen/accesorio/056.png",
+      "label": "BARBA",
+      "style": 13,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/056.png"
+    },
+    {
+      "png": "art/chargen/accesorio/057.png",
+      "label": "BARBA",
+      "style": 13,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/057.png"
+    },
+    {
+      "png": "art/chargen/accesorio/058.png",
+      "label": "BARBA",
+      "style": 13,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/058.png"
+    },
+    {
+      "png": "art/chargen/accesorio/059.png",
+      "label": "GUANTES",
+      "style": 14,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/060.png",
+      "label": "GUANTES",
+      "style": 14,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/061.png",
+      "label": "GUANTES",
+      "style": 14,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/062.png",
+      "label": "GUANTES",
+      "style": 14,
+      "color": 4,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/063.png",
+      "label": "ANTEOJOS",
+      "style": 15,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/063.png"
+    },
+    {
+      "png": "art/chargen/accesorio/064.png",
+      "label": "ANTEOJOS",
+      "style": 15,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/064.png"
+    },
+    {
+      "png": "art/chargen/accesorio/065.png",
+      "label": "ANTEOJOS",
+      "style": 15,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/065.png"
+    },
+    {
+      "png": "art/chargen/accesorio/066.png",
+      "label": "ANTEOJOS",
+      "style": 15,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/066.png"
+    },
+    {
+      "png": "art/chargen/accesorio/067.png",
+      "label": "ANTEOJOS",
+      "style": 15,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/067.png"
+    },
+    {
+      "png": "art/chargen/accesorio/068.png",
+      "label": "ANTEOJOS",
+      "style": 15,
+      "color": 6,
+      "portrait": "art/retrato/accesorio/068.png"
+    },
+    {
+      "png": "art/chargen/accesorio/069.png",
+      "label": "MONOCULO",
+      "style": 16,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/069.png"
+    },
+    {
+      "png": "art/chargen/accesorio/070.png",
+      "label": "MONOCULO",
+      "style": 16,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/070.png"
+    },
+    {
+      "png": "art/chargen/accesorio/071.png",
+      "label": "MONOCULO",
+      "style": 16,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/071.png"
+    },
+    {
+      "png": "art/chargen/accesorio/072.png",
+      "label": "BARBIJO",
+      "style": 17,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/072.png"
+    },
+    {
+      "png": "art/chargen/accesorio/073.png",
+      "label": "BARBIJO",
+      "style": 17,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/073.png"
+    },
+    {
+      "png": "art/chargen/accesorio/074.png",
+      "label": "BARBIJO",
+      "style": 17,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/074.png"
+    },
+    {
+      "png": "art/chargen/accesorio/075.png",
+      "label": "BARBIJO",
+      "style": 17,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/075.png"
+    },
+    {
+      "png": "art/chargen/accesorio/076.png",
+      "label": "BARBIJO",
+      "style": 17,
+      "color": 5,
+      "portrait": "art/retrato/accesorio/076.png"
+    },
+    {
+      "png": "art/chargen/accesorio/077.png",
+      "label": "GORRO DE CHEF",
+      "style": 18,
+      "color": 1,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/078.png",
+      "label": "GORRO DE CHEF",
+      "style": 18,
+      "color": 2,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/079.png",
+      "label": "GORRO DE CHEF",
+      "style": 18,
+      "color": 3,
+      "portrait": null
+    },
+    {
+      "png": "art/chargen/accesorio/080.png",
+      "label": "GORRO DE FIESTA",
+      "style": 19,
+      "color": 1,
+      "portrait": "art/retrato/accesorio/080.png"
+    },
+    {
+      "png": "art/chargen/accesorio/081.png",
+      "label": "GORRO DE FIESTA",
+      "style": 19,
+      "color": 2,
+      "portrait": "art/retrato/accesorio/081.png"
+    },
+    {
+      "png": "art/chargen/accesorio/082.png",
+      "label": "GORRO DE FIESTA",
+      "style": 19,
+      "color": 3,
+      "portrait": "art/retrato/accesorio/082.png"
+    },
+    {
+      "png": "art/chargen/accesorio/083.png",
+      "label": "GORRO DE FIESTA",
+      "style": 19,
+      "color": 4,
+      "portrait": "art/retrato/accesorio/083.png"
+    }
+  ],
+  "npc_looks": [
+    {
+      "body": 6,
+      "eyes": 6,
+      "outfit": 125,
+      "hair": 190,
+      "accessory": null
+    },
+    {
+      "body": 6,
+      "eyes": 1,
+      "outfit": 22,
+      "hair": 82,
+      "accessory": 59
+    },
+    {
+      "body": 8,
+      "eyes": 0,
+      "outfit": 47,
+      "hair": 94,
+      "accessory": null
+    },
+    {
+      "body": 8,
+      "eyes": 1,
+      "outfit": 24,
+      "hair": 49,
+      "accessory": null
+    },
+    {
+      "body": 7,
+      "eyes": 1,
+      "outfit": 47,
+      "hair": 21,
+      "accessory": null
+    },
+    {
+      "body": 7,
+      "eyes": 6,
+      "outfit": 115,
+      "hair": 191,
+      "accessory": null
+    },
+    {
+      "body": 0,
+      "eyes": 1,
+      "outfit": 67,
+      "hair": 54,
+      "accessory": null
+    },
+    {
+      "body": 0,
+      "eyes": 0,
+      "outfit": 81,
+      "hair": 30,
+      "accessory": 48
+    },
+    {
+      "body": 6,
+      "eyes": 5,
+      "outfit": 123,
+      "hair": 154,
+      "accessory": null
+    },
+    {
+      "body": 6,
+      "eyes": 4,
+      "outfit": 19,
+      "hair": 179,
+      "accessory": 61
+    },
+    {
+      "body": 2,
+      "eyes": 3,
+      "outfit": 42,
+      "hair": 30,
+      "accessory": null
+    },
+    {
+      "body": 7,
+      "eyes": 0,
+      "outfit": 114,
+      "hair": 157,
+      "accessory": 16
+    },
+    {
+      "body": 5,
+      "eyes": 4,
+      "outfit": 46,
+      "hair": 113,
+      "accessory": null
+    },
+    {
+      "body": 6,
+      "eyes": 4,
+      "outfit": 117,
+      "hair": 33,
+      "accessory": null
+    },
+    {
+      "body": 0,
+      "eyes": 1,
+      "outfit": 17,
+      "hair": 198,
+      "accessory": 29
+    },
+    {
+      "body": 6,
+      "eyes": 0,
+      "outfit": 121,
+      "hair": 118,
+      "accessory": null
+    },
+    {
+      "body": 4,
+      "eyes": 2,
+      "outfit": 100,
+      "hair": 112,
+      "accessory": null
+    },
+    {
+      "body": 3,
+      "eyes": 0,
+      "outfit": 71,
+      "hair": 187,
+      "accessory": null
+    },
+    {
+      "body": 2,
+      "eyes": 4,
+      "outfit": 119,
+      "hair": 21,
+      "accessory": null
+    },
+    {
+      "body": 6,
+      "eyes": 2,
+      "outfit": 63,
+      "hair": 164,
+      "accessory": null
+    }
+  ]
+}

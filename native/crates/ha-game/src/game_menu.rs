@@ -7,19 +7,13 @@
 //! reuses the existing dev `UiEditorCommand`s (no logic duplication).
 
 use bevy::prelude::*;
-use bevy::ui::{FocusPolicy, Overflow, RepeatedGridTrack};
+use bevy::ui::{FocusPolicy, Overflow};
 use ha_shared::{body_center_at, body_def, CelestialBody};
 
 use crate::flight::Flight;
 use crate::scene::RegionId;
-use crate::sim::{Player, SimState};
 use crate::solar_system_clock::SolarSystemClock;
 use crate::ui_editor::UiEditorState;
-
-/// Terrain minimap: NxN cells, each sampling one world tile every STEP units,
-/// centred on the player. Cheap enough for the menu (recoloured only while open).
-const MINI_N: usize = 24;
-const MINI_STEP: f32 = 2.0;
 
 const NEON_CYAN: Color = Color::srgb(0.16, 0.94, 1.0);
 const NEON_MAGENTA: Color = Color::srgb(1.0, 0.18, 0.62);
@@ -72,12 +66,6 @@ struct MapShipMarker;
 /// Wraps the orbital dots/rings/sun/ship — shown in Space, hidden on a surface.
 #[derive(Component)]
 struct OrbitalLayer;
-/// Wraps the terrain minimap grid — shown on a surface, hidden in Space.
-#[derive(Component)]
-struct TerrainLayer;
-/// One terrain minimap cell; `.0` is its flat index (row * MINI_N + col).
-#[derive(Component)]
-struct MinimapCell(usize);
 /// The map title text — swapped between "MAPA ORBITAL" and the body name.
 #[derive(Component)]
 struct MapTitle;
@@ -117,30 +105,51 @@ fn sync_menu_edit_mode(
     mut roots: Query<(&mut BackgroundColor, &mut FocusPolicy), With<GameMenuRoot>>,
     mut sets: ParamSet<(
         Query<&mut Visibility, With<MapViewport>>,
-        Query<&mut Visibility, With<EditToolbar>>,
+        Query<&mut Node, With<EditToolbar>>,
     )>,
 ) {
     let Ok((mut bg, mut fp)) = roots.get_single_mut() else {
         return;
     };
-    let (map_vis, toolbar_vis) = if editor.enabled {
+    // La barra de edición va por `Display` y no por `Visibility`: un nodo
+    // `Visibility::Hidden` SIGUE ocupando su lugar en el layout, así que en el
+    // menú normal reservaba una franja invisible que se traducía en scroll
+    // muerto — llegabas al fondo y no había nada.
+    let (map_vis, toolbar_display) = if editor.enabled {
         *bg = BackgroundColor(Color::NONE);
         *fp = FocusPolicy::Pass;
-        (Visibility::Hidden, Visibility::Inherited)
+        (Visibility::Hidden, Display::Flex)
     } else {
         *bg = BackgroundColor(PANEL_BG);
         *fp = FocusPolicy::Block;
-        (Visibility::Inherited, Visibility::Hidden)
+        (Visibility::Inherited, Display::None)
     };
     for mut v in &mut sets.p0() {
-        *v = map_vis;
+        if *v != map_vis {
+            *v = map_vis;
+        }
     }
-    for mut v in &mut sets.p1() {
-        *v = toolbar_vis;
+    for mut node in &mut sets.p1() {
+        // Sólo al CAMBIAR: tocar un `Node` lo marca sucio y taffy recalcula el
+        // árbol entero (§10, cambio 3).
+        if node.display != toolbar_display {
+            node.display = toolbar_display;
+        }
     }
 }
 
 fn spawn_menu(commands: &mut Commands) -> Entity {
+    // **TODO EN UNA PANTALLA, SIN SCROLL.** La versión en columna no entraba en
+    // apaisado de teléfono (~400 px de alto lógico): el mapa se lleva media
+    // pantalla y AJUSTES/CERRAR quedaban abajo del pliegue. Se probó ponerle
+    // scroll y el pedido fue explícito: en un menú no se scrollea, se ve todo.
+    //
+    // Como la app está clavada en apaisado (`AndroidManifest`,
+    // `screenOrientation="landscape"`), lo que sobra es ANCHO: el mapa va a la
+    // izquierda y todo lo demás en una columna a la derecha. El mapa se mide en
+    // `Vh` y las filas de botones envuelven (`FlexWrap::Wrap`), así que el
+    // conjunto se acomoda solo a cualquier pantalla en vez de depender de que
+    // los números elegidos a mano den justo.
     commands
         .spawn((
             Node {
@@ -149,10 +158,11 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                 top: Val::Px(0.0),
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
+                flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
-                padding: UiRect::all(Val::Px(16.0)),
-                row_gap: Val::Px(12.0),
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(16.0),
+                padding: UiRect::all(Val::Px(12.0)),
                 ..default()
             },
             BackgroundColor(PANEL_BG),
@@ -162,16 +172,6 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
             Name::new("GameMenu"),
         ))
         .with_children(|root| {
-            root.spawn((
-                Text::new("MAPA ORBITAL"),
-                TextFont {
-                    font_size: 26.0,
-                    ..default()
-                },
-                TextColor(NEON_CYAN),
-                MapTitle,
-            ));
-
             // Square map viewport (keeps the top-down projection undistorted).
             root.spawn((
                 Node {
@@ -188,8 +188,9 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                     // always laid out with an explicit size — `VMin` was collapsing
                     // to ~0 here, leaving the map blank. Kept square so orbit circles
                     // don't distort; markers are positioned in PERCENT.
-                    width: Val::Vh(52.0),
-                    height: Val::Vh(52.0),
+                    width: Val::Vh(76.0),
+                    height: Val::Vh(76.0),
+                    flex_shrink: 0.0,
                     border: UiRect::all(Val::Px(2.0)),
                     // Clip orbit rings / body dots to the panel — nothing the
                     // marker system positions can bleed outside the map window.
@@ -277,52 +278,31 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                     ));
                 });
 
-                // ── Terrain layer (shown on a surface): NxN grid of tile cells,
-                // recoloured each frame from the tiles around the player.
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        display: Display::Grid,
-                        grid_template_columns: vec![RepeatedGridTrack::flex(
-                            MINI_N as u16,
-                            1.0,
-                        )],
-                        grid_template_rows: vec![RepeatedGridTrack::flex(MINI_N as u16, 1.0)],
-                        ..default()
-                    },
-                    Visibility::Hidden,
-                    TerrainLayer,
-                ))
-                .with_children(|grid| {
-                    for i in 0..MINI_N * MINI_N {
-                        grid.spawn((
-                            Node::default(),
-                            BackgroundColor(Color::srgb(0.02, 0.03, 0.06)),
-                            MinimapCell(i),
-                        ));
-                    }
-                    // Player marker: absolute overlay at the grid centre.
-                    grid.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: Val::Percent(50.0),
-                            top: Val::Percent(50.0),
-                            width: Val::Px(11.0),
-                            height: Val::Px(11.0),
-                            border: UiRect::all(Val::Px(2.0)),
-                            margin: UiRect::all(Val::Px(-5.5)),
-                            ..default()
-                        },
-                        BorderColor(Color::WHITE),
-                        BackgroundColor(NEON_MAGENTA),
-                        BorderRadius::all(Val::Percent(50.0)),
-                    ));
-                });
             });
+
+            // ── Columna derecha: TODO lo que no es el mapa. `flex_grow` + ancho
+            // mínimo cero para que se lleve lo que quede de ancho y las filas de
+            // botones envuelvan solas en vez de desbordar.
+            root.spawn(Node {
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_width: Val::Px(0.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                row_gap: Val::Px(8.0),
+                ..default()
+            })
+            .with_children(|root| {
+            root.spawn((
+                Text::new("MAPA ORBITAL"),
+                TextFont {
+                    font_size: 20.0,
+                    ..default()
+                },
+                TextColor(NEON_CYAN),
+                MapTitle,
+            ));
 
             root.spawn((
                 Text::new("+ tu     o orbitas    * Sol"),
@@ -390,9 +370,10 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     row_gap: Val::Px(6.0),
+                    // Arranca fuera del layout: ver `sync_menu_edit_mode`.
+                    display: Display::None,
                     ..default()
                 },
-                Visibility::Hidden,
                 EditToolbar,
             ))
             .with_children(|col| {
@@ -414,6 +395,7 @@ fn spawn_menu(commands: &mut Commands) -> Entity {
                     menu_button(bar, "RESET", C::Reset);
                     menu_button(bar, "GUARDAR", C::Save);
                 });
+            });
             });
         })
         .id()
@@ -550,66 +532,38 @@ fn body_menu_name(b: CelestialBody) -> String {
     }
 }
 
-/// Swaps the map between the orbital view (Space) and a top-down terrain
-/// minimap (any surface), and — on a surface — recolours the grid from the
-/// tiles around the player. Screen-up = −z, matching the main game view.
+/// **El minimapa de terreno ya no vive acá.** Era un recuadro de 24×24 celdas que
+/// en el teléfono no se veía y que obligaba a salir del juego para mirarlo; ahora
+/// el mapa es un OBJETO que se craftea y se abre en la mano (`map_item.rs`), y se
+/// puede colgar en la pared. Lo que queda en el menú es el mapa ORBITAL, que sí es
+/// información de menú (dónde está cada cuerpo del sistema).
+///
+/// Este sistema mantiene el título y deja el mapa orbital siempre visible.
 #[allow(clippy::type_complexity)]
 fn update_terrain_minimap(
     menu: Res<GameMenuState>,
     region: Res<crate::scene::RegionRuntime>,
-    tiles: Res<crate::world2d::TileWorld>,
-    player: Query<&SimState, With<Player>>,
     mut sets: ParamSet<(
         Query<&mut Visibility, With<OrbitalLayer>>,
-        Query<&mut Visibility, With<TerrainLayer>>,
-        Query<(&MinimapCell, &mut BackgroundColor)>,
         Query<&mut Text, With<MapTitle>>,
     )>,
 ) {
     if !menu.spawned {
         return;
     }
-    let body = surface_body(&region.active);
-    let surface = body.is_some();
-
     for mut v in &mut sets.p0() {
-        *v = if surface { Visibility::Hidden } else { Visibility::Inherited };
+        if *v != Visibility::Inherited {
+            *v = Visibility::Inherited;
+        }
     }
-    for mut v in &mut sets.p1() {
-        *v = if surface { Visibility::Inherited } else { Visibility::Hidden };
-    }
-    let title = match body {
+    let title = match surface_body(&region.active) {
         None => "MAPA ORBITAL".to_string(),
-        Some(b) => body_menu_name(b),
+        Some(b) => format!("{} - MAPA ORBITAL", body_menu_name(b)),
     };
-    if let Ok(mut t) = sets.p3().get_single_mut() {
+    if let Ok(mut t) = sets.p1().get_single_mut() {
         if t.0 != title {
             t.0 = title;
         }
-    }
-
-    let Some(body) = body else {
-        return;
-    };
-    let (px, pz) = player
-        .get_single()
-        .map(|s| (s.body.x, s.body.z))
-        .unwrap_or((0.0, 0.0));
-    let cx = px.floor() as i64;
-    let cz = pz.floor() as i64;
-    let half = MINI_N as f32 * 0.5;
-    let surface_layer = tiles.z == 0;
-    for (cell, mut bg) in &mut sets.p2() {
-        let col = (cell.0 % MINI_N) as f32;
-        let row = (cell.0 / MINI_N) as f32;
-        let tx = cx + ((col - half) * MINI_STEP).round() as i64;
-        let tz = cz + ((row - half) * MINI_STEP).round() as i64;
-        let mut rgb = tiles.tile_at(body, tx, tz).color();
-        // Trees/rocks darken their cell so clearings read lighter (surface only).
-        if surface_layer && crate::world2d::surface_decor_at(body, tx, tz).is_some() {
-            rgb = [rgb[0] * 0.6, rgb[1] * 0.6, rgb[2] * 0.6];
-        }
-        *bg = BackgroundColor(Color::srgb(rgb[0], rgb[1], rgb[2]));
     }
 }
 

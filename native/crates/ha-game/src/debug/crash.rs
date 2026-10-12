@@ -92,23 +92,53 @@ pub(crate) fn build_crash_report(message: &str, location: &str, ctx: &CrashConte
     report.to_string()
 }
 
-fn persist_crash_report(payload: &str) {
+/// Dónde queda el último reporte. En Android va al cache de la app (lo único
+/// escribible sin permisos); en escritorio, al lado del binario.
+fn crash_report_paths() -> &'static [&'static str] {
     #[cfg(target_os = "android")]
     {
-        let paths = [
-            "/data/data/com.hungerarena.app/cache/ha-last-crash.json",
-            "./ha-last-crash.json",
-        ];
-        for p in paths {
-            if std::fs::write(p, payload).is_ok() {
-                eprintln!("ha-crash persisted={p}");
-                break;
-            }
-        }
+        &["/data/data/com.hungerarena.app/cache/ha-last-crash.json", "./ha-last-crash.json"]
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = std::fs::write("./ha-last-crash.json", payload);
+        &["./ha-last-crash.json"]
+    }
+}
+
+fn persist_crash_report(payload: &str) {
+    for p in crash_report_paths() {
+        if std::fs::write(p, payload).is_ok() {
+            eprintln!("ha-crash persisted={p}");
+            return;
+        }
+    }
+}
+
+/// Una línea legible del último cierre, o `None` si la partida anterior terminó
+/// bien. La lee el menú principal.
+///
+/// **Por qué se muestra en pantalla y no sólo en logcat.** En Android el hook de
+/// pánico termina en `std::process::exit(1)`: la app se cierra **de golpe y sin
+/// diálogo**, que es exactamente el reporte "se cierra solito". Con el flujo de
+/// este proyecto (APK por URL, sin cable) el motivo era invisible. Ahora al
+/// volver a abrir el juego el menú lo dice.
+pub fn last_crash_line() -> Option<String> {
+    let raw = crash_report_paths().iter().find_map(|p| std::fs::read_to_string(p).ok())?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let msg = v.get("message")?.as_str()?;
+    let loc = v.get("location").and_then(|l| l.as_str()).unwrap_or("?");
+    // El archivo sólo dice "la vez pasada": ASCII y recortado, la fuente del
+    // juego no dibuja acentos (regla 6) y el menú no es un visor de JSON.
+    let short = loc.rsplit('/').next().unwrap_or(loc);
+    let line = format!("ULTIMO CIERRE: {msg} ({short})");
+    Some(line.chars().filter(|c| c.is_ascii()).take(120).collect())
+}
+
+/// Borra el reporte. Lo llama el menú tras mostrarlo: la línea vale para el
+/// cierre que acabás de sufrir, no para siempre.
+pub fn clear_last_crash() {
+    for p in crash_report_paths() {
+        let _ = std::fs::remove_file(p);
     }
 }
 

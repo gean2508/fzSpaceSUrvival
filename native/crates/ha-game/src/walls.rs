@@ -56,15 +56,33 @@ impl PlacedWall {
     pub fn def(&self) -> &'static EdgePiece {
         edge_piece(self.piece).unwrap_or(&EDGE_PIECES[0])
     }
-    fn same_edge(&self, body: u8, z: i32, tx: i64, tz: i64, axis: WallAxis) -> bool {
-        self.body == body && self.z == z && self.tx == tx && self.tz == tz && self.axis == axis
-    }
+}
+
+/// Clave de un borde: cuerpo, piso, celda y eje. Es lo que indexa `BuiltWalls`.
+type EdgeKey = (u8, i32, i64, i64, u8);
+
+fn edge_key(w: &PlacedWall) -> EdgeKey {
+    (w.body, w.z, w.tx, w.tz, w.axis.as_u8())
 }
 
 /// Registro persistente de paredes construidas por el jugador.
+///
+/// **Indexado por borde, no barrido.** `blocks()` es la consulta más caliente del
+/// juego: la llama `wall_capsule_hits` para cada arista que toca la cápsula (≈9),
+/// dos veces por eje y por frame, para el jugador **y para cada animal y NPC**.
+/// Con la búsqueda lineal de antes eso era `paredes × 9 × 2 × entidades` por
+/// frame: gratis con la choza de cuatro paredes de la prueba, y decenas de
+/// millones de comparaciones en cuanto alguien levanta el refugio que este
+/// sistema existe para levantar. Justo el costo que aparece cuando el jugador
+/// hace lo que le pedimos.
+///
+/// El `Vec` se queda porque el streaming y el guardado necesitan recorrer en
+/// orden estable; el mapa sólo traduce borde → posición.
 #[derive(Resource, Default)]
 pub struct BuiltWalls {
     pub list: Vec<PlacedWall>,
+    /// Borde → índice en `list`. Se mantiene al día en `add`/`remove`.
+    index: std::collections::HashMap<EdgeKey, usize>,
     /// Sube en cada alta/baja: el streaming lo mira para refrescar al instante
     /// (`is_changed()` no sirve — el sistema de guardado toca el recurso cada
     /// frame y lo marcaría siempre).
@@ -77,7 +95,22 @@ pub struct BuiltWalls {
 impl BuiltWalls {
     /// La pared que ocupa ese borde, si hay alguna.
     pub fn at(&self, body: CelestialBody, z: i32, tx: i64, tz: i64, axis: WallAxis) -> Option<&PlacedWall> {
-        self.list.iter().find(|w| w.same_edge(body as u8, z, tx, tz, axis))
+        let idx = *self.index.get(&(body as u8, z, tx, tz, axis.as_u8()))?;
+        self.list.get(idx)
+    }
+
+    /// ¿Hay alguna pieza de borde en las CUATRO aristas de esta celda? Es lo que
+    /// hace que el anillo de paredes de una planta aguante la losa de la de
+    /// arriba (`build_grid::floor_supported`): techás tu casa apoyándote en sus
+    /// propias paredes, aunque el interior no tenga piso construido.
+    pub fn any_edge_of_cell(&self, body: CelestialBody, z: i32, tx: i64, tz: i64) -> bool {
+        let h = WallAxis::H.as_u8();
+        let v = WallAxis::V.as_u8();
+        let b = body as u8;
+        self.index.contains_key(&(b, z, tx, tz, h))
+            || self.index.contains_key(&(b, z, tx, tz + 1, h))
+            || self.index.contains_key(&(b, z, tx, tz, v))
+            || self.index.contains_key(&(b, z, tx + 1, tz, v))
     }
 
     /// ¿Ese borde corta el paso? (pared/ventana sí, puerta no).
@@ -89,8 +122,16 @@ impl BuiltWalls {
 
     /// Coloca (reemplazando lo que hubiera en ese borde).
     pub fn add(&mut self, w: PlacedWall) {
-        self.list.retain(|o| !o.same_edge(w.body, w.z, w.tx, w.tz, w.axis));
-        self.list.push(w);
+        let key = edge_key(&w);
+        match self.index.get(&key) {
+            // Ya había algo en ese borde: se reemplaza en su sitio (el índice de
+            // los demás no se mueve).
+            Some(&idx) => self.list[idx] = w,
+            None => {
+                self.index.insert(key, self.list.len());
+                self.list.push(w);
+            }
+        }
         self.dirty = true;
         self.rev += 1;
     }
@@ -104,13 +145,18 @@ impl BuiltWalls {
         tz: i64,
         axis: WallAxis,
     ) -> Option<PlacedWall> {
-        let idx = self
-            .list
-            .iter()
-            .position(|w| w.same_edge(body as u8, z, tx, tz, axis))?;
+        let idx = self.index.remove(&(body as u8, z, tx, tz, axis.as_u8()))?;
+        // `swap_remove` es O(1) pero mueve la última al hueco: hay que reapuntar
+        // su entrada del índice o la pared movida deja de existir para la
+        // colisión (y sigue dibujándose). Es el bug clásico de este patrón.
+        let gone = self.list.swap_remove(idx);
+        if idx < self.list.len() {
+            let moved = edge_key(&self.list[idx]);
+            self.index.insert(moved, idx);
+        }
         self.dirty = true;
         self.rev += 1;
-        Some(self.list.remove(idx))
+        Some(gone)
     }
 }
 
@@ -129,6 +175,8 @@ struct WallSprite {
 /// Puerta de borde: alterna `open`/`closed` por proximidad del jugador.
 #[derive(Component)]
 struct WallDoor {
+    /// Segundos que le quedan a la transición `opening`/`closing` en curso.
+    t: f32,
     /// Centro del borde en mundo (x, z) — para la distancia al jugador.
     cx: f32,
     cz: f32,
@@ -313,7 +361,7 @@ fn stream_walls(
         ));
         if def.kind == WallKind::Door {
             let (cx, cz) = edge_center(w.tx, w.tz, w.axis);
-            ent.insert(WallDoor { cx, cz, art: def.art, open: false });
+            ent.insert(WallDoor { cx, cz, art: def.art, open: false, t: 0.0 });
         }
         // Un muro con farol/ventana encendida ilumina si el slot lo declara.
         crate::light2d::attach(&mut ent, &art, &[def.art], size);
@@ -324,39 +372,49 @@ fn stream_walls(
 /// toca el sprite cuando el estado cambia (cero costo en reposo).
 fn animate_wall_doors(
     mut commands: Commands,
+    time: Res<Time>,
     art: Res<ArtLibrary>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
     player: Query<&Transform, With<Player>>,
     mut doors: Query<(Entity, &mut WallDoor, &mut Sprite)>,
 ) {
     let Ok(player_tf) = player.get_single() else {
         return;
     };
+    let dt = time.delta_secs();
+    let size = Vec2::new(TILE_M, TILE_M * WALL_RENDER_H);
     let ptx = player_tf.translation.x / TILE_M;
     let ptz = -player_tf.translation.y / TILE_M;
     for (ent, mut door, mut sprite) in &mut doors {
+        // Misma cadena de estados que las puertas de tile (`building`): reposo →
+        // transición → reposo, y la transición corre entera.
+        if door.t > 0.0 {
+            door.t -= dt;
+            if door.t <= 0.0 {
+                door.t = 0.0;
+                let rest = if door.open { "open" } else { "closed" };
+                crate::building::set_door_pose(
+                    &mut commands, ent, &art, door.art, rest, &mut sprite, size,
+                );
+            }
+            continue;
+        }
         let (dx, dz) = (ptx - door.cx, ptz - door.cz);
         let near = (dx * dx + dz * dz).sqrt() < DOOR_OPEN_DIST;
         if near == door.open {
             continue;
         }
         door.open = near;
-        sfx.send(crate::audio::PlaySfx(if near {
-            crate::audio::Sfx::DoorOpen
-        } else {
-            crate::audio::Sfx::DoorClose
-        }));
-        let pose = if near { "open" } else { "closed" };
-        let size = Vec2::new(TILE_M, TILE_M * WALL_RENDER_H);
-        if let Some(s) = art.pose_sprite(door.art, pose, size) {
-            *sprite = s;
-            // Tira de frames → corre la transición entera y se clava en el
-            // último frame; recorte suelto → sin animador.
-            match art.pose(door.art, pose).and_then(|(_, a)| a) {
-                Some(anim) => commands.entity(ent).insert(anim.once()),
-                None => commands.entity(ent).remove::<crate::art2d::ArtAnimated>(),
-            };
-        }
+        sfx.send(crate::audio::PlaySfxAt(
+            if near { crate::audio::Sfx::DoorOpen } else { crate::audio::Sfx::DoorClose },
+            render_xy(door.cx * TILE_M, door.cz * TILE_M),
+        ));
+        let (pose, secs) = match crate::building::door_transition(&art, door.art, near) {
+            Some((p, s)) => (p, s),
+            None => (if near { "open" } else { "closed" }, 0.0),
+        };
+        door.t = secs;
+        crate::building::set_door_pose(&mut commands, ent, &art, door.art, pose, &mut sprite, size);
     }
 }
 
@@ -385,7 +443,10 @@ fn load_walls_on_startup(mut built: ResMut<BuiltWalls>) {
         let Some(piece) = edge_piece_index(&piece) else {
             continue;
         };
-        built.list.push(PlacedWall {
+        // Por `add`, no por `list.push`: es lo único que deja el índice de bordes
+        // al día. Una partida cargada por el otro camino se dibujaría entera y no
+        // frenaría a nadie.
+        built.add(PlacedWall {
             body,
             z,
             tx,
@@ -394,6 +455,9 @@ fn load_walls_on_startup(mut built: ResMut<BuiltWalls>) {
             piece,
         });
     }
+    // Cargar no es construir: sin esto la partida recién abierta se reescribiría
+    // sola a los 20 s por el `dirty` que deja `add`.
+    built.dirty = false;
 }
 
 fn debounced_walls_save(time: Res<Time>, mut built: ResMut<BuiltWalls>) {
@@ -418,5 +482,73 @@ fn debounced_walls_save(time: Res<Time>, mut built: ResMut<BuiltWalls>) {
     };
     if let Ok(json) = serde_json::to_string(&save) {
         let _ = std::fs::write(walls_path(), json);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wall_at(tx: i64, tz: i64, axis: WallAxis) -> PlacedWall {
+        PlacedWall { body: 0, z: 0, tx, tz, axis, piece: 0 }
+    }
+
+    /// **El índice y la lista no pueden discrepar nunca.**
+    ///
+    /// `remove` usa `swap_remove`: mueve la ÚLTIMA pared al hueco que dejó la que
+    /// se fue. Si no se reapunta su entrada del índice, esa pared queda dibujada
+    /// pero invisible para la colisión — o sea, una pared que se atraviesa
+    /// caminando, y encima sólo la que estaba al final de la lista. Es la clase de
+    /// bug que aparece recién cuando el jugador ya tiene un refugio grande y
+    /// demuele una pieza cualquiera.
+    #[test]
+    fn demoler_una_pared_no_desindexa_a_las_demas() {
+        let body = CelestialBody::Earth;
+        let mut w = BuiltWalls::default();
+        for i in 0..5 {
+            w.add(wall_at(i, 0, WallAxis::H));
+        }
+        // Se quita la PRIMERA: la última pasa a ocupar su lugar en el `Vec`.
+        assert!(w.remove(body, 0, 0, 0, WallAxis::H).is_some());
+        assert_eq!(w.list.len(), 4);
+        for i in 1..5 {
+            assert!(w.at(body, 0, i, 0, WallAxis::H).is_some(), "pared {i} perdida");
+            assert!(w.blocks(body, 0, i, 0, WallAxis::H), "pared {i} dejo de frenar");
+        }
+        assert!(w.at(body, 0, 0, 0, WallAxis::H).is_none(), "la demolida sigue ahi");
+        // Y todo lo que dice el índice existe de verdad en la lista.
+        assert_eq!(w.index.len(), w.list.len());
+    }
+
+    /// Colocar sobre un borde ocupado REEMPLAZA (no apila ni duplica).
+    #[test]
+    fn colocar_sobre_un_borde_ocupado_reemplaza() {
+        let body = CelestialBody::Earth;
+        let mut w = BuiltWalls::default();
+        w.add(wall_at(4, 4, WallAxis::V));
+        let mut otra = wall_at(4, 4, WallAxis::V);
+        otra.piece = 1;
+        w.add(otra);
+        assert_eq!(w.list.len(), 1);
+        assert_eq!(w.at(body, 0, 4, 4, WallAxis::V).unwrap().piece, 1);
+    }
+
+    /// El anillo de paredes de una planta es lo que aguanta la losa de arriba:
+    /// `any_edge_of_cell` tiene que ver las CUATRO aristas de la celda.
+    #[test]
+    fn una_celda_ve_sus_cuatro_aristas() {
+        let body = CelestialBody::Earth;
+        for (tx, tz, axis) in [
+            (7, 7, WallAxis::H), // norte
+            (7, 8, WallAxis::H), // sur
+            (7, 7, WallAxis::V), // oeste
+            (8, 7, WallAxis::V), // este
+        ] {
+            let mut w = BuiltWalls::default();
+            w.add(wall_at(tx, tz, axis));
+            assert!(w.any_edge_of_cell(body, 0, 7, 7), "{tx},{tz},{axis:?}");
+            // Y no ve la de la celda de al lado.
+            assert!(!w.any_edge_of_cell(body, 0, 20, 20));
+        }
     }
 }

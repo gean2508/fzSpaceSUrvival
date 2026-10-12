@@ -5,15 +5,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-# Headless: sin Bevy a propósito — lo consumen la CLI (ha-asset-tools), el
-# server (F7) y los tests, sin arrastrar el motor. El puente Bevy vive en ha-game.
+# Headless: sin Bevy a propósito — lo consumen HA Studio, ha-game y los tests,
+# sin arrastrar el motor. El puente Bevy vive en ha-game.
+[dev-dependencies]
+# Sólo para el test de paridad slot<->colocable: el catálogo del juego vive en
+# ha-shared y este crate NO puede depender de él en runtime (el editor tiene que
+# poder abrir sin el juego). Como dev-dep no entra al binario y aun así impide
+# que las dos listas se separen.
+ha-shared = { path = "../ha-shared" }
+
 [dependencies]
 serde = { workspace = true }
-ron = "0.8"
 serde_json = "1"
-# Sólo el escaneo (F2) necesita leer PNGs. Feature-gated para que el server (F7)
-# y ha-game no arrastren el decoder de imágenes.
-image = { version = "0.25", default-features = false, features = ["png"], optional = true }
-
-[features]
-scan = ["dep:image"]

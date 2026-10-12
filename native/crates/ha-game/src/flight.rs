@@ -49,15 +49,30 @@ pub const KI_MAX: f32 = 100.0;
 /// el Ki se vaciaba en pleno ascenso, el vuelo caía solo y el jugador quedaba
 /// rebotando entre despegue y aterrizaje sin poder salir del planeta.
 ///
-/// A 0.30/s una carga completa da ~5.5 min de vuelo (~3.7 min empujando): la
-/// ida y vuelta a la Luna entra holgada, y una expedición a Marte SÍ exige
-/// parar a recargar. Eso es lo que se quería: un coste que se nota, no un muro.
-pub const KI_DRAIN_PER_S: f32 = 0.30;
+/// A 0.22/s una carga completa da ~7.5 min de vuelo (~5 min empujando a fondo):
+/// la ida y vuelta a la Luna entra holgada, cruzar el sistema de punta a punta
+/// entra incluso empujando todo el trayecto, y una expedición larga sigue
+/// exigiendo parar a recargar. Un coste que se nota, no un muro.
+///
+/// Bajado de 0.30 el 29 jul 2026: con 0.30 el peor caso (mantener el impulso
+/// durante los 253 s que son Sol↔Neptuno a velocidad de tope) se pasaba del
+/// presupuesto por 30 s — o sea que el trayecto más largo del sistema te dejaba
+/// tirado justo antes de llegar. Lo verifica
+/// `universe::tests::the_farthest_body_is_reachable_on_one_ki_charge`.
+pub const KI_DRAIN_PER_S: f32 = 0.22;
 /// Ki restored per second while CHARGING (holding the charge/power-up) — a full
 /// top-up in ~3 s.
 pub const KI_CHARGE_PER_S: f32 = 34.0;
 /// Passive Ki regen per second while grounded and not charging (~12 s to refill).
 pub const KI_GROUND_REGEN_PER_S: f32 = 8.0;
+/// Ki recuperado por segundo PLANEANDO: en el aire, sin empujar ni maniobrar.
+///
+/// Es lento a propósito (una recarga completa son ~3.5 min de quedarse quieto):
+/// no reemplaza a bajar a recargar, sólo garantiza que quedarse sin Ki en medio
+/// del vacío nunca sea un callejón sin salida. Antes lo era —no se recargaba en
+/// el aire y sin cuerpo cerca no hay suelo al que caer—, y eso es lo que impedía
+/// explorar los rincones del sistema.
+pub const KI_GLIDE_REGEN_PER_S: f32 = 0.48;
 
 pub struct FlightPlugin;
 

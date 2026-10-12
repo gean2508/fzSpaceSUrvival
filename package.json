@@ -29,7 +29,7 @@
     "test:native": "make -C native test",
     "phone:install": "bash scripts/device-ready.sh",
     "test:e2e": "npm run build:shared && node scripts/test-join.mjs && node scripts/test-survival.mjs && node scripts/test-auth.mjs && node scripts/test-persist.mjs",
-    "validate:arch": "node .cursor/skills/monorepo-architecture/scripts/check-boundaries.mjs",
+    "validate:arch": "node scripts/check-boundaries.mjs",
     "generate:icons": "python3 scripts/generate-space-icons.py",
     "dev:native": "make -C native run",
     "dev:pc": "node scripts/dev-pc.mjs",
@@ -38,8 +38,7 @@
     "qa:suite": "node scripts/ha-suite.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "turbo": "^2.5.4"
+    "concurrently": "^9.1.2"
   },
   "packageManager": "npm@10.8.2"
 }

@@ -171,6 +171,24 @@ pub const CRAFT_RECIPES: &[CraftRecipe] = &[
         output_id: "sword_steel",
         output_qty: 1,
     },
+    // **El mapa se craftea y se lleva en la mano** (estilo Minecraft): dejó de ser
+    // una pantalla del menú —donde en el teléfono no se veía— y pasó a ser un
+    // objeto. El chico cubre tu valle; el grande, la región entera, y cuesta lo
+    // que corresponde a algo que te ahorra perderte.
+    CraftRecipe {
+        id: 23,
+        display_name: "Mapa chico",
+        ingredients: &[("wood", 2), ("leather", 1)],
+        output_id: "map_small",
+        output_qty: 1,
+    },
+    CraftRecipe {
+        id: 24,
+        display_name: "Mapa grande",
+        ingredients: &[("map_small", 1), ("leather", 2), ("iron_ingot", 1)],
+        output_id: "map_large",
+        output_qty: 1,
+    },
 ];
 
 pub fn get_craft_recipe(id: u32) -> Option<&'static CraftRecipe> {

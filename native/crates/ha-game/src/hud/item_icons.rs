@@ -13,46 +13,84 @@ pub const BAG_SLOT_ID: &str = "_bag";
 /// Prefijo de caché para la variante sin fondo (ítem en la mano).
 const HAND_ICON_PREFIX: &str = "_hand:";
 
+/// **Un icono y su recorte.** El recorte es la mitad que faltaba: el arte del pack
+/// puede venir de un ATLAS (el editor guarda el rect del slot en `art/manifest.json`),
+/// y guardar sólo el `Handle<Image>` hacía que el juego dibujara **la hoja
+/// entera** donde iba un ítem de 16 px — la mochila, la hotbar, la mano del
+/// personaje y los sprites de máquina, todos con el atlas completo escalado.
+/// Un icono suelto (`items/<id>.png`) simplemente no tiene rect y se dibuja igual
+/// que siempre.
+#[derive(Clone)]
+pub struct ItemIcon {
+    pub image: Handle<Image>,
+    /// Recorte en píxeles dentro de la hoja. `None` = la imagen es el ítem.
+    pub rect: Option<Rect>,
+}
+
+impl ItemIcon {
+    /// Para la UI (mochila, hotbar, cofres, fantasma de arrastre).
+    pub fn node(&self) -> ImageNode {
+        let mut node = ImageNode::new(self.image.clone());
+        node.rect = self.rect;
+        node
+    }
+
+    /// Para el mundo (ítem en la mano, sprite de una máquina colocada).
+    pub fn sprite(&self, size: Vec2) -> Sprite {
+        let mut s = Sprite::from_image(self.image.clone());
+        s.custom_size = Some(size);
+        s.rect = self.rect;
+        s
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct ItemIconCache {
-    cache: HashMap<String, Handle<Image>>,
+    cache: HashMap<String, ItemIcon>,
 }
 
 impl ItemIconCache {
     /// Seed a drop-in PNG icon (assets/art/items/<id>.png) so every consumer
-    /// gets the pack art instead of the procedural raster.
-    pub fn preload(&mut self, item_id: &str, handle: Handle<Image>) {
-        self.cache.insert(item_id.to_string(), handle);
+    /// gets the pack art instead of the procedural raster. `rect` es el recorte
+    /// del atlas cuando el slot se curó desde una hoja (ver `art2d`).
+    pub fn preload(&mut self, item_id: &str, handle: Handle<Image>, rect: Option<Rect>) {
+        self.cache.insert(item_id.to_string(), ItemIcon { image: handle, rect });
     }
 
-    pub fn get(&mut self, item_id: &str, images: &mut Assets<Image>) -> Handle<Image> {
+    /// El icono de un ítem: arte del pack si lo hay (con su recorte), y si no el
+    /// raster procedural.
+    pub fn icon(&mut self, item_id: &str, images: &mut Assets<Image>) -> ItemIcon {
         if let Some(hit) = self.cache.get(item_id) {
             return hit.clone();
         }
-        let handle = images.add(rasterize_item_icon(item_id));
-        self.cache.insert(item_id.to_string(), handle.clone());
-        handle
+        let icon = ItemIcon { image: images.add(rasterize_item_icon(item_id)), rect: None };
+        self.cache.insert(item_id.to_string(), icon.clone());
+        icon
     }
 
-    /// Igual que [`Self::get`] pero SIN el cuadrado de fondo: es el sprite que
+    /// Igual que [`Self::icon`] pero SIN el cuadrado de fondo: es el sprite que
     /// el personaje lleva en la mano dentro del mundo (un icono con fondo se
-    /// vería como una cajita negra flotando junto al brazo).
-    pub fn hand_sprite(&mut self, item_id: &str, images: &mut Assets<Image>) -> Handle<Image> {
+    /// vería como una cajita negra flotando junto al brazo). Con arte del pack no
+    /// hay diferencia — ese PNG ya viene transparente.
+    pub fn hand_icon(&mut self, item_id: &str, images: &mut Assets<Image>) -> ItemIcon {
+        if let Some(hit) = self.cache.get(item_id) {
+            return hit.clone();
+        }
         let key = format!("{HAND_ICON_PREFIX}{item_id}");
         if let Some(hit) = self.cache.get(&key) {
             return hit.clone();
         }
-        let handle = images.add(rasterize_item(item_id, false));
-        self.cache.insert(key, handle.clone());
-        handle
+        let icon = ItemIcon { image: images.add(rasterize_item(item_id, false)), rect: None };
+        self.cache.insert(key, icon.clone());
+        icon
     }
 
-    pub fn empty_slot(&mut self, images: &mut Assets<Image>) -> Handle<Image> {
-        self.get(SLOT_EMPTY_ID, images)
+    pub fn empty_slot(&mut self, images: &mut Assets<Image>) -> ItemIcon {
+        self.icon(SLOT_EMPTY_ID, images)
     }
 
-    pub fn bag_slot(&mut self, images: &mut Assets<Image>) -> Handle<Image> {
-        self.get(BAG_SLOT_ID, images)
+    pub fn bag_slot(&mut self, images: &mut Assets<Image>) -> ItemIcon {
+        self.icon(BAG_SLOT_ID, images)
     }
 }
 
@@ -91,6 +129,7 @@ fn rasterize_item(item_id: &str, with_bg: bool) -> Image {
         "potion_blue" | "potion_green" => draw_potion(&mut data, size, PaletteKey::NeonCyan),
         "gem_blue" => draw_gem(&mut data, size, PaletteKey::NeonCyan),
         "leather" => draw_leather(&mut data, size),
+        MAP_SMALL_ID | MAP_LARGE_ID => draw_map(&mut data, size, item_id == MAP_LARGE_ID),
         "axe" | "wood_axe" | "stone_axe" => draw_axe(&mut data, size),
         "apple" => draw_fruit(&mut data, size, PaletteKey::Foe),
         "orange" => draw_fruit(&mut data, size, PaletteKey::Gold),
@@ -288,6 +327,28 @@ fn draw_gem(data: &mut [u8], size: u32, tone: PaletteKey) {
     fill_rect(data, size, 20, 8, 24, 14, c);
     fill_rect(data, size, 14, 14, 30, 22, c);
     fill_rect(data, size, 18, 22, 26, 30, c);
+}
+
+/// Ids de los mapas (duplicados acá para no arrastrar `map_item` a este módulo,
+/// que es CPU puro y no sabe de gameplay).
+const MAP_SMALL_ID: &str = "map_small";
+const MAP_LARGE_ID: &str = "map_large";
+
+/// Pergamino con una marca: un mapa se reconoce por el borde de cuero y la cruz
+/// del "estás acá". El grande se dibuja más ancho — a 40 px es la única forma de
+/// distinguirlos de un vistazo en la hotbar.
+fn draw_map(data: &mut [u8], size: u32, large: bool) {
+    let paper = rgba(PaletteKey::Fog, 1.0);
+    let edge = rgba(PaletteKey::Leather, 1.0);
+    let ink = rgba(PaletteKey::Bark, 1.0);
+    let mark = rgba(PaletteKey::PotionRed, 1.0);
+    let (x0, x1) = if large { (5, 35) } else { (9, 31) };
+    fill_rect(data, size, x0, 8, x1, 32, edge);
+    fill_rect(data, size, x0 + 2, 10, x1 - 2, 30, paper);
+    // Dos "costas" y un camino: basta para que se lea como mapa y no como hoja.
+    fill_rect(data, size, x0 + 4, 14, x1 - 6, 16, ink);
+    fill_rect(data, size, x0 + 6, 22, x1 - 4, 24, ink);
+    fill_rect(data, size, 19, 18, 22, 21, mark);
 }
 
 fn draw_leather(data: &mut [u8], size: u32) {

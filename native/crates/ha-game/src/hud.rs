@@ -7,7 +7,7 @@ use crate::game_ui::{
     GameUiRoot, GameUiRootReady, UiGameplayBlock,
 };
 use crate::debug::{span_guard, CpuSpanSlot, CpuSpanStats};
-use crate::input::{CraftIntent, EquippedItem, HoldInteractState, AbilityCooldown, TouchActions, TouchLayout, TouchBlockRects};
+use crate::input::{CraftIntent, EquippedItem, HoldInteractState, AbilityCooldown, TouchLayout, TouchBlockRects};
 use crate::inventory_persist::{InventoryPersistState, PlayerInventory};
 use crate::flight::Flight;
 use crate::machines::{MachineWorld, PendingMachinePlacement};
@@ -75,7 +75,11 @@ impl Plugin for PixelHudPlugin {
             .add_systems(Update, skin_ui_from_art.after(spawn_hud_once))
             // Aparte del bloque de abajo: ese ya llegó al tope de 20 sistemas
             // por tupla que acepta `add_systems`.
-            .add_systems(Update, update_day_clock.after(spawn_hud_once))
+            .add_systems(
+                Update,
+                (update_day_clock, update_sky_dial, fill_ui_icon_slots, hide_touch_controls_with_panel)
+                    .after(spawn_hud_once),
+            )
             .add_systems(Update, (
                 sync_game_ui_root,
                 spawn_hud_once.after(sync_game_ui_root),
@@ -108,6 +112,8 @@ impl Plugin for PixelHudPlugin {
                 update_lantern_toggle_ui,
                 update_held_item_ghost,
                 scroll_craft_list,
+                build_filter_system.after(bag_panel_system),
+                bag_tab_style_system.after(bag_panel_system),
             ))
             .add_systems(Update, survival_bars::update_survival_bars)
             .add_systems(
@@ -173,6 +179,61 @@ struct BagCraftSection;
 /// Container for the CONSTRUIR tab's build-piece list (owned display toggle).
 #[derive(Component)]
 pub(crate) struct BagBuildSection;
+
+/// El nodo que SCROLLEA de una pestaña (el que tiene `Overflow::scroll_y`).
+#[derive(Component)]
+pub(crate) struct BagScrollView;
+
+/// El único hijo de un contenedor que scrollea: envuelve TODO el contenido.
+/// Existe para poder MEDIRLO — sin un nodo que lo envuelva, la altura del
+/// contenido de una lista que envuelve (`FlexWrap`) no se puede leer de ningún
+/// lado, y sin esa altura el tope del scroll tiene que ser un número inventado.
+/// Lo era en los dos paneles: `clamp(0.0, 900.0)` en la mochila (dejaba fuera de
+/// alcance cientos de piezas de CONSTRUIR) y `clamp(0.0, 1200.0)` en el cofre.
+#[derive(Component)]
+pub(crate) struct ScrollContent;
+
+/// Una ficha de filtro de la paleta; `.0` es el índice en [`build_groups`].
+#[derive(Component, Clone, Copy)]
+struct BuildFilterChip(usize);
+
+/// Un grupo de la paleta de CONSTRUIR.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BuildGroup {
+    /// Piso, pared, puerta: las piezas de rejilla de toda la vida.
+    Pieces,
+    /// Prefabs multi-celda (se estampa el área entera).
+    Prefabs,
+    /// Paredes de borde (estilo Last Day on Earth).
+    Edges,
+    /// Tapas: tumbados de interior y techos modulares de exterior.
+    Ceilings,
+    /// Colocables del pack, por categoría.
+    Place(ha_shared::placeables::PlaceCat),
+    /// Fauna y utilería de vivario — sólo surte efecto en creativo.
+    Fauna,
+}
+
+/// **La paleta se navega por grupos, no scrolleando 350 tarjetas.**
+///
+/// La categoría del colocable ya existía en los datos (`PlaceCat`, "es la
+/// pestaña del menú CONSTRUIR" dice su propio comentario) pero el menú la usaba
+/// sólo como encabezado dentro de una lista plana. Con el pack importado eso son
+/// ~350 tarjetas en una sola tira: aunque el scroll llegara hasta el fondo,
+/// encontrar una heladera ahí adentro con el pulgar es imposible.
+fn build_groups() -> Vec<(BuildGroup, &'static str)> {
+    let mut out = vec![
+        (BuildGroup::Pieces, "PIEZAS"),
+        (BuildGroup::Edges, "PAREDES"),
+        (BuildGroup::Ceilings, "TECHOS"),
+        (BuildGroup::Prefabs, "PREFABS"),
+    ];
+    for &cat in ha_shared::placeables::PlaceCat::all() {
+        out.push((BuildGroup::Place(cat), cat.chip()));
+    }
+    out.push((BuildGroup::Fauna, "FAUNA"));
+    out
+}
 
 /// A build-piece pick button inside the CONSTRUIR tab; `.0` = `BUILD_PIECES` idx.
 #[derive(Component)]
@@ -267,6 +328,12 @@ impl Default for StaminaMeter {
 pub(crate) struct BagPanelState {
     pub(crate) open: bool,
     pub(crate) tab: BagTab,
+    /// Ficha activa de la paleta de CONSTRUIR (índice en [`build_groups`]).
+    /// Vive acá y no en un recurso propio porque `bag_panel_system` ya está en
+    /// el tope de 16 parámetros que acepta un sistema de Bevy.
+    build_group: usize,
+    /// La ficha cambió: hay que rehacer la lista.
+    build_dirty: bool,
     pulse: Timer,
     modal: Option<Entity>,
 }
@@ -276,11 +343,34 @@ struct MachinePanelState {
     panel: Option<Entity>,
 }
 
+impl BagPanelState {
+    /// Cambia la ficha activa de la paleta de CONSTRUIR. La usa el driver de QA
+    /// (`debug::autodrive`) para capturar una categoría de colocables: sin esto
+    /// la única captura posible es la del grupo por defecto, y el camino que se
+    /// quiere ver —la lista rehecha al filtrar— no se ejercita nunca.
+    pub(crate) fn set_build_group(&mut self, group: usize) {
+        if self.build_group != group {
+            self.build_group = group;
+            self.build_dirty = true;
+        }
+    }
+
+    /// Índice de la primera ficha de una categoría de colocables.
+    pub(crate) fn build_group_of(cat: ha_shared::placeables::PlaceCat) -> usize {
+        build_groups()
+            .iter()
+            .position(|(g, _)| *g == BuildGroup::Place(cat))
+            .unwrap_or(0)
+    }
+}
+
 impl Default for BagPanelState {
     fn default() -> Self {
         Self {
             open: false,
             tab: BagTab::Inventory,
+            build_group: 0,
+            build_dirty: false,
             pulse: Timer::from_seconds(0.15, TimerMode::Once),
             modal: None,
         }
@@ -302,7 +392,7 @@ pub(crate) struct HudDisplayCache {
     machine_panel_line: String,
     machine_panel_dismissed: bool,
     inv_signature: String,
-    prompt_is_idle: bool,
+    prompt_visible: bool,
     prompt_alpha: f32,
 }
 
@@ -386,12 +476,53 @@ fn spawn_hud_once(
                 }
             });
 
+        spawn_menu_button(parent, &layout);
         spawn_day_clock(parent, &layout, margin, heart, gap);
         spawn_hotbar(parent, &layout, short, heart);
         spawn_equip_toast(parent, &layout, heart);
         spawn_lantern_toggle(parent, &layout, short);
         spawn_interact_hud(parent, &layout, short);
     });
+}
+
+/// **El botón MENU, arriba al centro** — donde estuvo siempre y donde se lo
+/// vuelve a pedir. Estuvo un tiempo metido dentro del header de la mochila y no
+/// funcionó: para pausar, mirar el mapa o abrir opciones había que abrir primero
+/// la mochila, o sea dos toques y un rodeo por una pantalla que no tiene nada que
+/// ver. Arriba al centro es la única zona del HUD que no pisa nada (la vida va a
+/// la izquierda, la energía y el reloj a la derecha, la hotbar abajo).
+///
+/// Posición fija al nacer, como el resto del HUD: recalcularla por frame marca el
+/// nodo sucio y hace que taffy relayoutee el árbol entero (biblia §10, cambio 3).
+fn spawn_menu_button(parent: &mut ChildBuilder, layout: &TouchLayout) {
+    let w = game_ui::MENU_BUTTON_WIDTH;
+    parent
+        .spawn((
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(game_ui::ui_center_left(layout, w)),
+                top: Val::Px(game_ui::menu_button_top(layout)),
+                width: Val::Px(w),
+                height: Val::Px(game_ui::MENU_BUTTON_HEIGHT),
+                border: UiRect::all(Val::Px(2.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BorderRadius::all(Val::Px(8.0)),
+            BorderColor(ui_theme::button_border(UiButtonTone::Primary)),
+            BackgroundColor(ui_theme::button_bg(UiButtonTone::Primary, UiButtonState::Normal)),
+            crate::ui_editor::UiEditorCommand::Menu,
+            Name::new("InGameMenuButton"),
+        ))
+        .with_children(|b| {
+            b.spawn((
+                Text::new("MENU"),
+                TextFont { font_size: 12.0, ..default() },
+                TextColor(ui_theme::text_primary()),
+            ));
+        });
 }
 
 /// Reloj del día (arriba a la derecha, DEBAJO de la fila de energía — misma
@@ -405,6 +536,36 @@ struct DayClockText;
 struct DayClockPhaseText;
 #[derive(Component)]
 struct DayClockFill;
+
+/// **El minigráfico del cielo**, al lado del reloj: media Tierra abajo, el astro
+/// de turno recorriendo su arco por encima y estrellitas de noche. Es lo que
+/// reemplaza al disco de sol que se dibujaba en el mundo (ver `sky2d`): la misma
+/// información —qué hora del cielo es y cuán inclinado está el astro— pero en el
+/// sitio donde se la busca, que es el reloj, y sin taparte el juego.
+///
+/// Son 8 nodos de UI sin texturas: dos círculos (astro), un domo y cinco puntos.
+#[derive(Component)]
+struct SkyDialBg;
+/// El sol: se muestra sólo en su turno y se mueve por el arco.
+#[derive(Component)]
+struct SkyDialSun;
+/// La luna: idem, de noche. `.0` es su diámetro a luna LLENA en px — el dibujo se
+/// encoge con la fase, que es la lectura que el ojo acepta sin geometría de fases
+/// (creciente delgada = poca luna), igual que hacía el disco del mundo.
+#[derive(Component)]
+struct SkyDialMoon(f32);
+/// Una estrellita del dial; `.0` es su posición en % (x, y) dentro del cuadro.
+#[derive(Component)]
+struct SkyDialStar(Vec2);
+
+/// Sitio del astro dentro del dial, en porcentaje del cuadro. `t` es 0 al salir,
+/// 0.5 en el cenit y 1 al ponerse — el mismo parámetro que usa el arco de
+/// `sky2d::arc`, así el dibujo y las sombras nunca se contradicen.
+fn sky_dial_pos(t: f32) -> (f32, f32) {
+    let th = std::f32::consts::PI * t.clamp(0.0, 1.0);
+    // El astro sale por la DERECHA (este), como en el mundo.
+    (50.0 + th.cos() * 38.0, 74.0 - th.sin() * 58.0)
+}
 
 fn spawn_day_clock(
     parent: &mut ChildBuilder,
@@ -422,9 +583,9 @@ fn spawn_day_clock(
                 right: Val::Px(layout.insets.right as f32 + margin),
                 top: Val::Px(top),
                 display: Display::Flex,
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexEnd,
-                row_gap: Val::Px(gap * 0.5),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(gap * 0.8),
                 padding: UiRect::axes(Val::Px(8.0), Val::Px(5.0)),
                 border: UiRect::all(Val::Px(ui_theme::panel_border_width())),
                 min_width: Val::Px(heart * 3.4),
@@ -435,36 +596,136 @@ fn spawn_day_clock(
             Name::new("DayClock"),
         ))
         .with_children(|panel| {
-            panel.spawn((
-                Text::new("--:--"),
-                TextFont { font_size: (heart * 0.72).clamp(12.0, 18.0), ..default() },
-                TextColor(ui_theme::text_primary()),
-                DayClockText,
-            ));
-            panel.spawn((
-                Text::new("DIA"),
-                TextFont { font_size: (heart * 0.42).clamp(8.0, 11.0), ..default() },
-                TextColor(ui_theme::text_muted()),
-                DayClockPhaseText,
-            ));
-            // Barra de progreso del día (pista + relleno).
+            spawn_sky_dial(panel, heart);
             panel
-                .spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        height: Val::Px(3.0),
-                        ..default()
-                    },
-                    BackgroundColor(ui_theme::panel_bg(0.6)),
-                ))
-                .with_children(|track| {
-                    track.spawn((
-                        Node { width: Val::Percent(0.0), height: Val::Percent(100.0), ..default() },
-                        BackgroundColor(ui_theme::accent_ink()),
-                        DayClockFill,
+                .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::FlexEnd,
+                    row_gap: Val::Px(gap * 0.5),
+                    min_width: Val::Px(heart * 2.2),
+                    ..default()
+                })
+                .with_children(|col| {
+                    col.spawn((
+                        Text::new("--:--"),
+                        TextFont { font_size: (heart * 0.72).clamp(12.0, 18.0), ..default() },
+                        TextColor(ui_theme::text_primary()),
+                        DayClockText,
                     ));
+                    col.spawn((
+                        Text::new("DIA"),
+                        TextFont { font_size: (heart * 0.42).clamp(8.0, 11.0), ..default() },
+                        TextColor(ui_theme::text_muted()),
+                        DayClockPhaseText,
+                    ));
+                    // Barra de progreso del día (pista + relleno).
+                    col.spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(3.0),
+                            ..default()
+                        },
+                        BackgroundColor(ui_theme::panel_bg(0.6)),
+                    ))
+                    .with_children(|track| {
+                        track.spawn((
+                            Node { width: Val::Percent(0.0), height: Val::Percent(100.0), ..default() },
+                            BackgroundColor(ui_theme::accent_ink()),
+                            DayClockFill,
+                        ));
+                    });
                 });
         });
+}
+
+/// El dial del cielo. El orden de los hijos ES el orden de dibujo en Bevy UI, así
+/// que el domo de la Tierra va ÚLTIMO: el astro se esconde detrás de él al salir y
+/// al ponerse, que es la mitad de la lectura ("está bajando").
+fn spawn_sky_dial(parent: &mut ChildBuilder, heart: f32) {
+    let w = (heart * 2.1).clamp(38.0, 62.0);
+    let h = w * 0.62;
+    let astro = (w * 0.20).clamp(7.0, 13.0);
+    parent
+        .spawn((
+            Node {
+                width: Val::Px(w),
+                height: Val::Px(h),
+                overflow: Overflow::clip(),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            // Redondeado arriba y recto abajo: la silueta de una ventanita al
+            // cielo, no otra cajita más.
+            BorderRadius::px(w * 0.5, w * 0.5, 3.0, 3.0),
+            BorderColor(ui_theme::accent_ink()),
+            BackgroundColor(Color::srgb(0.10, 0.16, 0.30)),
+            SkyDialBg,
+            Name::new("SkyDial"),
+        ))
+        .with_children(|dial| {
+            // Estrellitas: sitios fijos (no aleatorios por frame — eso titila mal)
+            // y su alpha lo pone la noche.
+            for p in [
+                Vec2::new(16.0, 22.0),
+                Vec2::new(34.0, 10.0),
+                Vec2::new(52.0, 26.0),
+                Vec2::new(70.0, 14.0),
+                Vec2::new(84.0, 34.0),
+            ] {
+                dial.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(p.x),
+                        top: Val::Percent(p.y),
+                        width: Val::Px(2.0),
+                        height: Val::Px(2.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    SkyDialStar(p),
+                ));
+            }
+            for (marker, color) in [
+                (SkyDialKind::Sun, Color::srgb(1.0, 0.86, 0.42)),
+                (SkyDialKind::Moon, Color::srgb(0.88, 0.92, 1.0)),
+            ] {
+                let mut e = dial.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(astro),
+                        height: Val::Px(astro),
+                        display: Display::None,
+                        ..default()
+                    },
+                    BorderRadius::all(Val::Percent(50.0)),
+                    BackgroundColor(color),
+                ));
+                match marker {
+                    SkyDialKind::Sun => e.insert(SkyDialSun),
+                    SkyDialKind::Moon => e.insert(SkyDialMoon(astro)),
+                };
+            }
+            // La "tierrita": media Tierra asomando de abajo para arriba. Es un
+            // círculo grande recortado por el cuadro del dial.
+            dial.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(-24.0),
+                    top: Val::Percent(62.0),
+                    width: Val::Percent(148.0),
+                    height: Val::Px(h * 1.2),
+                    ..default()
+                },
+                BorderRadius::all(Val::Percent(50.0)),
+                BackgroundColor(Color::srgb(0.20, 0.42, 0.22)),
+            ));
+        });
+}
+
+/// Sólo para elegir qué marcador insertar en el bucle de arriba.
+enum SkyDialKind {
+    Sun,
+    Moon,
 }
 
 /// Refresca el reloj. Sólo escribe cuando el MINUTO cambia (el texto de Bevy
@@ -472,16 +733,27 @@ fn spawn_day_clock(
 #[allow(clippy::type_complexity)]
 fn update_day_clock(
     clock: Res<crate::sky2d::DayClock>,
+    weather: Res<crate::weather::Weather>,
     mut q: ParamSet<(
         Query<&mut Text, With<DayClockText>>,
         Query<(&mut Text, &mut TextColor), With<DayClockPhaseText>>,
         Query<&mut Node, With<DayClockFill>>,
     )>,
     mut last: Local<(u32, u32)>,
+    mut last_fill: Local<f32>,
 ) {
     let (h, m) = clock.clock_hm();
-    for mut node in &mut q.p2() {
-        node.width = Val::Percent(clock.phase() * 100.0);
+    // **La barra sólo se toca cuando de verdad se movió.** Escribir un `Node` lo
+    // marca sucio y taffy recalcula el ÁRBOL ENTERO de la UI; esta línea estaba
+    // arriba del corte por minuto, así que pagábamos un relayout completo todos
+    // los frames para siempre. La barra mide ~200 px: por debajo de un cuarto de
+    // punto porcentual el cambio no llega ni a medio píxel.
+    let fill = clock.phase() * 100.0;
+    if (fill - *last_fill).abs() > 0.25 {
+        *last_fill = fill;
+        for mut node in &mut q.p2() {
+            node.width = Val::Percent(fill);
+        }
     }
     if (h, m) == *last {
         return;
@@ -498,9 +770,106 @@ fn update_day_clock(
         "NOCHE" => Color::srgb(0.62, 0.72, 1.0),
         _ => ui_theme::text_muted(),
     };
+    // El clima va pegado al tramo del día ("DIA - LLUVIA"): es la misma
+    // información —qué está pasando afuera— y no gasta una fila más de HUD.
+    // Despejado no se escribe: lo normal no se anuncia.
+    let line = match weather.kind {
+        crate::weather::WeatherKind::Clear => name.to_string(),
+        k => format!("{name} - {}", k.label()),
+    };
     for (mut text, mut color) in &mut q.p1() {
-        text.0 = name.to_string();
+        text.0 = line.clone();
         color.0 = col;
+    }
+}
+
+/// Mueve el dial: el astro por su arco, el color del cielo y las estrellas. Corre
+/// una vez por MINUTO de juego (2.5 s reales con el ciclo de 1 h): el astro avanza
+/// ~1% del arco por paso, o sea imperceptiblemente escalonado, y el HUD no re-mide
+/// layout todos los frames.
+#[allow(clippy::type_complexity)]
+fn update_sky_dial(
+    clock: Res<crate::sky2d::DayClock>,
+    mut q: ParamSet<(
+        Query<&mut BackgroundColor, With<SkyDialBg>>,
+        Query<&mut Node, With<SkyDialSun>>,
+        Query<(&mut Node, &SkyDialMoon)>,
+        Query<(&mut BackgroundColor, &SkyDialStar)>,
+    )>,
+    mut last: Local<(u32, u32)>,
+) {
+    let hm = clock.clock_hm();
+    if hm == *last {
+        return;
+    }
+    *last = hm;
+    use crate::sky2d::{DAWN_START, NIGHT_START};
+    let p = clock.phase();
+    let day = clock.daylight();
+    let sun_up = (DAWN_START..NIGHT_START).contains(&p);
+    // Cielo del dial: la misma idea que el `ClearColor` del mundo (noche azul
+    // profundo → celeste de día) con el naranja del crepúsculo encima.
+    let night = Vec3::new(0.055, 0.075, 0.185);
+    let noon = Vec3::new(0.33, 0.58, 0.85);
+    let dusk = Vec3::new(0.80, 0.42, 0.28);
+    let bg = night
+        .lerp(noon, day)
+        .lerp(dusk, crate::sky2d::dusk_amount(p) * 0.75);
+    for mut c in &mut q.p0() {
+        c.0 = Color::srgb(bg.x, bg.y, bg.z);
+    }
+    // Sol y luna: cada uno en su turno, en el sitio que le toca del arco.
+    let (sx, sy) = sky_dial_pos((p - DAWN_START) / (NIGHT_START - DAWN_START));
+    for mut node in &mut q.p1() {
+        node.display = if sun_up { Display::Flex } else { Display::None };
+        node.left = Val::Percent(sx);
+        node.top = Val::Percent(sy);
+    }
+    let night_span = 1.0 - (NIGHT_START - DAWN_START);
+    let (mx, my) = sky_dial_pos((p - NIGHT_START).rem_euclid(1.0) / night_span);
+    let illum = clock.moon_illum();
+    for (mut node, moon) in &mut q.p2() {
+        // La luna nueva no se dibuja: esa noche sin luna es contenido, no un bug.
+        node.display = if !sun_up && illum > 0.08 { Display::Flex } else { Display::None };
+        let d = moon.0 * (0.55 + 0.45 * illum);
+        node.width = Val::Px(d);
+        node.height = Val::Px(d);
+        node.left = Val::Percent(mx);
+        node.top = Val::Percent(my);
+    }
+    // Las estrellas salen con la noche, y las de más arriba brillan un poco más.
+    let star_a = (1.0 - day) * 0.95;
+    for (mut c, star) in &mut q.p3() {
+        let k = star_a * (0.65 + 0.35 * (1.0 - star.0.y / 40.0));
+        c.0 = Color::srgba(1.0, 1.0, 0.95, k.clamp(0.0, 1.0));
+    }
+}
+
+/// **Con un panel abierto no se dibujan los controles.** Los joysticks y los
+/// botones de acción viven en la misma capa que la mochila y, ahora que la
+/// ventana ocupa la pantalla entera, quedaban flotando ENCIMA de las tarjetas —
+/// dos discos enormes tapando el inventario. Ya estaban desconectados
+/// (`UiGameplayBlock` ignora el toque); esto sólo hace que además se vayan de la
+/// vista, que es lo que el ojo espera.
+fn hide_touch_controls_with_panel(
+    bag: Res<BagPanelState>,
+    chest: Res<crate::chests::ChestPanelState>,
+    editor: Res<crate::ui_editor::UiEditorState>,
+    mut sticks: Query<&mut Visibility, With<crate::input::JoystickBase>>,
+    mut actions: Query<
+        &mut Visibility,
+        (With<crate::input::ActionUiRoot>, Without<crate::input::JoystickBase>),
+    >,
+) {
+    let want = if bag.open || chest.is_open() || editor.menu_open || editor.enabled {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
+    for mut vis in sticks.iter_mut().chain(actions.iter_mut()) {
+        if *vis != want {
+            *vis = want;
+        }
     }
 }
 
@@ -509,7 +878,9 @@ fn spawn_status_prompt_block(parent: &mut ChildBuilder, heart: f32, gap: f32) {
     parent
         .spawn((
             Node {
-                display: Display::Flex,
+                // Nace OCULTO: sin nada tocado no hay nada que decir, y el
+                // arranque del juego no es momento de explicar controles.
+                display: Display::None,
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(gap * 0.6),
                 padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
@@ -525,7 +896,7 @@ fn spawn_status_prompt_block(parent: &mut ChildBuilder, heart: f32, gap: f32) {
         ))
         .with_children(|block| {
             block.spawn((
-                Text::new(platform::gameplay_controls_hint()),
+                Text::new(""),
                 TextFont {
                     font_size: (heart * 0.58).clamp(10.0, 14.0),
                     ..default()
@@ -833,10 +1204,10 @@ fn update_hud_layout(
     mut hotbar: Query<&mut Node, (With<HotbarRoot>, Without<HotbarSlot>)>,
     mut slots: Query<&mut Node, (With<HotbarSlot>, Without<HotbarRoot>)>,
     mut hud_blocks: ResMut<HudTouchBlocks>,
-    mut span: ResMut<CpuSpanStats>,
+    span: Res<CpuSpanStats>,
     mut last: Local<(f32, f32, f32, f32)>,
 ) {
-    let _guard = span_guard(&mut span, CpuSpanSlot::Hud);
+    let _guard = span_guard(&span, CpuSpanSlot::Hud);
     if layout.width < 100.0 {
         return;
     }
@@ -853,7 +1224,12 @@ fn update_hud_layout(
         node.column_gap = Val::Px(gap);
         let left = game_ui::ui_center_left(&layout, total);
         let top = layout.height - bottom - slot;
-        hud_blocks.0 = vec![[left, top, left + total, top + slot]];
+        // La hotbar abajo y el botón MENU arriba al centro: los dos toques que no
+        // puede robarles el mundo.
+        hud_blocks.0 = vec![
+            [left, top, left + total, top + slot],
+            game_ui::menu_button_rect(&layout),
+        ];
     }
     for mut slot_node in &mut slots {
         slot_node.width = Val::Px(slot);
@@ -870,9 +1246,9 @@ fn update_hud_state(
     mut cache: ResMut<HudDisplayCache>,
     mut hearts: Query<(&StatHeartIcon, &mut ImageNode), Without<StatEnergyIcon>>,
     mut energy: Query<(&StatEnergyIcon, &mut ImageNode), Without<StatHeartIcon>>,
-    mut span: ResMut<CpuSpanStats>,
+    span: Res<CpuSpanStats>,
 ) {
-    let _guard = span_guard(&mut span, CpuSpanSlot::Hud);
+    let _guard = span_guard(&span, CpuSpanSlot::Hud);
     let Ok(sim) = player.get_single() else {
         return;
     };
@@ -912,8 +1288,15 @@ fn update_hud_state(
     cache.initialized = true;
 }
 
+/// **El panel de estado sólo habla cuando tiene algo que decir.**
+///
+/// Antes vivía en pantalla con la chuleta de controles (`<- Move | Look -> |
+/// USE...`) porque siempre había una mira apuntando a algo. Sacada la mira, el
+/// texto aparece únicamente mientras tocás algo, mientras una acción avanza, o
+/// cuando el vuelo tiene telemetría que sí es juego (altura, Ki, cuerpo). La
+/// chuleta y lo demás que es de developer queda para el modo CREATIVO.
+#[allow(clippy::too_many_arguments)]
 fn update_survival_hud(
-    player: Query<&Transform, With<Player>>,
     equipped: Res<EquippedItem>,
     hold: Res<HoldInteractState>,
     target: Res<LookTarget>,
@@ -921,12 +1304,17 @@ fn update_survival_hud(
     pending: Res<PendingMachinePlacement>,
     inv: Res<PlayerInventory>,
     flight: Res<Flight>,
+    editor: Res<crate::ui_editor::UiEditorState>,
+    names: Query<&crate::structures::StructureName>,
     mut cache: ResMut<HudDisplayCache>,
     mut prompts: Query<(&mut Text, &mut TextColor), With<InteractPromptText>>,
-    mut prompt_roots: Query<(&mut BackgroundColor, &mut BorderColor), With<StatusPromptRoot>>,
+    mut prompt_roots: Query<(&mut Node, &mut BackgroundColor, &mut BorderColor), With<StatusPromptRoot>>,
 ) {
-    let player_pos = player.get_single().ok().map(|tf| tf.translation);
-    let prompt_line = build_interact_prompt(
+    let target_name = target
+        .entity
+        .and_then(|e| names.get(e).ok())
+        .map(|n| n.0.as_str());
+    let prompt = build_interact_prompt(
         &equipped,
         &hold,
         &target,
@@ -934,8 +1322,11 @@ fn update_survival_hud(
         &pending,
         &inv,
         &flight,
-        player_pos,
+        editor.creative,
+        target_name,
     );
+    let visible = prompt.is_some();
+    let prompt_line = prompt.unwrap_or_default();
     if cache.prompt_line != prompt_line {
         cache.prompt_line = prompt_line.clone();
         for (mut text, _) in &mut prompts {
@@ -943,23 +1334,17 @@ fn update_survival_hud(
         }
     }
 
-    let idle_hint = prompt_line.starts_with("<- Move")
-        || prompt_line.starts_with("WASD")
-        || prompt_line.contains("Move | Look");
-    let target_alpha = if hold.active || !idle_hint { 0.92 } else { 0.34 };
-    if cache.prompt_is_idle != idle_hint || (cache.prompt_alpha - target_alpha).abs() > 0.02 {
-        cache.prompt_is_idle = idle_hint;
+    let target_alpha = if visible { 0.92 } else { 0.0 };
+    if cache.prompt_visible != visible || (cache.prompt_alpha - target_alpha).abs() > 0.02 {
+        cache.prompt_visible = visible;
         cache.prompt_alpha = target_alpha;
-        for (mut bg, mut border) in &mut prompt_roots {
+        for (mut node, mut bg, mut border) in &mut prompt_roots {
+            node.display = if visible { Display::Flex } else { Display::None };
             *bg = BackgroundColor(ui_theme::panel_bg(target_alpha * 0.82));
             *border = BorderColor(ui_theme::accent_ink().with_alpha(target_alpha));
         }
         for (_, mut color) in &mut prompts {
-            *color = TextColor(ui_theme::text_primary().with_alpha(if idle_hint && !hold.active {
-                0.55
-            } else {
-                0.95
-            }));
+            *color = TextColor(ui_theme::text_primary().with_alpha(0.95));
         }
     }
 }
@@ -1055,11 +1440,22 @@ fn format_inventory_line(inv: &PlayerInventory) -> String {
     format!("Stock: {}", parts.join(" | "))
 }
 
+/// Nombre CORTO de un material para la línea de costo de una tarjeta. Los ids
+/// largos (`iron_ingot`, `gold_ingot`) hacían que el costo ocupara tres líneas y
+/// se derramara fuera de la tarjeta; con símbolos de una o dos letras el costo
+/// entero entra en un renglón.
 fn item_label(id: &str) -> &str {
     match id {
         "wood" => "W",
         "stone" => "S",
         "sticks" => "T",
+        "iron_ingot" => "Fe",
+        "gold_ingot" => "Au",
+        "gem_blue" => "Gem",
+        "leather" => "Cue",
+        "apple" => "Man",
+        "orange" => "Nar",
+        "grape" => "Uva",
         _ => id,
     }
 }
@@ -1088,26 +1484,27 @@ fn recipe_status(inv: &PlayerInventory, recipe: &CraftRecipe) -> (bool, String) 
             }
         })
         .collect();
-    (false, format!("Need {}", missing.join(", ")))
+    (false, format!("falta {}", missing.join(" ")))
 }
 
-/// Touch-drag + mouse-wheel scroll for the BAG panels (CRAFT recipe list AND
-/// the inventory grid). Both had `Overflow::scroll_y()` + `ScrollPosition` but
-/// no input driver, so content below the fold was unreachable on mobile.
-/// BAG-open gates gameplay input, so any drag while open scrolls. The hidden
-/// tab's ScrollPosition is harmless to touch.
+/// Arrastre táctil + rueda del mouse en las listas de la mochila. Las tres
+/// pestañas tienen `Overflow::scroll_y()` + `ScrollPosition` pero ningún sistema
+/// que las mueva: sin esto, lo que quede debajo del pliegue no existe en el
+/// teléfono. Con la mochila abierta el gameplay está bloqueado, así que
+/// cualquier arrastre scrollea.
+///
+/// **El tope sale de medir el contenido, no de un número.** Antes era
+/// `clamp(0.0, 900.0)` — un valor elegido cuando la lista de CONSTRUIR eran doce
+/// recetas. Con el pack importado esa lista pasó a ~350 tarjetas y **todo lo que
+/// caía después de los primeros 900 px quedó inalcanzable**: los objetos estaban
+/// declarados, con su nombre y su icono, y el menú simplemente no dejaba llegar.
+/// Es el bug de "agregaste los items y no los veo en construir".
 fn scroll_craft_list(
     bag: Res<BagPanelState>,
     touches: Res<Touches>,
     mut wheel: EventReader<bevy::input::mouse::MouseWheel>,
-    mut sections: Query<
-        &mut ScrollPosition,
-        Or<(
-            With<BagCraftSection>,
-            With<BagInventorySection>,
-            With<BagBuildSection>,
-        )>,
-    >,
+    mut views: Query<(&mut ScrollPosition, &ComputedNode, &Children), With<BagScrollView>>,
+    contents: Query<&ComputedNode, With<ScrollContent>>,
 ) {
     if !bag.open {
         wheel.clear();
@@ -1123,10 +1520,26 @@ fn scroll_craft_list(
     if dy.abs() < 0.5 {
         return;
     }
-    for mut sp in &mut sections {
-        // Generous content bound (12 recipes / 8 inventory rows + machines).
-        sp.offset_y = (sp.offset_y + dy).clamp(0.0, 900.0);
+    for (mut sp, view, children) in &mut views {
+        // `ComputedNode::size()` es en px FÍSICOS y `ScrollPosition` en lógicos:
+        // sin el factor, en un teléfono de alta densidad el tope sale 2-3 veces
+        // más grande y la lista se va de largo hasta quedar en blanco.
+        let k = view.inverse_scale_factor();
+        let view_h = view.size().y * k;
+        let content_h = children
+            .iter()
+            .filter_map(|c| contents.get(*c).ok())
+            .map(|c| c.size().y * c.inverse_scale_factor())
+            .fold(0.0f32, f32::max);
+        sp.offset_y = (sp.offset_y + dy).clamp(0.0, max_scroll(view_h, content_h));
     }
+}
+
+/// Cuánto se puede bajar una lista: lo que sobresale del marco, y nada más.
+/// Cero cuando el contenido entra entero — si no, la lista se puede arrastrar
+/// hasta dejar la pantalla en blanco.
+pub(crate) fn max_scroll(view_h: f32, content_h: f32) -> f32 {
+    (content_h - view_h).max(0.0)
 }
 
 fn build_machine_panel_text(
@@ -1179,8 +1592,10 @@ fn build_interact_prompt(
     pending: &PendingMachinePlacement,
     inv: &PlayerInventory,
     flight: &Flight,
-    player_pos: Option<Vec3>,
-) -> String {
+    creative: bool,
+    // Nombre del objeto colocado bajo el dedo, si lo hay.
+    target_name: Option<&str>,
+) -> Option<String> {
     if flight.active {
         let alt = flight.altitude_m();
         let spd = flight.speed();
@@ -1191,9 +1606,11 @@ fn build_interact_prompt(
         let vac = if flight.in_vacuum() { "VAC" } else { "ATM" };
         let charge = if flight.charging { " - CARGANDO" } else { "" };
         // NOTE: la fuente del juego es ASCII-only (no |, flechas, acentos) -> separadores ASCII.
-        return format!(
-            "VUELO KI - {body} - alt {alt:.0}m - vert {v_vert:+.0} horiz {v_horiz:.0} m/s - {spd:.0} tot - Ki {ki:.0}% - {vac}{charge} - JUMP subir - USE bajar",
-        );
+        // Esto SÍ es juego: sin altura ni Ki no se puede pilotar. Lo que era
+        // chuleta de botones se fue con el resto (JUMP/BAJAR están en pantalla).
+        return Some(format!(
+            "VUELO KI - {body} - alt {alt:.0}m - vert {v_vert:+.0} horiz {v_horiz:.0} m/s - {spd:.0} tot - Ki {ki:.0}% - {vac}{charge}",
+        ));
     }
 
     if hold.active && hold.placing_machine {
@@ -1203,7 +1620,7 @@ fn build_interact_prompt(
         } else {
             0
         };
-        return format!("BUILD {} - {}%", def.display_name, pct);
+        return Some(format!("Colocando {} - {}%", def.display_name, pct));
     }
 
     if hold.active && hold.eating {
@@ -1212,119 +1629,121 @@ fn build_interact_prompt(
         } else {
             0
         };
-        return format!(
-            "EATING {} - {}%",
+        return Some(format!(
+            "Comiendo {} - {}%",
             ha_shared::item_display_name(&equipped.item_id),
             pct
-        );
+        ));
     }
     if target.kind.is_none()
         && !hold.active
         && ha_shared::food_restore(&equipped.item_id).is_some()
         && inv.qty(&equipped.item_id) > 0
     {
-        return format!(
-            "HOLD -> Eat {}",
+        return Some(format!(
+            "Manten para comer {}",
             ha_shared::item_display_name(&equipped.item_id)
-        );
-    }
-
-    if let Some(pos) = player_pos {
-        if matches!(region.active, RegionId::Cave(_)) {
-            return "USE -> Exit cave".to_string();
-        }
-        if pos.distance(region.cave_portal) <= 3.2 {
-            return "USE -> Descend into the core".to_string();
-        }
+        ));
     }
 
     if let Some(kind) = target.kind {
+        // Objeto colocado por el jugador: se levanta con el mismo gesto que se
+        // pica un bloque. El nombre sale de su propio slot de arte, así que la
+        // heladera dice "Heladera" y no "objeto".
+        if kind == InteractTargetKind::Entity {
+            return Some(match target_name {
+                Some(name) => format!("Manten para levantar {name}"),
+                None => "Manten para levantar".to_string(),
+            });
+        }
         if kind == InteractTargetKind::Block {
             if ha_shared::is_block_item(&equipped.item_id) {
-                return format!(
-                    "HOLD -> Place {}",
+                return Some(format!(
+                    "Manten para colocar {}",
                     ha_shared::item_display_name(&equipped.item_id)
-                );
+                ));
             }
-            return "HOLD -> Break block".to_string();
+            return Some("Manten para picar".to_string());
         }
         if let Some(rule) = resolve_interaction(Some(equipped.item_id.as_str()), kind) {
-            return match rule.kind {
+            return Some(match rule.kind {
                 InteractActionKind::Gather => {
-                    format!("HOLD -> Gather {}", rule.item_id.unwrap_or("resource"))
+                    format!("Manten para recoger {}", rule.item_id.unwrap_or("recurso"))
                 }
                 InteractActionKind::Mine => {
-                    format!("HOLD -> Mine {}", rule.item_id.unwrap_or("stone"))
+                    format!("Manten para picar {}", rule.item_id.unwrap_or("piedra"))
                 }
-                InteractActionKind::Collect => "HOLD -> Collect".to_string(),
+                InteractActionKind::Collect => "Manten para recoger".to_string(),
                 InteractActionKind::Assemble if kind == InteractTargetKind::SpaceStationModule => {
-                    "HOLD -> Install station module".to_string()
+                    "Manten para instalar el modulo".to_string()
                 }
-                InteractActionKind::Assemble => "HOLD -> Install starship module".to_string(),
-                InteractActionKind::Launch => "HOLD -> LAUNCH to orbit".to_string(),
+                InteractActionKind::Assemble => "Manten para instalar el modulo de la nave".to_string(),
+                InteractActionKind::Launch => "Manten para DESPEGAR a orbita".to_string(),
                 InteractActionKind::ReturnEarth if kind == InteractTargetKind::LunarReturn => {
-                    "HOLD -> Return to orbital hub".to_string()
+                    "Manten para volver al hub orbital".to_string()
                 }
-                InteractActionKind::ReturnEarth => "HOLD -> Re-enter Earth".to_string(),
+                InteractActionKind::ReturnEarth => "Manten para reentrar a la Tierra".to_string(),
                 InteractActionKind::TravelLuna => {
                     // Earth->Moon distance is effectively fixed (~52 km flight
                     // metres) - travel-time preview without needing the clock.
                     let secs = ha_shared::transit_cruise_secs(52_000.0);
-                    format!("HOLD -> AUTOPILOT Luna | ~{secs:.0}s | requiere nav data")
+                    format!("Manten para viajar a la Luna - ~{secs:.0}s - requiere datos de nav")
                 }
                 InteractActionKind::TravelBody => {
-                    "HOLD -> AUTOPILOT a planeta | coste segun distancia | requiere nav data".to_string()
+                    "Manten para viajar al planeta - requiere datos de nav".to_string()
                 }
                 InteractActionKind::LaunchProbe => {
                     if inv.qty("probe") > 0 {
-                        "HOLD -> Launch nav probe".to_string()
+                        "Manten para lanzar la sonda".to_string()
                     } else {
-                        "Need Nav Probe - BAG -> CRAFT".to_string()
+                        "Falta una sonda - MOCHILA -> FABRICAR".to_string()
                     }
                 }
-                InteractActionKind::Attack => "TAP -> Ability".to_string(),
+                InteractActionKind::Attack => "Toca para golpear".to_string(),
                 InteractActionKind::None => match kind {
                     InteractTargetKind::Rock
                     | InteractTargetKind::OreIron
                     | InteractTargetKind::OreGold => {
-                        "Need pickaxe - BAG -> CRAFT".to_string()
+                        "Necesitas un pico - MOCHILA -> FABRICAR".to_string()
                     }
-                    _ => "No action".to_string(),
+                    _ => return None,
                 },
-            };
+            });
         }
     }
 
     if ha_shared::is_block_item(&equipped.item_id) && target.place_cell.is_some() {
-        return format!(
-            "HOLD -> Place {}",
+        return Some(format!(
+            "Manten para colocar {}",
             ha_shared::item_display_name(&equipped.item_id)
-        );
+        ));
     }
 
+    // El martillo sí informa: el coste de la máquina es una decisión de juego, y
+    // sin verlo no sabés si te alcanza. Sólo cuando lo tenés en la mano.
     if equipped.item_id == "hammer" {
         let def = require_machine(pending.machine_id);
-        let can = inv.can_afford_machine(def);
-        if can {
-            return format!(
-                "HOLD (empty) -> Place {} | W{} S{} T{}",
+        if inv.can_afford_machine(def) {
+            return Some(format!(
+                "Manten en el suelo para armar {} - M{} P{} R{}",
                 def.display_name, def.cost_wood, def.cost_stone, def.cost_sticks
-            );
+            ));
         }
-        return format!(
-            "Need W{} S{} T{} for {}",
+        return Some(format!(
+            "Faltan M{} P{} R{} para {}",
             def.cost_wood, def.cost_stone, def.cost_sticks, def.display_name
-        );
+        ));
     }
 
     if region.active == RegionId::Space {
-        return "Vacio orbital | JUMP subir - USE bajar | vuela con Ki hacia Tierra/Luna".to_string();
+        return Some("Vacio orbital - vuela con Ki hacia Tierra/Luna".to_string());
     }
     if region.active == RegionId::Luna {
-        return "Superficie lunar | JUMP para cargar Ki y despegar hacia el espacio".to_string();
+        return Some("Superficie lunar - manten SALTAR para cargar Ki y despegar".to_string());
     }
 
-    platform::gameplay_controls_hint().to_string()
+    // Chuleta de controles: es documentación, no juego. Sólo en CREATIVO.
+    creative.then(|| platform::gameplay_controls_hint().to_string())
 }
 
 fn spawn_interact_hud(parent: &mut ChildBuilder, layout: &TouchLayout, short: f32) {
@@ -1361,6 +1780,9 @@ fn spawn_panel_close_button(parent: &mut ChildBuilder, heart: f32, marker: impl 
                 align_items: AlignItems::Center,
                 ..default()
             },
+            // Redondo: es el botón que más se toca de un panel y una X en un
+            // cuadradito se lee como diálogo de sistema.
+            BorderRadius::MAX,
             BorderColor(ui_theme::button_border(UiButtonTone::Primary)),
             BackgroundColor(ui_theme::button_bg(UiButtonTone::Primary, UiButtonState::Normal)),
             marker,
@@ -1383,12 +1805,17 @@ fn spawn_bag_tab_button(parent: &mut ChildBuilder, label: &str, tab: BagTab, hea
             Button,
             Node {
                 flex_grow: 1.0,
-                height: Val::Px((heart * 0.95).clamp(22.0, 30.0)),
+                // Alto de dedo: 22 px era una pestaña que se erraba. La barra de
+                // pestañas es lo primero que se toca al abrir la mochila.
+                height: Val::Px((heart * 1.35).clamp(30.0, 40.0)),
                 border: UiRect::all(Val::Px(2.0)),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
             },
+            // Píldora: las tres pestañas son una sola barra de conmutadores, no
+            // tres cajitas.
+            BorderRadius::MAX,
             BorderColor(ui_theme::button_border(UiButtonTone::Inventory)),
             BackgroundColor(ui_theme::button_bg(UiButtonTone::Inventory, UiButtonState::Normal)),
             BagTabButton { tab },
@@ -1405,20 +1832,25 @@ fn spawn_bag_tab_button(parent: &mut ChildBuilder, label: &str, tab: BagTab, hea
         });
 }
 
+/// **La ventana de la mochila ocupa la pantalla**, dejando sólo un borde entre
+/// ella y el límite del juego. Antes era un panelito de 340-540 px centrado: en el
+/// teléfono quedaba una tarjeta chica con listas de texto que había que scrollear
+/// para todo, y el minimapa del menú no se veía. Con el área completa entran la
+/// grilla de 6 columnas y las tarjetas con icono.
+///
+/// El botón MENU **no vive acá**: volvió a su sitio de siempre, arriba al centro
+/// del HUD (ver [`spawn_menu_button`]). El header sólo cierra la ventana.
 fn spawn_bag_panel(
     commands: &mut Commands,
     root: Entity,
     layout: &TouchLayout,
     tune: &HudTune,
     tab: BagTab,
-    inv: &PlayerInventory,
+    group: usize,
 ) -> Entity {
-    let short = layout.width.min(layout.height);
     let heart = tune.heart_px;
-    let panel_w = (short * 0.74).clamp(340.0, 540.0);
-    let panel_h = (short * 0.72).clamp(340.0, 520.0);
-    let cell = (panel_w * 0.19).clamp(52.0, 72.0);
-    let cell_gap = (cell * 0.08).clamp(4.0, 8.0);
+    let BagMetrics { edge, panel_w, panel_h, pad, cell_gap, cell, card } =
+        bag_metrics(layout, heart);
 
     let mut modal_entity = Entity::PLACEHOLDER;
     commands.entity(root).with_children(|parent| {
@@ -1452,19 +1884,23 @@ fn spawn_bag_panel(
                     .spawn((
                         Node {
                             position_type: PositionType::Absolute,
-                            left: Val::Px(game_ui::ui_center_left(layout, panel_w)),
-                            top: Val::Px(((layout.height - panel_h) * 0.5).max(layout.insets.top as f32)),
+                            left: Val::Px(layout.insets.left as f32 + edge),
+                            top: Val::Px(layout.insets.top as f32 + edge),
                             width: Val::Px(panel_w),
                             height: Val::Px(panel_h),
                             border: UiRect::all(Val::Px(ui_theme::panel_border_width())),
-                            padding: UiRect::all(Val::Px((heart * 0.4).clamp(6.0, 14.0))),
+                            padding: UiRect::all(Val::Px(pad)),
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px((heart * 0.35).clamp(5.0, 10.0)),
                             overflow: Overflow::clip(),
                             ..default()
                         },
+                        // Esquinas redondeadas: es la misma familia de formas que
+                        // los botones circulares y las tarjetas, no una caja de
+                        // diálogo de sistema.
+                        BorderRadius::all(Val::Px((heart * 0.5).clamp(10.0, 22.0))),
                         BorderColor(ui_theme::accent_ink()),
-                        BackgroundColor(ui_theme::panel_bg_lit(0.0, 0.90)),
+                        BackgroundColor(ui_theme::panel_bg_lit(0.0, 0.985)),
                         BagPanelRoot,
                         BagPanelBase {
                             width: panel_w,
@@ -1479,20 +1915,33 @@ fn spawn_bag_panel(
                                     width: Val::Percent(100.0),
                                     justify_content: JustifyContent::SpaceBetween,
                                     align_items: AlignItems::Center,
+                                    column_gap: Val::Px(8.0),
                                     ..default()
                                 },
                                 Name::new("BagPanelHeader"),
                             ))
                             .with_children(|header| {
                                 header.spawn((
-                                    Text::new("BAG"),
+                                    Text::new("MOCHILA"),
                                     TextFont {
-                                        font_size: (heart * 0.72).clamp(12.0, 20.0),
+                                        font_size: (heart * 0.72).clamp(12.0, 22.0),
                                         ..default()
                                     },
                                     TextColor(ui_theme::text_primary()),
                                 ));
-                                spawn_panel_close_button(header, heart, BagPanelCloseButton);
+                                header
+                                    .spawn((
+                                        Node {
+                                            flex_direction: FlexDirection::Row,
+                                            align_items: AlignItems::Center,
+                                            column_gap: Val::Px(8.0),
+                                            ..default()
+                                        },
+                                        Name::new("BagHeaderActions"),
+                                    ))
+                                    .with_children(|actions| {
+                                        spawn_panel_close_button(actions, heart, BagPanelCloseButton);
+                                    });
                             });
 
                         panel
@@ -1506,8 +1955,8 @@ fn spawn_bag_panel(
                                 Name::new("BagTabs"),
                             ))
                             .with_children(|tabs| {
-                                spawn_bag_tab_button(tabs, "INVENTORY", BagTab::Inventory, heart);
-                                spawn_bag_tab_button(tabs, "CRAFT", BagTab::Craft, heart);
+                                spawn_bag_tab_button(tabs, "INVENTARIO", BagTab::Inventory, heart);
+                                spawn_bag_tab_button(tabs, "CRAFTEAR", BagTab::Craft, heart);
                                 spawn_bag_tab_button(tabs, "CONSTRUIR", BagTab::Build, heart);
                             });
 
@@ -1516,6 +1965,15 @@ fn spawn_bag_panel(
                                 Node {
                                     width: Val::Percent(100.0),
                                     flex_grow: 1.0,
+                                    // **`min_height: 0` o no hay scroll.** En una
+                                    // columna flex, un hijo con `flex_grow` tiene
+                                    // `min-height: auto`: no puede encogerse por
+                                    // debajo de su contenido, así que la sección
+                                    // crecía hasta contener las 8 filas enteras y
+                                    // `scroll_y` no tenía NADA que desplazar — el
+                                    // sobrante lo recortaba el panel y las últimas
+                                    // filas del inventario eran inalcanzables.
+                                    min_height: Val::Px(0.0),
                                     flex_direction: FlexDirection::Column,
                                     row_gap: Val::Px(cell_gap),
                                     display: if tab == BagTab::Inventory {
@@ -1527,11 +1985,28 @@ fn spawn_bag_panel(
                                     ..default()
                                 },
                                 BagInventorySection,
+                                BagScrollView,
                                 ScrollPosition::default(),
                             ))
                             .with_children(|section| {
+                                section
+                                    .spawn((
+                                        Node {
+                                            width: Val::Percent(100.0),
+                                            flex_direction: FlexDirection::Column,
+                                            row_gap: Val::Px(cell_gap),
+                                            // Sin esto NO hay scroll: dentro de un marco `scroll_y` el hijo se
+                                            // ENCOGE hasta entrar (flex_shrink por omision = 1), o sea que lo que
+                                            // se mide es el alto del marco y `max_scroll` da ~0. Es el bug de "la
+                                            // ultima fila queda cortada y no me deja seguir bajando".
+                                            flex_shrink: 0.0,
+                                            ..default()
+                                        },
+                                        ScrollContent,
+                                    ))
+                                    .with_children(|section| {
                                 section.spawn((
-                                    Text::new("Toca = elegir · toca otro = mover · 2 toques = dividir · manten = levantar"),
+                                    Text::new("Toca = elegir | toca otro = mover | 2 toques = dividir | manten = levantar"),
                                     TextFont {
                                         font_size: (heart * 0.46).clamp(9.0, 12.0),
                                         ..default()
@@ -1553,6 +2028,7 @@ fn spawn_bag_panel(
                                             grid.spawn(Node {
                                                 width: Val::Percent(100.0),
                                                 flex_direction: FlexDirection::Row,
+                                                justify_content: JustifyContent::Center,
                                                 column_gap: Val::Px(cell_gap),
                                                 ..default()
                                             })
@@ -1569,6 +2045,7 @@ fn spawn_bag_panel(
                                             });
                                         }
                                     });
+                                    });
                             });
 
                         panel
@@ -1576,8 +2053,7 @@ fn spawn_bag_panel(
                                 Node {
                                     width: Val::Percent(100.0),
                                     flex_grow: 1.0,
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap: Val::Px((heart * 0.28).clamp(4.0, 8.0)),
+                                    min_height: Val::Px(0.0),
                                     display: if tab == BagTab::Craft {
                                         Display::Flex
                                     } else {
@@ -1587,209 +2063,411 @@ fn spawn_bag_panel(
                                     ..default()
                                 },
                                 BagCraftSection,
+                                BagScrollView,
                                 ScrollPosition::default(),
                             ))
                             .with_children(|section| {
+                                section
+                                    .spawn((
+                                        Node {
+                                            width: Val::Percent(100.0),
+                                            flex_direction: FlexDirection::Row,
+                                            flex_wrap: FlexWrap::Wrap,
+                                            align_content: AlignContent::FlexStart,
+                                            column_gap: Val::Px(cell_gap),
+                                            row_gap: Val::Px(cell_gap),
+                                            // Sin esto NO hay scroll: dentro de un marco `scroll_y` el hijo se
+                                            // ENCOGE hasta entrar (flex_shrink por omision = 1), o sea que lo que
+                                            // se mide es el alto del marco y `max_scroll` da ~0. Es el bug de "la
+                                            // ultima fila queda cortada y no me deja seguir bajando".
+                                            flex_shrink: 0.0,
+                                            ..default()
+                                        },
+                                        ScrollContent,
+                                    ))
+                                    .with_children(|section| {
                                 // All recipes are craftable from obtainable
                                 // materials now (the old id 2/3 skip hid the
                                 // wood pickaxe/axe after the recipe renumber).
+                                spawn_section_label(section, "Herramientas y equipo:", heart);
                                 for recipe in CRAFT_RECIPES {
-                                    spawn_recipe_button(section, recipe, heart);
+                                    spawn_recipe_card(section, recipe, heart, card);
                                 }
-                                spawn_machine_select_button(
-                                    section,
-                                    "Wood Extractor",
-                                    10,
-                                    machine_cost_label(&WOOD_EXTRACTOR),
-                                    heart,
-                                );
-                                spawn_machine_select_button(
-                                    section,
-                                    "Stone Extractor",
-                                    11,
-                                    machine_cost_label(&STONE_EXTRACTOR),
-                                    heart,
-                                );
-                                spawn_machine_select_button(
-                                    section,
-                                    "Regolith Drill (Luna)",
-                                    13,
-                                    machine_cost_label(&ha_shared::REGOLITH_DRILL),
-                                    heart,
-                                );
-                                spawn_machine_select_button(
-                                    section,
-                                    "Antenna (Luna)",
-                                    14,
-                                    machine_cost_label(&ha_shared::ANTENNA),
-                                    heart,
-                                );
-                                spawn_machine_select_button(
-                                    section,
-                                    "Habitat (Luna)",
-                                    15,
-                                    machine_cost_label(&ha_shared::HABITAT),
-                                    heart,
-                                );
+                                spawn_section_label(section, "Maquinas (elegis y la colocas):", heart);
+                                for (label, id, def) in [
+                                    ("Wood Extractor", 10u32, &WOOD_EXTRACTOR),
+                                    ("Stone Extractor", 11, &STONE_EXTRACTOR),
+                                    ("Regolith Drill", 13, &ha_shared::REGOLITH_DRILL),
+                                    ("Antenna", 14, &ha_shared::ANTENNA),
+                                    ("Habitat", 15, &ha_shared::HABITAT),
+                                ] {
+                                    spawn_machine_select_card(
+                                        section,
+                                        label,
+                                        id,
+                                        def.id,
+                                        machine_cost_label(def),
+                                        heart,
+                                        card,
+                                    );
+                                }
+                                    });
                             });
 
-                        // CONSTRUIR - build-piece palette (owned by build.rs).
+                        // CONSTRUIR - paleta por grupos (la selección es de build.rs).
                         panel
                             .spawn((
                                 Node {
                                     width: Val::Percent(100.0),
                                     flex_grow: 1.0,
+                                    // **`min_height: 0` o no hay scroll**, igual
+                                    // que en las otras dos pestañas y por lo
+                                    // mismo: en una columna flex, un hijo con
+                                    // `flex_grow` tiene `min-height: auto` y NO
+                                    // puede encogerse por debajo de su
+                                    // contenido. Sin esto la sección crecía con
+                                    // las tarjetas, su `BuildScroll` heredaba
+                                    // ese alto y quedaba sin nada que recortar:
+                                    // lo que se veía cortado abajo lo cortaba el
+                                    // panel, y `ScrollPosition` no movía nada.
+                                    // Ése es el bug de "los ítems se quedan
+                                    // recortados y no me deja seguir bajando" —
+                                    // faltaba acá, en CONSTRUIR, que es la
+                                    // pestaña con listas largas.
+                                    min_height: Val::Px(0.0),
                                     flex_direction: FlexDirection::Column,
-                                    row_gap: Val::Px((heart * 0.28).clamp(4.0, 8.0)),
+                                    row_gap: Val::Px(cell_gap),
                                     display: if tab == BagTab::Build {
                                         Display::Flex
                                     } else {
                                         Display::None
                                     },
-                                    overflow: Overflow::scroll_y(),
+                                    overflow: Overflow::clip(),
                                     ..default()
                                 },
                                 BagBuildSection,
-                                ScrollPosition::default(),
                             ))
                             .with_children(|section| {
+                                // Fila de fichas: el grupo activo se ve de un
+                                // vistazo y cambiar cuesta un toque.
+                                section
+                                    .spawn((
+                                        Node {
+                                            width: Val::Percent(100.0),
+                                            flex_direction: FlexDirection::Row,
+                                            flex_wrap: FlexWrap::Wrap,
+                                            column_gap: Val::Px(4.0),
+                                            row_gap: Val::Px(4.0),
+                                            ..default()
+                                        },
+                                        Name::new("BuildFilterChips"),
+                                    ))
+                                    .with_children(|chips| {
+                                        for (i, (_, label)) in build_groups().iter().enumerate() {
+                                            spawn_build_chip(chips, i, label, heart, i == group);
+                                        }
+                                    });
                                 section.spawn((
-                                    Text::new("Elegi una pieza: entra modo construir. Coloca con USE. Cavar la quita."),
+                                    Text::new(build_group_hint(group)),
                                     TextFont {
-                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
+                                        font_size: (heart * 0.46).clamp(9.0, 12.0),
                                         ..default()
                                     },
                                     TextColor(ui_theme::text_muted()),
+                                    BuildGroupHint,
                                 ));
-                                for (idx, piece) in ha_shared::topdown::BUILD_PIECES.iter().enumerate() {
-                                    spawn_build_piece_button(section, idx, piece.label, piece.cost_item, piece.cost_qty, heart);
-                                }
-                                // Prefabs multi-tile (F5): stamp del area completa.
-                                section.spawn((
-                                    Text::new("Prefabs (area completa de una):"),
-                                    TextFont {
-                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
-                                        ..default()
-                                    },
-                                    TextColor(ui_theme::text_muted()),
-                                ));
-                                let base = ha_shared::topdown::build_piece_count();
-                                for (i, p) in ha_shared::topdown::PREFABS.iter().enumerate() {
-                                    spawn_build_piece_button(
-                                        section,
-                                        base + i,
-                                        p.label,
-                                        p.cost_item,
-                                        ha_shared::topdown::prefab_cost(p),
-                                        heart,
-                                    );
-                                }
-                                // Assets grandes (A2): sprite unico + footprint,
-                                // colocado como estructura (se rodea, no se entra).
-                                section.spawn((
-                                    Text::new("Assets grandes (bloquean su base):"),
-                                    TextFont {
-                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
-                                        ..default()
-                                    },
-                                    TextColor(ui_theme::text_muted()),
-                                ));
-                                let lbase = ha_shared::topdown::build_piece_count()
-                                    + ha_shared::topdown::prefab_count();
-                                for (i, a) in ha_shared::topdown::LARGE_ASSETS.iter().enumerate() {
-                                    spawn_build_piece_button(
-                                        section,
-                                        lbase + i,
-                                        a.label,
-                                        a.cost_item,
-                                        a.cost_qty,
-                                        heart,
-                                    );
-                                }
-                                // Paredes de BORDE (estilo Last Day on Earth): se
-                                // enganchan a la arista de la celda apuntada y
-                                // necesitan piso construido de algún lado.
-                                section.spawn((
-                                    Text::new("Paredes (se pegan al borde del piso; volver a tocar = demoler):"),
-                                    TextFont {
-                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
-                                        ..default()
-                                    },
-                                    TextColor(ui_theme::text_muted()),
-                                ));
-                                let ebase = crate::build::edge_palette_base();
-                                for (i, e) in ha_shared::build_grid::EDGE_PIECES.iter().enumerate() {
-                                    spawn_build_piece_button(
-                                        section,
-                                        ebase + i,
-                                        e.label,
-                                        e.cost_item,
-                                        e.cost_qty,
-                                        heart,
-                                    );
-                                }
-                                // VIVARIO (F1): spawn de fauna RESIDENTE — surte efecto
-                                // SOLO en creativo. Encerrala (puerta cerrada) y observa
-                                // como evoluciona. Ver PLAN_VIVARIO_VIDA_EMERGENTE.md.
-                                section.spawn((
-                                    Text::new("Fauna (solo creativo) - encerrala y observa:"),
-                                    TextFont {
-                                        font_size: (heart * 0.44).clamp(9.0, 12.0),
-                                        ..default()
-                                    },
-                                    TextColor(ui_theme::text_muted()),
-                                ));
-                                for i in 0..crate::fauna::spawn_species_count() {
-                                    spawn_build_piece_button(
-                                        section,
-                                        crate::fauna::SPAWN_PALETTE_BASE + i,
-                                        crate::fauna::spawn_species_label(i),
-                                        "solo creativo",
-                                        0,
-                                        heart,
-                                    );
-                                }
-                                // F8: feeder de comida persistente (diseñar la presion del habitat).
-                                spawn_build_piece_button(
-                                    section,
-                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::FEED_PALETTE_SUB,
-                                    "Comida (feeder)",
-                                    "solo creativo",
-                                    0,
-                                    heart,
-                                );
-                                // F7: dejar una camara de vigilancia (verla remoto con CAM).
-                                spawn_build_piece_button(
-                                    section,
-                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::CAMERA_PALETTE_SUB,
-                                    "Camara",
-                                    "solo creativo",
-                                    0,
-                                    heart,
-                                );
-                                // F8: depredador (hostil) + agua (abrevadero) para el habitat.
-                                spawn_build_piece_button(
-                                    section,
-                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::PREDATOR_PALETTE_SUB,
-                                    "Depredador",
-                                    "solo creativo",
-                                    0,
-                                    heart,
-                                );
-                                spawn_build_piece_button(
-                                    section,
-                                    crate::fauna::SPAWN_PALETTE_BASE + crate::fauna::WATER_PALETTE_SUB,
-                                    "Agua",
-                                    "solo creativo",
-                                    0,
-                                    heart,
-                                );
+                                section
+                                    .spawn((
+                                        Node {
+                                            width: Val::Percent(100.0),
+                                            flex_grow: 1.0,
+                                            min_height: Val::Px(0.0),
+                                            overflow: Overflow::scroll_y(),
+                                            ..default()
+                                        },
+                                        BagScrollView,
+                                        ScrollPosition::default(),
+                                        Name::new("BuildScroll"),
+                                    ))
+                                    .with_children(|view| {
+                                        view.spawn((
+                                            Node {
+                                                width: Val::Percent(100.0),
+                                                flex_direction: FlexDirection::Row,
+                                                flex_wrap: FlexWrap::Wrap,
+                                                align_content: AlignContent::FlexStart,
+                                                column_gap: Val::Px(cell_gap),
+                                                row_gap: Val::Px(cell_gap),
+                                                // Sin esto NO hay scroll: dentro de un marco `scroll_y` el hijo se
+                                                // ENCOGE hasta entrar (flex_shrink por omision = 1), o sea que lo que
+                                                // se mide es el alto del marco y `max_scroll` da ~0. Es el bug de "la
+                                                // ultima fila queda cortada y no me deja seguir bajando".
+                                                flex_shrink: 0.0,
+                                                ..default()
+                                            },
+                                            ScrollContent,
+                                            BagBuildList,
+                                        ))
+                                        .with_children(|list| {
+                                            fill_build_group(list, group, heart, card);
+                                        });
+                                    });
                             });
                     });
             })
             .id();
     });
     modal_entity
+}
+
+/// Medidas de la ventana de la mochila.
+struct BagMetrics {
+    /// Borde entre la ventana y el límite de lo que ocupa el juego.
+    edge: f32,
+    panel_w: f32,
+    panel_h: f32,
+    pad: f32,
+    cell_gap: f32,
+    /// Lado de una celda de la grilla del inventario.
+    cell: f32,
+    /// Lado de una tarjeta de crafteo/construcción.
+    card: f32,
+}
+
+/// **Cuántas tarjetas entran, no cuántas quiero.** Se parte de un tamaño de
+/// tarjeta cómodo para el dedo y se calcula cuántas caben en el ancho REAL;
+/// después se reparte el sobrante entre ellas. Con un número fijo por fila (lo
+/// primero que se probó) la pantalla del Redmi quedaba con media mochila vacía
+/// o, en un monitor, con tarjetas del tamaño de un sello.
+///
+/// Vive en una función porque la lista de CONSTRUIR se REHACE al cambiar de
+/// ficha: si el tamaño se recalculara a ojo en el otro sitio, las tarjetas
+/// cambiarían de porte al filtrar.
+fn bag_metrics(layout: &TouchLayout, heart: f32) -> BagMetrics {
+    let short = layout.width.min(layout.height);
+    let edge = (short * 0.035).clamp(10.0, 28.0);
+    let panel_w = (layout.width - layout.insets.left as f32 - layout.insets.right as f32
+        - edge * 2.0)
+        .max(240.0);
+    let panel_h = (layout.height - layout.insets.top as f32 - layout.insets.bottom as f32
+        - edge * 2.0)
+        .max(200.0);
+    let pad = (heart * 0.45).clamp(8.0, 16.0);
+    let cell_gap = (heart * 0.22).clamp(4.0, 9.0);
+    let inner_w = panel_w - pad * 2.0;
+    let cell =
+        ((inner_w - cell_gap * (GRID_COLS as f32 - 1.0)) / GRID_COLS as f32).clamp(44.0, 132.0);
+    let target = (short * 0.17).clamp(64.0, 132.0);
+    let per_row = ((inner_w + cell_gap) / (target + cell_gap)).floor().max(2.0);
+    let card = ((inner_w - cell_gap * (per_row - 1.0)) / per_row).max(52.0);
+    BagMetrics { edge, panel_w, panel_h, pad, cell_gap, cell, card }
+}
+
+/// La lista de tarjetas del grupo activo (el contenido que se rehace al cambiar
+/// de ficha).
+#[derive(Component)]
+struct BagBuildList;
+
+/// El renglón de ayuda que cambia con el grupo.
+#[derive(Component)]
+struct BuildGroupHint;
+
+/// Una ficha de filtro. Chica, redondeada y con el estado activo pintado: es la
+/// misma familia visual que las pestañas de arriba, un escalón más abajo en la
+/// jerarquía (pestaña = qué pantalla; ficha = qué parte de esta pantalla).
+fn spawn_build_chip(parent: &mut ChildBuilder, idx: usize, label: &str, heart: f32, active: bool) {
+    parent
+        .spawn((
+            Button,
+            Node {
+                height: Val::Px((heart * 1.08).clamp(20.0, 28.0)),
+                padding: UiRect::horizontal(Val::Px(9.0)),
+                border: UiRect::all(Val::Px(if active { 2.0 } else { 1.0 })),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BorderRadius::MAX,
+            BorderColor(if active {
+                ui_theme::accent_ink()
+            } else {
+                ui_theme::button_border(UiButtonTone::Inventory)
+            }),
+            BackgroundColor(ui_theme::button_bg(
+                UiButtonTone::Inventory,
+                if active { UiButtonState::Pressed } else { UiButtonState::Normal },
+            )),
+            BuildFilterChip(idx),
+        ))
+        .with_children(|chip| {
+            chip.spawn((
+                Text::new(label.to_string()),
+                TextFont { font_size: (heart * 0.44).clamp(8.0, 11.0), ..default() },
+                TextColor(if active {
+                    ui_theme::text_primary()
+                } else {
+                    ui_theme::text_muted()
+                }),
+            ));
+        });
+}
+
+/// Qué hace el grupo activo, en un renglón. Cada familia de piezas se coloca
+/// distinto y eso antes se leía (si se leía) en un rótulo perdido en el medio de
+/// la lista.
+fn build_group_hint(group: usize) -> &'static str {
+    match build_groups().get(group).map(|(g, _)| *g) {
+        Some(BuildGroup::Pieces) => "Elegi una pieza: entra modo construir. Coloca con USE. Cavar la quita.",
+        Some(BuildGroup::Edges) => "Se pegan al borde del piso apuntado; volver a tocar demuele.",
+        Some(BuildGroup::Ceilings) => "Tapa la celda apuntada; volver a tocar la saca. El piso de arriba ya tapa solo.",
+        Some(BuildGroup::Prefabs) => "Estampa el area entera de una sola vez.",
+        Some(BuildGroup::Fauna) => "Solo creativo: encerrala y observa como evoluciona.",
+        _ => "Se coloca entera y se rodea (no se entra). Cuesta material.",
+    }
+}
+
+/// Llena la lista con las tarjetas del grupo activo.
+///
+/// **El índice de paleta no cambia por agrupar**: sigue siendo el de las tablas
+/// (`BUILD_PIECES`, luego prefabs, luego colocables, luego bordes, luego fauna),
+/// así que `build_selection` no se entera de nada de esto.
+fn fill_build_group(list: &mut ChildBuilder, group: usize, heart: f32, card: f32) {
+    let Some((group, _)) = build_groups().get(group).copied() else {
+        return;
+    };
+    let prefab_base = ha_shared::topdown::build_piece_count();
+    let place_base = prefab_base + ha_shared::topdown::prefab_count();
+    match group {
+        BuildGroup::Pieces => {
+            for (idx, piece) in ha_shared::topdown::BUILD_PIECES.iter().enumerate() {
+                spawn_build_piece_card(
+                    list,
+                    idx,
+                    piece.label,
+                    piece.cost_item,
+                    piece.cost_qty,
+                    build_piece_icon(piece.tile, piece.cost_item),
+                    heart,
+                    card,
+                );
+            }
+        }
+        BuildGroup::Prefabs => {
+            for (i, p) in ha_shared::topdown::PREFABS.iter().enumerate() {
+                spawn_build_piece_card(
+                    list,
+                    prefab_base + i,
+                    p.label,
+                    p.cost_item,
+                    ha_shared::topdown::prefab_cost(p),
+                    UiIconSlot::item(p.cost_item),
+                    heart,
+                    card,
+                );
+            }
+        }
+        BuildGroup::Edges => {
+            let ebase = crate::build::edge_palette_base();
+            for (i, e) in ha_shared::build_grid::EDGE_PIECES.iter().enumerate() {
+                spawn_build_piece_card(
+                    list,
+                    ebase + i,
+                    e.label,
+                    e.cost_item,
+                    e.cost_qty,
+                    UiIconSlot::art(&[e.art], e.cost_item),
+                    heart,
+                    card,
+                );
+            }
+        }
+        BuildGroup::Ceilings => {
+            let cbase = crate::build::ceiling_palette_base();
+            for (i, c) in ha_shared::build_grid::CEILING_PIECES.iter().enumerate() {
+                spawn_build_piece_card(
+                    list,
+                    cbase + i,
+                    c.label,
+                    c.cost_item,
+                    c.cost_qty,
+                    UiIconSlot::art(&[c.art], c.cost_item),
+                    heart,
+                    card,
+                );
+            }
+        }
+        BuildGroup::Place(cat) => {
+            for (i, a) in ha_shared::placeables::placeables_in(cat) {
+                spawn_build_piece_card(
+                    list,
+                    place_base + i,
+                    a.label,
+                    a.cost_item,
+                    a.cost_qty,
+                    // El colocable SE VE: su propio slot de arte es el icono.
+                    UiIconSlot::art(&[a.art], a.cost_item),
+                    heart,
+                    card,
+                );
+            }
+        }
+        BuildGroup::Fauna => {
+            // VIVARIO (F1): spawn de fauna RESIDENTE — sólo surte efecto en
+            // creativo. Encerrala (puerta cerrada) y observá cómo evoluciona.
+            for i in 0..crate::fauna::spawn_species_count() {
+                spawn_build_piece_card(
+                    list,
+                    crate::fauna::SPAWN_PALETTE_BASE + i,
+                    crate::fauna::spawn_species_label(i),
+                    "solo creativo",
+                    0,
+                    UiIconSlot::art(&[crate::fauna::spawn_species_art(i)], "leather"),
+                    heart,
+                    card,
+                );
+            }
+            // F8: feeder de comida persistente (diseñar la presión del hábitat).
+            for (sub, label, item) in [
+                (crate::fauna::FEED_PALETTE_SUB, "Comida (feeder)", "apple"),
+                (crate::fauna::CAMERA_PALETTE_SUB, "Camara", "iron_ingot"),
+                (crate::fauna::PREDATOR_PALETTE_SUB, "Depredador", "sword_iron"),
+                (crate::fauna::WATER_PALETTE_SUB, "Agua", "potion_blue"),
+            ] {
+                spawn_build_piece_card(
+                    list,
+                    crate::fauna::SPAWN_PALETTE_BASE + sub,
+                    label,
+                    "solo creativo",
+                    0,
+                    UiIconSlot::item(item),
+                    heart,
+                    card,
+                );
+            }
+        }
+    }
+}
+
+/// Un rótulo de sección dentro de una sección que envuelve tarjetas. Ocupa el
+/// ancho entero a propósito: eso fuerza el corte de línea del `Wrap`, así el grupo
+/// siguiente empieza en su propia fila.
+fn spawn_section_label(parent: &mut ChildBuilder, text: &str, heart: f32) {
+    parent
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            margin: UiRect::top(Val::Px(4.0)),
+            ..default()
+        })
+        .with_children(|w| {
+            w.spawn((
+                Text::new(text.to_string()),
+                TextFont {
+                    font_size: (heart * 0.44).clamp(9.0, 12.0),
+                    ..default()
+                },
+                TextColor(ui_theme::text_muted()),
+            ));
+        });
 }
 
 fn spawn_inventory_grid_cell(
@@ -1863,68 +2541,192 @@ fn despawn_bag_panel(commands: &mut Commands, bag_state: &mut BagPanelState) {
     }
 }
 
-fn spawn_recipe_button(panel: &mut ChildBuilder, recipe: &CraftRecipe, heart: f32) {
-    panel.spawn((
-        Button,
-        Node {
-            width: Val::Percent(100.0),
-            min_height: Val::Px((heart * 1.0).clamp(22.0, 36.0)),
-            border: UiRect::all(Val::Px(2.0)),
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-            overflow: Overflow::clip(),
-            ..default()
-        },
-        BorderColor(ui_theme::button_border(UiButtonTone::Craft)),
-        BackgroundColor(ui_theme::button_bg(UiButtonTone::Craft, UiButtonState::Normal)),
-        CraftRecipeButton {
-            recipe_id: recipe.id,
-            is_machine_select: false,
-        },
-    ))
-    .with_children(|btn| {
-        btn.spawn((
+// ── Tarjetas con icono ───────────────────────────────────────────────────────
+
+/// **Un hueco de icono que se rellena solo.** Las tarjetas se crean en
+/// `spawn_bag_panel`, que no tiene acceso a `Assets<Image>` ni al caché de iconos;
+/// este componente declara QUÉ dibujar y [`fill_ui_icon_slots`] lo resuelve el
+/// frame siguiente, en el orden correcto: arte del pack (con su recorte de atlas o
+/// su pose representativa) y, si el pack no lo trae, el icono del ítem.
+#[derive(Component, Clone)]
+pub struct UiIconSlot {
+    /// Slots de arte a probar, en orden.
+    art: Vec<String>,
+    /// Id de ítem para el último recurso (`items/<id>` del pack o raster propio).
+    item: String,
+}
+
+impl UiIconSlot {
+    /// Icono de un ítem del inventario (madera, espada, mapa…).
+    pub fn item(item: &str) -> Self {
+        Self { art: Vec::new(), item: item.to_string() }
+    }
+
+    /// Arte de un slot del pack (una pieza de construir, una máquina, un bicho),
+    /// con un ítem de respaldo si ese slot todavía no tiene pixel asignado.
+    pub fn art(keys: &[&str], item: &str) -> Self {
+        Self {
+            art: keys.iter().map(|k| k.to_string()).collect(),
+            item: item.to_string(),
+        }
+    }
+}
+
+/// Resuelve cada [`UiIconSlot`] recién creado. Corre con `Added<>`: coste cero en
+/// reposo, y así una tarjeta nunca queda con un cuadrado vacío.
+fn fill_ui_icon_slots(
+    mut commands: Commands,
+    art: Res<crate::art2d::ArtLibrary>,
+    mut images: ResMut<Assets<Image>>,
+    mut icons: ResMut<ItemIconCache>,
+    pending: Query<(Entity, &UiIconSlot), Added<UiIconSlot>>,
+) {
+    for (entity, slot) in &pending {
+        let node = slot
+            .art
+            .iter()
+            .find_map(|key| art.ui_icon(key))
+            .unwrap_or_else(|| icons.icon(&slot.item, &mut images).node());
+        commands.entity(entity).insert(node);
+    }
+}
+
+/// Qué icono le toca a una pieza de construir: **su propio material**. El arte de
+/// tile ya existe (autotile del editor), así que la tarjeta del piso de madera
+/// muestra piso de madera y no la palabra "Piso madera".
+fn build_piece_icon(tile: ha_shared::topdown::Tile, cost_item: &str) -> UiIconSlot {
+    match crate::world2d::tile_art_key(tile) {
+        Some(key) => UiIconSlot::art(&[key], cost_item),
+        None => UiIconSlot::item(cost_item),
+    }
+}
+
+/// **La tarjeta: icono grande, nombre DEBAJO del icono, costo al pie.** Es el
+/// formato que se pidió para todas las secciones (inventario, craftear,
+/// construir): antes craftear y construir eran filas de texto con el costo a la
+/// derecha — se leían como un listado de configuración, no como objetos.
+#[allow(clippy::too_many_arguments)]
+fn spawn_icon_card(
+    parent: &mut ChildBuilder,
+    heart: f32,
+    card: f32,
+    label: &str,
+    cost: String,
+    icon: UiIconSlot,
+    tone: UiButtonTone,
+    marker: impl Bundle,
+    cost_marker: impl Bundle,
+) {
+    let _ = heart;
+    let disc = card * 0.66;
+    parent
+        .spawn((
+            Button,
             Node {
-                max_width: Val::Percent(48.0),
+                width: Val::Px(card),
+                // 1.38 daba justo para UN renglón de nombre. Con dos (la mitad
+                // del catálogo importado tiene nombre largo) el costo quedaba
+                // afuera aunque el nombre ya no empuje.
+                height: Val::Px(card * 1.52),
+                border: UiRect::all(Val::Px(2.0)),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::FlexStart,
+                padding: UiRect::axes(Val::Px(3.0), Val::Px(5.0)),
+                row_gap: Val::Px(3.0),
                 overflow: Overflow::clip(),
                 ..default()
             },
-            Name::new("RecipeTitleWrap"),
+            BorderRadius::all(Val::Px(card * 0.16)),
+            BorderColor(ui_theme::button_border(tone)),
+            BackgroundColor(ui_theme::button_bg(tone, UiButtonState::Normal)),
+            marker,
         ))
-        .with_children(|wrap| {
-            wrap.spawn((
-                Text::new(recipe.display_name),
-                TextFont {
-                    font_size: (heart * 0.54).clamp(10.0, 15.0),
+        .with_children(|btn| {
+            // El icono va en un DISCO: es lo que hace que la tarjeta se lea como
+            // objeto y no como celda, y casa con los botones circulares.
+            btn.spawn((
+                Node {
+                    width: Val::Px(disc),
+                    height: Val::Px(disc),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    overflow: Overflow::clip(),
                     ..default()
                 },
+                BorderRadius::MAX,
+                BackgroundColor(ui_theme::panel_bg(0.55)),
+            ))
+            .with_children(|holder| {
+                holder.spawn((
+                    Node {
+                        width: Val::Percent(84.0),
+                        height: Val::Percent(84.0),
+                        ..default()
+                    },
+                    icon,
+                ));
+            });
+            // **El nombre vive en una caja que se come lo que sobra y recorta lo
+            // que no entra.** Antes era un `Text` suelto: un nombre largo
+            // ("Muelle de tablones") se partía en tres renglones y EMPUJABA el
+            // costo fuera de la tarjeta, que tiene alto fijo y `clip()` — o sea
+            // que el costo desaparecía. Ahora el que se recorta es el nombre.
+            btn.spawn(Node {
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                overflow: Overflow::clip(),
+                ..default()
+            })
+            .with_children(|slot| {
+                slot.spawn((
+                    Text::new(label.to_string()),
+                    TextFont {
+                        font_size: (card * 0.155).clamp(8.0, 13.0),
+                        ..default()
+                    },
+                    TextColor(ui_theme::text_primary()),
+                    TextLayout::new_with_justify(JustifyText::Center),
+                ));
+            });
+            btn.spawn((
+                Text::new(cost),
+                TextFont {
+                    font_size: (card * 0.135).clamp(7.0, 11.0),
+                    ..default()
+                },
+                // `text_primary` y no `text_muted`: con el marco de madera de
+                // `ui/button` debajo, el gris apagado quedaba ilegible — y el
+                // costo es la mitad de la información de la tarjeta.
                 TextColor(ui_theme::text_primary()),
+                TextLayout::new_with_justify(JustifyText::Center),
+                // No se encoge nunca: el costo es la mitad de la información de
+                // la tarjeta ("¿me alcanza?").
+                Node { flex_shrink: 0.0, ..default() },
+                cost_marker,
             ));
         });
-        btn.spawn((
-            Node {
-                max_width: Val::Percent(48.0),
-                overflow: Overflow::clip(),
-                ..default()
-            },
-            Name::new("RecipeCostWrap"),
-        ))
-        .with_children(|wrap| {
-            wrap.spawn((
-                Text::new(format_ingredients(recipe.ingredients)),
-                TextFont {
-                    font_size: (heart * 0.48).clamp(9.0, 13.0),
-                    ..default()
-                },
-                TextColor(ui_theme::text_muted()),
-                CraftRecipeCostText {
-                    recipe_id: recipe.id,
-                    is_machine_select: false,
-                },
-            ));
-        });
-    });
+}
+
+/// Tarjeta de receta: el icono es **el resultado** (lo que vas a tener), no los
+/// ingredientes — esos son el costo al pie, y `bag_panel_system` los reescribe con
+/// el stock real ("2/3 madera").
+fn spawn_recipe_card(panel: &mut ChildBuilder, recipe: &CraftRecipe, heart: f32, card: f32) {
+    spawn_icon_card(
+        panel,
+        heart,
+        card,
+        recipe.display_name,
+        format_ingredients(recipe.ingredients),
+        UiIconSlot::item(recipe.output_id),
+        UiButtonTone::Craft,
+        CraftRecipeButton { recipe_id: recipe.id, is_machine_select: false },
+        CraftRecipeCostText { recipe_id: recipe.id, is_machine_select: false },
+    );
 }
 
 /// "W5 S2 T1 I4" - only nonzero costs, so lunar kit shows its iron.
@@ -1943,106 +2745,61 @@ fn machine_cost_label(def: &ha_shared::MachineDef) -> String {
     parts.join(" ")
 }
 
-fn spawn_machine_select_button(
+/// Tarjeta de máquina: al tocarla se cierra la mochila y quedás colocándola.
+#[allow(clippy::too_many_arguments)]
+fn spawn_machine_select_card(
     panel: &mut ChildBuilder,
     label: &str,
     recipe_id: u32,
+    machine_id: &str,
     cost_label: String,
     heart: f32,
+    card: f32,
 ) {
-    panel.spawn((
-        Button,
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Px((heart * 1.0).clamp(20.0, 34.0)),
-            border: UiRect::all(Val::Px(2.0)),
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            padding: UiRect::axes(Val::Px(8.0), Val::Px(0.0)),
-            ..default()
-        },
-        BorderColor(ui_theme::button_border(UiButtonTone::Craft)),
-        BackgroundColor(ui_theme::button_bg(UiButtonTone::Craft, UiButtonState::Normal)),
-        CraftRecipeButton {
-            recipe_id,
-            is_machine_select: true,
-        },
-    ))
-    .with_children(|btn| {
-        btn.spawn((
-            Text::new(label),
-            TextFont {
-                font_size: (heart * 0.58).clamp(11.0, 17.0),
-                ..default()
-            },
-            TextColor(ui_theme::text_primary()),
-        ));
-        btn.spawn((
-            Text::new(cost_label),
-            TextFont {
-                font_size: (heart * 0.52).clamp(10.0, 15.0),
-                ..default()
-            },
-            TextColor(ui_theme::text_muted()),
-            CraftRecipeCostText {
-                recipe_id,
-                is_machine_select: true,
-            },
-        ));
-    });
+    spawn_icon_card(
+        panel,
+        heart,
+        card,
+        label,
+        cost_label,
+        UiIconSlot::art(&[&format!("machines/{machine_id}")], machine_id),
+        UiButtonTone::Craft,
+        CraftRecipeButton { recipe_id, is_machine_select: true },
+        CraftRecipeCostText { recipe_id, is_machine_select: true },
+    );
 }
 
-/// One build-piece row in the CONSTRUIR tab (label + cost). Selecting it enters
-/// build mode (handled by `build::build_tab_select`).
-fn spawn_build_piece_button(
+/// Tarjeta de una pieza de construir / prefab / asset grande / spawn creativo.
+/// Elegirla entra en modo construir (lo atiende `build::build_tab_select`).
+#[allow(clippy::too_many_arguments)]
+fn spawn_build_piece_card(
     panel: &mut ChildBuilder,
     idx: usize,
     label: &str,
     cost_item: &str,
     cost_qty: u32,
+    icon: UiIconSlot,
     heart: f32,
+    card: f32,
 ) {
-    panel
-        .spawn((
-            Button,
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px((heart * 1.0).clamp(20.0, 34.0)),
-                border: UiRect::all(Val::Px(2.0)),
-                justify_content: JustifyContent::SpaceBetween,
-                align_items: AlignItems::Center,
-                padding: UiRect::axes(Val::Px(8.0), Val::Px(0.0)),
-                ..default()
-            },
-            BorderColor(ui_theme::button_border(UiButtonTone::Craft)),
-            BackgroundColor(ui_theme::button_bg(UiButtonTone::Craft, UiButtonState::Normal)),
-            BagBuildPieceButton(idx),
-        ))
-        .with_children(|btn| {
-            btn.spawn((
-                Text::new(label.to_string()),
-                TextFont {
-                    font_size: (heart * 0.58).clamp(11.0, 17.0),
-                    ..default()
-                },
-                TextColor(ui_theme::text_primary()),
-            ));
-            // cost_qty == 0 → entrada sin costo (ej. spawn creativo): mostrar solo
-            // la etiqueta (evita el feo "0 x ...").
-            let cost_text = if cost_qty == 0 {
-                cost_item.to_string()
-            } else {
-                format!("{cost_qty} x {cost_item}")
-            };
-            btn.spawn((
-                Text::new(cost_text),
-                TextFont {
-                    font_size: (heart * 0.52).clamp(10.0, 15.0),
-                    ..default()
-                },
-                TextColor(ui_theme::text_muted()),
-            ));
-        });
+    // cost_qty == 0 → entrada sin costo (ej. spawn creativo): mostrar solo
+    // la etiqueta (evita el feo "0 x ...").
+    let cost = if cost_qty == 0 {
+        cost_item.to_string()
+    } else {
+        format!("{cost_qty} x {cost_item}")
+    };
+    spawn_icon_card(
+        panel,
+        heart,
+        card,
+        label,
+        cost,
+        icon,
+        UiButtonTone::Craft,
+        BagBuildPieceButton(idx),
+        (),
+    );
 }
 
 /// F7 - reskin de UI data-driven: cuando un elemento del HUD spawnea, si su
@@ -2061,7 +2818,37 @@ fn skin_ui_from_art(
         Or<(Added<BagPanelCloseButton>, Added<MachinePanelCloseButton>)>,
     >,
     tabs: Query<(Entity, &BagTabButton), Added<BagTabButton>>,
+    // **Todo el resto de los botones** (tarjetas de craftear/construir, fichas de
+    // grupo, botones del menú, del cofre, del creador). El arte de `ui/button` ya
+    // estaba recortado en el manifest y NO lo consumía nadie: el HUD entero se
+    // seguía dibujando con los colores planos de `ui_theme`. Los `Without` dejan
+    // afuera a los que ya tienen su propio slot arriba — si no, el genérico les
+    // pisaría el arte específico.
+    #[allow(clippy::type_complexity)]
+    generic: Query<
+        Entity,
+        (
+            Added<Button>,
+            Without<HotbarSlot>,
+            Without<crate::input::ActionButton>,
+            Without<LanternToggleButton>,
+            Without<BagTabButton>,
+            Without<BagPanelCloseButton>,
+            Without<MachinePanelCloseButton>,
+        ),
+    >,
+    panels: Query<Entity, Or<(Added<BagPanelRoot>, Added<MachinePanelRoot>)>>,
 ) {
+    for e in &generic {
+        if let Some(img) = art.ui_frame_node("ui/button") {
+            commands.entity(e).insert(img);
+        }
+    }
+    for e in &panels {
+        if let Some(img) = art.ui_frame_node("ui/panel") {
+            commands.entity(e).insert(img);
+        }
+    }
     for e in &hotbar {
         if let Some(img) = art.ui_image_node("ui/hotbar_slot") {
             commands.entity(e).insert(img);
@@ -2076,8 +2863,15 @@ fn skin_ui_from_art(
             commands.entity(e).insert(img);
         }
     }
+    // Los slots específicos que el usuario todavía no recortó caen al marco
+    // genérico en vez de quedarse sin arte: es lo que hace que asignar UNA vez
+    // `ui/button` vista TODOS los botones del juego, y que recortar el slot
+    // propio después sea una mejora y no un requisito.
     for e in &lantern {
-        if let Some(img) = art.ui_image_node("ui/lantern_button") {
+        if let Some(img) = art
+            .ui_frame_node("ui/lantern_button")
+            .or_else(|| art.ui_frame_node("ui/button"))
+        {
             commands.entity(e).insert(img);
         }
     }
@@ -2092,7 +2886,7 @@ fn skin_ui_from_art(
             BagTab::Craft => "ui/tab_craft",
             BagTab::Build => "ui/tab_construir",
         };
-        if let Some(img) = art.ui_image_node(key) {
+        if let Some(img) = art.ui_frame_node(key).or_else(|| art.ui_frame_node("ui/button")) {
             commands.entity(e).insert(img);
         }
     }
@@ -2159,6 +2953,120 @@ fn bag_hotbar_system(
 
     if keys.just_pressed(KeyCode::Escape) && bag_state.open {
         bag_state.open = false;
+    }
+}
+
+/// Marca la pestaña activa con el borde de acento y el texto encendido, no sólo
+/// con el fondo. Con el fondo solo, en la pantalla del teléfono a plena luz las
+/// tres pestañas se ven casi iguales y no sabés en cuál estás.
+fn bag_tab_style_system(
+    bag: Res<BagPanelState>,
+    mut tabs: Query<(&BagTabButton, &mut BorderColor, &Children)>,
+    mut text: Query<&mut TextColor>,
+) {
+    if !bag.open {
+        return;
+    }
+    for (tab, mut border, children) in &mut tabs {
+        let active = tab.tab == bag.tab;
+        let want = if active {
+            ui_theme::accent_ink()
+        } else {
+            ui_theme::button_border(UiButtonTone::Inventory)
+        };
+        if border.0 != want {
+            *border = BorderColor(want);
+        }
+        let want_text = if active {
+            ui_theme::text_primary()
+        } else {
+            ui_theme::text_muted()
+        };
+        for child in children.iter() {
+            if let Ok(mut color) = text.get_mut(*child) {
+                if color.0 != want_text {
+                    *color = TextColor(want_text);
+                }
+            }
+        }
+    }
+}
+
+/// Las fichas de filtro de CONSTRUIR: cambia el grupo y **rehace la lista**.
+///
+/// Rehacerla en vez de esconder/mostrar no es capricho: con las ~350 tarjetas
+/// vivas a la vez, abrir la mochila spawnea 350 botones con su icono y su texto
+/// de una sentada — un tirón garantizado en el Redmi cada vez que tocás la
+/// bolsa. Así vive sólo el grupo que estás mirando (entre 6 y 60 tarjetas).
+#[allow(clippy::type_complexity)]
+fn build_filter_system(
+    mut commands: Commands,
+    layout: Res<TouchLayout>,
+    tune: Res<HudTune>,
+    mut bag: ResMut<BagPanelState>,
+    chips: Query<(&Interaction, &BuildFilterChip), Changed<Interaction>>,
+    mut chip_style: Query<
+        (&BuildFilterChip, &mut BorderColor, &mut BackgroundColor, &Children),
+        With<Button>,
+    >,
+    mut chip_text: Query<&mut TextColor>,
+    mut hint: Query<&mut Text, With<BuildGroupHint>>,
+    list: Query<Entity, With<BagBuildList>>,
+    mut scroll: Query<&mut ScrollPosition, With<BagScrollView>>,
+) {
+    if !bag.open {
+        return;
+    }
+    for (interaction, chip) in &chips {
+        if *interaction == Interaction::Pressed && bag.build_group != chip.0 {
+            bag.build_group = chip.0;
+            bag.build_dirty = true;
+        }
+    }
+    if !bag.build_dirty {
+        return;
+    }
+    let group = bag.build_group;
+    let heart = tune.heart_px;
+    let card = bag_metrics(&layout, heart).card;
+
+    // Sin lista todavía (el panel se está rearmando este frame) la marca se
+    // queda puesta: si se consumiera acá, el grupo elegido no se dibujaría nunca.
+    let Ok(list) = list.get_single() else { return };
+    bag.build_dirty = false;
+    commands.entity(list).despawn_descendants();
+    commands.entity(list).with_children(|list| {
+        fill_build_group(list, group, heart, card);
+    });
+
+    // La lista nueva empieza arriba: quedarse en el desplazamiento de la
+    // anterior deja la pantalla en blanco si el grupo nuevo es más corto.
+    for mut sp in &mut scroll {
+        sp.offset_y = 0.0;
+    }
+    for (chip, mut border, mut bg, children) in &mut chip_style {
+        let active = chip.0 == group;
+        *border = BorderColor(if active {
+            ui_theme::accent_ink()
+        } else {
+            ui_theme::button_border(UiButtonTone::Inventory)
+        });
+        *bg = BackgroundColor(ui_theme::button_bg(
+            UiButtonTone::Inventory,
+            if active { UiButtonState::Pressed } else { UiButtonState::Normal },
+        ));
+        for child in children.iter() {
+            if let Ok(mut color) = chip_text.get_mut(*child) {
+                *color = TextColor(if active {
+                    ui_theme::text_primary()
+                } else {
+                    ui_theme::text_muted()
+                });
+            }
+        }
+    }
+    if let Ok(mut text) = hint.get_single_mut() {
+        text.0 = build_group_hint(group).into();
     }
 }
 
@@ -2230,13 +3138,19 @@ fn bag_panel_system(
             (&Interaction, &mut BackgroundColor),
             (With<BagPanelCloseButton>, With<Button>, Changed<Interaction>),
         >,
-        Query<
-            (&Interaction, &BagTabButton, &mut BackgroundColor),
-            (With<Button>, Changed<Interaction>),
-        >,
+        // Sin `Changed<Interaction>`: la pestaña activa se puede cambiar sin
+        // tocarla (un driver, cerrar y reabrir la mochila), y con el filtro el
+        // resaltado se quedaba en la pestaña anterior.
+        Query<(&Interaction, &BagTabButton, &mut BackgroundColor), With<Button>>,
     )>,
 ) {
     let editor = &editor_res;
+    // Abrir el MENU (su botón vive arriba al centro del HUD) CIERRA la mochila:
+    // si no, el panel del menú quedaría flotando encima de una ventana que ocupa
+    // la pantalla entera.
+    if editor.menu_open && bag_state.open {
+        bag_state.open = false;
+    }
     if !bag_state.open {
         despawn_bag_panel(&mut commands, &mut bag_state);
         return;
@@ -2252,7 +3166,7 @@ fn bag_panel_system(
             &layout,
             &tune,
             bag_state.tab,
-            &inv,
+            bag_state.build_group,
         ));
     }
 
@@ -2381,12 +3295,15 @@ fn bag_panel_system(
         1.0
     };
     let e = elastic_out(progress);
-    let k = 1.0 + (1.0 - e) * 0.06;
     if let Ok((mut node, mut bg, base)) = ui_queries.p0().get_single_mut() {
-        node.width = Val::Px(base.width * k);
-        node.height = Val::Px(base.height * k);
+        // **El pulso ya no escala el panel.** Con la ventana a pantalla completa,
+        // ese 6% de rebote la empujaba fuera del borde (y del recorte del padre):
+        // el feedback de "crafteaste algo" queda en el destello del fondo, que se
+        // ve igual y no mueve el layout de nada.
+        node.width = Val::Px(base.width);
+        node.height = Val::Px(base.height);
         let glow = (1.0 - e) * 0.18;
-        *bg = BackgroundColor(ui_theme::panel_bg_lit(glow, 0.88));
+        *bg = BackgroundColor(ui_theme::panel_bg_lit(glow, 0.985));
     }
 }
 
@@ -2471,9 +3388,9 @@ pub(crate) fn update_interact_hud(
             } else {
                 hold.completed = false;
             }
-        } else if !hold.placing_block && !hold.placing_machine && !hold.placing_build {
+        } else if !hold.is_placement() {
             // Placement holds have no target kind - their consumers
-            // (world2d/machines/building) own hold.completed.
+            // (world2d/machines/build/chests/torches/map) own hold.completed.
             hold.completed = false;
         }
     }
@@ -2533,7 +3450,7 @@ fn lantern_toggle_system(
     editor: Res<crate::ui_editor::UiEditorState>,
     gameplay_block: Res<UiGameplayBlock>,
     mut ctrl: ResMut<PlayerLanternControl>,
-    mut buttons: Query<&Interaction, (With<LanternToggleButton>, Changed<Interaction>)>,
+    buttons: Query<&Interaction, (With<LanternToggleButton>, Changed<Interaction>)>,
 ) {
     // Cualquier ítem que ilumine en la mano (antorcha, linterna…) puede apagarse.
     if crate::held_item::item_light(&equipped.item_id).is_none() {
@@ -2632,7 +3549,7 @@ fn update_held_item_ghost(
     let bottom = layout.insets.bottom as f32 + (short * 0.14).clamp(56.0, 90.0);
 
     if ghost.is_empty() {
-        let icon = icons.get(&held.item_id, &mut images);
+        let icon = icons.icon(&held.item_id, &mut images);
         commands.entity(root_e).with_children(|p| {
             p.spawn((
                 Node {
@@ -2643,7 +3560,7 @@ fn update_held_item_ghost(
                     height: Val::Px(size),
                     ..default()
                 },
-                ImageNode::new(icon),
+                icon.node(),
                 Visibility::Visible,
                 HeldItemGhost,
                 Name::new("HeldItemGhost"),
@@ -2658,9 +3575,10 @@ fn update_held_item_ghost(
         node.bottom = Val::Px(bottom);
         node.width = Val::Px(size);
         node.height = Val::Px(size);
-        let icon = icons.get(&held.item_id, &mut images);
+        let icon = icons.icon(&held.item_id, &mut images);
         if let Ok(mut img) = image_nodes.get_mut(e) {
-            img.image = icon;
+            img.image = icon.image.clone();
+            img.rect = icon.rect;
         }
     }
 }
@@ -2670,6 +3588,8 @@ fn hold_target_handled_elsewhere(kind: InteractTargetKind) -> bool {
         kind,
         InteractTargetKind::Block
             | InteractTargetKind::Chest
+            // Objeto colocado: lo levanta `structures::pick_up_structure`.
+            | InteractTargetKind::Entity
             | InteractTargetKind::LaunchModule
             | InteractTargetKind::LaunchIgnition
             | InteractTargetKind::SpaceReentry
@@ -2683,11 +3603,17 @@ fn sync_ui_gameplay_block(
     bag: Res<BagPanelState>,
     chest: Res<crate::chests::ChestPanelState>,
     editor: Res<crate::ui_editor::UiEditorState>,
+    phase: Res<State<crate::game_phase::GamePhase>>,
     mut block: ResMut<UiGameplayBlock>,
 ) {
     // Only REAL UI blocks gameplay input. Flight must NOT block (B8): Ki thrust
     // (JUMP/USE) and steering run through the same action pipeline.
-    block.blocked = bag.open || chest.is_open() || editor.menu_open || editor.enabled;
+    //
+    // La PANTALLA DE CARGA también bloquea: el jugador ya existe detrás de la
+    // cortina, así que sin esto una tecla apoyada lo hacía caminar a ciegas
+    // mientras se armaba el mundo, y aparecías en otro lado del que te dejaron.
+    let loading = *phase.get() == crate::game_phase::GamePhase::Loading;
+    block.blocked = loading || bag.open || chest.is_open() || editor.menu_open || editor.enabled;
 }
 
 /// Public so the touch-stick systems can order themselves AFTER it - otherwise
@@ -2768,7 +3694,7 @@ fn update_inventory_slot_visuals(
     mut images: ResMut<Assets<Image>>,
     mut icons: ResMut<ItemIconCache>,
     ui: Res<InventoryUiState>,
-    mut span: ResMut<CpuSpanStats>,
+    span: Res<CpuSpanStats>,
     children_q: Query<&Children>,
     mut slots: Query<
         (&InventoryGridSlot, &mut BorderColor, &Children),
@@ -2787,7 +3713,7 @@ fn update_inventory_slot_visuals(
     if !bag.open {
         return;
     }
-    let _guard = span_guard(&mut span, CpuSpanSlot::Hud);
+    let _guard = span_guard(&span, CpuSpanSlot::Hud);
     for (slot, mut border, children) in &mut slots {
         let stack = &ui.grid[slot.index];
         let selected = ui.selected == Some(SlotId::Grid(slot.index));
@@ -2801,16 +3727,19 @@ fn update_inventory_slot_visuals(
 
         visit_slot_entities(children, &children_q, &mut |entity| {
             if let Ok((icon_e, mut vis)) = icon_markers.get_mut(entity) {
-                let handle = if stack.is_empty() {
+                let icon = if stack.is_empty() {
                     icons.empty_slot(&mut images)
                 } else {
-                    icons.get(stack.item_id.as_deref().unwrap_or("wood"), &mut images)
+                    icons.icon(stack.item_id.as_deref().unwrap_or("wood"), &mut images)
                 };
                 *vis = Visibility::Visible;
                 if let Ok(mut node) = image_nodes.get_mut(entity) {
-                    node.image = handle;
+                    // Imagen Y recorte: cambiar sólo el handle deja el slot con el
+                    // rect del ítem anterior (media hoja de atlas por icono).
+                    node.image = icon.image.clone();
+                    node.rect = icon.rect;
                 } else {
-                    commands.entity(icon_e).insert(ImageNode::new(handle));
+                    commands.entity(icon_e).insert(icon.node());
                 }
             }
         });
@@ -2873,9 +3802,9 @@ fn update_hotbar_item_visuals(
         Query<&mut Text, (With<HotbarSlotQty>, Without<InventorySlotQty>)>,
         Query<&mut Text, (With<HotbarSlotName>, Without<InventorySlotName>)>,
     )>,
-    mut span: ResMut<CpuSpanStats>,
+    span: Res<CpuSpanStats>,
 ) {
-    let _guard = span_guard(&mut span, CpuSpanSlot::Hud);
+    let _guard = span_guard(&span, CpuSpanSlot::Hud);
     for (slot, mut border, mut bg, children) in &mut slots {
         let stack = &ui.hotbar[slot.index];
         let selected = ui.selected == Some(SlotId::Hotbar(slot.index));
@@ -2898,16 +3827,19 @@ fn update_hotbar_item_visuals(
         ));
         visit_slot_entities(children, &children_q, &mut |entity| {
             if let Ok((icon_e, mut vis)) = icon_markers.get_mut(entity) {
-                let handle = if stack.is_empty() {
+                let icon = if stack.is_empty() {
                     icons.empty_slot(&mut images)
                 } else {
-                    icons.get(stack.item_id.as_deref().unwrap_or("wood"), &mut images)
+                    icons.icon(stack.item_id.as_deref().unwrap_or("wood"), &mut images)
                 };
                 *vis = Visibility::Visible;
                 if let Ok(mut node) = image_nodes.get_mut(entity) {
-                    node.image = handle;
+                    // Imagen Y recorte: cambiar sólo el handle deja el slot con el
+                    // rect del ítem anterior (media hoja de atlas por icono).
+                    node.image = icon.image.clone();
+                    node.rect = icon.rect;
                 } else {
-                    commands.entity(icon_e).insert(ImageNode::new(handle));
+                    commands.entity(icon_e).insert(icon.node());
                 }
             }
         });
@@ -2973,20 +3905,22 @@ fn sync_hotbar_chrome_icons(
         ),
     >,
 ) {
-    let hammer_icon = icons.get("hammer", &mut images);
+    let hammer_icon = icons.icon("hammer", &mut images);
     for e in &hammer_missing {
-        commands.entity(e).insert(ImageNode::new(hammer_icon.clone()));
+        commands.entity(e).insert(hammer_icon.node());
     }
     for (_, mut node) in &mut hammer {
-        node.image = hammer_icon.clone();
+        node.image = hammer_icon.image.clone();
+        node.rect = hammer_icon.rect;
     }
 
     let bag_icon = icons.bag_slot(&mut images);
     for e in &bag_missing {
-        commands.entity(e).insert(ImageNode::new(bag_icon.clone()));
+        commands.entity(e).insert(bag_icon.node());
     }
     for (_, mut node) in &mut bag {
-        node.image = bag_icon.clone();
+        node.image = bag_icon.image.clone();
+        node.rect = bag_icon.rect;
     }
 }
 
@@ -3112,4 +4046,109 @@ fn spawn_equip_toast(parent: &mut ChildBuilder, layout: &TouchLayout, heart: f32
                 EquipToast { life: 0.0 },
             ));
         });
+}
+
+#[cfg(test)]
+mod bag_tests {
+    use super::*;
+
+    /// El tope del scroll sale de MEDIR, no de un número. Antes era
+    /// `clamp(0.0, 900.0)`: con la paleta de CONSTRUIR en ~350 tarjetas (más de
+    /// 3000 px de alto), dos tercios de los objetos del juego estaban declarados
+    /// y eran inalcanzables con el dedo.
+    #[test]
+    fn el_scroll_llega_hasta_el_final_de_la_lista() {
+        // Lista larga: se puede bajar exactamente lo que sobresale.
+        assert_eq!(max_scroll(350.0, 3510.0), 3160.0);
+        // Lista que entra entera: no se mueve.
+        assert_eq!(max_scroll(350.0, 120.0), 0.0);
+        assert_eq!(max_scroll(350.0, 350.0), 0.0);
+    }
+
+    /// Cada ficha de la paleta abre algo. Una ficha que abre una lista vacía se
+    /// lee como que el juego se rompió.
+    #[test]
+    fn ningun_grupo_de_construir_esta_vacio() {
+        for (i, (group, label)) in build_groups().iter().enumerate() {
+            let n = match group {
+                BuildGroup::Pieces => ha_shared::topdown::build_piece_count(),
+                BuildGroup::Prefabs => ha_shared::topdown::prefab_count(),
+                BuildGroup::Edges => ha_shared::build_grid::EDGE_PIECES.len(),
+                BuildGroup::Ceilings => ha_shared::build_grid::CEILING_PIECES.len(),
+                BuildGroup::Place(cat) => ha_shared::placeables::placeables_in(*cat).count(),
+                BuildGroup::Fauna => crate::fauna::spawn_species_count() + 4,
+            };
+            assert!(n > 0, "el grupo {label} (#{i}) de CONSTRUIR no tiene ni una pieza");
+            assert!(label.is_ascii(), "ficha con caracteres que la fuente no dibuja: {label}");
+        }
+    }
+
+    /// Todos los colocables del pack entran en alguna ficha: la suma de los
+    /// grupos de categoría tiene que dar la tabla entera. Si mañana se importa
+    /// una tanda nueva con una categoría sin ficha, esto lo caza acá y no en el
+    /// teléfono buscando una heladera que no está.
+    #[test]
+    fn todos_los_colocables_tienen_ficha() {
+        let en_fichas: usize = build_groups()
+            .iter()
+            .filter_map(|(g, _)| match g {
+                BuildGroup::Place(cat) => Some(ha_shared::placeables::placeables_in(*cat).count()),
+                _ => None,
+            })
+            .sum();
+        assert_eq!(
+            en_fichas,
+            ha_shared::placeables::PLACEABLES.len(),
+            "hay colocables que no aparecen en ninguna ficha de CONSTRUIR"
+        );
+    }
+}
+
+/// **Regla 6 con dientes.** La fuente del juego no dibuja acentos, `·`, flechas
+/// ni emoji: donde haya uno, el jugador ve una caja. Ya pasó tres veces (el
+/// renglón de ayuda del inventario, el del cofre y una burbuja de diálogo
+/// mostraban `·` y `á` en pantalla), así que en vez de confiar en la memoria se
+/// revisa el código fuente: cualquier `Text::new("...")` literal del cliente
+/// tiene que ser ASCII puro.
+///
+/// No cubre el texto armado con `format!` — eso sale de datos, y esos catálogos
+/// tienen sus propios tests (`todo_colocable_tiene_nombre_humano`,
+/// `los_consejos_son_ascii`, `el_nombre_corto_entra_en_una_ficha`).
+#[cfg(test)]
+mod regla_6 {
+    use std::path::Path;
+
+    fn scan(dir: &Path, bad: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).expect("src legible").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                scan(&path, bad);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap_or_default();
+            for (n, line) in src.lines().enumerate() {
+                let Some(start) = line.find("Text::new(\"") else { continue };
+                let rest = &line[start + "Text::new(\"".len()..];
+                let Some(end) = rest.find('"') else { continue };
+                let literal = &rest[..end];
+                if !literal.is_ascii() {
+                    bad.push(format!("{}:{}: {literal}", path.display(), n + 1));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn la_ui_del_juego_es_ascii() {
+        let mut bad = Vec::new();
+        scan(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path(), &mut bad);
+        assert!(
+            bad.is_empty(),
+            "texto de UI con caracteres que la fuente no dibuja (salen cajas):\n{}",
+            bad.join("\n")
+        );
+    }
 }

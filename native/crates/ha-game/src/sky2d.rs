@@ -1,7 +1,7 @@
 //! 2D sky — day/night clear color, night overlay, starfield in vacuum.
 //!
 //! Replaces the Ghibli dome + fog + starfield shells: on Earth the clear
-//! color runs a 720 s day cycle; airless bodies and space render near-black
+//! color runs a one-hour day cycle; airless bodies and space render near-black
 //! with camera-following star sprites (never a crossable shell — biblia §1).
 
 use bevy::prelude::*;
@@ -11,25 +11,112 @@ use crate::scene::{RegionId, RegionRuntime};
 use crate::sim::{Player, SimState};
 use crate::transition::FlightTransition;
 
-/// Full day length in seconds (matches the old sky_clock cycle).
-pub const DAY_SECS: f32 = 720.0;
+/// Cuánto dura un día entero, en segundos reales.
+///
+/// 30 jul 2026: 720 → 1200 → **3600 (1 hora)**. El ciclo viejo daba 8 min de luz
+/// y 4 de noche: alcanzaba para ver el efecto, no para VIVIR una jornada — te
+/// encontrabas la noche antes de terminar de cortar un árbol. Estirarlo no cambia
+/// ninguna curva (todo lo demás trabaja en FASE 0..1): sólo reparte la hora en
+/// **25 min de día, 25 de noche, 5 de amanecer y 5 de atardecer** (ver
+/// [`DAWN_START`] y compañía), que es donde una salida a explorar —ir, hacer algo
+/// y volver— entra entera en una parte del día.
+pub const DAY_SECS: f32 = 3600.0;
+
+/// **Los cuatro tramos del día, en FASE** (0 = medianoche, 0.5 = mediodía). Están
+/// acá y no repartidos por el archivo porque son UN reparto: el sol sale en
+/// [`DAWN_START`], se pone en [`NIGHT_START`], y entre medio la curva de
+/// [`DayClock::daylight`] sube y baja justo en los tramos de crepúsculo. Tocar uno
+/// solo desincroniza el arco de la luz, las sombras y el velo.
+///
+/// Con [`DAY_SECS`] = 3600 s los minutos reales caen así:
+/// noche 47:30→12:30 · amanecer 12:30→17:30 · día 17:30→42:30 · atardecer 42:30→47:30.
+pub const DAWN_START: f32 = 12.5 / 60.0;
+/// Fin del amanecer: de acá a [`DUSK_START`] es día pleno (25 min).
+pub const DAY_START: f32 = 17.5 / 60.0;
+/// Empieza el atardecer (5 min).
+pub const DUSK_START: f32 = 42.5 / 60.0;
+/// Cae la noche (25 min, cruzando la medianoche).
+pub const NIGHT_START: f32 = 47.5 / 60.0;
+
+/// Días de juego que tarda la luna en completar su ciclo (nueva → llena →
+/// nueva). Ocho es corto de verdad, y ese es el punto: en una sesión larga se
+/// nota que hay **noches con luna y noches sin ella**, que es lo que le da valor
+/// a llevar una antorcha.
+const LUNAR_DAYS: f32 = 8.0;
 
 /// Opacidad máxima del velo nocturno. Alta a propósito: de noche apenas se ve
 /// por dónde vas, y por eso una farola o una fogata (ver `light2d`) valen algo.
 ///
 /// La "niebla negra densa" NO se arregla bajando esto —bajarlo da atardecer
 /// permanente, no noche—. Se arregla con el COLOR del velo: ver `sync_sky`.
-const NIGHT_VEIL: f32 = 0.965;
+///
+/// 29 jul 2026: 0.965 → 0.985 → 0.992 → **0.978**. El CONTRASTE de una luz es
+/// `pozo / velo`, así que este número manda más que cualquier ajuste de las
+/// luces. Bajó de 0.992 al pasar la sombra ambiental de negro puro al **verde
+/// azulado de la referencia**: con un color de verdad en el velo hace falta
+/// dejar pasar algo más de albedo, o el término constante aplasta la variación
+/// del mundo y vuelve la "niebla plana" (ver `sync_sky`).
+///
+/// **Este número no servía de nada hasta hoy**: la linterna multiplicaba
+/// `night_alpha` por 0.45 y el flag `lit` nunca se apagaba, así que la noche real
+/// corría a α≈0.44 pasara lo que pasara acá. Ver el bloque de la linterna abajo.
+const NIGHT_VEIL: f32 = 0.978;
 
-/// Cuánto crepúsculo hay (0..1): pico en el amanecer (~0.20) y en el atardecer
-/// (~0.80) de la fase del día. Es la curva que tiñe cielo y velo de naranja/violeta
-/// — la "vibra lofi" del atardecer sale de acá.
+/// **La sombra de cada mundo tiene su color.** Es el término SÓLIDO del velo, en
+/// lineal (el espacio en el que mezcla el shader), y es lo que decide de qué
+/// color es "no estar iluminado" en ese cuerpo. Vale más que cualquier tinte de
+/// lámpara: la mitad de que una antorcha se sienta acogedora es el contraste
+/// contra el color de su sombra, así que cambiar esta línea cambia el ánimo del
+/// planeta entero.
+///
+/// Los valores son bajísimos porque se pintan a α ≈ 0.98: 0.03 lineal ya es un
+/// 19% en pantalla. Subirlos lava el mundo y vuelve la "niebla plana".
+fn body_night_veil(body: ha_shared::CelestialBody) -> Vec3 {
+    use ha_shared::CelestialBody as B;
+    match body {
+        // Navy oscuro: noche azul de planeta con aire y agua. Es el único cuerpo
+        // donde el cielo mismo aporta color a la sombra.
+        B::Earth => Vec3::new(0.0035, 0.0062, 0.0310),
+        // Gris azulado frío y un punto más claro que la Tierra: sin atmósfera no
+        // hay cielo que tiña nada, pero la Tierra llena de luz cenicienta el
+        // regolito (el "earthshine" que hace que las fotos Apolo no sean negras).
+        B::Moon => Vec3::new(0.0080, 0.0103, 0.0194),
+        // Óxido. La sombra marciana no es negra: el polvo suspendido devuelve rojo.
+        B::Mars => Vec3::new(0.0273, 0.0080, 0.0061),
+        // Ocre de azufre, y CLARA: bajo esa atmósfera nunca hay noche cerrada,
+        // hay una penumbra amarillenta permanente.
+        B::Venus => Vec3::new(0.0344, 0.0194, 0.0044),
+        // Roca pelada al sol desnudo: sombra dura, casi sin color.
+        B::Mercury => Vec3::new(0.0050, 0.0048, 0.0052),
+        // Azufre volcánico — verde amarillento enfermizo.
+        B::Io => Vec3::new(0.0230, 0.0210, 0.0048),
+        // Hielo: cian pálido, la sombra más fría del sistema.
+        B::Europa => Vec3::new(0.0062, 0.0170, 0.0230),
+        // Neblina de metano: naranja apagado y difuso.
+        B::Titan => Vec3::new(0.0250, 0.0140, 0.0060),
+        // Gigantes de hielo: azul verdoso profundo.
+        B::Uranus | B::Neptune => Vec3::new(0.0040, 0.0150, 0.0230),
+        // Lunas de Marte y el Sol: rocas sin nada que las tiña.
+        B::Phobos | B::Deimos | B::Sun => Vec3::new(0.0060, 0.0055, 0.0050),
+    }
+}
+
+/// Cuánto crepúsculo hay (0..1): pico en el MEDIO del amanecer y del atardecer.
+/// Es la curva que tiñe cielo y velo de naranja/violeta — la "vibra lofi" del
+/// atardecer sale de acá.
+///
+/// Los centros salen de los tramos ([`DAWN_START`]…): así el tinte cálido pega
+/// exactamente cuando el sol está rasante, y no a destiempo. El ancho es un pelo
+/// mayor que el tramo (5 min = 0.083 de fase) a propósito: el color del cielo
+/// empieza a virar un poco ANTES de que baje la luz y termina de irse un poco
+/// después, que es como se lee un atardecer de verdad.
 pub fn dusk_amount(phase: f32) -> f32 {
     let bump = |c: f32, w: f32| {
         let t = ((phase - c).abs() / w).min(1.0);
         1.0 - t * t * (3.0 - 2.0 * t) // smoothstep invertido: 1 en el centro
     };
-    bump(0.21, 0.09).max(bump(0.80, 0.10))
+    let w = (DAY_START - DAWN_START) * 1.05;
+    bump((DAWN_START + DAY_START) * 0.5, w).max(bump((DUSK_START + NIGHT_START) * 0.5, w))
 }
 
 /// Creative ascent fade band (biblia §11): sky darkens into space.
@@ -45,11 +132,14 @@ impl Default for DayClock {
     fn default() -> Self {
         // Start mid-morning. `HA_DAYPHASE=<0..1>` arranca en otra hora (0 =
         // medianoche, 0.5 = mediodía) — así se pueden probar/capturar la noche y
-        // el sistema de luces (`light2d`) sin esperar 12 minutos de ciclo.
+        // el sistema de luces (`light2d`) sin esperar la hora entera del ciclo.
+        // La PARTE ENTERA es el día: `HA_DAYPHASE=2.9` arranca la noche del tercer
+        // día, que es la única forma de ver una luna que no sea la nueva del día 0
+        // (ver `moon_illum`) sin jugar media hora.
         let phase = std::env::var("HA_DAYPHASE")
             .ok()
             .and_then(|v| v.parse::<f32>().ok())
-            .map(|p| p.rem_euclid(1.0))
+            .map(|p| p.max(0.0))
             .unwrap_or(0.28);
         Self { t: DAY_SECS * phase }
     }
@@ -73,22 +163,80 @@ impl DayClock {
     pub fn phase_name(&self) -> &'static str {
         let p = self.phase();
         match p {
-            _ if p < 0.17 => "NOCHE",
-            _ if p < 0.27 => "AMANECER",
-            _ if p < 0.73 => "DIA",
-            _ if p < 0.86 => "ATARDECER",
+            _ if p < DAWN_START => "NOCHE",
+            _ if p < DAY_START => "AMANECER",
+            _ if p < DUSK_START => "DIA",
+            _ if p < NIGHT_START => "ATARDECER",
             _ => "NOCHE",
         }
     }
 
-    /// 0 = full night, 1 = full day.
+    /// 0 = noche cerrada, 1 = día pleno. Las rampas son EXACTAMENTE los tramos de
+    /// crepúsculo (5 min cada uno): a las 12:30 arranca a subir, a las 17:30 está
+    /// a pleno, y baja igual del otro lado. Todo lo que reacciona al día
+    /// (luciérnagas, velo, luces, fauna) cuelga de este número.
     pub fn daylight(&self) -> f32 {
-        // Day between 0.2 and 0.8 phase with smooth dawn/dusk ramps.
         let p = self.phase();
-        let up = ((p - 0.17) / 0.1).clamp(0.0, 1.0);
-        let down = ((0.83 - p) / 0.1).clamp(0.0, 1.0);
+        let up = ((p - DAWN_START) / (DAY_START - DAWN_START)).clamp(0.0, 1.0);
+        let down = ((NIGHT_START - p) / (NIGHT_START - DUSK_START)).clamp(0.0, 1.0);
         up.min(down)
     }
+
+    /// Qué día de juego va corriendo (0, 1, 2…). Lo usa la fase lunar.
+    pub fn day_index(&self) -> f32 {
+        (self.t / DAY_SECS).floor()
+    }
+
+    /// Fracción iluminada de la luna esta noche (0 = luna nueva → noche cerrada,
+    /// 1 = llena). Cambia de una noche a la otra, nunca dentro de la misma.
+    pub fn moon_illum(&self) -> f32 {
+        // El +3 corre el ciclo para que la PRIMERA noche de una partida tenga
+        // luna casi llena. Con el ciclo a pelo, el día 0 caía en luna nueva: la
+        // primera noche del juego era la única sin luna, y eso se lee como que la
+        // luna no existe, no como una noche especial. La luna nueva llega al
+        // quinto día, cuando ya se entendió que hay ciclo.
+        let k = (self.day_index() + 3.0) / LUNAR_DAYS;
+        0.5 - 0.5 * (k * std::f32::consts::TAU).cos()
+    }
+}
+
+/// **La luz que viene del cielo**: el sol de día, la luna de noche (si hay). Es
+/// la fuente que decide HACIA DÓNDE caen las sombras del mundo — por eso vive en
+/// un recurso y no dentro del dibujo del disco.
+///
+/// `dir` está en coordenadas de PANTALLA y apunta HACIA la fuente: el sol sale
+/// por la derecha (este), cruza por arriba al mediodía y se pone por la
+/// izquierda. La sombra de cualquier objeto es exactamente `-dir`, y su largo
+/// sale de `elevation` (rasante al amanecer, cortita al mediodía).
+#[derive(Resource, Clone, Copy)]
+pub struct SkyLight {
+    pub dir: Vec2,
+    /// 0 = en el horizonte, 1 = en el cenit.
+    pub elevation: f32,
+    /// Cuánta luz DIRECCIONAL tira (0..1). La tapan las nubes: un día nublado no
+    /// proyecta sombras, y esa es justo la diferencia que se ve.
+    pub strength: f32,
+    /// Color de esa luz (cálido al ras, blanco al mediodía, azul de luna). Lo lee
+    /// `light2d::cast_shadows` para teñir la sombra con el complementario.
+    pub color: Vec3,
+}
+
+impl Default for SkyLight {
+    fn default() -> Self {
+        Self {
+            dir: Vec2::new(0.0, 1.0),
+            elevation: 1.0,
+            strength: 1.0,
+            color: Vec3::new(1.0, 0.97, 0.9),
+        }
+    }
+}
+
+/// Arco de un astro: `t` 0 = sale (por el este/derecha), 0.5 = cenit, 1 = se pone.
+/// Devuelve `(dirección en pantalla, elevación 0..1)`.
+fn arc(t: f32) -> (Vec2, f32) {
+    let th = std::f32::consts::PI * t.clamp(0.0, 1.0);
+    (Vec2::new(th.cos(), th.sin().max(0.0)), th.sin().max(0.0))
 }
 
 /// Kept for HUD compat: lantern state (crafted light) — dims the night overlay.
@@ -111,6 +259,14 @@ struct StarSprite;
 struct StarField {
     unit: Vec2,
     size: f32,
+    /// Brillo propio de la estrella; `sync_sky` lo multiplica por el fundido del
+    /// campo (así el cielo entra y sale sin que todas queden del mismo brillo).
+    alpha: f32,
+    /// PARALAJE: cuánto arrastra la cámara a esta estrella. Las brillantes ("cerca")
+    /// se mueven más que las tenues ("lejos"), así el cielo tiene profundidad cuando
+    /// caminás en vez de ser una calcomanía pegada al visor. El campo se envuelve
+    /// (`rem_euclid`), así que nunca se agota por mucho que andes.
+    plx: f32,
 }
 
 /// Camera-following cover layer for every ascent/descent (rocket AND creative)
@@ -119,7 +275,24 @@ struct StarField {
 /// an atmosphere, a brief dark fade on airless ones). Drop a `decor/clouds`
 /// texture later for real clouds.
 #[derive(Component)]
-struct CloudOverlay;
+pub struct CloudOverlay;
+
+// **NO se dibuja ningún astro, y es a propósito.** Hubo un disco de sol y otro de
+// luna (halo + cuerpo, colgados de la cámara como las estrellas) y los dos se
+// sacaron: esto es una vista CENITAL, así que un disco en pantalla no queda "allá
+// arriba en el cielo" — queda como un manchón blanco flotando sobre los techos,
+// justo delante de donde estás mirando. Fue el reporte, textual: "no se tiene que
+// ver ese sol, sólo se tienen que ver las sombras".
+//
+// El astro se lee por lo que HACE, que es más información y no menos: el color del
+// cielo (`sync_sky`), el brillo del mundo, el tinte de la luz y sobre todo la
+// SOMBRA — hacia dónde cae, cuánto mide, de qué color es (`SkyLight` →
+// `light2d::cast_shadows`). La fase de la luna sigue existiendo y sigue decidiendo
+// cuánta luz tenés esta noche; lo único que no hay es su calcomanía.
+//
+// Si algún día hace falta volver a ponerlos: el patrón está en el historial de
+// esta rama (componente `SkyDisc` + sistema `sync_sky_discs`), pero lo correcto en
+// cenital es un icono de HUD, no un quad en el mundo.
 
 pub struct Sky2dPlugin;
 
@@ -127,11 +300,25 @@ impl Plugin for Sky2dPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DayClock>()
             .init_resource::<PlayerLanternControl>()
+            .init_resource::<SkyLight>()
             .init_resource::<SkyAttached>()
             .add_systems(Startup, spawn_cloud_overlay)
+            // Sólo en partida: en splash/menú el cielo no tiene a quién pintarle
+            // el día (y `sync_sky` es quien escribe `ClearColor`, que en el
+            // arranque tiene que quedarse en el void del menú — ver `boot_ui`).
             .add_systems(
                 Update,
-                (spawn_sky_attachments, advance_day_clock, sync_sky, sync_cloud_overlay),
+                (
+                    spawn_sky_attachments,
+                    advance_day_clock,
+                    // El astro se calcula ANTES de pintar el cielo (que lo usa
+                    // para el color del sol bajo) y antes de las sombras.
+                    sync_sky_light,
+                    sync_sky,
+                    sync_cloud_overlay,
+                )
+                    .chain()
+                    .run_if(crate::game_phase::world_active),
             );
     }
 }
@@ -155,6 +342,7 @@ fn spawn_sky_attachments(
     camera: Query<Entity, With<GameCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<crate::light2d::NightVeilMaterial>>,
+    mut add_materials: ResMut<Assets<crate::light2d::LightAddMaterial>>,
 ) {
     if done.0 {
         return;
@@ -167,20 +355,39 @@ fn spawn_sky_attachments(
         uniform: crate::light2d::NightVeilUniform::default(),
     });
     commands.insert_resource(crate::light2d::NightVeilMat(veil.clone()));
+    let light_add = add_materials.add(crate::light2d::LightAddMaterial {
+        uniform: crate::light2d::NightVeilUniform::default(),
+    });
+    commands.insert_resource(crate::light2d::LightAddMat(light_add.clone()));
     commands.entity(cam).with_children(|p| {
-        // Night dimmer in front of the world, behind UI. Material agujerea α
-        // cerca de cada Light2d (ver light2d::tick_lights + night_veil.wgsl).
+        // Las DOS pasadas de iluminación, delante del mundo y detrás de la UI
+        // (ver `light2d` + `night_veil.wgsl`). El ORDEN importa y sale del z:
+        //
+        //   z 40 → SOMBRA, blend multiplicativo: `mundo × sombra`.
+        //   z 41 → LUZ, blend aditivo: `+ fotones`.
+        //
+        // Primero oscurecer y después sumar, que es como funciona la realidad. Al
+        // revés (sumar y luego multiplicar) la luz de las lámparas se oscurecería
+        // con la noche y no se vería nada.
         p.spawn((
             NightOverlay,
+            crate::light2d::LightPass::Shade,
             Mesh2d(meshes.add(Rectangle::new(4.0, 2.4))),
             MeshMaterial2d(veil),
             Transform::from_xyz(0.0, 0.0, 40.0),
+        ));
+        p.spawn((
+            NightOverlay,
+            crate::light2d::LightPass::Add,
+            Mesh2d(meshes.add(Rectangle::new(4.0, 2.4))),
+            MeshMaterial2d(light_add),
+            Transform::from_xyz(0.0, 0.0, 41.0),
         ));
         // Static star pattern that follows the camera (skybox, never crossed).
         // Denser field with varied size/brightness/tint for parallax-less depth;
         // all flat quads → cost is trivial even at a few hundred.
         let mut seed = 0x1357_9bdfu32;
-        for i in 0..320 {
+        for i in 0..900 {
             seed ^= seed << 13;
             seed ^= seed >> 17;
             seed ^= seed << 5;
@@ -188,7 +395,11 @@ fn spawn_sky_attachments(
             let y = (((seed >> 16) & 0xffff) as f32 / 65535.0 - 0.5) * 1.5;
             // A few bright "near" stars, most faint "far" ones.
             let bright = i % 11 == 0;
-            let s = if bright { 0.007 + (seed % 4) as f32 * 0.002 } else { 0.003 + (seed % 5) as f32 * 0.0011 };
+            // Tamaño en FRACCIÓN de la altura del viewport → píxeles constantes a
+            // cualquier zoom. Medido en el teléfono (1080 de alto): con 0.007-0.013 la
+            // estrella salía de 8 a 14 px, o sea CONFETI, no cielo. Una estrella tiene
+            // que ser un punto: 1-3 px la tenue, 3-5 px la brillante.
+            let s = if bright { 0.0028 + (seed % 4) as f32 * 0.0006 } else { 0.0012 + (seed % 5) as f32 * 0.0004 };
             let a = if bright { 0.95 } else { 0.45 + (seed % 6) as f32 * 0.07 };
             // Subtle warm/cool tint variation.
             let (r, g, b) = match seed % 5 {
@@ -198,14 +409,23 @@ fn spawn_sky_attachments(
             };
             // Posición y tamaño se guardan NORMALIZADOS (fracción de la altura
             // del viewport) y `sync_sky` los multiplica por el encuadre vivo.
-            // Antes sólo se escalaba el TAMAÑO: las 320 estrellas se quedaban
+            // Antes sólo se escalaba el TAMAÑO: las estrellas se quedaban
             // dentro de ±1.2 m de la cámara, así que en el espacio (encuadre de
             // decenas de km) el cielo entero era UN PUNTO de 2 px en el centro
             // de la pantalla. De ahí el "no se ve nada" ahí arriba.
+            // Paralaje por "distancia": la estrella brillante está más cerca y se
+            // desplaza más. Son valores chicos a propósito — el cielo tiene que
+            // acompañar el paseo, no salir corriendo.
+            let plx = if bright { 0.0035 + (seed % 7) as f32 * 0.0004 } else { 0.0008 + (seed % 5) as f32 * 0.0002 };
             p.spawn((
                 StarSprite,
-                StarField { unit: Vec2::new(x, y), size: s },
-                Sprite::from_color(Color::srgba(r, g, b, a), Vec2::ONE),
+                // Una estrella ES luz: `UnlitSprite` la saca de `light2d::light_sprites`,
+                // que si no le multiplica el color por la luz del sitio y de noche —justo
+                // cuando tiene que verse— la deja negra. Ése era el motivo real de "no
+                // tenía las estrellas": se dibujaban, pero apagadas.
+                crate::sim::UnlitSprite,
+                StarField { unit: Vec2::new(x, y), size: s, alpha: a, plx },
+                Sprite::from_color(Color::srgba(r, g, b, 0.0), Vec2::ONE),
                 // DETRÁS de todo el mundo (los discos planetarios están en
                 // z ≈ −20). Antes iban en +30, o sea delante del suelo: pisando
                 // la Luna (cielo siempre "vacío") las estrellas se dibujaban
@@ -217,16 +437,75 @@ fn spawn_sky_attachments(
     });
 }
 
+/// Dónde está el astro AHORA y cuánta luz tira. Es la única fuente de verdad de
+/// la dirección de las sombras (`light2d::cast_shadows`).
+fn sync_sky_light(
+    clock: Res<DayClock>,
+    weather: Res<crate::weather::Weather>,
+    region: Res<RegionRuntime>,
+    tiles: Res<crate::world2d::TileWorld>,
+    world_ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
+    mut sky: ResMut<SkyLight>,
+) {
+    let p = clock.phase();
+    let body = crate::world2d::active_surface_body(&world_ctx, &planet);
+    let airless = ha_shared::transition_profile(body).sky_fade_end <= 0.0;
+    let underground = tiles.z < 0 || crate::world2d::surface_region_active(&region).is_none();
+    // Bajo tierra no entra ni el sol ni la luna: ahí la única luz es la que
+    // llevás puesta, y sin fuente direccional las sombras se quedan bajo los pies.
+    if underground {
+        *sky = SkyLight { strength: 0.0, ..default() };
+        return;
+    }
+    // Sin aire no hay nubes que tapen nada: el sol pega desnudo (sombras duras),
+    // que es exactamente el aspecto de las fotos de la Luna.
+    let cloud = if airless { 1.0 } else { weather.direct_mul() };
+
+    // Sol: sale con el amanecer y se pone cuando cae la noche. **No se DIBUJA**
+    // (ver el comentario de arriba, donde estaba `SkyDisc`): lo único que existe de
+    // él es esta dirección — o sea, sus sombras.
+    if (DAWN_START..NIGHT_START).contains(&p) {
+        let (dir, elev) = arc((p - DAWN_START) / (NIGHT_START - DAWN_START));
+        // Del naranja rasante al blanco del mediodía.
+        let low = Vec3::new(1.0, 0.66, 0.38);
+        let high = Vec3::new(1.0, 0.97, 0.90);
+        *sky = SkyLight {
+            dir,
+            elevation: elev,
+            strength: (0.25 + 0.75 * elev) * cloud,
+            color: low.lerp(high, elev.powf(0.6)),
+        };
+        return;
+    }
+    // Luna: cruza la noche entera (`NIGHT_START` → `DAWN_START` pasando por
+    // medianoche). Si está nueva no hay nadie arriba y la noche es de las antorchas.
+    let night_span = 1.0 - (NIGHT_START - DAWN_START);
+    let t = (p - NIGHT_START).rem_euclid(1.0) / night_span;
+    let (dir, elev) = arc(t);
+    let illum = clock.moon_illum();
+    *sky = SkyLight {
+        dir,
+        elevation: elev,
+        // Una luna llena en el cenit es ~1/500 del sol; acá vale 0.2 porque lo
+        // que hace es dar una DIRECCIÓN a las sombras nocturnas, no iluminar.
+        strength: 0.20 * illum * elev * cloud,
+        color: Vec3::new(0.60, 0.72, 1.0),
+    };
+}
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn sync_sky(
     clock: Res<DayClock>,
+    weather: Res<crate::weather::Weather>,
     region: Res<RegionRuntime>,
     trans: Res<FlightTransition>,
-    lantern: Res<PlayerLanternControl>,
     tiles: Res<crate::world2d::TileWorld>,
+    world_ctx: Res<crate::scene::WorldContextRuntime>,
+    planet: Res<crate::world2d::ActivePlanet>,
     mut clear: ResMut<ClearColor>,
     player: Query<&SimState, With<Player>>,
-    camera: Query<&OrthographicProjection, With<GameCamera>>,
+    camera: Query<(&OrthographicProjection, &GlobalTransform), With<GameCamera>>,
     mut overlay: Query<&mut Transform, (With<NightOverlay>, Without<StarSprite>)>,
     veil_mat: Option<Res<crate::light2d::NightVeilMat>>,
     mut veil_assets: ResMut<Assets<crate::light2d::NightVeilMaterial>>,
@@ -235,10 +514,14 @@ fn sync_sky(
         (With<StarSprite>, Without<NightOverlay>),
     >,
 ) {
+    let cam_pos = camera
+        .get_single()
+        .map(|(_, gt)| gt.translation().truncate())
+        .unwrap_or(Vec2::ZERO);
     let view_h = camera
         .get_single()
         .ok()
-        .map(|p| match p.scaling_mode {
+        .map(|(p, _)| match p.scaling_mode {
             bevy::render::camera::ScalingMode::FixedVertical { viewport_height } => viewport_height,
             _ => 30.0,
         })
@@ -295,11 +578,19 @@ fn sync_sky(
     // par daba un gris sucio. `dusk_amt` es 1 en el pico del crepúsculo.
     let day_sky = Vec3::new(0.45, 0.68, 0.85);
     let dusk_sky = Vec3::new(0.86, 0.44, 0.30); // naranja/rosa de atardecer
-    let night_sky = Vec3::new(0.05, 0.06, 0.15); // azul profundo, no negro
-    let dusk_amt = dusk_amount(clock.phase());
+    let night_sky = Vec3::new(0.03, 0.035, 0.10); // azul profundo, no negro
+    // Nublado: el cielo pierde el azul y baja de brillo, y con él se apaga el
+    // crepúsculo (bajo una tormenta no hay atardecer rosa, hay plomo). Es el
+    // MISMO `cover` que apaga el sol y las sombras — un solo número mueve todo.
+    let cover = weather.cover;
+    let dusk_amt = dusk_amount(clock.phase()) * (1.0 - cover * 0.85);
     let sky = body_sky.unwrap_or_else(|| {
         let base = night_sky.lerp(day_sky, day);
-        base.lerp(dusk_sky, dusk_amt * 0.85)
+        let clear_sky = base.lerp(dusk_sky, dusk_amt * 0.85);
+        // Gris de nube, oscurecido con la propia luz del día (de noche una nube
+        // no es gris claro: es un techo negro).
+        let overcast = Vec3::new(0.46, 0.48, 0.52) * (0.10 + 0.90 * day);
+        clear_sky.lerp(overcast, cover * 0.85)
     });
     let void = Vec3::new(0.01, 0.01, 0.03);
     let rgb = sky.lerp(void, space_f);
@@ -316,7 +607,26 @@ fn sync_sky(
     // vas → la luz vale algo y el mundo se siente mágico); el crepúsculo no
     // oscurece con gris sino con un violeta cálido que casa con el cielo
     // naranja. La linterna sigue abriendo el velo.
-    let mut night_alpha = (1.0 - day) * NIGHT_VEIL * (1.0 - space_f);
+    // **La curva, no sólo el tope.** Con `(1 - day)` a secas el atardecer heredaba
+    // casi toda la opacidad de la noche: a las 19:30 (`day` 0.2) el velo ya iba a
+    // α 0.79 y, como el crepúsculo pinta violeta SÓLIDO encima, la pantalla
+    // entera quedaba de un magenta plano — el mundo debajo no se veía. Elevarlo a
+    // 3.5 deja el atardecer transparente (α≈0.45 a `day` 0.2) y hunde el último
+    // tramo: la oscuridad llega DE GOLPE cuando cae el sol, que es lo que se
+    // siente real, en vez de un gris que crece parejo toda la tarde.
+    //
+    // El nublado entra por acá y no por otra parte: `daylight_mul` baja el día
+    // EFECTIVO, así que un cielo tapado oscurece el mundo y adelanta el encendido
+    // de las luces (`light2d::darkness` usa el mismo factor) sin tocar ninguna de
+    // estas curvas. Una tormenta de mediodía queda como un atardecer plomizo.
+    let day_eff = day * weather.daylight_mul();
+    let night_norm = (1.0 - day_eff).powf(3.5);
+    let mut night_alpha = night_norm * NIGHT_VEIL * (1.0 - space_f);
+    // Piso de penumbra del nublado. La curva de la noche está elevada a 3.5 (así
+    // el atardecer queda transparente), y eso mismo hace que un mediodía tapado
+    // apenas se oscurezca: 0.62 de día efectivo da α 0.18. Una tormenta tiene que
+    // LEERSE como tormenta aunque sea mediodía, así que se le pone un mínimo.
+    night_alpha = night_alpha.max(cover * 0.26 * (1.0 - space_f));
     // **Casi negro, y ese es el punto.** Es color LINEAL (el shader escribe a un
     // target sRGB): 0.010 lineal ya es ~9% en pantalla, y con α 0.965 ese término
     // constante aportaba MÁS que el albedo del mundo → todo quedaba del mismo
@@ -324,19 +634,54 @@ fn sync_sky(
     // casi negro la mezcla es ~albedo × 0.035, o sea un OSCURECIMIENTO: igual de
     // noche, pero el pasto sigue siendo verde y la piedra gris, y por eso se
     // entiende lo que mirás. Subir estos números vuelve a lavar todo.
-    let mut veil = Vec3::new(0.0012, 0.0016, 0.0045);
-    if dusk_amt > 0.0 {
-        veil = veil.lerp(Vec3::new(0.22, 0.08, 0.18), dusk_amt); // violeta de atardecer
+    // Bajado junto con `NIGHT_VEIL`: este término es color SÓLIDO (se pinta a
+    // pelo, no multiplica), así que al subir α pasa a pesar más que el albedo que
+    // deja pasar el velo. Con α 0.985 y el color viejo la mezcla volvía a ser
+    // "todo del mismo azul": la mitad del brillo venía de acá y no del mundo.
+    // **El color de la sombra, y es de cada cuerpo.** El principio salió de tu
+    // referencia: las zonas oscuras de esa captura miden (7,38,33) / (20,41,34)
+    // en sRGB — un color de verdad, nunca negro. La mitad de lo "acogedor" de esa
+    // imagen es contraste complementario: fuego cálido contra sombra fría. Con la
+    // sombra negra el mismo fuego se lee como una linterna sobre carbón.
+    //
+    // Lo que cambia por planeta es el matiz (ver `body_night_veil`): la Tierra su
+    // navy, Marte su óxido, Europa su hielo. El shader mezcla en lineal.
+    let mut veil = body_night_veil(crate::world2d::active_surface_body(&world_ctx, &planet));
+    // El violeta del crepúsculo es LUZ QUE QUEDA EN EL CIELO, así que tiene que
+    // apagarse cuando ya no queda ninguna. `dusk_amount` sigue >0 hasta la fase
+    // 0.90 — bien entrada la noche cerrada—, y ahí el velo ya va a α 0.99: el
+    // tinte, que es color SÓLIDO, se pintaba a plena opacidad sobre un mundo
+    // negro y el resultado era una sábana magenta lisa, sin mundo debajo.
+    // Ponderarlo por el día que sobra lo deja donde se ve bonito (el sol
+    // bajando) y deja la noche cerrada NEUTRA, que es lo que hace que una
+    // antorcha se lea naranja de verdad.
+    // Penumbra de tormenta: PLOMO, no la noche azul del planeta. Es la diferencia
+    // entre "se hizo de noche a las tres de la tarde" (raro) y "se puso feo".
+    veil = veil.lerp(Vec3::new(0.0170, 0.0185, 0.0220), (cover * day).clamp(0.0, 1.0) * 0.85);
+    let dusk_paint = dusk_amt * (1.0 - night_norm);
+    if dusk_paint > 0.0 {
+        // Bajado 3× (era 0.22,0.08,0.18): incluso ponderado, a esa saturación se
+        // leía como un baño rosa. Ahora es un tinte en el aire — el pasto sigue
+        // verde debajo.
+        veil = veil.lerp(Vec3::new(0.075, 0.027, 0.060), dusk_paint);
     }
     if underground {
         // La cueva es más cerrada que la noche, pero por el mismo mecanismo:
         // más α, no más color (si no, vuelve la niebla plana).
-        night_alpha = 0.975;
-        veil = Vec3::new(0.0006, 0.0006, 0.0016);
+        night_alpha = 0.992;
+        veil = Vec3::new(0.0008, 0.0038, 0.0034);
     }
-    if lantern.lit {
-        night_alpha *= 0.45;
-    }
+    // La linterna **NO** aclara la pantalla entera. Antes hacía
+    // `night_alpha *= 0.45`, o sea: llevar una antorcha subía el brillo del mundo
+    // hasta el horizonte, incluso a tus espaldas. Doble contabilidad, además: el
+    // ítem en la mano YA es un `Light2d` real (`held_item::item_light`) que
+    // agujerea el velo y tiñe los sprites a su alrededor. Con el multiplicador
+    // global el velo corría a α 0.443 en vez de 0.985 — la noche entera valía la
+    // mitad y por eso "no se notaba de dónde alumbraba" nada: el charco del farol
+    // competía contra un mundo ya medio iluminado.
+    //
+    // El recurso sigue existiendo porque el botón LAMP decide si el ítem emite;
+    // lo que se fue es el atajo que saltaba el sistema de luces.
     if let Some(vh) = veil_mat.as_ref() {
         if let Some(mat) = veil_assets.get_mut(&vh.0) {
             mat.uniform.color = Vec4::new(veil.x, veil.y, veil.z, night_alpha);
@@ -349,19 +694,36 @@ fn sync_sky(
 
     // Estrellas en el vacío / de noche a gran altura. Posición Y tamaño se
     // escalan al encuadre: el campo cubre siempre la pantalla entera.
-    let stars_on = space_f > 0.55 || (day < 0.25 && space_f > 0.2);
+    //
+    // La visibilidad es un FUNDIDO, no un interruptor. Con un umbral duro
+    // (`space_f > 0.55`) bastaba quedarse flotando justo en la banda para que
+    // `space_f` cruzara el corte ida y vuelta cada frame: las 320 estrellas
+    // aparecían y desaparecían: EL parpadeo del vuelo/espacio. Un fundido no
+    // puede oscilar porque no tiene borde donde oscilar.
+    // LAS ESTRELLAS SON DEL ESPACIO. Hubo un intento de traerlas a ras del suelo de
+    // noche y el resultado, dicho por el usuario, fue que "parecía nieve" — y con
+    // razón: en cenital no hay cielo en pantalla, hay suelo, así que puntos blancos
+    // sobre el paisaje se leen como copos, no como estrellas. La idea se quedó, pero
+    // donde corresponde: `weather.rs` la convirtió en nieve de verdad (con manto que
+    // se acumula). Acá el campo vuelve a atarse a la ALTURA.
+    let stars_f = crate::universe::smootherstep(0.30, 0.70, space_f)
+        .max(if day < 0.25 { crate::universe::smootherstep(0.12, 0.35, space_f) } else { 0.0 });
+    // Envoltura del campo: el paralaje desplaza cada estrella y al salirse por un
+    // borde reaparece por el otro, así el cielo es infinito sin más quads.
+    let (span_x, span_y) = (2.4 * view_h, 1.5 * view_h);
     for (field, mut vis, mut tf, mut sprite) in &mut stars {
-        *vis = if stars_on {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-        if !stars_on {
+        let want = if stars_f > 0.002 { Visibility::Visible } else { Visibility::Hidden };
+        if *vis != want {
+            *vis = want;
+        }
+        if stars_f <= 0.002 {
             continue;
         }
-        tf.translation.x = field.unit.x * view_h;
-        tf.translation.y = field.unit.y * view_h;
+        let wrap = |v: f32, span: f32| (v + span * 0.5).rem_euclid(span) - span * 0.5;
+        tf.translation.x = wrap(field.unit.x * view_h - cam_pos.x * field.plx, span_x);
+        tf.translation.y = wrap(field.unit.y * view_h - cam_pos.y * field.plx, span_y);
         sprite.custom_size = Some(Vec2::splat((field.size * view_h).max(0.001)));
+        sprite.color.set_alpha(field.alpha * stars_f);
     }
 }
 
@@ -383,6 +745,7 @@ fn spawn_cloud_overlay(mut commands: Commands) {
         // the clouds cover the ground, never the hearts/hotbar/buttons.
         GlobalZIndex(-50),
         bevy::ui::FocusPolicy::Pass,
+        crate::game_ui::GameplayUi,
         Name::new("CloudOverlay"),
     ));
 }

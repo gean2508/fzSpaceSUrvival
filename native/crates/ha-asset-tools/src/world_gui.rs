@@ -30,12 +30,19 @@ const PAINT_TILES: &[(Tile, &str)] = &[
     (Tile::Grass, "Pasto"),
     (Tile::Dirt, "Tierra"),
     (Tile::Sand, "Arena"),
-    (Tile::Water, "Agua"),
+    (Tile::Water, "Agua (bajío, se nada)"),
+    (Tile::WaterDeep, "Agua honda (bloquea)"),
     (Tile::Regolith, "Regolito"),
     (Tile::Basalt, "Basalto"),
     (Tile::Ice, "Hielo"),
     (Tile::RockRed, "Roca roja"),
     (Tile::Stone, "Piedra"),
+    // Relieve: pintar a mano un acantilado o una rampa es la forma de retocar el
+    // terreno que generó el mundo — cerrar un paso o abrir uno donde te conviene.
+    (Tile::Cliff, "Acantilado"),
+    (Tile::Slope, "Rampa"),
+    (Tile::Fence, "Cerca"),
+    (Tile::Pavement, "Vereda"),
     (Tile::WoodFloor, "Piso"),
     (Tile::WoodWall, "Pared"),
     (Tile::StoneBrick, "Ladrillo"),
@@ -47,11 +54,21 @@ const PAINT_TILES: &[(Tile, &str)] = &[
 fn tile_art_key(tile: Tile) -> Option<&'static str> {
     match tile {
         Tile::Water => Some("tiles/water"),
+        Tile::WaterDeep => Some("tiles/water_deep"),
         Tile::Grass => Some("tiles/grass"),
         Tile::Sand => Some("tiles/sand"),
+        Tile::Dirt => Some("tiles/dirt"),
+        Tile::Stone => Some("tiles/stone"),
         Tile::Regolith => Some("tiles/regolith"),
         Tile::Basalt => Some("tiles/basalt"),
         Tile::Ice => Some("tiles/ice"),
+        // Relieve. El editor dibuja la clave GENÉRICA; el juego además elige la
+        // variante por bioma. Mostrar la genérica acá es correcto: es la que
+        // aparece si esa variante no está curada.
+        Tile::Cliff => Some("cliff/roca"),
+        Tile::Slope => Some("slope/roca"),
+        Tile::Fence => Some("fence/madera"),
+        Tile::Pavement => Some("floor/vereda"),
         Tile::WoodFloor => Some("floor/wood"),
         Tile::WoodWall | Tile::Wall => Some("wall/wood"),
         Tile::StoneBrick => Some("wall/stone"),
@@ -85,7 +102,34 @@ enum Tool {
 /// Un asset colocable, tal como salió de `art/manifest.json`.
 struct PaletteEntry {
     key: String,
+    /// Nombre humano del objeto (`"Farol de calle"`), del catálogo de slots. Es
+    /// lo que se lee en la paleta — la clave es para el código, no para vos.
+    label: String,
     category: String,
+}
+
+/// Nombre humano de una clave de arte, buscado en el catálogo del juego. Para lo
+/// que no esté catalogado (variantes, slots hechos a mano) cae a la hoja de la
+/// clave con los guiones bajos abiertos: peor nombre, pero nunca vacío.
+fn slot_label(key: &str) -> String {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<&'static str, &'static str>> =
+        std::sync::OnceLock::new();
+    let names = NAMES.get_or_init(|| {
+        ha_assets::game_slots().into_iter().map(|s| (s.key, s.label)).collect()
+    });
+    // La variante (`floor/piso#madera`) se lee por su objeto base.
+    let (base, variant) = match key.split_once(ha_assets::VARIANT_SEP) {
+        Some((b, v)) => (b, Some(v)),
+        None => (key, None),
+    };
+    if let Some(label) = names.get(base) {
+        return match variant {
+            Some(v) => format!("{label} ({})", v.replace('_', " ")),
+            None => (*label).to_string(),
+        };
+    }
+    let leaf = base.split_once('/').map(|(_, n)| n).unwrap_or(base);
+    leaf.replace('_', " ")
 }
 
 pub fn run_world_gui() -> ExitCode {
@@ -105,7 +149,7 @@ pub fn run_world_gui() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-struct WorldApp {
+pub(crate) struct WorldApp {
     body: CelestialBody,
     z: i32,
     center: egui::Vec2,
@@ -133,6 +177,9 @@ struct WorldApp {
     tex: HashMap<String, Option<egui::TextureHandle>>,
     /// Dibujar los sprites reales en el canvas (WYSIWYG) o sólo colores.
     show_art: bool,
+    /// Pintar en amarillo la COLISIÓN real de los assets colocados (la huella del
+    /// editor de assets). Es lo que te dice con qué te vas a chocar en el juego.
+    show_collision: bool,
 
     /// Historial para Ctrl+Z (snapshots completos; el archivo es chico).
     undo: Vec<WorldEdits>,
@@ -140,10 +187,20 @@ struct WorldApp {
     last_decor_cell: Option<(i64, i64)>,
     /// Escala con la que se planta el asset (1 = su tamaño natural en tiles).
     decor_scale: f32,
+    /// **El asset estampa su solar**: al colocarlo, reemplaza el terreno de todas
+    /// las celdas de su huella. Es lo que hace que plantar una casa no sea
+    /// "dibujar un sprite sobre el bosque" — y como la huella sale del recorte del
+    /// slot, el solar se adapta SOLO al tamaño del asset.
+    decor_stamps_ground: bool,
+    /// Tile con el que se estampa ese solar.
+    decor_ground_tile: Tile,
+    /// Caché de las celdas que los assets colocados reemplazan con su solar
+    /// (cuerpo/capa actual). Lo reconstruye [`WorldApp::rebuild_solar`].
+    solar: HashMap<(i64, i64), Tile>,
 }
 
 impl WorldApp {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         // Rutas ancladas a la compilación (como el editor de assets): siempre correctas.
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let native_root = manifest_dir
@@ -179,15 +236,25 @@ impl WorldApp {
             palette_filter: String::new(),
             tex: HashMap::new(),
             show_art: true,
+            show_collision: true,
             undo: Vec::new(),
             last_decor_cell: None,
             decor_scale: 1.0,
+            decor_stamps_ground: false,
+            decor_ground_tile: Tile::Stone,
+            solar: HashMap::new(),
         };
         app.load_art();
         app
     }
 
     // ── puente con el editor de assets ──────────────────────────────────────
+
+    /// Relee el arte del juego (lo llama el Studio al entrar a este espacio: el
+    /// objeto/variante que acabás de crear en Assets aparece en la paleta solo).
+    pub(crate) fn reload_art(&mut self) {
+        self.load_art();
+    }
 
     /// (Re)lee `art/manifest.json` y arma la paleta con TODO lo que tenga arte.
     /// Es lo que hace que un asset recién creado aparezca acá para colocarlo.
@@ -204,6 +271,7 @@ impl WorldApp {
             .filter(|k| placeable_category(k))
             .map(|k| PaletteEntry {
                 key: k.clone(),
+                label: slot_label(k),
                 category: k.split('/').next().unwrap_or("otros").to_string(),
             })
             .collect();
@@ -253,6 +321,21 @@ impl WorldApp {
             ));
         }
         Some((e.png.clone(), None))
+    }
+
+    /// Profundidad de dibujo del asset, **misma regla que el juego**
+    /// (`ha-game::layers::depth`): la capa del slot elige la banda y el pie del
+    /// sprite desempata dentro de la banda Y-sorted. Se usa sólo para ordenar el
+    /// pintado del editor, así que lo que ves acá es lo que el juego dibuja.
+    fn draw_depth(&self, key: &str, tz: i64) -> f32 {
+        use ha_assets::ArtLayer;
+        let foot = (tz + 1) as f32;
+        match self.art.slot_layer(key).unwrap_or(ArtLayer::Object) {
+            ArtLayer::Floor | ArtLayer::Light => 1.0 + foot * 1e-6,
+            ArtLayer::Basement => 0.5 + foot * 1e-6,
+            ArtLayer::Wall | ArtLayer::Object => 2.0 + foot * 0.001,
+            ArtLayer::Roof => 6.0,
+        }
     }
 
     /// Tamaño en METROS que le corresponde al asset: sus celdas de recorte
@@ -327,8 +410,42 @@ impl WorldApp {
         cell: egui::Rect,
         scale: f32,
     ) -> bool {
-        let Some((rel, crop)) = self.slot_view(key) else { return false };
-        let Some(tex) = self.tex_for(ctx, &rel) else { return false };
+        let Some((uv, px, id)) = self.slot_uv(ctx, key) else { return false };
+        // Alto proporcional al ancho de la celda, apoyado en el borde inferior
+        // (pivote al pie: un árbol sobresale hacia arriba, como en el juego).
+        let w = cell.width() * scale;
+        let h = w * px.y / px.x;
+        let draw = egui::Rect::from_min_max(
+            egui::pos2(cell.center().x - w * 0.5, cell.max.y - h),
+            egui::pos2(cell.center().x + w * 0.5, cell.max.y),
+        );
+        painter.image(id, draw, uv, egui::Color32::WHITE);
+        true
+    }
+
+    /// Dibuja el sprite EXACTAMENTE dentro de `dest` (sin re-encuadrar): el rect
+    /// ya viene de la regla de colocación, así que lo que se ve acá es pixel por
+    /// pixel lo que el juego va a plantar.
+    fn draw_slot_in(
+        &mut self,
+        ctx: &egui::Context,
+        painter: &egui::Painter,
+        key: &str,
+        dest: egui::Rect,
+    ) -> bool {
+        let Some((uv, _, id)) = self.slot_uv(ctx, key) else { return false };
+        painter.image(id, dest, uv, egui::Color32::WHITE);
+        true
+    }
+
+    /// UV + tamaño px del recorte del slot y la textura de su hoja.
+    fn slot_uv(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+    ) -> Option<(egui::Rect, egui::Vec2, egui::TextureId)> {
+        let (rel, crop) = self.slot_view(key)?;
+        let tex = self.tex_for(ctx, &rel)?;
         let img = tex.size_vec2();
         let (uv, px) = match crop {
             Some([x, y, w, h]) => (
@@ -344,18 +461,70 @@ impl WorldApp {
             ),
         };
         if px.x <= 0.0 || px.y <= 0.0 {
-            return false;
+            return None;
         }
-        // Alto proporcional al ancho de la celda, apoyado en el borde inferior
-        // (pivote al pie: un árbol sobresale hacia arriba, como en el juego).
-        let w = cell.width() * scale;
-        let h = w * px.y / px.x;
-        let draw = egui::Rect::from_min_max(
-            egui::pos2(cell.center().x - w * 0.5, cell.max.y - h),
-            egui::pos2(cell.center().x + w * 0.5, cell.max.y),
-        );
-        painter.image(tex.id(), draw, uv, egui::Color32::WHITE);
-        true
+        Some((uv, px, tex.id()))
+    }
+
+    /// Celdas (tiles) que ocupa el slot y su celda ANCLA — la que va a quedar
+    /// justo donde apuntás con el mouse. Espejo exacto de lo que hace el juego
+    /// (`ArtLibrary::slot_cells` / `anchor`).
+    fn slot_cells_anchor(&mut self, ctx: &egui::Context, key: &str) -> ((u32, u32), (u32, u32)) {
+        let s = self.slot_size_m(ctx, key).unwrap_or([1.0, 1.0]);
+        let cells = (s[0].round().max(1.0) as u32, s[1].round().max(1.0) as u32);
+        let anchor = self.art.anchor(key, cells);
+        (cells, anchor)
+    }
+
+    /// Rect que el asset ocupará **en tiles del mundo** al colocarlo en la celda
+    /// `(tx, tz)` con la escala actual. Es la MISMA cuenta que hace el juego
+    /// (`ha_assets::placement_center_tiles`), así que el fantasma no miente: el
+    /// asset cae donde está el mouse, no una celda más arriba.
+    fn placed_tile_rect(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        tx: i64,
+        tz: i64,
+        size: [f32; 2],
+    ) -> egui::Rect {
+        let (cells, anchor) = self.slot_cells_anchor(ctx, key);
+        let c = ha_assets::placement_center_tiles(tx, tz, cells, anchor, size);
+        egui::Rect::from_center_size(
+            egui::pos2(c[0], c[1]),
+            egui::vec2(size[0].max(0.01), size[1].max(0.01)),
+        )
+    }
+
+    /// Cajas de colisión (en tiles del mundo) del asset colocado en `(tx, tz)`:
+    /// la huella que pintaste en el editor de assets, escalada como el sprite.
+    /// Vacío = ese asset no declara colisión (no frena a nadie).
+    fn collision_tile_rects(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        tx: i64,
+        tz: i64,
+        size: [f32; 2],
+    ) -> Vec<egui::Rect> {
+        let _ = ctx;
+        let Some(fp) = self.art.footprint(key).cloned() else { return Vec::new() };
+        let (sx, sz) = if fp.w > 0 && fp.h > 0 {
+            (size[0] / fp.w as f32, size[1] / fp.h as f32)
+        } else {
+            (1.0, 1.0)
+        };
+        // Escala alrededor del CENTRO de la celda ancla — igual que el juego
+        // (`world2d::footprint_hits`), para que caja y sprite crezcan juntos.
+        let (ox, oz) = (tx as f32 + 0.5, tz as f32 + 0.5);
+        fp.solid_rects()
+            .map(|r| {
+                egui::Rect::from_min_max(
+                    egui::pos2(ox + (r[0] - 0.5) * sx, oz + (r[1] - 0.5) * sz),
+                    egui::pos2(ox + (r[2] - 0.5) * sx, oz + (r[3] - 0.5) * sz),
+                )
+            })
+            .collect()
     }
 
     // ── edición ─────────────────────────────────────────────────────────────
@@ -418,7 +587,30 @@ impl WorldApp {
             .iter()
             .find(|t| t.body == b && t.z == self.z && t.x == x && t.zc == zc)
             .map(|t| t.tile)
+            // Mismo orden que el juego: el solar de los assets va por debajo de lo
+            // que pintaste a mano, y por encima del mundo procedural. Sin esto
+            // estampabas solares a ciegas: el editor te seguía mostrando el bosque.
+            .or_else(|| self.solar.get(&(x, zc)).copied())
             .unwrap_or_else(|| topdown_tile(self.body, self.z, x, zc))
+    }
+
+    /// Recalcula el mapa de SOLARES del cuerpo/capa actual: las celdas que los
+    /// assets colocados reemplazan con su `ground`. Se cachea porque el rasterizado
+    /// consulta `effective_tile` una vez por celda visible (decenas de miles) y
+    /// recorrer la lista de assets en cada una no escala.
+    ///
+    /// Hay que llamarlo tras CUALQUIER cambio en `edits.decor` (colocar, borrar,
+    /// deshacer, cargar).
+    fn rebuild_solar(&mut self) {
+        let (b, z) = (self.body as u8, self.z);
+        self.solar = self
+            .edits
+            .decor
+            .iter()
+            .filter(|d| d.body == b && d.z == z)
+            .filter_map(|d| d.ground.map(|t| (d, t)))
+            .flat_map(|(d, tile)| d.covered_cells().map(move |c| (c, tile)))
+            .collect();
     }
 
     /// Overrides del cuerpo/z actual como mapa (para operaciones masivas rápidas).
@@ -535,6 +727,7 @@ impl WorldApp {
             h: a.h,
             art: a.art.to_string(),
             solid: Vec::new(), // base completa; la huella fina se pinta en el editor de assets
+            rot: 0,
         });
     }
 
@@ -544,11 +737,21 @@ impl WorldApp {
         let key = self.decor_key.clone();
         let scale = self.decor_scale.max(0.1);
         let size = self.slot_size_m(ctx, &key).map(|[w, h]| [w * scale, h * scale]);
-        self.place_decor_sized(x, zc, size);
+        // La huella se guarda CON la colocación: si mañana recortás el sprite de
+        // otra manera, los solares ya autorados no se mueven de sitio.
+        let (cells, anchor) = self.slot_cells_anchor(ctx, &key);
+        self.place_decor_sized(x, zc, size, Some(cells), Some(anchor));
     }
 
     /// El alta en sí (sin UI): una celda = un asset. Volver a colocar reemplaza.
-    fn place_decor_sized(&mut self, x: i64, zc: i64, size: Option<[f32; 2]>) {
+    fn place_decor_sized(
+        &mut self,
+        x: i64,
+        zc: i64,
+        size: Option<[f32; 2]>,
+        cells: Option<(u32, u32)>,
+        anchor: Option<(u32, u32)>,
+    ) {
         if self.decor_key.is_empty() {
             self.status = "elegí un asset de la paleta (derecha)".into();
             return;
@@ -564,6 +767,13 @@ impl WorldApp {
             zc,
             key: self.decor_key.clone(),
             size,
+            // SOLAR: si la casilla está tildada, el asset reemplaza el terreno de
+            // toda su huella — el suelo se adapta al tamaño del asset, sea una
+            // maceta o una universidad. Destildada, se comporta como siempre
+            // (sprite encima, terreno intacto).
+            ground: self.decor_stamps_ground.then_some(self.decor_ground_tile),
+            cells: cells.map(|(w, h)| [w, h]),
+            anchor: anchor.map(|(ax, az)| [ax, az]),
         });
     }
 
@@ -613,7 +823,7 @@ impl WorldApp {
         }
         if let Some(kind) = surface_decor_at(self.body, tx, tz) {
             return Some(match kind {
-                DecorKind::Tree => (pick_tree_species_in(body, tx, tz).key.to_string(), true),
+                DecorKind::Tree => (pick_tree_species_in(self.body, tx, tz).key.to_string(), true),
                 DecorKind::Rock => ("decor/rock".to_string(), true),
             });
         }
@@ -677,6 +887,18 @@ fn load_texture(ctx: &egui::Context, path: &Path, id: &str) -> Option<egui::Text
 
 impl eframe::App for WorldApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.ui(ctx);
+    }
+}
+
+impl WorldApp {
+    /// Dibuja este espacio de trabajo. Lo llama el shell del Studio
+    /// (`studio.rs`) o `eframe` cuando el editor corre solo.
+    pub(crate) fn ui(&mut self, ctx: &egui::Context) {
+        // Una vez por frame, antes de dibujar nada: es más barato que rastrear los
+        // ocho sitios que mutan `edits.decor` (colocar, borrar, deshacer, cargar,
+        // cambiar de cuerpo o de capa) y olvidarse de uno.
+        self.rebuild_solar();
         self.top_bar(ctx);
         self.tools_panel(ctx);
         self.palette_panel(ctx);
@@ -738,6 +960,11 @@ impl WorldApp {
                 }
                 ui.checkbox(&mut self.show_art, "ver sprites")
                     .on_hover_text("dibuja el arte real (WYSIWYG) en vez de puntos de color");
+                ui.checkbox(&mut self.show_collision, "ver colisión")
+                    .on_hover_text(
+                        "amarillo = con qué te vas a chocar en el juego (la huella que \
+                         pintaste en el editor de assets). Sin amarillo, el asset se pisa.",
+                    );
                 // Inspector: qué va a ver el juego exactamente en esa celda.
                 if let Some((x, zc)) = self.hover_cell {
                     ui.separator();
@@ -835,6 +1062,26 @@ impl WorldApp {
                             "1 = el tamaño que da su recorte (una casa de 5×4 celdas mide 5×4 tiles)",
                         );
                     });
+                    ui.separator();
+                    ui.checkbox(&mut self.decor_stamps_ground, "🧱 reemplaza el suelo")
+                        .on_hover_text(
+                            "El asset estampa su SOLAR: borra el terreno de todas las celdas \
+                             que ocupa y lo reemplaza por el tile elegido. El solar se adapta \
+                             solo al tamaño del asset — una universidad tapa lo suyo, una \
+                             maceta no toca nada. Sin tildar, el asset se dibuja encima y el \
+                             terreno queda como estaba.",
+                        );
+                    if self.decor_stamps_ground {
+                        ui.label("suelo del solar:");
+                        for &(t, name) in PAINT_TILES {
+                            ui.horizontal(|ui| {
+                                let (rect, _) = ui
+                                    .allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+                                ui.painter().rect_filled(rect, 2.0, tile_color(t));
+                                ui.selectable_value(&mut self.decor_ground_tile, t, name);
+                            });
+                        }
+                    }
                 }
                 Tool::BorrarDecor => {
                     ui.label(
@@ -900,33 +1147,45 @@ impl WorldApp {
                     ui.text_edit_singleline(&mut self.palette_filter);
                 });
                 if !self.decor_key.is_empty() {
-                    ui.label(egui::RichText::new(format!("elegido: {}", self.decor_key)).small());
+                    ui.label(
+                        egui::RichText::new(format!("elegido: {}", slot_label(&self.decor_key)))
+                            .small(),
+                    );
                 }
                 ui.separator();
                 let f = self.palette_filter.to_lowercase();
-                // Agrupar por categoría respetando el filtro.
-                let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+                // Agrupar por categoría respetando el filtro. El filtro mira el
+                // NOMBRE primero (se busca "farol", no "prop/farol").
+                let mut groups: Vec<(String, Vec<(String, String)>)> = Vec::new();
                 for p in &self.palette {
-                    if !f.is_empty() && !p.key.to_lowercase().contains(&f) {
+                    if !f.is_empty()
+                        && !p.label.to_lowercase().contains(&f)
+                        && !p.key.to_lowercase().contains(&f)
+                    {
                         continue;
                     }
+                    let row = (p.key.clone(), p.label.clone());
                     match groups.last_mut() {
-                        Some((c, v)) if *c == p.category => v.push(p.key.clone()),
-                        _ => groups.push((p.category.clone(), vec![p.key.clone()])),
+                        Some((c, v)) if *c == p.category => v.push(row),
+                        _ => groups.push((p.category.clone(), vec![row])),
                     }
                 }
                 let mut pick: Option<String> = None;
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for (cat, keys) in &groups {
                         egui::CollapsingHeader::new(
-                            egui::RichText::new(format!("{} ({})", cat.to_uppercase(), keys.len()))
-                                .strong()
-                                .color(egui::Color32::from_rgb(120, 210, 255)),
+                            egui::RichText::new(format!(
+                                "{} ({})",
+                                ha_assets::category_label(cat),
+                                keys.len()
+                            ))
+                            .strong()
+                            .color(egui::Color32::from_rgb(120, 210, 255)),
                         )
                         .default_open(f.is_empty() && groups.len() <= 3 || !f.is_empty())
                         .id_salt(cat)
                         .show(ui, |ui| {
-                            for key in keys {
+                            for (key, label) in keys {
                                 let selected = self.decor_key == *key;
                                 let resp = ui.horizontal(|ui| {
                                     // Miniatura real recortada de su hoja.
@@ -938,8 +1197,9 @@ impl WorldApp {
                                     if !self.draw_slot(ctx, &painter, key, rect, 1.0) {
                                         painter.rect_filled(rect, 2.0, egui::Color32::from_gray(60));
                                     }
-                                    let leaf = key.split_once('/').map(|(_, n)| n).unwrap_or(key);
-                                    ui.selectable_label(selected, leaf).clicked()
+                                    ui.selectable_label(selected, label)
+                                        .on_hover_text(key.as_str())
+                                        .clicked()
                                 });
                                 if resp.inner {
                                     pick = Some(key.clone());
@@ -1018,6 +1278,9 @@ impl WorldApp {
             // `(clave, celda, ancho en TILES, es_tile)`. El ancho sale del tamaño
             // real del asset: una casa ocupa sus 5 tiles, no uno.
             let mut sprites: Vec<(String, egui::Rect, Option<f32>, bool)> = Vec::new();
+            // Assets AUTORADOS: van por la regla de colocación (celda + tamaño),
+            // no por el encuadre de la celda — se resuelven en el 2º pase.
+            let mut placed: Vec<(String, (i64, i64), Option<[f32; 2]>)> = Vec::new();
             for dz in 0..rows {
                 for dx in 0..cols {
                     let (tx, tz) = (x0 + dx, z0 + dz);
@@ -1050,6 +1313,15 @@ impl WorldApp {
                     };
                     let Some((key, width_tiles)) = entry else { continue };
                     let is_authored = authored.contains_key(&(tx, tz));
+                    if is_authored {
+                        // Lo colocado a mano se dibuja por la regla de colocación
+                        // (2º pase): mismo rect que la colisión y que el juego.
+                        if self.show_art && ppt >= 6.0 {
+                            let size = authored.get(&(tx, tz)).and_then(|(_, s)| *s);
+                            placed.push((key, (tx, tz), size));
+                            continue;
+                        }
+                    }
                     if self.show_art && ppt >= 6.0 {
                         sprites.push((key, cell, width_tiles, false));
                     } else {
@@ -1091,6 +1363,46 @@ impl WorldApp {
                     );
                 }
             }
+            // Assets AUTORADOS: sprite en su rect real + (opcional) su COLISIÓN.
+            // Se dibujan en el MISMO orden que el juego (ver `ha-game::layers`):
+            // primero los de capa Suelo, después los Y-sorted por su fila del pie,
+            // y los Techo al final. Sin esto el editor mentía — mostraba un charco
+            // encima de la casa que en el juego iba debajo.
+            placed.sort_by(|a, b| {
+                self.draw_depth(&a.0, a.1 .1)
+                    .partial_cmp(&self.draw_depth(&b.0, b.1 .1))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            for (key, (tx, tz), size) in placed {
+                let size = size.filter(|s| s[0] > 0.0 && s[1] > 0.0).unwrap_or_else(|| {
+                    self.slot_size_m(ctx, &key).unwrap_or([1.5, 1.5])
+                });
+                let r = self.placed_tile_rect(ctx, &key, tx, tz, size);
+                let dest = egui::Rect::from_min_max(
+                    screen_of(r.min.x, r.min.y),
+                    screen_of(r.max.x, r.max.y),
+                );
+                if !self.draw_slot_in(ctx, &painter, &key, dest) {
+                    painter.circle_filled(
+                        dest.center(),
+                        (ppt * 0.3).clamp(2.0, 8.0),
+                        egui::Color32::from_rgb(255, 210, 90),
+                    );
+                }
+                if self.show_collision {
+                    for cr in self.collision_tile_rects(ctx, &key, tx, tz, size) {
+                        let sr = egui::Rect::from_min_max(
+                            screen_of(cr.min.x, cr.min.y),
+                            screen_of(cr.max.x, cr.max.y),
+                        );
+                        painter.rect_filled(
+                            sr,
+                            0.0,
+                            egui::Color32::from_rgba_unmultiplied(255, 210, 90, 60),
+                        );
+                    }
+                }
+            }
             // Estructuras del cuerpo/z: su sprite si lo tiene, si no el rectángulo.
             let structures: Vec<(String, egui::Rect)> = self
                 .edits
@@ -1126,16 +1438,66 @@ impl WorldApp {
             });
             self.hover_cell = hover;
 
-            // Fantasma del asset bajo el cursor (drag & drop legible).
+            // Fantasma del asset bajo el cursor: el sprite EN SU SITIO (la misma
+            // cuenta que hace el juego al plantarlo) y en amarillo su COLISIÓN
+            // real, no un cuadrito en el tile. Lo que ves acá es lo que va a
+            // quedar y con lo que te vas a chocar.
             if let (Tool::ColocarDecor, Some((tx, tz))) = (self.tool, hover) {
-                let cell = egui::Rect::from_min_size(screen_of(tx as f32, tz as f32), sz);
                 let key = self.decor_key.clone();
                 if !key.is_empty() {
-                    let w = self.slot_size_m(ctx, &key).map(|s| s[0]).unwrap_or(1.5)
-                        * self.decor_scale.max(0.1);
-                    self.draw_slot(ctx, &painter, &key, cell, w);
+                    let scale = self.decor_scale.max(0.1);
+                    let nat = self.slot_size_m(ctx, &key).unwrap_or([1.5, 1.5]);
+                    let size = [nat[0] * scale, nat[1] * scale];
+                    let r = self.placed_tile_rect(ctx, &key, tx, tz, size);
+                    let dest = egui::Rect::from_min_max(
+                        screen_of(r.min.x, r.min.y),
+                        screen_of(r.max.x, r.max.y),
+                    );
+                    self.draw_slot_in(ctx, &painter, &key, dest);
+                    // Contorno tenue = el sitio que ocupa el sprite.
+                    painter.rect_stroke(
+                        dest,
+                        0.0,
+                        egui::Stroke::new(
+                            1.0,
+                            egui::Color32::from_rgba_unmultiplied(255, 230, 140, 90),
+                        ),
+                    );
+                    // Amarillo lleno = colisión (huella del editor de assets).
+                    let boxes = self.collision_tile_rects(ctx, &key, tx, tz, size);
+                    for cr in &boxes {
+                        let sr = egui::Rect::from_min_max(
+                            screen_of(cr.min.x, cr.min.y),
+                            screen_of(cr.max.x, cr.max.y),
+                        );
+                        painter.rect_filled(
+                            sr,
+                            0.0,
+                            egui::Color32::from_rgba_unmultiplied(255, 210, 90, 90),
+                        );
+                        painter.rect_stroke(
+                            sr,
+                            0.0,
+                            egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 210, 90)),
+                        );
+                    }
+                    if boxes.is_empty() {
+                        // Sin huella pintada: el asset no frena a nadie. Se avisa
+                        // con una cruz en la celda ancla en vez de mentir con un
+                        // cuadro sólido.
+                        let cell = egui::Rect::from_min_size(screen_of(tx as f32, tz as f32), sz);
+                        let st = egui::Stroke::new(
+                            1.0,
+                            egui::Color32::from_rgba_unmultiplied(255, 210, 90, 110),
+                        );
+                        painter.rect_stroke(cell, 0.0, st);
+                        painter.line_segment([cell.min, cell.max], st);
+                        painter.line_segment(
+                            [egui::pos2(cell.min.x, cell.max.y), egui::pos2(cell.max.x, cell.min.y)],
+                            st,
+                        );
+                    }
                 }
-                painter.rect_stroke(cell, 0.0, egui::Stroke::new(1.5, egui::Color32::from_rgb(255, 210, 90)));
             }
 
             // Preview del rectángulo en curso (herramienta Rellenar).
@@ -1241,29 +1603,126 @@ mod tests {
             palette_filter: String::new(),
             tex: HashMap::new(),
             show_art: true,
+            show_collision: true,
             undo: Vec::new(),
             last_decor_cell: None,
             decor_scale: 1.0,
+            decor_stamps_ground: false,
+            decor_ground_tile: Tile::Stone,
+            solar: HashMap::new(),
         }
+    }
+
+    /// Un asset de `cells` tiles ya recortado y elegido en la paleta.
+    fn app_with(cells: (u32, u32)) -> (WorldApp, egui::Context) {
+        let mut a = app();
+        a.decor_key = "prop/farol".into();
+        a.art.set_rect(
+            "prop/farol",
+            "art/prop/farol.png".into(),
+            (32, 32),
+            ha_assets::CellRect { col: 0, row: 0, w: cells.0, h: cells.1 },
+        );
+        (a, egui::Context::default())
+    }
+
+    #[test]
+    fn the_asset_lands_on_the_cell_you_point_at() {
+        // Farol de 1×2: su PIE (la celda ancla) va justo en la celda del mouse y
+        // el resto sobresale hacia arriba. Antes el sprite se apoyaba "a ojo" y
+        // con anchos pares quedaba medio tile corrido del cuadro amarillo.
+        let (mut a, ctx) = app_with((1, 2));
+        let r = a.placed_tile_rect(&ctx, "prop/farol", 4, 7, [1.0, 2.0]);
+        assert_eq!((r.min.x, r.max.x), (4.0, 5.0));
+        assert_eq!((r.min.y, r.max.y), (6.0, 8.0)); // pie en la fila 7 = la del mouse
+        // Ancho PAR: sigue clavado al grid (nada de medios tiles).
+        let (mut a2, ctx2) = app_with((2, 2));
+        let r2 = a2.placed_tile_rect(&ctx2, "prop/farol", 10, 5, [2.0, 2.0]);
+        assert_eq!((r2.min.x, r2.max.x), (10.0, 12.0));
+        assert_eq!((r2.min.y, r2.max.y), (4.0, 6.0));
+    }
+
+    #[test]
+    fn the_yellow_boxes_are_the_real_collision_of_the_sprite() {
+        // Huella fina (¼ de tile) del poste del farol, pintada en el editor de
+        // assets: el editor de mundo debe mostrar ESAS cajas, no el tile entero.
+        let (mut a, ctx) = app_with((1, 2));
+        a.art.set_footprint(
+            "prop/farol",
+            Some(ha_assets::CollisionFootprint {
+                w: 1,
+                h: 2,
+                ax: 0,
+                az: 1,
+                solid: vec![(1, 6), (2, 6), (1, 7), (2, 7)],
+                step: Vec::new(), res: 4,
+            }),
+        );
+        let boxes = a.collision_tile_rects(&ctx, "prop/farol", 4, 7, [1.0, 2.0]);
+        assert_eq!(boxes.len(), 4);
+        // Todas dentro de la celda apuntada y sólo en su mitad central.
+        for b in &boxes {
+            assert!(b.min.x >= 4.25 && b.max.x <= 4.75, "{b:?}");
+            assert!(b.min.y >= 7.0 && b.max.y <= 8.0, "{b:?}");
+        }
+        // Sin huella pintada no hay colisión que mostrar (el asset se pisa).
+        a.art.set_footprint("prop/farol", None);
+        assert!(a.collision_tile_rects(&ctx, "prop/farol", 4, 7, [1.0, 2.0]).is_empty());
     }
 
     #[test]
     fn placing_an_asset_records_it_once_per_cell() {
         let mut a = app();
-        a.place_decor_sized(4, 7, Some([5.0, 4.0]));
-        a.place_decor_sized(4, 7, Some([5.0, 4.0])); // volver a clickear reemplaza, no apila
+        a.place_decor_sized(4, 7, Some([5.0, 4.0]), None, None);
+        a.place_decor_sized(4, 7, Some([5.0, 4.0]), None, None); // volver a clickear reemplaza, no apila
         assert_eq!(a.edits.decor.len(), 1);
         assert_eq!(a.edits.decor[0].key, "decor/tree_roble");
         assert_eq!((a.edits.decor[0].x, a.edits.decor[0].zc), (4, 7));
         // Otro asset en la misma celda: sigue siendo uno solo, el nuevo.
         a.decor_key = "prop/farol".into();
-        a.place_decor_sized(4, 7, Some([1.0, 2.0]));
+        a.place_decor_sized(4, 7, Some([1.0, 2.0]), None, None);
         assert_eq!(a.edits.decor.len(), 1);
         assert_eq!(a.edits.decor[0].key, "prop/farol");
         // La goma lo saca y NO deja basura de celda limpiada (no había procedural).
         a.erase_decor(4, 7);
         assert!(a.edits.decor.is_empty());
         assert!(a.edits.cleared.is_empty());
+    }
+
+    /// El solar se adapta al TAMAÑO DEL ASSET, y el editor lo muestra. Es el fix
+    /// de "el asset que coloco no borra el tile de abajo, se pone encima".
+    #[test]
+    fn stamping_an_asset_replaces_the_ground_under_its_footprint() {
+        let mut a = app();
+        a.decor_stamps_ground = true;
+        a.decor_ground_tile = Tile::Stone;
+        // Un asset de 5×4 anclado en (40, 40): ancla por defecto = (2, 3).
+        a.place_decor_sized(40, 40, Some([5.0, 4.0]), Some((5, 4)), None);
+        a.rebuild_solar();
+        assert_eq!(a.solar.len(), 20, "el solar mide lo que mide el asset");
+        assert_eq!(a.effective_tile(38, 37), Tile::Stone, "esquina min del solar");
+        assert_eq!(a.effective_tile(42, 40), Tile::Stone, "esquina max del solar");
+        // Y ni un tile más allá de la huella.
+        assert_ne!(a.solar.get(&(43, 40)), Some(&Tile::Stone));
+        // Lo que pintás a mano GANA sobre el solar (lo dibujaste después).
+        a.commit_map([((40, 40), Tile::Water)].into_iter().collect());
+        assert_eq!(a.effective_tile(40, 40), Tile::Water);
+        // Sacar el asset se lleva su solar: no queda una losa fantasma.
+        a.erase_decor(40, 40);
+        a.rebuild_solar();
+        assert!(a.solar.is_empty());
+    }
+
+    /// Sin la casilla tildada, colocar un asset NO toca el terreno — es el
+    /// comportamiento histórico y lo usan todos los props sueltos.
+    #[test]
+    fn placing_without_stamping_leaves_the_terrain_alone() {
+        let mut a = app();
+        a.decor_stamps_ground = false;
+        a.place_decor_sized(40, 40, Some([5.0, 4.0]), Some((5, 4)), None);
+        a.rebuild_solar();
+        assert!(a.solar.is_empty());
+        assert!(a.edits.decor[0].ground.is_none());
     }
 
     #[test]
@@ -1282,7 +1741,7 @@ mod tests {
             "lo que pintás reemplaza al mundo: el árbol no debe seguir ahí"
         );
         // Y el asset autorado gana incluso sobre el terreno pintado.
-        a.place_decor_sized(x, z, None);
+        a.place_decor_sized(x, z, None, None, None);
         assert_eq!(a.effective_decor(x, z).as_deref(), Some("decor/tree_roble"));
     }
 

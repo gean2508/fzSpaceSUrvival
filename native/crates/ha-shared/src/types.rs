@@ -11,6 +11,10 @@ pub type MovementState = &'static str;
 pub const MOV_IDLE: MovementState = "idle";
 pub const MOV_RUNNING: MovementState = "running";
 pub const MOV_SPRINTING: MovementState = "sprinting";
+/// Cruzando líquido de poco fondo ([`crate::topdown::Tile::swim`]): más lento, sin
+/// esprintar y con la pose `swim_*` del personaje. Si el pack de arte no trae esa
+/// pose, el personaje sigue con la de caminar — nunca se queda sin sprite.
+pub const MOV_SWIMMING: MovementState = "swimming";
 pub const MOV_WALL_TREK: MovementState = "wall_trek";
 pub const MOV_CLIMBING: MovementState = "climbing";
 pub const MOV_HANGING: MovementState = "hanging";

@@ -28,6 +28,13 @@ use crate::society::{
 /// Radio (unidades de mundo) alrededor del NPC donde un toque lo selecciona.
 const PICK_R: f32 = 1.6;
 const CONVERT_STEP: f32 = 0.3;
+/// Espera entre sermones **mientras el culto no existe todavía**. `CONVERT_COOLDOWN`
+/// (60 s) está pensado para que no conviertas al pueblo entero a fuerza de clicks
+/// —para eso está el contagio de vecino a vecino—, pero aplicado al PRIMER fiel
+/// dejaba fundar la religión detrás de dos esperas de un minuto. Fundar tiene que
+/// costar una charla, no un trámite; a partir del primer creyente manda el
+/// cooldown largo.
+const FOUND_COOLDOWN: f32 = 8.0;
 
 const NEON_CYAN: Color = Color::srgb(0.16, 0.94, 1.0);
 const NEON_MAGENTA: Color = Color::srgb(1.0, 0.18, 0.62);
@@ -68,6 +75,7 @@ fn npc_menu_autoshot(
     mut speech: ResMut<SpeechQueue>,
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
+    selected: Res<crate::game_phase::SelectedCharacter>,
 ) {
     let Ok(path) = std::env::var("HA_NPCSHOT") else {
         return;
@@ -95,7 +103,7 @@ fn npc_menu_autoshot(
             if let Some((mut npc, _)) = npcs.iter_mut().find(|(n, _)| n.uid == uid) {
                 let rep = soc.rep(npc.family);
                 for k in 0..3u64 {
-                    let line = npc_line(rep, npc.converted, npc.faith, religion.founded, &religion.name, npc.uid + k);
+                    let line = npc_line(rep, npc.converted, npc.faith, religion.founded, &religion.name, &selected.name, npc.uid + k);
                     push_history(&mut npc.history, &line);
                     say(&mut speech, npc.x, npc.z, line, Color::srgb(0.92, 0.96, 1.0));
                 }
@@ -124,6 +132,10 @@ struct NpcMenu {
     shown_uid: Option<u64>,
     /// forzar reconstrucción (tras Hablar, etc.).
     refresh: bool,
+    /// Grilla de expresiones del retrato. Se crea UNA vez: el panel se
+    /// reconstruye en cada "HABLAR" y armar un layout nuevo cada vez iba dejando
+    /// `TextureAtlasLayout` huérfanos para toda la partida.
+    portrait_layout: Option<Handle<TextureAtlasLayout>>,
 }
 
 #[derive(Component)]
@@ -180,7 +192,13 @@ fn pick_npc(
     let Ok((camera, cam_tf)) = cam.get_single() else {
         return;
     };
-    let Ok(world) = camera.viewport_to_world_2d(cam_tf, screen) else {
+    let Ok(win) = windows.get_single() else {
+        return;
+    };
+    // Píxeles de ventana → mundo teniendo en cuenta la escala de render: con la
+    // cámara apuntando a una imagen más chica, pasarle el toque crudo desviaría
+    // la selección justo en proporción a la escala. Ver `render::scale`.
+    let Some(world) = crate::render::scale::window_to_world_2d(camera, cam_tf, win, screen) else {
         return;
     };
     // NPC más cercano al punto tocado (en espacio de render = Transform.xy).
@@ -225,6 +243,11 @@ fn sync_menu(
     npcs: Query<&Npc>,
     soc: Res<Society>,
     religion: Res<Religion>,
+    cg: Res<crate::chargen::Chargen>,
+    mut jobs: ResMut<crate::chargen::ChargenJobs>,
+    mut images: ResMut<Assets<Image>>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+    assets: Res<AssetServer>,
 ) {
     let changed = menu.open_uid != menu.shown_uid || menu.refresh;
     if !changed {
@@ -252,6 +275,34 @@ fn sync_menu(
     let founded = religion.founded;
     let converted = npc.converted;
 
+    // RETRATO — la misma cara que tiene su cuerpo en el mundo (el índice guarda
+    // con qué capas se horneó cada hoja `npc/char_XX`), con la expresión que le
+    // toca por cómo te trata y cómo está. Se compone una vez y queda cacheado.
+    let expression =
+        crate::chargen::Expression::for_npc(role, npc.needs.food, npc.needs.rest);
+    let portrait = crate::chargen::portrait_for(
+        cg.look_for_uid(uid),
+        &cg,
+        &mut jobs,
+        &mut images,
+        &assets,
+    )
+    .map(|handle| {
+        let layout = menu
+            .portrait_layout
+            .get_or_insert_with(|| {
+                layouts.add(TextureAtlasLayout::from_grid(
+                    UVec2::new(cg.index.portrait_cell[0], cg.index.portrait_cell[1]),
+                    cg.index.portrait_cols.max(1),
+                    cg.index.portrait_rows.max(1),
+                    None,
+                    None,
+                ))
+            })
+            .clone();
+        ImageNode::from_atlas_image(handle, TextureAtlas { layout, index: expression.index() })
+    });
+
     commands
         .spawn((
             Node {
@@ -276,11 +327,39 @@ fn sync_menu(
             Name::new("NpcMenu"),
         ))
         .with_children(|root| {
-            root.spawn((
-                Text::new(format!("{name}  [{role}]  {job}")),
-                TextFont { font_size: 20.0, ..default() },
-                TextColor(NEON_CYAN),
-            ));
+            // Cabecera: retrato a la izquierda, nombre/rol/oficio a la derecha.
+            root.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                ..default()
+            })
+            .with_children(|head| {
+                if let Some(image) = portrait {
+                    head.spawn((
+                        image,
+                        Node { width: Val::Px(64.0), height: Val::Px(64.0), flex_shrink: 0.0, ..default() },
+                        Name::new("NpcPortrait"),
+                    ));
+                }
+                head.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    ..default()
+                })
+                .with_children(|col| {
+                    col.spawn((
+                        Text::new(name.clone()),
+                        TextFont { font_size: 20.0, ..default() },
+                        TextColor(NEON_CYAN),
+                    ));
+                    col.spawn((
+                        Text::new(format!("[{role}]  {job}")),
+                        TextFont { font_size: 13.0, ..default() },
+                        TextColor(Color::srgb(0.7, 0.75, 0.85)),
+                    ));
+                });
+            });
             root.spawn((
                 Text::new("ultimos mensajes:"),
                 TextFont { font_size: 12.0, ..default() },
@@ -299,7 +378,7 @@ fn sync_menu(
             .with_children(|list| {
                 if history.is_empty() {
                     list.spawn((
-                        Text::new("(silencio... tocá HABLAR)"),
+                        Text::new("(silencio... toca HABLAR)"),
                         TextFont { font_size: 13.0, ..default() },
                         TextColor(Color::srgb(0.5, 0.55, 0.65)),
                     ));
@@ -332,8 +411,16 @@ fn sync_menu(
                 } else {
                     npc_button(row, "COMERCIAR", NpcAction::Trade, NEON_CYAN);
                 }
-                if founded && !converted {
-                    npc_button(row, "CONVERTIR", NpcAction::Convert, Color::srgb(1.0, 0.86, 0.35));
+                // Sin culto fundado el botón decía nada y no había forma de
+                // fundarlo hablando: sólo juntando gente encima tuyo. Ahora
+                // PREDICAR es el camino, y el primer convencido funda el culto.
+                if !converted {
+                    let (label, action) = if founded {
+                        ("CONVERTIR", NpcAction::Convert)
+                    } else {
+                        ("PREDICAR", NpcAction::Convert)
+                    };
+                    npc_button(row, label, action, Color::srgb(1.0, 0.86, 0.35));
                 }
                 npc_button(row, "CERRAR", NpcAction::Close, NEON_MAGENTA);
             });
@@ -368,9 +455,10 @@ fn menu_buttons(
     mut menu: ResMut<NpcMenu>,
     mut npcs: Query<(Entity, &mut Npc)>,
     mut soc: ResMut<Society>,
-    religion: Res<Religion>,
+    mut religion: ResMut<Religion>,
     mut speech: ResMut<SpeechQueue>,
     mut inv: ResMut<PlayerInventory>,
+    selected: Res<crate::game_phase::SelectedCharacter>,
 ) {
     let Some(uid) = menu.open_uid else {
         return;
@@ -393,6 +481,7 @@ fn menu_buttons(
                         npc.faith,
                         religion.founded,
                         &religion.name,
+                        &selected.name,
                         npc.uid.wrapping_add(npc.history.len() as u64 + 1),
                     );
                     push_history(&mut npc.history, &line);
@@ -434,13 +523,24 @@ fn menu_buttons(
                         // para voltear a un HOSTIL.
                         say_from(&mut speech, e, x, z, "Jamas!", Color::srgb(1.0, 0.5, 0.45), true);
                     } else {
-                        npc.convert_cd = CONVERT_COOLDOWN;
+                        npc.convert_cd =
+                            if religion.founded { CONVERT_COOLDOWN } else { FOUND_COOLDOWN };
                         npc.faith = (npc.faith + CONVERT_STEP).min(1.0);
                         if npc.faith >= CONVERT_AT && !npc.converted {
                             npc.converted = true;
+                            // El PRIMER converso funda el culto. Antes la religión
+                            // nacía de juntar un rebaño de aldeanos alrededor tuyo,
+                            // que es justo la conducta que no queremos premiar.
+                            let first = !religion.founded;
+                            religion.found();
                             // D7: NO incrementar `religion.followers` acá — `tick_society`
                             // ya lo recalcula de cero cada tick contando a los conversos.
-                            say_from(&mut speech, e, x, z, "Creo en el Ki!", Color::srgb(1.0, 0.9, 0.4), true);
+                            let line = if first {
+                                format!("Creo en el Ki! Fundamos {}.", religion.name)
+                            } else {
+                                "Creo en el Ki!".to_string()
+                            };
+                            say_from(&mut speech, e, x, z, line, Color::srgb(1.0, 0.9, 0.4), true);
                         } else {
                             say_from(&mut speech, e, x, z, "Cuentame mas...", Color::srgb(1.0, 0.86, 0.5), true);
                         }
@@ -465,7 +565,9 @@ fn menu_buttons(
                             e,
                             x,
                             z,
-                            format!("Tené, {amount:.0} de {label}."),
+                            // Regla 6: la fuente no dibuja acentos ("Tené" salia con
+                            // una caja en el medio).
+                            format!("Toma, {amount:.0} de {label}."),
                             Color::srgb(0.7, 1.0, 0.75),
                             true,
                         );

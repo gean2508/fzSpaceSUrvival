@@ -5,7 +5,7 @@
 
 use crate::celestial_bodies::CelestialBody;
 use crate::geography::{biome_at, vegetation_density, Biome};
-use crate::topdown::{building_cell, building_site_in, topdown_tile, Tile, SITE_PERIOD};
+use crate::topdown::{building_cell, building_site_in, topdown_tile, SITE_PERIOD};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DecorKind {
@@ -32,7 +32,10 @@ pub fn hash_cell(seed: u32, tx: i64, tz: i64) -> u32 {
 pub fn surface_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<DecorKind> {
     let seed = crate::body_terrain_seed(body) ^ 0x1234_abcd;
     let tile = topdown_tile(body, 0, tx, tz);
-    if tile.solid() || tile == Tile::Water {
+    // `buildable_ground` y no `!solid()`: desde que el bajío se nada, `!solid()`
+    // dice que sí a plantar un roble en medio del lago. Tampoco crece nada sobre
+    // una rampa (es un paso, no un terreno).
+    if !tile.buildable_ground() {
         return None;
     }
     if building_cell(body, tx, tz).is_some() {
@@ -174,6 +177,87 @@ pub fn prop_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static E
         return None;
     }
     pick_weighted(PROP_SPECIES, h >> 10)
+}
+
+// ---------------------------------------------------------------------------
+// El agua no está vacía: flota, se pesca y se acampa en la orilla
+// ---------------------------------------------------------------------------
+
+/// Cosas que FLOTAN. Van sobre celdas de líquido, en capa de piso (no tapan al
+/// que nada). Un lago liso de un solo azul se lee como un agujero en el mapa;
+/// cuatro troncos y un nenúfar lo convierten en un sitio.
+pub const WATER_DECOR: &[ExtraDecor] = &[
+    ExtraDecor { key: "agua/tronco_flotante", size: [2.2, 1.0], weight: 20 },
+    ExtraDecor { key: "agua/nenufar", size: [1.1, 1.0], weight: 26 },
+    ExtraDecor { key: "agua/junco", size: [1.0, 1.6], weight: 22 },
+    ExtraDecor { key: "agua/boya", size: [0.8, 1.1], weight: 8 },
+    ExtraDecor { key: "agua/flotador", size: [1.2, 1.1], weight: 6 },
+    ExtraDecor { key: "agua/estrella_mar", size: [0.8, 0.7], weight: 10 },
+];
+
+/// Lo que hay en la ORILLA de una laguna: el campamento y el puesto de pesca.
+/// Los `Fishing_Spot_1..4` del pack son cuatro variantes del MISMO objeto, así
+/// que van por una sola clave (`fishing/spot`) y el juego elige la variante por
+/// celda — ver `ArtLibrary::variant_key_seeded`.
+pub const SHORE_DECOR: &[ExtraDecor] = &[
+    ExtraDecor { key: "fishing/spot", size: [1.6, 1.4], weight: 30 },
+    ExtraDecor { key: "fishing/caña", size: [1.0, 1.8], weight: 10 },
+    ExtraDecor { key: "fishing/balde", size: [0.9, 0.9], weight: 8 },
+    ExtraDecor { key: "prop/carpa", size: [2.6, 2.2], weight: 12 },
+    ExtraDecor { key: "prop/barril", size: [0.9, 1.1], weight: 6 },
+    ExtraDecor { key: "nature/tronco", size: [1.5, 0.8], weight: 14 },
+    ExtraDecor { key: "prop/mesa_picnic", size: [2.0, 1.6], weight: 8 },
+    ExtraDecor { key: "agua/muelle", size: [2.0, 3.0], weight: 6 },
+];
+
+/// Decoración de una celda de LÍQUIDO. Densidad baja (~2 %): lo justo para que el
+/// agua tenga cosas y no para convertir el lago en un vertedero.
+pub fn water_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    if !crate::relief::is_liquid(body, tx, tz) {
+        return None;
+    }
+    // Sólo en el BAJÍO: el fondo profundo se ve desde arriba y nada flota ahí
+    // (además de que un tronco a 8 m de profundidad sería un tronco hundido).
+    if crate::relief::relief_level(body, tx, tz) < -1 {
+        return None;
+    }
+    let h = hash_cell(0x1a6e_1001, tx, tz);
+    if h % 1000 >= 20 {
+        return None;
+    }
+    pick_weighted(WATER_DECOR, h >> 10)
+}
+
+/// Campamento y puesto de pesca en la ORILLA de una laguna: la franja de tierra
+/// firme que rodea el agua, hasta 5 tiles.
+///
+/// Es lo que convierte una charca en un destino: llegás, hay una carpa, una mesa
+/// y sitio para pescar. Sin esto un lago es un obstáculo; con esto es un sitio
+/// adonde ir.
+pub fn shore_decor_at(body: CelestialBody, tx: i64, tz: i64) -> Option<&'static ExtraDecor> {
+    // Tiene que ser tierra firme: nada de plantar una carpa dentro del agua.
+    if !topdown_tile(body, 0, tx, tz).buildable_ground() {
+        return None;
+    }
+    // ¿Hay agua a menos de 5 tiles? Se prueba en cruz, que basta para una orilla.
+    let near_water = [(5, 0), (-5, 0), (0, 5), (0, -5), (3, 3), (-3, -3), (3, -3), (-3, 3)]
+        .into_iter()
+        .any(|(dx, dz)| crate::relief::is_liquid(body, tx + dx, tz + dz));
+    if !near_water {
+        return None;
+    }
+    // Y tiene que ser la orilla de una LAGUNA, no la del océano: el mar abierto
+    // tiene su propia costa (playa) y no se acampa en ella por defecto.
+    crate::world_map::pond_covering(body, tx, tz)?;
+    // Nada de campamentos en mitad de la calzada ni dentro de un pueblo.
+    if crate::geography::civil_at(body, tx, tz).is_some() {
+        return None;
+    }
+    let h = hash_cell(0x1a6e_2002, tx, tz);
+    if h % 1000 >= 45 {
+        return None;
+    }
+    pick_weighted(SHORE_DECOR, h >> 10)
 }
 
 fn pick_weighted(table: &'static [ExtraDecor], roll: u32) -> Option<&'static ExtraDecor> {

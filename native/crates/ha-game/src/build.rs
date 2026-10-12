@@ -24,8 +24,9 @@
 use bevy::prelude::*;
 
 use ha_shared::build_grid::{
-    edge_piece, edge_piece_count, is_build_floor, nearest_edge, prefab_edges, wall_supported,
-    EdgePiece, WallAxis, WallKind, WALL_THICK,
+    ceiling_piece, ceiling_piece_count, ceiling_supported, edge_piece, edge_piece_count,
+    is_build_floor, nearest_edge, prefab_edges, wall_supported, CeilingPiece, EdgePiece, WallAxis,
+    WallKind, WALL_THICK,
 };
 use ha_shared::topdown::{
     build_piece, build_piece_count, large_asset, large_asset_count, prefab, prefab_cost,
@@ -58,6 +59,8 @@ pub enum BuildSelection {
     Large(&'static LargeAsset),
     /// Pieza de BORDE (pared/puerta/ventana): se pega a la arista entre celdas.
     Edge(&'static EdgePiece),
+    /// TAPA (tumbado o techo modular): ocupa la celda, pero por encima.
+    Ceiling(&'static CeilingPiece),
 }
 
 /// Índice de paleta donde arrancan las piezas de borde.
@@ -65,11 +68,17 @@ pub fn edge_palette_base() -> usize {
     build_piece_count() + prefab_count() + large_asset_count()
 }
 
-/// Combined palette lookup: cell pieces, prefabs, large assets (A2), edges.
+/// Índice de paleta donde arrancan las tapas (techos y tumbados).
+pub fn ceiling_palette_base() -> usize {
+    edge_palette_base() + edge_piece_count()
+}
+
+/// Combined palette lookup: cell pieces, prefabs, large assets (A2), edges, tapas.
 pub fn build_selection(idx: usize) -> Option<BuildSelection> {
     let pc = build_piece_count();
     let prc = prefab_count();
     let lc = large_asset_count();
+    let ec = edge_piece_count();
     if idx < pc {
         return build_piece(idx).map(BuildSelection::Piece);
     }
@@ -79,12 +88,126 @@ pub fn build_selection(idx: usize) -> Option<BuildSelection> {
     if idx < pc + prc + lc {
         return large_asset(idx - pc - prc).map(BuildSelection::Large);
     }
-    edge_piece(idx - pc - prc - lc).map(BuildSelection::Edge)
+    if idx < pc + prc + lc + ec {
+        return edge_piece(idx - pc - prc - lc).map(BuildSelection::Edge);
+    }
+    ceiling_piece(idx - pc - prc - lc - ec).map(BuildSelection::Ceiling)
+}
+
+/// **¿Esta celda del nivel activo admite fundar algo?** En el suelo (`z <= 0`)
+/// siempre: hay terreno. En altura sólo sobre lo construido —tu casa, o la casa
+/// generada del pueblo que estás ampliando— o enganchándose a una losa vecina del
+/// mismo piso (`build_grid::floor_supported`, regla de Project Zomboid).
+///
+/// Lo que aguanta desde abajo son las TRES capas que existen: el tile (piso o
+/// pared de asentamiento), la pared de BORDE que rodea la celda, y la estructura
+/// colocada. Si faltara alguna, techar tu propia casa fallaría según con qué la
+/// hayas levantado, que es la peor clase de regla: la que depende de por dónde
+/// entraste.
+fn floor_supported_here(
+    tiles: &TileWorld,
+    walls: &crate::walls::BuiltWalls,
+    structures: &crate::structures::BuiltStructures,
+    body: ha_shared::CelestialBody,
+    z: i32,
+    tx: i64,
+    tz: i64,
+) -> bool {
+    ha_shared::build_grid::floor_supported(
+        z,
+        &|cx, cz| {
+            tiles.supports_upper_floor(body, z - 1, cx, cz)
+                || walls.any_edge_of_cell(body, z - 1, cx, cz)
+                || structures.blocks(body, z - 1, cx, cz)
+        },
+        &|cx, cz| is_build_floor(tiles.tile_at(body, cx, cz)),
+        tx,
+        tz,
+    )
 }
 
 /// Footprint min corner for a prefab aimed at cell `(tx, tz)` (centered).
 fn prefab_min(p: &Prefab, tx: i64, tz: i64) -> (i64, i64) {
     (tx - p.w / 2, tz - p.h / 2)
+}
+
+/// **Hacia dónde mira lo que estás por colocar.**
+///
+/// `None` = AUTOMÁTICO: el objeto se planta de espaldas a la pared que tenga al
+/// lado. Es lo que uno espera al amoblar —la cabecera contra el muro, la
+/// heladera pegada al rincón— y evita tener que girar a mano cada mueble.
+/// `Some(r)` = lo fijaste vos con GIRAR y manda sobre el automático, para el caso
+/// en que quieras la cama en medio del cuarto.
+#[derive(Resource, Default)]
+pub struct BuildFacing(pub Option<u8>);
+
+impl BuildFacing {
+    /// El botón cicla AUTO → sur → oeste → norte → este → AUTO.
+    fn cycle(&mut self) {
+        self.0 = match self.0 {
+            None => Some(0),
+            Some(3) => None,
+            Some(r) => Some(r + 1),
+        };
+    }
+    fn label(&self) -> &'static str {
+        match self.0 {
+            None => "AUTO",
+            Some(0) => "SUR",
+            Some(1) => "OESTE",
+            Some(2) => "NORTE",
+            _ => "ESTE",
+        }
+    }
+}
+
+/// **Anclaje a la pared**: de espaldas al muro que tenga la celda al lado. Se
+/// mira en orden norte, este, sur, oeste y se toma el primero; sin paredes
+/// alrededor queda mirando al sur, que es el reposo de todos los sprites.
+fn auto_facing(walls: &crate::walls::BuiltWalls, body: ha_shared::CelestialBody, z: i32, tx: i64, tz: i64) -> u8 {
+    use ha_shared::build_grid::WallAxis::{H, V};
+    if walls.at(body, z, tx, tz, H).is_some() {
+        return 0; // muro al norte → mira al sur
+    }
+    if walls.at(body, z, tx + 1, tz, V).is_some() {
+        return 1; // muro al este → mira al oeste
+    }
+    if walls.at(body, z, tx, tz + 1, H).is_some() {
+        return 2; // muro al sur → mira al norte
+    }
+    if walls.at(body, z, tx, tz, V).is_some() {
+        return 3; // muro al oeste → mira al este
+    }
+    0
+}
+
+/// **¿Esta celda está ADENTRO?** Un mueble de interior (`PlaceCat::Mueble`) no va
+/// en mitad de la calle: pide estar bajo techo —el que pusiste o la losa de la
+/// planta de arriba— o en un rincón con al menos dos paredes.
+///
+/// Las dos condiciones existen porque las dos son "adentro" para el jugador: un
+/// cuarto terminado tiene tapa, y uno a medio hacer todavía no, pero ya tiene
+/// esquinas. Exigir sólo techo obligaría a techar antes de poder amoblar.
+fn cell_is_indoors(
+    ceilings: &crate::ceilings::BuiltCeilings,
+    walls: &crate::walls::BuiltWalls,
+    tiles: &TileWorld,
+    body: ha_shared::CelestialBody,
+    z: i32,
+    tx: i64,
+    tz: i64,
+) -> bool {
+    if crate::ceilings::covered(ceilings, tiles, body, z, tx, tz) {
+        return true;
+    }
+    use ha_shared::build_grid::WallAxis::{H, V};
+    let sides = [
+        walls.at(body, z, tx, tz, H).is_some(),
+        walls.at(body, z, tx, tz + 1, H).is_some(),
+        walls.at(body, z, tx, tz, V).is_some(),
+        walls.at(body, z, tx + 1, tz, V).is_some(),
+    ];
+    sides.iter().filter(|s| **s).count() >= 2
 }
 
 #[derive(Resource, Default)]
@@ -96,12 +219,21 @@ struct BuildIndicator;
 struct BuildIndicatorLabel;
 #[derive(Component)]
 struct BuildGhost;
+/// Chapa "en qué piso estoy". Ver `sync_floor_indicator`.
+#[derive(Component)]
+struct FloorIndicator;
+/// Chapa GIRAR: toca y el objeto que estás por colocar cambia de orientación.
+#[derive(Component)]
+struct FacingChip;
+#[derive(Component)]
+struct FacingChipLabel;
 
 pub struct BuildPlugin;
 
 impl Plugin for BuildPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SelectedBuildPiece>()
+            .init_resource::<BuildFacing>()
             .init_resource::<BuildIndicatorSpawned>()
             .add_systems(Startup, spawn_build_ghost)
             .add_systems(
@@ -109,9 +241,12 @@ impl Plugin for BuildPlugin {
                 (
                     ensure_build_indicator,
                     desktop_build_hotkey,
+                    desktop_rotate_hotkey,
                     build_tab_select,
                     sync_bag_build_section,
                     sync_build_indicator,
+                    sync_floor_indicator,
+                    sync_facing_chip,
                     apply_build_hold.before(crate::hud::update_interact_hud),
                     sync_build_ghost,
                 ),
@@ -126,6 +261,17 @@ fn desktop_build_hotkey(keys: Res<ButtonInput<KeyCode>>, mut build_mode: ResMut<
     }
     if keys.just_pressed(KeyCode::KeyB) {
         build_mode.active = !build_mode.active;
+    }
+}
+
+/// `R` gira lo que estás por colocar (escritorio). En el celular lo hace la
+/// chapa GIRAR, que es táctil y vive arriba-izquierda, lejos de los joysticks.
+fn desktop_rotate_hotkey(keys: Res<ButtonInput<KeyCode>>, mut facing: ResMut<BuildFacing>) {
+    if crate::platform::uses_touch_gameplay_ui() {
+        return;
+    }
+    if keys.just_pressed(KeyCode::KeyR) {
+        facing.cycle();
     }
 }
 
@@ -157,12 +303,17 @@ fn sync_bag_build_section(
     bag: Res<BagPanelState>,
     mut sections: Query<&mut Node, With<BagBuildSection>>,
 ) {
+    // Sólo al cambiar de pestaña: escribir `display` cada frame marca el `Node`
+    // sucio y taffy relayoutea toda la UI, aunque el valor sea el mismo.
+    let want = if bag.tab == BagTab::Build {
+        Display::Flex
+    } else {
+        Display::None
+    };
     for mut node in &mut sections {
-        node.display = if bag.tab == BagTab::Build {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        if node.display != want {
+            node.display = want;
+        }
     }
 }
 
@@ -181,6 +332,65 @@ fn ensure_build_indicator(
         return;
     };
     spawned.0 = true;
+    // Chapa de PISO: nace oculta y sólo aparece fuera de la planta baja. Sin
+    // esto la verticalidad es adivinanza — el mundo de abajo se ve atenuado por
+    // el hueco, pero "estoy en el 2º" y "estoy en una cueva" no se distinguen, y
+    // colocar en el piso equivocado es el error más fácil de cometer.
+    commands.entity(root).with_children(|parent| {
+        parent
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(8.0),
+                    top: Val::Px(128.0),
+                    padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BorderColor(ui_theme::accent_cyan()),
+                BackgroundColor(ui_theme::button_bg(UiButtonTone::Primary, UiButtonState::Pressed)),
+                Visibility::Hidden,
+                FloorIndicator,
+                Name::new("FloorIndicator"),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    Text::new(""),
+                    TextFont { font_size: 13.0, ..default() },
+                    TextColor(ui_theme::text_primary()),
+                ));
+            });
+    });
+    // Chapa GIRAR: el celular no tiene tecla `R`, y sin ella amoblar de espaldas
+    // a la pared sería imposible de corregir a mano. Arriba-izquierda como el
+    // resto (biblia §7: ahí no la roban los joysticks).
+    commands.entity(root).with_children(|parent| {
+        parent
+            .spawn((
+                Button,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(8.0),
+                    top: Val::Px(156.0),
+                    padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BorderColor(ui_theme::accent_cyan()),
+                BackgroundColor(ui_theme::button_bg(UiButtonTone::Craft, UiButtonState::Pressed)),
+                Visibility::Hidden,
+                FacingChip,
+                Name::new("FacingChip"),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    Text::new("GIRAR: AUTO"),
+                    TextFont { font_size: 13.0, ..default() },
+                    TextColor(ui_theme::text_primary()),
+                    FacingChipLabel,
+                ));
+            });
+    });
     commands.entity(root).with_children(|parent| {
         parent
             .spawn((
@@ -249,11 +459,82 @@ fn sync_build_indicator(
                     Some(BuildSelection::Prefab(p)) => p.label,
                     Some(BuildSelection::Large(a)) => a.label,
                     Some(BuildSelection::Edge(p)) => p.label,
+                    Some(BuildSelection::Ceiling(p)) => p.label,
                     None => "",
                 }
             };
             let verb = if is_spawn { "SPAWN" } else { "CONSTRUIR" };
             let line = format!("{verb}: {name}  (tocar: salir)");
+            if text.0 != line {
+                text.0 = line;
+            }
+        }
+    }
+}
+
+/// **En qué piso estás**, en una línea y sólo cuando no es obvio. Planta baja =
+/// sin chapa: el 99 % del juego pasa ahí y una etiqueta permanente sería ruido.
+///
+/// La verticalidad ya no es sólo la mina: `z > 0` son los pisos que construís
+/// (Project Zomboid) y `z < 0` el subsuelo. Que la chapa sea la MISMA para los
+/// dos es a propósito — es un solo eje, no dos sistemas.
+fn sync_floor_indicator(
+    tiles: Res<TileWorld>,
+    mut chips: Query<(&mut Visibility, &Children), With<FloorIndicator>>,
+    mut labels: Query<&mut Text>,
+) {
+    let z = tiles.z;
+    for (mut vis, children) in &mut chips {
+        let want = if z == 0 { Visibility::Hidden } else { Visibility::Inherited };
+        if *vis != want {
+            *vis = want;
+        }
+        if z == 0 {
+            continue;
+        }
+        // ASCII-only: la fuente del juego no dibuja acentos ni flechas.
+        let line = if z > 0 {
+            format!("PISO {}", z + 1)
+        } else {
+            format!("SUBSUELO {}", -z)
+        };
+        for child in children.iter() {
+            if let Ok(mut text) = labels.get_mut(*child) {
+                if text.0 != line {
+                    text.0 = line.clone();
+                }
+            }
+        }
+    }
+}
+
+/// La chapa GIRAR: sólo aparece con algo ORIENTABLE en la mano (un colocable),
+/// porque girar un piso o una pared no significa nada y una chapa que no hace
+/// nada es peor que ninguna.
+fn sync_facing_chip(
+    build_mode: Res<BuildModeActive>,
+    selected: Res<SelectedBuildPiece>,
+    mut facing: ResMut<BuildFacing>,
+    taps: Query<&Interaction, (With<FacingChip>, Changed<Interaction>)>,
+    mut chips: Query<&mut Visibility, With<FacingChip>>,
+    mut label: Query<&mut Text, With<FacingChipLabel>>,
+) {
+    for interaction in &taps {
+        if *interaction == Interaction::Pressed {
+            facing.cycle();
+        }
+    }
+    let orientable = build_mode.active
+        && matches!(build_selection(selected.0), Some(BuildSelection::Large(_)));
+    let want = if orientable { Visibility::Inherited } else { Visibility::Hidden };
+    for mut v in &mut chips {
+        if *v != want {
+            *v = want;
+        }
+    }
+    if orientable {
+        if let Ok(mut text) = label.get_single_mut() {
+            let line = format!("GIRAR: {}", facing.label());
             if text.0 != line {
                 text.0 = line;
             }
@@ -277,6 +558,7 @@ struct BuildTargets<'w> {
     roofs: ResMut<'w, crate::building::BuiltRoofs>,
     structures: ResMut<'w, crate::structures::BuiltStructures>,
     walls: ResMut<'w, crate::walls::BuiltWalls>,
+    ceilings: ResMut<'w, crate::ceilings::BuiltCeilings>,
 }
 
 /// **Snapping de pared**: borde de la cuadrícula al que se engancha la mira.
@@ -305,9 +587,10 @@ fn apply_build_hold(
     art: Res<crate::art2d::ArtLibrary>,
     cursor: Res<crate::input::AimCursor>,
     mut world: BuildTargets,
+    facing: Res<BuildFacing>,
     mut inv: ResMut<PlayerInventory>,
     mut persist: ResMut<InventoryPersistState>,
-    mut sfx: EventWriter<crate::audio::PlaySfx>,
+    mut sfx: EventWriter<crate::audio::PlaySfxAt>,
     mut spawners: CreativeSpawnWriters,
 ) {
     if !hold.completed || !hold.placing_build {
@@ -335,6 +618,26 @@ fn apply_build_hold(
     let Some((tx, tz, _)) = target.place_cell else {
         return;
     };
+    // TAPAS: ocupan la celda apuntada, pero por encima. Mismas dos reglas que el
+    // borde —tocar una ocupada DEMUELE y devuelve el material, si no se coloca
+    // exigiendo apoyo—, así techar se aprende sabiendo levantar una pared.
+    if let Some(BuildSelection::Ceiling(piece)) = build_selection(selected.0) {
+        apply_ceiling_build(
+            piece,
+            selected.0 - ceiling_palette_base(),
+            tx as i64,
+            tz as i64,
+            &ctx,
+            &planet,
+            editor.creative,
+            &mut world,
+            &mut inv,
+            &mut persist,
+            &mut sfx,
+            &cursor,
+        );
+        return;
+    }
     // VIVARIO (F1): índices ≥ SPAWN_PALETTE_BASE son fauna residente (creativo), no
     // piezas — spawnea en el centro de la celda apuntada. Ver PLAN_VIVARIO_*.
     if selected.0 >= crate::fauna::SPAWN_PALETTE_BASE {
@@ -369,7 +672,10 @@ fn apply_build_hold(
                     hostile: false,
                 });
             }
-            sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Place));
+            sfx.send(crate::audio::PlaySfxAt(
+                crate::audio::Sfx::Place,
+                render_xy(cursor.world.x, cursor.world.y),
+            ));
         }
         return;
     }
@@ -390,8 +696,23 @@ fn apply_build_hold(
             if crate::world2d::cell_build_blocked(&flora, body, z, tx as i64, tz as i64) {
                 return;
             }
+            // En altura, la losa necesita apoyo (la casa de abajo o una losa vecina).
+            if !floor_supported_here(
+                &world.tiles,
+                &world.walls,
+                &world.structures,
+                body,
+                z,
+                tx as i64,
+                tz as i64,
+            ) {
+                return;
+            }
             if world.tiles.place_tile(body, tx as i64, tz as i64, piece.tile) {
-                sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Place));
+                sfx.send(crate::audio::PlaySfxAt(
+                    crate::audio::Sfx::Place,
+                    render_xy(cursor.world.x, cursor.world.y),
+                ));
                 if !creative {
                     inv.remove(piece.cost_item, piece.cost_qty);
                 }
@@ -414,6 +735,15 @@ fn apply_build_hold(
                     if world.tiles.solid_at(body, min_x + dx, min_z + dz)
                         || crate::world2d::cell_build_blocked(
                             &flora,
+                            body,
+                            z,
+                            min_x + dx,
+                            min_z + dz,
+                        )
+                        || !floor_supported_here(
+                            &world.tiles,
+                            &world.walls,
+                            &world.structures,
                             body,
                             z,
                             min_x + dx,
@@ -442,7 +772,10 @@ fn apply_build_hold(
                     piece,
                 });
             }
-            sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Stamp));
+            sfx.send(crate::audio::PlaySfxAt(
+                crate::audio::Sfx::Stamp,
+                render_xy(cursor.world.x, cursor.world.y),
+            ));
             if !creative {
                 inv.remove(p.cost_item, qty);
             }
@@ -463,15 +796,38 @@ fn apply_build_hold(
             if !creative && inv.qty(a.cost_item) < a.cost_qty {
                 return;
             }
-            let (min_x, min_z) = (tx as i64 - a.w / 2, tz as i64 - a.h / 2);
+            // Orientación: la que fijaste con GIRAR, o de espaldas a la pared.
+            let rot = facing
+                .0
+                .unwrap_or_else(|| auto_facing(&world.walls, body, z, tx as i64, tz as i64));
+            let (fw, fh) = ha_shared::world_edits::footprint_rotated(a.w, a.h, rot);
+            // Un mueble de interior no se planta en la calle.
+            if !creative
+                && a.cat == ha_shared::placeables::PlaceCat::Mueble
+                && !cell_is_indoors(
+                    &world.ceilings, &world.walls, &world.tiles, body, z, tx as i64, tz as i64,
+                )
+            {
+                return;
+            }
+            let (min_x, min_z) = (tx as i64 - fw / 2, tz as i64 - fh / 2);
             // Footprint despejado: nada sólido, ni decor cosechable, ni otra
             // estructura (no se apilan).
-            for dz in 0..a.h {
-                for dx in 0..a.w {
+            for dz in 0..fh {
+                for dx in 0..fw {
                     let (cx, cz) = (min_x + dx, min_z + dz);
                     if world.tiles.solid_at(body, cx, cz)
                         || crate::world2d::cell_build_blocked(&flora, body, z, cx, cz)
                         || world.structures.blocks(body, z, cx, cz)
+                        || !floor_supported_here(
+                            &world.tiles,
+                            &world.walls,
+                            &world.structures,
+                            body,
+                            z,
+                            cx,
+                            cz,
+                        )
                     {
                         return;
                     }
@@ -489,6 +845,9 @@ fn apply_build_hold(
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            // `w`/`h` se guardan SIN girar: son la medida del asset. Quien dibuja
+            // y quien colisiona aplican `rot` (`footprint_rotated`), así que la
+            // orientación es un dato y no una copia deformada del tamaño.
             world.structures.add(crate::structures::PlacedStructure {
                 body: body as u8,
                 z,
@@ -498,16 +857,84 @@ fn apply_build_hold(
                 h: a.h,
                 art: a.art.to_string(),
                 solid,
+                rot,
             });
-            sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Stamp));
+            sfx.send(crate::audio::PlaySfxAt(
+                crate::audio::Sfx::Stamp,
+                render_xy(cursor.world.x, cursor.world.y),
+            ));
             if !creative {
                 inv.remove(a.cost_item, a.cost_qty);
             }
             persist.mark_immediate();
         }
-        // Ya resuelto arriba (usa borde, no celda).
-        BuildSelection::Edge(_) => {}
+        // Ya resueltos arriba (borde y tapa tienen su propio camino).
+        BuildSelection::Edge(_) | BuildSelection::Ceiling(_) => {}
     }
+}
+
+/// **Colocación / demolición de una TAPA.** Las mismas dos reglas que el borde:
+/// 1. Si la celda ya tiene tapa colocada → la saca y devuelve el material.
+/// 2. Si no, exige apoyo (`ceiling_supported`: piso construido o una pared en
+///    algún borde de la celda) y material; en creativo se saltea todo.
+///
+/// La tapa DERIVADA de la losa de arriba no se toca acá: ésa no es una pieza, es
+/// el piso del vecino de arriba, y se quita quitando esa losa.
+#[allow(clippy::too_many_arguments)]
+fn apply_ceiling_build(
+    piece: &'static CeilingPiece,
+    piece_idx: usize,
+    tx: i64,
+    tz: i64,
+    ctx: &WorldContextRuntime,
+    planet: &ActivePlanet,
+    creative: bool,
+    world: &mut BuildTargets,
+    inv: &mut PlayerInventory,
+    persist: &mut InventoryPersistState,
+    sfx: &mut EventWriter<crate::audio::PlaySfxAt>,
+    cursor: &crate::input::AimCursor,
+) {
+    let body = active_surface_body(ctx, planet);
+    let z = world.tiles.z;
+    if let Some(old) = world.ceilings.remove(body, z, tx, tz) {
+        if !creative {
+            if let Some(def) = ceiling_piece(old.piece) {
+                inv.add(def.cost_item, def.cost_qty);
+            }
+        }
+        sfx.send(crate::audio::PlaySfxAt(
+            crate::audio::Sfx::Dig,
+            render_xy(cursor.world.x, cursor.world.y),
+        ));
+        persist.mark_immediate();
+        return;
+    }
+    if !creative {
+        if inv.qty(piece.cost_item) < piece.cost_qty {
+            return;
+        }
+        let has_floor = |cx: i64, cz: i64| is_build_floor(world.tiles.tile_at(body, cx, cz));
+        let has_wall = |cx: i64, cz: i64| world.walls.any_edge_of_cell(body, z, cx, cz);
+        if !ceiling_supported(&has_floor, &has_wall, tx, tz) {
+            return;
+        }
+    }
+    world.ceilings.add(crate::ceilings::PlacedCeiling {
+        body: body as u8,
+        z,
+        tx,
+        tz,
+        piece: piece_idx,
+    });
+    sfx.send(crate::audio::PlaySfxAt(
+        crate::audio::Sfx::Place,
+        render_xy(cursor.world.x, cursor.world.y),
+    ));
+    if !creative {
+        inv.remove(piece.cost_item, piece.cost_qty);
+    }
+    persist.mark_immediate();
 }
 
 /// Índice de paleta de la pieza de borde de ese tipo hecha del material pedido
@@ -539,7 +966,7 @@ fn apply_edge_build(
     world: &mut BuildTargets,
     inv: &mut PlayerInventory,
     persist: &mut InventoryPersistState,
-    sfx: &mut EventWriter<crate::audio::PlaySfx>,
+    sfx: &mut EventWriter<crate::audio::PlaySfxAt>,
 ) {
     let Some((tx, tz, axis)) = aimed_edge(cursor, target) else {
         return;
@@ -552,7 +979,10 @@ fn apply_edge_build(
             let def = old.def();
             inv.add(def.cost_item, def.cost_qty);
         }
-        sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Dig));
+        sfx.send(crate::audio::PlaySfxAt(
+            crate::audio::Sfx::Dig,
+            render_xy(cursor.world.x, cursor.world.y),
+        ));
         persist.mark_immediate();
         return;
     }
@@ -574,7 +1004,10 @@ fn apply_edge_build(
         axis,
         piece: piece_idx,
     });
-    sfx.send(crate::audio::PlaySfx(crate::audio::Sfx::Place));
+    sfx.send(crate::audio::PlaySfxAt(
+        crate::audio::Sfx::Place,
+        render_xy(cursor.world.x, cursor.world.y),
+    ));
     if !creative {
         inv.remove(piece.cost_item, piece.cost_qty);
     }
@@ -614,6 +1047,8 @@ fn sync_build_ghost(
     flora: Res<crate::harvest::FloraHarvest>,
     structures: Res<crate::structures::BuiltStructures>,
     walls: Res<crate::walls::BuiltWalls>,
+    ceilings: Res<crate::ceilings::BuiltCeilings>,
+    facing: Res<BuildFacing>,
     mut ghost: Query<(&mut Transform, &mut Visibility, &mut Sprite), With<BuildGhost>>,
 ) {
     let Ok((mut tf, mut vis, mut sprite)) = ghost.get_single_mut() else {
@@ -658,11 +1093,34 @@ fn sync_build_ghost(
         return;
     };
     *vis = Visibility::Visible;
-    // Una celda bloquea si es sólida o tiene decor cosechable (talar/picar antes).
+    // TAPA: ghost de la celda entera. Naranja si ahí ya hay una (el gesto pasa a
+    // DEMOLER), verde si entra, rojo si falta apoyo o material.
+    if let BuildSelection::Ceiling(piece) = selection {
+        let (cx, cz) = (tx as i64, tz as i64);
+        let demolish = ceilings.at(body, tiles.z, cx, cz).is_some();
+        let has_floor = |x: i64, z: i64| is_build_floor(tiles.tile_at(body, x, z));
+        let has_wall = |x: i64, z: i64| walls.any_edge_of_cell(body, tiles.z, x, z);
+        let ok = inv.qty(piece.cost_item) >= piece.cost_qty
+            && ceiling_supported(&has_floor, &has_wall, cx, cz);
+        sprite.color = if demolish {
+            Color::srgba(1.0, 0.62, 0.12, 0.7)
+        } else if ok {
+            Color::srgba(0.25, 1.0, 0.35, 0.6)
+        } else {
+            Color::srgba(1.0, 0.25, 0.2, 0.55)
+        };
+        sprite.custom_size = Some(Vec2::splat(TILE_M));
+        let r = render_xy((tx as f32 + 0.5) * TILE_M, (tz as f32 + 0.5) * TILE_M);
+        tf.translation = Vec3::new(r.x, r.y, 5.7);
+        return;
+    }
+    // Una celda bloquea si es sólida, tiene decor cosechable (talar/picar antes)
+    // o —en un piso alto— no tiene nada debajo que la aguante.
     let blocked = |cx: i64, cz: i64| {
         tiles.solid_at(body, cx, cz)
             || crate::world2d::cell_build_blocked(&flora, body, tiles.z, cx, cz)
             || structures.blocks(body, tiles.z, cx, cz)
+            || !floor_supported_here(&tiles, &walls, &structures, body, tiles.z, cx, cz)
     };
     // Pieza: celda 1×1. Prefab: ghost del footprint COMPLETO w×h, centrado en la
     // celda apuntada. `ok` = materiales suficientes Y todo el footprint despejado.
@@ -685,16 +1143,25 @@ fn sync_build_ghost(
             )
         }
         BuildSelection::Large(a) => {
-            let (min_x, min_z) = (tx as i64 - a.w / 2, tz as i64 - a.h / 2);
-            let clear = (0..a.h).all(|dz| (0..a.w).all(|dx| !blocked(min_x + dx, min_z + dz)));
+            // El ghost muestra la huella YA GIRADA y aplica la regla de interior:
+            // el rojo tiene que significar "asi no entra", incluido "esto va
+            // adentro de una casa".
+            let rot = facing
+                .0
+                .unwrap_or_else(|| auto_facing(&walls, body, tiles.z, tx as i64, tz as i64));
+            let (fw, fh) = ha_shared::world_edits::footprint_rotated(a.w, a.h, rot);
+            let (min_x, min_z) = (tx as i64 - fw / 2, tz as i64 - fh / 2);
+            let clear = (0..fh).all(|dz| (0..fw).all(|dx| !blocked(min_x + dx, min_z + dz)));
+            let indoors = a.cat != ha_shared::placeables::PlaceCat::Mueble
+                || cell_is_indoors(&ceilings, &walls, &tiles, body, tiles.z, tx as i64, tz as i64);
             (
-                (inv.qty(a.cost_item) >= a.cost_qty) && clear,
-                Vec2::new(a.w as f32 * TILE_M, a.h as f32 * TILE_M),
-                (min_x as f32 + a.w as f32 * 0.5, min_z as f32 + a.h as f32 * 0.5),
+                (inv.qty(a.cost_item) >= a.cost_qty) && clear && indoors,
+                Vec2::new(fw as f32 * TILE_M, fh as f32 * TILE_M),
+                (min_x as f32 + fw as f32 * 0.5, min_z as f32 + fh as f32 * 0.5),
             )
         }
-        // Resuelto arriba (usa borde, no celda).
-        BuildSelection::Edge(_) => return,
+        // Resueltos arriba (borde y tapa tienen su propio ghost).
+        BuildSelection::Edge(_) | BuildSelection::Ceiling(_) => return,
     };
     // Bright green = placeable, red = not enough materials OR footprint obstructed.
     sprite.color = if ok {
@@ -705,4 +1172,68 @@ fn sync_build_ghost(
     sprite.custom_size = Some(size);
     let r = render_xy(center.0, center.1);
     tf.translation = Vec3::new(r.x, r.y, 5.7);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **La tarjeta que tocás pone EXACTAMENTE lo que dice.**
+    ///
+    /// El menú dibuja los colocables agrupados por categoría (`hud.rs`) pero el
+    /// índice de paleta sigue siendo el de la tabla. Es la clase de acoplamiento
+    /// que se rompe en silencio: reordenás una categoría, el menú se ve perfecto y
+    /// tocar "Heladera" planta un colectivo. Acá se recorre la paleta igual que la
+    /// dibuja el HUD y se exige que el índice devuelva el mismo objeto.
+    #[test]
+    fn cada_tarjeta_del_menu_coloca_su_propio_objeto() {
+        let lbase = build_piece_count() + prefab_count();
+        let mut vistas = 0;
+        for &cat in ha_shared::placeables::PlaceCat::all() {
+            for (i, esperado) in ha_shared::placeables::placeables_in(cat) {
+                let Some(BuildSelection::Large(puesto)) = build_selection(lbase + i) else {
+                    panic!("la tarjeta {} ({}) no resuelve a un colocable", lbase + i, esperado.label);
+                };
+                assert_eq!(
+                    puesto.art, esperado.art,
+                    "la tarjeta de '{}' coloca '{}'",
+                    esperado.label, puesto.label
+                );
+                vistas += 1;
+            }
+        }
+        assert_eq!(vistas, large_asset_count(), "el menu no muestra la tabla entera");
+    }
+
+    /// Las cuatro familias de la paleta no pueden pisarse: si los rangos se
+    /// solaparan, una pieza de borde se colocaría como estructura (o al revés).
+    #[test]
+    fn los_rangos_de_la_paleta_no_se_solapan() {
+        let pc = build_piece_count();
+        let prc = prefab_count();
+        let lc = large_asset_count();
+        for i in 0..pc {
+            assert!(matches!(build_selection(i), Some(BuildSelection::Piece(_))), "{i} no es pieza");
+        }
+        for i in pc..pc + prc {
+            assert!(matches!(build_selection(i), Some(BuildSelection::Prefab(_))), "{i} no es prefab");
+        }
+        for i in pc + prc..pc + prc + lc {
+            assert!(matches!(build_selection(i), Some(BuildSelection::Large(_))), "{i} no es colocable");
+        }
+        let ebase = edge_palette_base();
+        for i in 0..ha_shared::build_grid::edge_piece_count() {
+            assert!(
+                matches!(build_selection(ebase + i), Some(BuildSelection::Edge(_))),
+                "{} no es borde",
+                ebase + i
+            );
+        }
+        // El spawn de fauna vive MUY por encima de la paleta: si algún día la
+        // tabla creciera hasta ahí, tocar un colocable spawnearía una vaca.
+        assert!(
+            ebase + ha_shared::build_grid::edge_piece_count() < crate::fauna::SPAWN_PALETTE_BASE,
+            "la paleta alcanzo al rango de spawn de fauna"
+        );
+    }
 }
