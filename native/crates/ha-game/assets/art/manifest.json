@@ -561,6 +561,9 @@
     }
    ]
   },
+  "agua/pileta_completa": {
+   "label": "Pileta completa (6×4)"
+  },
   "agua/salvavidas": {
    "label": "Salvavidas",
    "variants": [
@@ -2235,7 +2238,7 @@
    ]
   },
   "azotea/cantero": {
-   "label": "Equipo de techo",
+   "label": "Equipo con canteros",
    "variants": [
     {
      "id": "ladrillo",
@@ -2781,6 +2784,19 @@
   "building/atras_gris_abajo": {
    "label": "Tacho de basura metálico"
   },
+  "building/ayuntamiento": {
+   "label": "Ayuntamiento",
+   "variants": [
+    {
+     "id": "1",
+     "label": "Ayuntamiento 1"
+    },
+    {
+     "id": "2",
+     "label": "Ayuntamiento 2"
+    }
+   ]
+  },
   "building/balcon_edificio": {
    "label": "Balcón edificio",
    "variants": [
@@ -3251,32 +3267,6 @@
     {
      "id": "3",
      "label": "Casa chica 3"
-    }
-   ]
-  },
-  "building/casa_country": {
-   "label": "Casa country",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Casa country 1"
-    },
-    {
-     "id": "2",
-     "label": "Casa country 2"
-    }
-   ]
-  },
-  "building/casa_grande": {
-   "label": "Casa grande",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Casa grande 1"
-    },
-    {
-     "id": "2",
-     "label": "Casa grande 2"
     }
    ]
   },
@@ -4036,6 +4026,19 @@
     {
      "id": "2",
      "label": "Gasolinera 2"
+    }
+   ]
+  },
+  "building/granero": {
+   "label": "Granero",
+   "variants": [
+    {
+     "id": "1",
+     "label": "Granero 1"
+    },
+    {
+     "id": "2",
+     "label": "Granero 2"
     }
    ]
   },
@@ -5854,57 +5857,6 @@
   "doorway/fachada_portal": {
    "label": "Portal de fachada"
   },
-  "edificio/azotea": {
-   "label": "Azotea con parapeto",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Azotea con parapeto · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Azotea con parapeto · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Azotea con parapeto · Hormigón"
-    }
-   ]
-  },
-  "edificio/azotea_clara": {
-   "label": "Azotea con parapeto claro",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Azotea con parapeto claro · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Azotea con parapeto claro · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Azotea con parapeto claro · Hormigón"
-    }
-   ]
-  },
-  "edificio/local": {
-   "label": "Local con vidriera",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Local con vidriera · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Local con vidriera · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Local con vidriera · Hormigón"
-    }
-   ]
-  },
   "edificio/local_angosto": {
    "label": "Local angosto",
    "variants": [
@@ -5979,176 +5931,6 @@
     }
    ]
   },
-  "edificio/pb_arco": {
-   "label": "Planta baja: puerta de arco",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Planta baja: puerta de arco · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Planta baja: puerta de arco · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Planta baja: puerta de arco · Hormigón"
-    }
-   ]
-  },
-  "edificio/pb_cajero": {
-   "label": "Planta baja: cajero automático",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Planta baja: cajero automático · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Planta baja: cajero automático · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Planta baja: cajero automático · Hormigón"
-    }
-   ]
-  },
-  "edificio/pb_madera": {
-   "label": "Planta baja: puerta de madera",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Planta baja: puerta de madera · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Planta baja: puerta de madera · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Planta baja: puerta de madera · Hormigón"
-    }
-   ]
-  },
-  "edificio/pb_vidrio": {
-   "label": "Planta baja: puerta de vidrio",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Planta baja: puerta de vidrio · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Planta baja: puerta de vidrio · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Planta baja: puerta de vidrio · Hormigón"
-    }
-   ]
-  },
-  "edificio/piso_balcon": {
-   "label": "Piso: balcón",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Piso: balcón · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Piso: balcón · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Piso: balcón · Hormigón"
-    }
-   ]
-  },
-  "edificio/piso_doble": {
-   "label": "Piso: ventana doble",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Piso: ventana doble · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Piso: ventana doble · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Piso: ventana doble · Hormigón"
-    }
-   ]
-  },
-  "edificio/piso_rejilla": {
-   "label": "Piso: ventanas chicas",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Piso: ventanas chicas · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Piso: ventanas chicas · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Piso: ventanas chicas · Hormigón"
-    }
-   ]
-  },
-  "edificio/piso_ventanal": {
-   "label": "Piso: ventanales altos",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Piso: ventanales altos · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Piso: ventanales altos · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Piso: ventanales altos · Hormigón"
-    }
-   ]
-  },
-  "edificio/tejado": {
-   "label": "Tejado con chimeneas",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tejado con chimeneas · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tejado con chimeneas · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tejado con chimeneas · Hormigón"
-    }
-   ]
-  },
-  "edificio/tejado_liso": {
-   "label": "Tejado liso",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tejado liso · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tejado liso · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tejado liso · Hormigón"
-    }
-   ]
-  },
   "edificio/tendedero": {
    "label": "Tendedero",
    "variants": [
@@ -6218,23 +6000,6 @@
     }
    ]
   },
-  "edificio/tienda_carniceria": {
-   "label": "Tienda: carnicería",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tienda: carnicería · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tienda: carnicería · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tienda: carnicería · Hormigón"
-    }
-   ]
-  },
   "edificio/tienda_cerrada": {
    "label": "Tienda cerrada",
    "variants": [
@@ -6286,23 +6051,6 @@
     }
    ]
   },
-  "edificio/tienda_entera": {
-   "label": "Carnicería entera (9×10)",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Carnicería entera (9×10) · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Carnicería entera (9×10) · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Carnicería entera (9×10) · Hormigón"
-    }
-   ]
-  },
   "edificio/tienda_galletas": {
    "label": "Tienda: galletas",
    "variants": [
@@ -6317,57 +6065,6 @@
     {
      "id": "hormigon",
      "label": "Tienda: galletas · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_gimnasio": {
-   "label": "Gimnasio",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Gimnasio · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Gimnasio · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Gimnasio · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_gimnasio_bajo": {
-   "label": "Gimnasio (marquesina baja)",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Gimnasio (marquesina baja) · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Gimnasio (marquesina baja) · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Gimnasio (marquesina baja) · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_heladeria": {
-   "label": "Heladería",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Heladería · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Heladería · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Heladería · Hormigón"
     }
    ]
   },
@@ -6388,74 +6085,6 @@
     }
    ]
   },
-  "edificio/tienda_mascotas": {
-   "label": "Tienda: mascotas",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tienda: mascotas · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tienda: mascotas · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tienda: mascotas · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_panaderia": {
-   "label": "Tienda: panadería",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tienda: panadería · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tienda: panadería · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tienda: panadería · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_persiana": {
-   "label": "Tienda con la persiana baja",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tienda con la persiana baja · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tienda con la persiana baja · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tienda con la persiana baja · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_pesca": {
-   "label": "Tienda: pesca",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Tienda: pesca · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Tienda: pesca · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Tienda: pesca · Hormigón"
-    }
-   ]
-  },
   "edificio/tienda_vacia": {
    "label": "Local vacío",
    "variants": [
@@ -6470,23 +6099,6 @@
     {
      "id": "hormigon",
      "label": "Local vacío · Hormigón"
-    }
-   ]
-  },
-  "edificio/tienda_vidriera": {
-   "label": "Local con vidriera corrida",
-   "variants": [
-    {
-     "id": "ladrillo",
-     "label": "Local con vidriera corrida · Ladrillo"
-    },
-    {
-     "id": "azul",
-     "label": "Local con vidriera corrida · Azul"
-    },
-    {
-     "id": "hormigon",
-     "label": "Local con vidriera corrida · Hormigón"
     }
    ]
   },
@@ -33849,18 +33461,6 @@
      "label": "Helicóptero 2"
     }
    ]
-  },
-  "building/ayuntamiento": {
-   "label": "Ayuntamiento",
-   "variants": [
-    {
-     "id": "1",
-     "label": "Ayuntamiento 1"
-    }
-   ]
-  },
-  "agua/pileta_completa": {
-   "label": "Pileta completa (6×4)"
   }
  },
  "origen": {
@@ -39763,6 +39363,19 @@
     "h": 1,
     "row": 15,
     "w": 1
+   }
+  },
+  "agua/pileta_completa": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/gen/pileta_completa.png",
+   "rect": {
+    "col": 0,
+    "h": 4,
+    "row": 0,
+    "w": 6
    }
   },
   "agua/playa_caracol_blanco_1": {
@@ -50868,7 +50481,7 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
     "col": 27,
     "h": 4,
@@ -50881,11 +50494,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 4,
-    "row": 6,
+    "row": 9,
     "w": 4
    }
   },
@@ -50894,7 +50507,7 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
     "col": 27,
     "h": 4,
@@ -50907,11 +50520,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
     "col": 30,
     "h": 3,
-    "row": 8,
+    "row": 16,
     "w": 2
    }
   },
@@ -50922,7 +50535,7 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 5,
     "row": 0,
     "w": 5
@@ -50935,9 +50548,9 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 5,
     "h": 5,
-    "row": 10,
+    "row": 0,
     "w": 5
    }
   },
@@ -50948,7 +50561,7 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 5,
     "row": 0,
     "w": 5
@@ -50959,11 +50572,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
     "col": 30,
     "h": 3,
-    "row": 27,
+    "row": 19,
     "w": 2
    }
   },
@@ -50972,11 +50585,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 30,
     "h": 3,
-    "row": 0,
+    "row": 22,
     "w": 2
    }
   },
@@ -50985,11 +50598,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 29,
+    "col": 30,
     "h": 3,
-    "row": 0,
+    "row": 25,
     "w": 2
    }
   },
@@ -50998,11 +50611,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
     "col": 30,
     "h": 3,
-    "row": 27,
+    "row": 19,
     "w": 2
    }
   },
@@ -51011,11 +50624,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 30,
     "h": 3,
-    "row": 3,
+    "row": 28,
     "w": 2
    }
   },
@@ -51024,11 +50637,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 29,
+    "col": 3,
     "h": 3,
-    "row": 3,
+    "row": 0,
     "w": 2
    }
   },
@@ -51037,11 +50650,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 30,
     "h": 3,
-    "row": 3,
+    "row": 28,
     "w": 2
    }
   },
@@ -51052,9 +50665,9 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 10,
     "h": 5,
-    "row": 17,
+    "row": 0,
     "w": 5
    }
   },
@@ -51065,9 +50678,9 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 15,
     "h": 5,
-    "row": 24,
+    "row": 0,
     "w": 5
    }
   },
@@ -51078,9 +50691,9 @@
    ],
    "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 10,
     "h": 5,
-    "row": 17,
+    "row": 0,
     "w": 5
    }
   },
@@ -51089,11 +50702,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
     "col": 30,
     "h": 2,
-    "row": 12,
+    "row": 0,
     "w": 2
    }
   },
@@ -51102,11 +50715,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
     "col": 30,
     "h": 2,
-    "row": 18,
+    "row": 3,
     "w": 2
    }
   },
@@ -51115,11 +50728,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
     "col": 30,
     "h": 2,
-    "row": 12,
+    "row": 0,
     "w": 2
    }
   },
@@ -51128,11 +50741,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 30,
+    "col": 16,
     "h": 2,
-    "row": 21,
+    "row": 5,
     "w": 2
    }
   },
@@ -51141,11 +50754,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 21,
+    "col": 8,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -51154,11 +50767,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 21,
+    "col": 8,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -51167,11 +50780,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 6,
+    "col": 24,
     "h": 1,
-    "row": 2,
+    "row": 7,
     "w": 2
    }
   },
@@ -51180,11 +50793,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 22,
+    "col": 9,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -51193,11 +50806,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 8,
+    "col": 26,
     "h": 1,
-    "row": 2,
+    "row": 7,
     "w": 2
    }
   },
@@ -51206,11 +50819,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 23,
+    "col": 10,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -51219,11 +50832,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 10,
+    "col": 28,
     "h": 1,
-    "row": 2,
+    "row": 7,
     "w": 2
    }
   },
@@ -51232,11 +50845,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 31,
+    "col": 6,
     "h": 1,
-    "row": 0,
+    "row": 9,
     "w": 1
    }
   },
@@ -51245,11 +50858,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 20,
+    "col": 7,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -51258,11 +50871,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 31,
+    "col": 6,
     "h": 1,
-    "row": 0,
+    "row": 9,
     "w": 1
    }
   },
@@ -51271,11 +50884,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 5,
     "h": 3,
-    "row": 6,
+    "row": 0,
     "w": 2
    }
   },
@@ -56168,6 +55781,45 @@
     "h": 7,
     "row": 0,
     "w": 3
+   }
+  },
+  "building/ayuntamiento": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_0.png",
+   "rect": {
+    "col": 0,
+    "h": 22,
+    "row": 34,
+    "w": 18
+   }
+  },
+  "building/ayuntamiento#1": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_0.png",
+   "rect": {
+    "col": 0,
+    "h": 22,
+    "row": 34,
+    "w": 18
+   }
+  },
+  "building/ayuntamiento#2": {
+   "grid": [
+    32,
+    32
+   ],
+   "png": "art/pack/completos_1.png",
+   "rect": {
+    "col": 30,
+    "h": 16,
+    "row": 18,
+    "w": 18
    }
   },
   "building/balcon_edificio": {
@@ -61187,32 +60839,6 @@
     "w": 23
    }
   },
-  "building/casa_country#1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 27,
-    "h": 14,
-    "row": 34,
-    "w": 23
-   }
-  },
-  "building/casa_country#2": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "rect": {
-    "col": 0,
-    "h": 22,
-    "row": 34,
-    "w": 18
-   }
-  },
   "building/casa_cubierta_silla_blanca": {
    "grid": [
     32,
@@ -62683,19 +62309,6 @@
    }
   },
   "building/casa_grande": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 0,
-    "h": 16,
-    "row": 18,
-    "w": 18
-   }
-  },
-  "building/casa_grande#1": {
    "grid": [
     32,
     32
@@ -99970,11 +99583,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 3,
-    "row": 11,
+    "row": 25,
     "w": 5
    }
   },
@@ -99983,11 +99596,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 5,
     "h": 3,
-    "row": 15,
+    "row": 25,
     "w": 5
    }
   },
@@ -99996,11 +99609,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 10,
     "h": 3,
-    "row": 19,
+    "row": 25,
     "w": 5
    }
   },
@@ -100009,11 +99622,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 3,
-    "row": 11,
+    "row": 25,
     "w": 5
    }
   },
@@ -100022,11 +99635,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 25,
     "h": 2,
-    "row": 9,
+    "row": 0,
     "w": 5
    }
   },
@@ -100035,11 +99648,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 2,
-    "row": 15,
+    "row": 3,
     "w": 5
    }
   },
@@ -100048,11 +99661,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 5,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 5
    }
   },
@@ -100061,11 +99674,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 25,
     "h": 2,
-    "row": 9,
+    "row": 0,
     "w": 5
    }
   },
@@ -100074,11 +99687,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 15,
     "h": 3,
-    "row": 23,
+    "row": 25,
     "w": 5
    }
   },
@@ -100087,11 +99700,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 20,
     "h": 3,
-    "row": 27,
+    "row": 25,
     "w": 5
    }
   },
@@ -100100,11 +99713,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 25,
     "h": 3,
-    "row": 0,
+    "row": 25,
     "w": 5
    }
   },
@@ -100113,11 +99726,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 15,
     "h": 3,
-    "row": 23,
+    "row": 25,
     "w": 5
    }
   },
@@ -100126,11 +99739,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 12,
+    "col": 7,
     "h": 2,
-    "row": 27,
+    "row": 0,
     "w": 6
    }
   },
@@ -100139,11 +99752,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 13,
     "h": 2,
-    "row": 27,
+    "row": 0,
     "w": 6
    }
   },
@@ -100152,11 +99765,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 24,
+    "col": 19,
     "h": 2,
-    "row": 27,
+    "row": 0,
     "w": 6
    }
   },
@@ -100165,11 +99778,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 12,
+    "col": 7,
     "h": 2,
-    "row": 27,
+    "row": 0,
     "w": 6
    }
   },
@@ -100178,11 +99791,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 3,
-    "row": 4,
+    "row": 28,
     "w": 5
    }
   },
@@ -100191,11 +99804,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 5,
     "h": 3,
-    "row": 12,
+    "row": 28,
     "w": 5
    }
   },
@@ -100204,11 +99817,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 10,
     "h": 3,
-    "row": 15,
+    "row": 28,
     "w": 5
    }
   },
@@ -100217,11 +99830,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 3,
-    "row": 4,
+    "row": 28,
     "w": 5
    }
   },
@@ -100230,11 +99843,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 15,
     "h": 3,
-    "row": 18,
+    "row": 28,
     "w": 5
    }
   },
@@ -100243,11 +99856,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 20,
     "h": 3,
-    "row": 21,
+    "row": 28,
     "w": 5
    }
   },
@@ -100256,11 +99869,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 25,
     "h": 3,
-    "row": 24,
+    "row": 28,
     "w": 5
    }
   },
@@ -100269,11 +99882,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 27,
+    "col": 15,
     "h": 3,
-    "row": 18,
+    "row": 28,
     "w": 5
    }
   },
@@ -100282,11 +99895,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 9,
+    "col": 14,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 4
    }
   },
@@ -100295,11 +99908,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 13,
+    "col": 18,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 4
    }
   },
@@ -100308,11 +99921,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 5,
+    "col": 10,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 4
    }
   },
@@ -100321,11 +99934,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 21,
+    "col": 14,
     "h": 4,
-    "row": 4,
+    "row": 5,
     "w": 6
    }
   },
@@ -100334,11 +99947,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 20,
     "h": 4,
-    "row": 8,
+    "row": 5,
     "w": 6
    }
   },
@@ -100347,11 +99960,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 6,
+    "col": 26,
     "h": 4,
-    "row": 8,
+    "row": 5,
     "w": 6
    }
   },
@@ -100360,11 +99973,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 21,
+    "col": 14,
     "h": 4,
-    "row": 4,
+    "row": 5,
     "w": 6
    }
   },
@@ -106176,172 +105789,16 @@
     "w": 2
    }
   },
-  "edificio/azotea": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 6,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/azotea#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 10,
-    "h": 6,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/azotea#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 19,
-    "h": 6,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/azotea#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 6,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/azotea_clara": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 7,
-    "row": 10,
-    "w": 7
-   }
-  },
-  "edificio/azotea_clara#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 10,
-    "h": 7,
-    "row": 10,
-    "w": 7
-   }
-  },
-  "edificio/azotea_clara#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 19,
-    "h": 7,
-    "row": 10,
-    "w": 7
-   }
-  },
-  "edificio/azotea_clara#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 7,
-    "row": 10,
-    "w": 7
-   }
-  },
-  "edificio/local": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 11,
-    "w": 7
-   }
-  },
-  "edificio/local#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 10,
-    "h": 4,
-    "row": 11,
-    "w": 7
-   }
-  },
-  "edificio/local#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 19,
-    "h": 4,
-    "row": 11,
-    "w": 7
-   }
-  },
-  "edificio/local#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 11,
-    "w": 7
-   }
-  },
   "edificio/local_angosto": {
    "grid": [
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 20,
     "h": 4,
-    "row": 4,
+    "row": 0,
     "w": 7
    }
   },
@@ -106350,11 +105807,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 7,
+    "col": 0,
     "h": 4,
-    "row": 4,
+    "row": 5,
     "w": 7
    }
   },
@@ -106363,11 +105820,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 14,
+    "col": 7,
     "h": 4,
-    "row": 4,
+    "row": 5,
     "w": 7
    }
   },
@@ -106376,11 +105833,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 20,
     "h": 4,
-    "row": 4,
+    "row": 0,
     "w": 7
    }
   },
@@ -106389,11 +105846,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 17,
+    "col": 22,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 4
    }
   },
@@ -106402,11 +105859,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 17,
+    "col": 22,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 4
    }
   },
@@ -106415,11 +105872,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 30,
+    "col": 18,
     "h": 2,
-    "row": 24,
+    "row": 5,
     "w": 2
    }
   },
@@ -106428,11 +105885,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 21,
+    "col": 26,
     "h": 2,
-    "row": 30,
+    "row": 3,
     "w": 4
    }
   },
@@ -106441,11 +105898,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 30,
+    "col": 20,
     "h": 2,
-    "row": 27,
+    "row": 5,
     "w": 2
    }
   },
@@ -106454,11 +105911,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 6,
+    "col": 22,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 2
    }
   },
@@ -106467,7 +105924,7 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_2.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
     "col": 31,
     "h": 2,
@@ -106482,9 +105939,9 @@
    ],
    "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 31,
+    "col": 6,
     "h": 2,
-    "row": 6,
+    "row": 7,
     "w": 1
    }
   },
@@ -106493,11 +105950,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 8,
+    "col": 24,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 2
    }
   },
@@ -106506,11 +105963,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 10,
+    "col": 26,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 2
    }
   },
@@ -106519,11 +105976,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 25,
+    "col": 0,
     "h": 2,
-    "row": 30,
+    "row": 5,
     "w": 4
    }
   },
@@ -106532,11 +105989,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 14,
+    "col": 30,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 2
    }
   },
@@ -106545,11 +106002,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 16,
+    "col": 0,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 2
    }
   },
@@ -106558,1572 +106015,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 12,
+    "col": 28,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 2
-   }
-  },
-  "edificio/pb_arco": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 13,
-      "h": 3,
-      "row": 8,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 130,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 13,
-    "h": 3,
-    "row": 8,
-    "w": 7
-   }
-  },
-  "edificio/pb_arco#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 22,
-      "h": 3,
-      "row": 8,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 130,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 22,
-    "h": 3,
-    "row": 8,
-    "w": 7
-   }
-  },
-  "edificio/pb_arco#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 12,
-    "w": 7
-   }
-  },
-  "edificio/pb_arco#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 13,
-      "h": 3,
-      "row": 8,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 760,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 130,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 13,
-    "h": 3,
-    "row": 8,
-    "w": 7
-   }
-  },
-  "edificio/pb_cajero": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 12,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 480,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 788,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 788,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 480,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 90,
-      "h": 44,
-      "row": 42,
-      "w": 44
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 12,
-    "w": 7
-   }
-  },
-  "edificio/pb_cajero#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 12,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 480,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 788,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 788,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 480,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 90,
-      "h": 44,
-      "row": 42,
-      "w": 44
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 12,
-    "w": 7
-   }
-  },
-  "edificio/pb_cajero#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/pb_cajero#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 12,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 480,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 788,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 788,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 480,
-      "h": 44,
-      "row": 1122,
-      "w": 44
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 90,
-      "h": 44,
-      "row": 42,
-      "w": 44
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 12,
-    "w": 7
-   }
-  },
-  "edificio/pb_madera": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 15,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1624,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1624,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 60,
-      "row": 32,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/pb_madera#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 15,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1624,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1624,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 60,
-      "row": 32,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/pb_madera#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 18,
-    "w": 7
-   }
-  },
-  "edificio/pb_madera#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 15,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1624,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1624,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1344,
-      "h": 60,
-      "row": 946,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 60,
-      "row": 32,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/pb_vidrio": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 18,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 128,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 18,
-    "w": 7
-   }
-  },
-  "edificio/pb_vidrio#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 18,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 128,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 18,
-    "w": 7
-   }
-  },
-  "edificio/pb_vidrio#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 1,
-      "h": 3,
-      "row": 21,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 128,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 21,
-    "w": 7
-   }
-  },
-  "edificio/pb_vidrio#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 18,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 760,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 128,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 18,
-    "w": 7
-   }
-  },
-  "edificio/piso_balcon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/piso_balcon#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 10,
-    "h": 4,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/piso_balcon#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 19,
-    "h": 4,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/piso_balcon#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 15,
-    "w": 7
-   }
-  },
-  "edificio/piso_doble": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 19,
-    "w": 7
-   }
-  },
-  "edificio/piso_doble#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 10,
-    "h": 4,
-    "row": 19,
-    "w": 7
-   }
-  },
-  "edificio/piso_doble#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 19,
-    "h": 4,
-    "row": 19,
-    "w": 7
-   }
-  },
-  "edificio/piso_doble#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 19,
-    "w": 7
-   }
-  },
-  "edificio/piso_rejilla": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 23,
-    "w": 7
-   }
-  },
-  "edificio/piso_rejilla#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 10,
-    "h": 4,
-    "row": 23,
-    "w": 7
-   }
-  },
-  "edificio/piso_rejilla#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 19,
-    "h": 4,
-    "row": 23,
-    "w": 7
-   }
-  },
-  "edificio/piso_rejilla#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 23,
-    "w": 7
-   }
-  },
-  "edificio/piso_ventanal": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/piso_ventanal#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 10,
-    "h": 4,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/piso_ventanal#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 19,
-    "h": 4,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/piso_ventanal#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 27,
-    "w": 7
    }
   },
   "edificio/sombra": {
@@ -108131,116 +106028,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_3.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 0,
     "h": 3,
-    "row": 27,
+    "row": 0,
     "w": 3
-   }
-  },
-  "edificio/tejado": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 7,
-    "row": 17,
-    "w": 7
-   }
-  },
-  "edificio/tejado#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 10,
-    "h": 7,
-    "row": 17,
-    "w": 7
-   }
-  },
-  "edificio/tejado#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 19,
-    "h": 7,
-    "row": 17,
-    "w": 7
-   }
-  },
-  "edificio/tejado#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 7,
-    "row": 17,
-    "w": 7
-   }
-  },
-  "edificio/tejado_liso": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 6,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tejado_liso#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 10,
-    "h": 6,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tejado_liso#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 19,
-    "h": 6,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tejado_liso#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "rect": {
-    "col": 1,
-    "h": 6,
-    "row": 0,
-    "w": 7
    }
   },
   "edificio/tendedero": {
@@ -108248,11 +106041,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 31,
+    "col": 7,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -108261,11 +106054,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 23,
+    "col": 10,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -108274,11 +106067,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 22,
+    "col": 9,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -108287,11 +106080,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 31,
+    "col": 8,
     "h": 2,
-    "row": 3,
+    "row": 7,
     "w": 1
    }
   },
@@ -108300,11 +106093,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 31,
+    "col": 7,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -108313,11 +106106,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 28,
+    "col": 15,
     "h": 1,
-    "row": 0,
+    "row": 7,
     "w": 3
    }
   },
@@ -108326,11 +106119,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 24,
+    "col": 11,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -108339,11 +106132,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 3,
+    "col": 21,
     "h": 1,
-    "row": 2,
+    "row": 7,
     "w": 3
    }
   },
@@ -108352,11 +106145,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 1,
-    "row": 2,
+    "row": 7,
     "w": 3
    }
   },
@@ -108365,11 +106158,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 12,
+    "col": 30,
     "h": 1,
-    "row": 2,
+    "row": 7,
     "w": 2
    }
   },
@@ -108378,11 +106171,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 29,
+    "col": 7,
     "h": 2,
-    "row": 30,
+    "row": 5,
     "w": 3
    }
   },
@@ -108391,11 +106184,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 29,
+    "col": 4,
     "h": 2,
-    "row": 6,
+    "row": 5,
     "w": 3
    }
   },
@@ -108404,11 +106197,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 14,
+    "col": 0,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 2
    }
   },
@@ -108417,11 +106210,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 3,
+    "col": 13,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 3
    }
   },
@@ -108430,11 +106223,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 0,
+    "col": 10,
     "h": 2,
-    "row": 0,
+    "row": 5,
     "w": 3
    }
   },
@@ -108443,11 +106236,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 4,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 2
    }
   },
@@ -108456,64 +106249,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 16,
+    "col": 2,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 2
-   }
-  },
-  "edificio/tienda_carniceria": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 21,
-    "w": 7
-   }
-  },
-  "edificio/tienda_carniceria#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 21,
-    "w": 7
-   }
-  },
-  "edificio/tienda_carniceria#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/tienda_carniceria#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 21,
-    "w": 7
    }
   },
   "edificio/tienda_cerrada": {
@@ -108521,11 +106262,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 21,
+    "col": 14,
     "h": 3,
-    "row": 15,
+    "row": 13,
     "w": 6
    }
   },
@@ -108534,11 +106275,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 20,
     "h": 3,
-    "row": 18,
+    "row": 13,
     "w": 6
    }
   },
@@ -108547,11 +106288,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 6,
+    "col": 26,
     "h": 3,
-    "row": 18,
+    "row": 13,
     "w": 6
    }
   },
@@ -108560,11 +106301,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 21,
+    "col": 14,
     "h": 3,
-    "row": 15,
+    "row": 13,
     "w": 6
    }
   },
@@ -108573,11 +106314,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 12,
+    "col": 0,
     "h": 3,
-    "row": 18,
+    "row": 16,
     "w": 6
    }
   },
@@ -108586,11 +106327,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 6,
     "h": 3,
-    "row": 18,
+    "row": 16,
     "w": 6
    }
   },
@@ -108599,11 +106340,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 24,
+    "col": 12,
     "h": 3,
-    "row": 18,
+    "row": 16,
     "w": 6
    }
   },
@@ -108612,11 +106353,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 12,
+    "col": 0,
     "h": 3,
-    "row": 18,
+    "row": 16,
     "w": 6
    }
   },
@@ -108625,11 +106366,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 3,
-    "row": 21,
+    "row": 16,
     "w": 6
    }
   },
@@ -108638,11 +106379,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 6,
+    "col": 24,
     "h": 3,
-    "row": 21,
+    "row": 16,
     "w": 6
    }
   },
@@ -108651,11 +106392,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 12,
+    "col": 0,
     "h": 3,
-    "row": 21,
+    "row": 19,
     "w": 6
    }
   },
@@ -108664,64 +106405,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 3,
-    "row": 21,
+    "row": 16,
     "w": 6
-   }
-  },
-  "edificio/tienda_entera": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 10,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_entera#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 10,
-    "h": 10,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_entera#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 19,
-    "h": 10,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_entera#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_1.png",
-   "rect": {
-    "col": 1,
-    "h": 10,
-    "row": 0,
-    "w": 7
    }
   },
   "edificio/tienda_galletas": {
@@ -108729,11 +106418,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 6,
     "h": 3,
-    "row": 21,
+    "row": 19,
     "w": 6
    }
   },
@@ -108742,11 +106431,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 24,
+    "col": 12,
     "h": 3,
-    "row": 21,
+    "row": 19,
     "w": 6
    }
   },
@@ -108755,11 +106444,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 3,
-    "row": 24,
+    "row": 19,
     "w": 6
    }
   },
@@ -108768,872 +106457,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 6,
     "h": 3,
-    "row": 21,
+    "row": 19,
     "w": 6
-   }
-  },
-  "edificio/tienda_gimnasio": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_2.png",
-     "rect": {
-      "col": 1,
-      "h": 5,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 96,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 5,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_2.png",
-     "rect": {
-      "col": 10,
-      "h": 5,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 96,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 5,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_2.png",
-     "rect": {
-      "col": 19,
-      "h": 5,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 96,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 5,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_2.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_2.png",
-     "rect": {
-      "col": 1,
-      "h": 5,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 96,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 5,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio_bajo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio_bajo#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 10,
-    "h": 4,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio_bajo#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 19,
-    "h": 4,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_gimnasio_bajo#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "rect": {
-    "col": 1,
-    "h": 4,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_heladeria": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 24,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 56,
-      "row": 38,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/tienda_heladeria#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 24,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 56,
-      "row": 38,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 24,
-    "w": 7
-   }
-  },
-  "edificio/tienda_heladeria#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 1,
-      "h": 3,
-      "row": 27,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 56,
-      "row": 38,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/tienda_heladeria#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 24,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 280,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 56,
-      "row": 1066,
-      "w": 40
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 92,
-      "h": 56,
-      "row": 38,
-      "w": 40
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 24,
-    "w": 7
    }
   },
   "edificio/tienda_juguetes": {
@@ -109641,11 +106470,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 6,
+    "col": 24,
     "h": 3,
-    "row": 24,
+    "row": 19,
     "w": 6
    }
   },
@@ -109654,11 +106483,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 12,
+    "col": 0,
     "h": 3,
-    "row": 24,
+    "row": 22,
     "w": 6
    }
   },
@@ -109667,11 +106496,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 18,
+    "col": 6,
     "h": 3,
-    "row": 24,
+    "row": 22,
     "w": 6
    }
   },
@@ -109680,1276 +106509,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 6,
+    "col": 24,
     "h": 3,
-    "row": 24,
+    "row": 19,
     "w": 6
-   }
-  },
-  "edificio/tienda_mascotas": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 27,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 144,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/tienda_mascotas#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 27,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 144,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/tienda_mascotas#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 1,
-      "h": 3,
-      "row": 0,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 144,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_mascotas#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_3.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_3.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 27,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 448,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 822,
-      "w": 64
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 144,
-      "h": 62,
-      "row": 32,
-      "w": 64
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 27,
-    "w": 7
-   }
-  },
-  "edificio/tienda_panaderia": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 0,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 146,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_panaderia#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 0,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 146,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_panaderia#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 1,
-      "h": 3,
-      "row": 3,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 146,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 3,
-    "w": 7
-   }
-  },
-  "edificio/tienda_panaderia#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 0,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 1316,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 896,
-      "h": 62,
-      "row": 822,
-      "w": 60
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 146,
-      "h": 62,
-      "row": 32,
-      "w": 60
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 0,
-    "w": 7
-   }
-  },
-  "edificio/tienda_persiana": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 3,
-    "w": 7
-   }
-  },
-  "edificio/tienda_persiana#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 3,
-    "w": 7
-   }
-  },
-  "edificio/tienda_persiana#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_persiana#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 3,
-    "w": 7
-   }
-  },
-  "edificio/tienda_pesca": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 62,
-      "row": 32,
-      "w": 96
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_pesca#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 62,
-      "row": 32,
-      "w": 96
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 6,
-    "w": 7
-   }
-  },
-  "edificio/tienda_pesca#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 1,
-      "h": 3,
-      "row": 9,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 62,
-      "row": 32,
-      "w": 96
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 9,
-    "w": 7
-   }
-  },
-  "edificio/tienda_pesca#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 6,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 672,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 62,
-      "row": 698,
-      "w": 96
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 64,
-      "h": 62,
-      "row": 32,
-      "w": 96
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 6,
-    "w": 7
    }
   },
   "edificio/tienda_vacia": {
@@ -110957,11 +106522,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 24,
+    "col": 12,
     "h": 3,
-    "row": 24,
+    "row": 22,
     "w": 6
    }
   },
@@ -110970,11 +106535,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 18,
     "h": 3,
-    "row": 27,
+    "row": 22,
     "w": 6
    }
   },
@@ -110983,11 +106548,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 6,
+    "col": 24,
     "h": 3,
-    "row": 27,
+    "row": 22,
     "w": 6
    }
   },
@@ -110996,416 +106561,12 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 24,
+    "col": 12,
     "h": 3,
-    "row": 24,
+    "row": 22,
     "w": 6
-   }
-  },
-  "edificio/tienda_vidriera": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 9,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 32,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 9,
-    "w": 7
-   }
-  },
-  "edificio/tienda_vidriera#azul": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 19,
-      "h": 3,
-      "row": 9,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 32,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 19,
-    "h": 3,
-    "row": 9,
-    "w": 7
-   }
-  },
-  "edificio/tienda_vidriera#hormigon": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 1,
-      "h": 3,
-      "row": 12,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 32,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 1,
-    "h": 3,
-    "row": 12,
-    "w": 7
-   }
-  },
-  "edificio/tienda_vidriera#ladrillo": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/modulares_4.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/modulares_4.png",
-     "rect": {
-      "col": 10,
-      "h": 3,
-      "row": 9,
-      "w": 7
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 322,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 0,
-      "h": 60,
-      "row": 1006,
-      "w": 46
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_1.png",
-     "rect": {
-      "col": 152,
-      "h": 60,
-      "row": 32,
-      "w": 46
-     }
-    }
-   },
-   "rect": {
-    "col": 10,
-    "h": 3,
-    "row": 9,
-    "w": 7
    }
   },
   "edificio/tienda_vitrina_juguetes": {
@@ -111413,11 +106574,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 9,
+    "col": 4,
     "h": 3,
-    "row": 12,
+    "row": 9,
     "w": 7
    }
   },
@@ -111426,11 +106587,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 16,
+    "col": 11,
     "h": 3,
-    "row": 12,
+    "row": 9,
     "w": 7
    }
   },
@@ -111439,11 +106600,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 23,
+    "col": 18,
     "h": 3,
-    "row": 12,
+    "row": 9,
     "w": 7
    }
   },
@@ -111452,11 +106613,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 9,
+    "col": 4,
     "h": 3,
-    "row": 12,
+    "row": 9,
     "w": 7
    }
   },
@@ -111465,11 +106626,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 25,
     "h": 3,
-    "row": 15,
+    "row": 9,
     "w": 7
    }
   },
@@ -111478,11 +106639,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 7,
+    "col": 0,
     "h": 3,
-    "row": 15,
+    "row": 13,
     "w": 7
    }
   },
@@ -111491,11 +106652,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 14,
+    "col": 7,
     "h": 3,
-    "row": 15,
+    "row": 13,
     "w": 7
    }
   },
@@ -111504,11 +106665,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_4.png",
+   "png": "art/pack/modulares_1.png",
    "rect": {
-    "col": 0,
+    "col": 25,
     "h": 3,
-    "row": 15,
+    "row": 9,
     "w": 7
    }
   },
@@ -114968,12 +110129,6 @@
     32
    ],
    "png": "art/pack/cercas.png",
-   "rect": {
-    "col": 13,
-    "h": 2,
-    "row": 0,
-    "w": 1
-   },
    "poses": {
     "es": {
      "rect": {
@@ -115103,6 +110258,12 @@
       "w": 1
      }
     }
+   },
+   "rect": {
+    "col": 13,
+    "h": 2,
+    "row": 0,
+    "w": 1
    }
   },
   "fence/alambre_de_puas_abajo_esquina_derecha": {
@@ -117685,12 +112846,6 @@
     32
    ],
    "png": "art/pack/cercas.png",
-   "rect": {
-    "col": 13,
-    "h": 2,
-    "row": 0,
-    "w": 1
-   },
    "poses": {
     "es": {
      "rect": {
@@ -117820,6 +112975,12 @@
       "w": 1
      }
     }
+   },
+   "rect": {
+    "col": 13,
+    "h": 2,
+    "row": 0,
+    "w": 1
    }
   },
   "fence/obra_cerca_1": {
@@ -119084,12 +114245,6 @@
     32
    ],
    "png": "art/pack/cercas.png",
-   "rect": {
-    "col": 0,
-    "row": 5,
-    "w": 1,
-    "h": 1
-   },
    "poses": {
     "ew": {
      "rect": {
@@ -119179,6 +114334,12 @@
       "h": 1
      }
     }
+   },
+   "rect": {
+    "col": 0,
+    "row": 5,
+    "w": 1,
+    "h": 1
    }
   },
   "fence/porton_1": {
@@ -241787,11 +236948,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 24,
+    "col": 11,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -241800,11 +236961,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 14,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -241813,11 +236974,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 26,
+    "col": 13,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -241826,11 +236987,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 25,
+    "col": 12,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -241839,11 +237000,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 24,
+    "col": 11,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 1
    }
   },
@@ -241852,11 +237013,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 20,
+    "col": 4,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 2
    }
   },
@@ -241865,11 +237026,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 18,
+    "col": 2,
     "h": 2,
-    "row": 0,
+    "row": 7,
     "w": 2
    }
   },
@@ -241878,11 +237039,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 28,
+    "col": 15,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -241891,11 +237052,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 27,
+    "col": 14,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -241904,11 +237065,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 26,
+    "col": 13,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -241917,11 +237078,11 @@
     32,
     32
    ],
-   "png": "art/pack/modulares_5.png",
+   "png": "art/pack/modulares_2.png",
    "rect": {
-    "col": 25,
+    "col": 12,
     "h": 1,
-    "row": 2,
+    "row": 9,
     "w": 1
    }
   },
@@ -273933,14 +269094,14 @@
     32,
     32
    ],
+   "layer": "Floor",
    "png": "art/pack/vehicles_0.png",
    "rect": {
     "col": 0,
     "h": 12,
     "row": 0,
     "w": 15
-   },
-   "layer": "Floor"
+   }
   },
   "vehicle/helicoptero_hoja_de_sierra_atras_costado": {
    "grid": [
@@ -278830,133 +273991,6 @@
     "h": 1,
     "row": 18,
     "w": 1
-   }
-  },
-  "building/ayuntamiento": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_0.png",
-   "poses": {
-    "base": {
-     "grid": [
-      32,
-      32
-     ],
-     "png": "art/pack/completos_0.png",
-     "rect": {
-      "col": 0,
-      "h": 22,
-      "row": 34,
-      "w": 18
-     }
-    },
-    "closed": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "closing": {
-     "anim": {
-      "fps": 28.0,
-      "frames": 7
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "open": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 224,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "opening": {
-     "anim": {
-      "fps": 27.43,
-      "frames": 8
-     },
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 0,
-      "h": 80,
-      "row": 1630,
-      "w": 32
-     }
-    },
-    "puerta_en_sprite": {
-     "grid": [
-      1,
-      1
-     ],
-     "png": "art/pack/edificios_puertas_0.png",
-     "rect": {
-      "col": 544,
-      "h": 80,
-      "row": 288,
-      "w": 32
-     }
-    }
-   },
-   "rect": {
-    "col": 0,
-    "h": 22,
-    "row": 34,
-    "w": 18
-   }
-  },
-  "agua/pileta_completa": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/gen/pileta_completa.png",
-   "rect": {
-    "col": 0,
-    "row": 0,
-    "w": 6,
-    "h": 4
-   }
-  },
-  "building/ayuntamiento#1": {
-   "grid": [
-    32,
-    32
-   ],
-   "png": "art/pack/completos_1.png",
-   "rect": {
-    "col": 30,
-    "h": 16,
-    "row": 18,
-    "w": 18
    }
   },
   "building/granero": {
