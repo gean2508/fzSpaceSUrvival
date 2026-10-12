@@ -1,0 +1,4 @@
+target/
+data/raw/
+.venv-vision/
+genomes/EXP_*/dron.bin

@@ -1,0 +1,23 @@
+(midiendo la VARA HONESTA — guiado clásico, red apagada)
+SORTEOS — peldaño 15, 24 juegos de escenarios distintos
+piloto: guiado clásico (la vara)
+umbral de aprobación: 2400.0
+
+  peor       -142.3
+  mediana     285.3
+  mejor      2526.3
+
+  término              peor   mediana     mejor   dispersión
+  misiones propias     -14.2    3861.7    4399.8      4414.0
+  examen de repaso    -142.3    2526.3    2526.3      2668.6   ← ata la nota
+
+  peldaños de atrás peor recordados:
+    peldaño  2     2690.7
+    peldaño  1     2721.4
+    peldaño 11     2968.4
+    peldaño 12     3053.0
+
+  sorteo a sorteo: 1✓ 2✓ 3✓ 4· 5· 6· 7· 8✓ 9· 10· 11✓ 12✓ 13· 14· 15· 16✓ 17· 18✓ 19✓ 20· 21· 22· 23✓ 24✓
+
+  aprueba en 11 de 24 sorteos
+  APRUEBA A VECES — con el criterio viejo, una de esas veces alcanzaba para dar el peldaño por aprobado (regla 3.20)

@@ -1,0 +1,25 @@
+(con módulo vertical genomes/EXP_20260927d/f2_en13.vertical.adn)
+(con módulo posar genomes/EXP_20260927d/f2_en13.posar.adn)
+(midiendo el REPERTORIO genomes/EXP_20260927d/f2_en13.repertorio.bin, no un genoma suelto)
+SORTEOS — peldaño 12, 24 juegos de escenarios distintos
+piloto: genomes/EXP_20260927d/f2_en13.repertorio.bin
+umbral de aprobación: 900.0
+
+  peor        -56.3
+  mediana     930.7
+  mejor       946.5
+
+  término              peor   mediana     mejor   dispersión
+  misiones propias     -56.3    1152.7    1245.9      1302.2
+  examen de repaso     -43.0     934.5     946.5       989.5
+
+  peldaños de atrás peor recordados:
+    peldaño  2     1023.6
+    peldaño  1     1035.9
+    peldaño 11     1119.9
+    peldaño  3     1165.5
+
+  sorteo a sorteo: 1✓ 2· 3✓ 4· 5✓ 6· 7· 8✓ 9· 10✓ 11✓ 12✓ 13✓ 14✓ 15· 16· 17✓ 18✓ 19· 20✓ 21✓ 22✓ 23✓ 24·
+
+  aprueba en 15 de 24 sorteos
+  APRUEBA A VECES — con el criterio viejo, una de esas veces alcanzaba para dar el peldaño por aprobado (regla 3.20)

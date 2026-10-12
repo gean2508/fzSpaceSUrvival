@@ -1,0 +1,735 @@
+<!doctype html>
+<!--
+  LA CABINA DE PERSECUCIÓN — v2.
+
+  Reescrita después de la primera versión, que el usuario probó y calificó
+  sin vueltas: "la conducción es un asco, la interfaz es un asco". Tenía
+  razón, y el porqué es concreto:
+
+  - Los controles eran zonas invisibles con un factor de escala arbitrario
+    (delta / 70 px), sin ningún dibujo que mostrara dónde estaba el dedo ni
+    cuánto mando se estaba pidiendo. Tocar no daba ninguna realimentación.
+  - No había forma de instalarla a pantalla completa: quedaba adentro de
+    Safari/Chrome con la barra de URL comiéndose media pantalla apaisada.
+  - Cero sensación de manejar algo: sin inclinación visible, sin vibración
+    de cámara a alta velocidad.
+
+  Esta versión:
+
+  1. **Instalable de verdad.** `manifest.json` + Service Worker mínimo +
+     metaetiquetas de iOS. "Agregar a pantalla de inicio" abre sin barra de
+     URL, sin pestañas, en `display: fullscreen`.
+  2. **Un solo joystick combinado, dinámico.** Tocás en cualquier parte de
+     la pantalla; el control APARECE ahí mismo, con una perilla que sigue el
+     dedo 1:1 y vuelve al centro sola al soltar (técnica de joystick
+     "flotante", estándar en juegos móviles). Los DOS ejes viven en el MISMO
+     stick —arriba/abajo acelera y frena, a los costados gira— a propósito:
+     la primera versión tenía dos joysticks separados (uno por pulgar), y
+     alguien arrastrando con una sola mano en diagonal —esperando que
+     "adelante y a la derecha" hiciera las dos cosas— se encontraba con que
+     el giro no hacía nada. Un solo stick con los dos ejes es imposible de
+     usar mal.
+  3. **Fidelidad**: el mando sigue siendo ANALÓGICO —no botones a fondo/nada—
+     porque la física de la moto (`movil.rs`) ya modela aceleración, frenada
+     y agarre reales; lo que hacía falta no era simplificar el control, era
+     que SE VIERA y respondiera bien.
+  4. **El widget de entrenamiento**, chico y discreto a propósito ("que casi
+     ni se note"): un renglón de texto, opacidad baja, esquina inferior,
+     que se actualiza solo. Lee `/estado` como todo lo demás — CERO lógica
+     de entrenamiento en el navegador, sólo mostrar lo que Rust ya calculó.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Cabina · perseguime</title>
+<meta name="theme-color" content="#0b0f14">
+<!-- PWA: instalable, pantalla completa, sin chrome del navegador. -->
+<link rel="manifest" href="/cabina/manifest.json">
+<link rel="icon" href="/cabina/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/cabina/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Perseguime">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden; position: fixed; inset: 0;
+    background: #05070a; color: #dfe7ef;
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    touch-action: none; user-select: none; overscroll-behavior: none;
+  }
+  #mundo { position: fixed; inset: 0; }
+  #mundo canvas { display: block; touch-action: none; }
+
+  /* --- la ventanita: cómo te ve el dron --- */
+  #ojo {
+    position: fixed; top: 10px; right: 10px;
+    width: 26vw; max-width: 260px; min-width: 140px; aspect-ratio: 4/3;
+    border: 2px solid #2b4257; border-radius: 8px; overflow: hidden;
+    background: #05080c; box-shadow: 0 6px 24px #0008;
+    transition: border-color .3s;
+  }
+  #ojo.perdido { border-color: #c0392b; }
+  #ojo canvas { width: 100%; height: 100%; display: block; }
+  #ojoTit {
+    position: absolute; left: 0; right: 0; top: 0; padding: 3px 7px;
+    background: linear-gradient(#0009, transparent);
+    font-size: 10px; letter-spacing: .04em; color: #8fb7d9;
+    display: flex; justify-content: space-between; pointer-events: none;
+  }
+  #ojoAviso { color: #ff6b6b; font-weight: 700; }
+
+  /* --- HUD principal --- */
+  #hud {
+    position: fixed; top: 10px; left: 10px; pointer-events: none;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #velCaja {
+    background: #0c1620cc; border: 1px solid #22384c; border-radius: 8px;
+    padding: 6px 14px; backdrop-filter: blur(2px);
+  }
+  #vel { font-size: 34px; font-weight: 700; color: #eaf3fb; line-height: 1; font-variant-numeric: tabular-nums; }
+  #velUnidad { font-size: 11px; opacity: .6; margin-left: 3px; }
+  #seguimiento {
+    background: #0c1620cc; border: 1px solid #22384c; border-radius: 8px;
+    padding: 5px 10px; font-size: 11px; line-height: 1.5;
+  }
+  .mal { color: #ff8080; } .bien { color: #7fd6a6; } .medio { color: #ffd479; }
+
+  /* Barra de inclinación lateral: da sensación de manejo real. */
+  #lean {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 140px; height: 14px; pointer-events: none;
+  }
+  #leanTrack { position: absolute; inset: 0; background: #0c1620aa; border-radius: 7px; border: 1px solid #22384c; }
+  #leanKnob {
+    position: absolute; top: -3px; width: 18px; height: 20px; border-radius: 5px;
+    background: #4da3ff; left: 50%; margin-left: -9px; transition: left .05s linear;
+    box-shadow: 0 0 8px #4da3ff88;
+  }
+
+  /* --- pantalla de inicio: gesto obligatorio para audio/fullscreen --- */
+  #inicio {
+    position: fixed; inset: 0; z-index: 100; background: #05070aee;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 18px; text-align: center; padding: 24px;
+  }
+  #inicio h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  #inicio p { opacity: .65; margin: 0; max-width: 340px; font-size: 12px; }
+  #btnEmpezar {
+    font: inherit; font-size: 15px; padding: 16px 36px; border-radius: 12px;
+    border: 1px solid #3a6ea5; background: #1a5fb4; color: #fff; font-weight: 600;
+    box-shadow: 0 4px 20px #1a5fb455;
+  }
+  #instalar {
+    font: inherit; font-size: 12px; padding: 8px 16px; border-radius: 8px;
+    border: 1px solid #2b4257; background: transparent; color: #8fb7d9; display: none;
+  }
+
+  /* --- controles: UN SOLO joystick combinado, en toda la pantalla --- */
+  /* Antes había dos joysticks (uno por pulgar: izquierda giraba, derecha
+     aceleraba). Un usuario probándolo con una sola mano —o arrastrando en
+     diagonal esperando que "adelante + a la derecha" hiciera las dos
+     cosas— se encontraba con que el stick derecho sólo lee el eje vertical
+     y el horizontal no hacía NADA: exactamente el síntoma reportado
+     ("giro y acelero y va derecho"). Un solo joystick con los dos ejes -Y
+     es acelerador/freno, X es giro- es lo que usa cualquier control
+     simplificado de manejo (RC de juguete, la mayoría de los juegos de
+     manejo casuales) y elimina la posibilidad de ese malentendido: cualquier
+     arrastre, con cualquier mano, en cualquier dirección, hace lo que se
+     espera que haga. */
+  .zona { position: fixed; inset: 0; }
+  .stick {
+    position: absolute; width: 128px; height: 128px; border-radius: 50%;
+    margin-left: -64px; margin-top: -64px; pointer-events: none;
+    background: radial-gradient(circle, #ffffff10, #ffffff02 70%);
+    border: 2px solid #ffffff22; opacity: 0; transition: opacity .15s;
+  }
+  .stick.activo { opacity: 1; transition: none; }
+  .stick .perilla {
+    position: absolute; width: 56px; height: 56px; border-radius: 50%;
+    left: 50%; top: 50%; margin-left: -28px; margin-top: -28px;
+    background: radial-gradient(circle at 35% 30%, #6fb4ff, #235a9e);
+    border: 2px solid #ffffff55; box-shadow: 0 3px 10px #0007;
+    transition: transform .18s cubic-bezier(.2,1.4,.4,1);
+  }
+  .stick.activo .perilla { transition: none; }
+  /* Cuando frena (tira hacia abajo) la perilla se pinta de rojo. */
+  #stick.frenando .perilla { background: radial-gradient(circle at 35% 30%, #ff8f8f, #a5261f); }
+
+  .guia {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    pointer-events: none; opacity: .35; font-size: 10px; letter-spacing: .06em;
+    text-transform: uppercase; text-align: center;
+  }
+
+  /* --- piloto manual del DRON: dos zonas, mitad izq/der de la pantalla,
+     como cualquier mando de RC (modo 2): izquierda guiñada+altura, derecha
+     banqueo+cabeceo. Ocultas salvo en modo dron, y el stick/zona/guía de la
+     moto se ocultan al revés — nunca compiten por el mismo toque. */
+  body:not(.modo-dron) .ctrl-dron { display: none; }
+  body.modo-dron .ctrl-moto { display: none; }
+  .zona-mitad { position: fixed; top: 0; bottom: 0; width: 50%; }
+  #zonaYaw { left: 0; }
+  #zonaRP { right: 0; }
+  #guiaYaw { left: 25%; }
+  #guiaRP { left: 75%; }
+
+  /* --- botones de servicio: chicos, discretos, esquina --- */
+  #botones {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%) translateY(38px);
+    display: flex; gap: 6px; z-index: 5;
+  }
+  button.svc {
+    font: inherit; font-size: 11px; padding: 6px 10px; border-radius: 6px;
+    border: 1px solid #2b4257; background: #0c1620cc; color: #9fb8cc;
+  }
+  button.svc.on { background: #7a1f2b; border-color: #c04; color: #ffd9de; }
+
+  /* --- el widget de entrenamiento: MUY discreto --- */
+  #entren {
+    position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; letter-spacing: .02em; color: #ffffff3a;
+    pointer-events: none; white-space: nowrap; transition: color .4s;
+  }
+  #entren.hay-dato { color: #ffffff55; }
+  #entren b { font-weight: 600; color: #ffffff70; }
+  #entren.aprobado { color: #7fd6a666; }
+
+  /* El régimen del tramo (recta/curva/transitorio), informativo. */
+  #regimen {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+    font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+    background: #ffffff10; color: #9fb8cc;
+  }
+  #regimen.curva { background: #7a4a1f; color: #ffd9a8; }
+  #regimen.transitorio { background: #1f4a7a; color: #a8d4ff; }
+
+  #lecturaMando {
+    position: fixed; top: 46px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: #ffffff45; pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #aviso {
+    position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);
+    padding: 5px 10px; background: #0c1620dd; border: 1px solid #22384c;
+    border-radius: 6px; font-size: 11px; white-space: nowrap; opacity: 0;
+    transition: opacity .3s;
+  }
+  #aviso.mostrar { opacity: 1; }
+
+  @media (orientation: portrait) {
+    #rota { display: flex !important; }
+  }
+  #rota {
+    display: none; position: fixed; inset: 0; z-index: 90;
+    background: #05070aee; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; text-align: center; padding: 24px;
+  }
+</style>
+</head>
+<body>
+<div id="mundo"></div>
+
+<div id="ojo">
+  <div id="ojoTit"><span id="ojoNombre">cámara del dron</span><span id="ojoAviso"></span></div>
+</div>
+
+<div id="lean"><div id="leanTrack"></div><div id="leanKnob"></div></div>
+
+<div id="hud">
+  <div id="velCaja"><span id="vel">0</span><span id="velUnidad">km/h</span></div>
+  <div id="seguimiento">
+    dron <span id="dist">—</span> · a tiro <span id="tiro">—</span><br>
+    <span id="piloto" style="opacity:.6">—</span>
+    <span id="regimen"></span>
+  </div>
+</div>
+
+<div id="botones">
+  <button class="svc" id="bGrabar">● grabar</button>
+  <button class="svc" id="bGuardar">guardar</button>
+  <button class="svc" id="bPiloto">piloto</button>
+  <button class="svc" id="bDron">volar dron</button>
+  <button class="svc" id="bSalir">✕</button>
+</div>
+
+<div class="zona ctrl-moto" id="zona"></div>
+<div class="guia ctrl-moto" id="guia">tocá y arrastrá<br>arriba acelera · abajo frena · a los costados gira</div>
+<div class="stick ctrl-moto" id="stick"><div class="perilla"></div></div>
+
+<!-- Piloto manual del DRON: los mismos cuatro números que la red le manda a
+     `Estabilizador3` (roll/pitch/yaw/alt), para que la persona pueda decir
+     "esto se siente raro" sobre los controles reales, no una aproximación. -->
+<div class="zona-mitad ctrl-dron" id="zonaYaw"></div>
+<div class="zona-mitad ctrl-dron" id="zonaRP"></div>
+<div class="guia ctrl-dron" id="guiaYaw">guiñada · altura</div>
+<div class="guia ctrl-dron" id="guiaRP">banqueo · cabeceo</div>
+<div class="stick ctrl-dron" id="stickYaw"><div class="perilla"></div></div>
+<div class="stick ctrl-dron" id="stickRP"><div class="perilla"></div></div>
+
+<!-- Lectura numérica del mando, chica y discreta: sirve para confirmar de
+     un vistazo que el toque se está registrando, sin tener que adivinar. -->
+<div id="lecturaMando"></div>
+
+<div id="entren"></div>
+<div id="aviso"></div>
+<div id="rota"><div style="font-size:32px">📱↻</div><div>Girá el teléfono<br>Esta cabina es apaisada</div></div>
+
+<div id="inicio">
+  <h1>🏍 Perseguime</h1>
+  <p>Manejás la moto y mirás, en la ventanita, cómo te ve el dron.</p>
+  <button id="btnEmpezar">Arrancar</button>
+  <button id="instalar">Instalar en la pantalla de inicio</button>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ===========================================================================
+// PWA: service worker + prompt de instalación
+// ===========================================================================
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/cabina/sw.js').catch(() => {});
+}
+let promptInstalacion = null;
+addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  promptInstalacion = e;
+  document.getElementById('instalar').style.display = 'inline-block';
+});
+document.getElementById('instalar').onclick = async () => {
+  if (!promptInstalacion) return;
+  promptInstalacion.prompt();
+  await promptInstalacion.userChoice;
+  promptInstalacion = null;
+  document.getElementById('instalar').style.display = 'none';
+};
+
+// ===========================================================================
+// ESCENA — igual filosofía que antes: todo el estado viene de Rust, el
+// navegador sólo dibuja. Si esta pestaña se cierra, el vuelo sigue igual.
+// ===========================================================================
+const escena = new THREE.Scene();
+escena.background = new THREE.Color(0x0b1219);
+escena.fog = new THREE.Fog(0x0b1219, 60, 400);
+escena.add(new THREE.HemisphereLight(0x88bbff, 0x102030, 1.1));
+const sol = new THREE.DirectionalLight(0xffffff, 1.4);
+sol.position.set(40, 80, 30);
+escena.add(sol);
+
+const piso = new THREE.Mesh(
+  new THREE.PlaneGeometry(4000, 4000),
+  new THREE.MeshStandardMaterial({ color: 0x16202b, roughness: 1 }));
+piso.rotation.x = -Math.PI / 2;
+escena.add(piso);
+escena.add(new THREE.GridHelper(4000, 400, 0x2a4258, 0x1b2b3a));
+
+const ruta = new THREE.Mesh(
+  new THREE.PlaneGeometry(3000, 9),
+  new THREE.MeshStandardMaterial({ color: 0x23303d, roughness: 1 }));
+ruta.rotation.x = -Math.PI / 2;
+ruta.position.y = 0.02;
+escena.add(ruta);
+
+const moto = new THREE.Group();
+const cuerpoMoto = new THREE.Mesh(
+  new THREE.BoxGeometry(2.0, 0.7, 0.7),
+  new THREE.MeshStandardMaterial({ color: 0xd8443a, metalness: .3, roughness: .5 }));
+cuerpoMoto.position.y = 0.55;
+moto.add(cuerpoMoto);
+const nariz = new THREE.Mesh(
+  new THREE.ConeGeometry(0.32, 0.8, 12),
+  new THREE.MeshStandardMaterial({ color: 0xffcc55 }));
+nariz.rotation.z = -Math.PI / 2;
+nariz.position.set(1.2, 0.55, 0);
+moto.add(nariz);
+escena.add(moto);
+
+const dron = new THREE.Group();
+dron.add(new THREE.Mesh(
+  new THREE.BoxGeometry(0.5, 0.14, 0.5),
+  new THREE.MeshStandardMaterial({ color: 0x2e3b4a, metalness: .4, roughness: .4 })));
+const helices = [];
+for (const [dx, dz] of [[.42,.42],[-.42,.42],[.42,-.42],[-.42,-.42]]) {
+  const brazo = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.035, 0.6, 8),
+    new THREE.MeshStandardMaterial({ color: 0x1c2733 }));
+  brazo.rotation.z = Math.PI / 2;
+  brazo.rotation.y = Math.atan2(dz, dx);
+  brazo.position.set(dx / 2, 0, dz / 2);
+  dron.add(brazo);
+  const helice = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.3, 0.3, 0.02, 14),
+    new THREE.MeshStandardMaterial({ color: 0x6fd0ff, transparent: true, opacity: .35 }));
+  helice.position.set(dx, 0.09, dz);
+  dron.add(helice);
+  helices.push(helice);
+}
+const led = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), new THREE.MeshBasicMaterial({ color: 0x7fff9f }));
+led.position.set(0.3, 0, 0);
+dron.add(led);
+escena.add(dron);
+
+const puesto = new THREE.Mesh(
+  new THREE.TorusGeometry(1.2, 0.06, 8, 24),
+  new THREE.MeshBasicMaterial({ color: 0x7fd6a6, transparent: true, opacity: .5 }));
+puesto.rotation.x = Math.PI / 2;
+escena.add(puesto);
+
+const camMoto = new THREE.PerspectiveCamera(78, 1, 0.1, 3000);
+const camDron = new THREE.PerspectiveCamera(2 * 0.6 * 180 / Math.PI, 4 / 3, 0.1, 3000);
+
+// FPV de verdad: la cámara es HIJA del grupo `dron`, así hereda su actitud
+// (roll/pitch/yaw) sola, cuadro a cuadro, sin copiar nada a mano. El offset
+// de rotación fijo alinea el "adelante" por defecto de una cámara (-Z) con
+// el "adelante" del modelo (+X local, donde está el LED de nariz) — mismo
+// eje que ya usa `camMoto` con el rumbo de la moto.
+dron.add(camDron);
+camDron.position.set(0.15, 0.05, 0);
+camDron.rotation.set(0, -Math.PI / 2, 0);
+
+// Si el piloto es manual, la pantalla grande pasa a ser la vista del DRON
+// —FPV, para juzgar los controles de verdad— y la de la moto queda de
+// referencia chica. Si no, es al revés (perseguir la moto es lo normal).
+// Antes del pedido del usuario la cámara del dron NUNCA se veía grande y
+// además, en persecución, se quedaba mirando siempre a la moto — bien para
+// perseguir, pero mentía sobre hacia dónde apuntaba el dron en modo manual.
+let modoDron = false;
+function camGrande() { return modoDron ? camDron : camMoto; }
+function camChica() { return modoDron ? camMoto : camDron; }
+
+const render1 = new THREE.WebGLRenderer({ antialias: true });
+render1.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.getElementById('mundo').appendChild(render1.domElement);
+const render2 = new THREE.WebGLRenderer({ antialias: true });
+render2.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+document.getElementById('ojo').appendChild(render2.domElement);
+
+function ajustar() {
+  render1.setSize(innerWidth, innerHeight);
+  camGrande().aspect = innerWidth / innerHeight;
+  camGrande().updateProjectionMatrix();
+  const caja = document.getElementById('ojo').getBoundingClientRect();
+  render2.setSize(caja.width, caja.height);
+  camChica().aspect = caja.width / caja.height;
+  camChica().updateProjectionMatrix();
+}
+addEventListener('resize', ajustar);
+addEventListener('orientationchange', () => setTimeout(ajustar, 200));
+ajustar();
+
+// ===========================================================================
+// CONTROLES — joystick dinámico (aparece donde tocás), con perilla que sigue
+// el dedo dentro de un radio fijo y vuelve al centro sola al soltar. Es la
+// técnica estándar de los juegos móviles y es lo que faltaba: antes había una
+// zona invisible sin ningún dibujo, ahora hay un control que se VE y responde
+// 1:1.
+// ===========================================================================
+const RADIO = 52; // px de recorrido máximo de la perilla
+
+function crearStick(elStick, elGuia) {
+  const perilla = elStick.querySelector('.perilla');
+  let activo = false, id = null, cx = 0, cy = 0, x = 0, y = 0;
+
+  function posicionar(px, py) {
+    let dx = px - cx, dy = py - cy;
+    const mag = Math.hypot(dx, dy);
+    if (mag > RADIO) { dx = dx / mag * RADIO; dy = dy / mag * RADIO; }
+    perilla.style.transform = `translate(${dx}px,${dy}px)`;
+    x = dx / RADIO; y = dy / RADIO;
+  }
+  function empezar(px, py) {
+    activo = true; cx = px; cy = py;
+    elStick.style.left = px + 'px'; elStick.style.top = py + 'px';
+    elStick.classList.add('activo');
+    elGuia.style.opacity = 0;
+    posicionar(px, py);
+    if (navigator.vibrate) navigator.vibrate(8);
+  }
+  function soltar() {
+    activo = false; id = null;
+    elStick.classList.remove('activo');
+    perilla.style.transform = 'translate(0,0)';
+    x = 0; y = 0;
+    setTimeout(() => { if (!activo) elGuia.style.opacity = ''; }, 200);
+  }
+  return { get x() { return x; }, get y() { return y; }, get activo() { return activo; },
+           empezar, posicionar, soltar,
+           get id() { return id; }, set id(v) { id = v; } };
+}
+
+const stick = crearStick(document.getElementById('stick'), document.getElementById('guia'));
+
+function ligarZona(zona, stick) {
+  zona.addEventListener('pointerdown', e => {
+    if (stick.activo) return;
+    stick.id = e.pointerId;
+    stick.empezar(e.clientX, e.clientY);
+    zona.setPointerCapture(e.pointerId);
+  });
+  zona.addEventListener('pointermove', e => {
+    if (stick.id === e.pointerId) stick.posicionar(e.clientX, e.clientY);
+  });
+  const fin = e => { if (stick.id === e.pointerId) stick.soltar(); };
+  zona.addEventListener('pointerup', fin);
+  zona.addEventListener('pointercancel', fin);
+}
+ligarZona(document.getElementById('zona'), stick);
+
+// Dos sticks más para el DRON: izquierda (yaw + altura), derecha (banqueo +
+// cabeceo) — mismo factory, otra zona, así que dos dedos no se pisan.
+const stickYaw = crearStick(document.getElementById('stickYaw'), document.getElementById('guiaYaw'));
+const stickRP = crearStick(document.getElementById('stickRP'), document.getElementById('guiaRP'));
+ligarZona(document.getElementById('zonaYaw'), stickYaw);
+ligarZona(document.getElementById('zonaRP'), stickRP);
+
+// Teclado, para probar en escritorio.
+const teclas = new Set();
+addEventListener('keydown', e => {
+  teclas.add(e.key.toLowerCase());
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+});
+addEventListener('keyup', e => teclas.delete(e.key.toLowerCase()));
+
+function leerMandos() {
+  // UN SOLO stick, los dos ejes: X es giro, Y (invertido: arriba es
+  // negativo en pantalla) es acelerador/freno. Cualquier arrastre —recto,
+  // diagonal, con cualquier mano— mueve las dos cosas a la vez, que es
+  // como maneja cualquiera intuitivamente.
+  let giro = stick.activo ? stick.x : 0;
+  let gas = stick.activo ? -stick.y : 0;
+  if (teclas.size) {
+    let g = 0, a = 0;
+    if (teclas.has('a') || teclas.has('arrowleft')) g -= 1;
+    if (teclas.has('d') || teclas.has('arrowright')) g += 1;
+    if (teclas.has('w') || teclas.has('arrowup')) a += 1;
+    if (teclas.has('s') || teclas.has('arrowdown')) a -= 1;
+    if (g || a) { giro = g; gas = a; }
+  }
+  document.getElementById('stick').classList.toggle('frenando', gas < -0.05);
+  return { giro, gas };
+}
+
+// ===========================================================================
+// PANTALLA DE INICIO: el gesto que desbloquea audio + pantalla completa +
+// bloqueo de orientación. Todas estas APIs exigen un toque humano primero.
+// ===========================================================================
+document.getElementById('btnEmpezar').onclick = async () => {
+  try { await document.documentElement.requestFullscreen?.(); } catch (e) {}
+  try { await screen.orientation?.lock?.('landscape'); } catch (e) {}
+  document.getElementById('inicio').style.display = 'none';
+};
+
+// ===========================================================================
+// RED: mandar los controles y pedir el estado
+// ===========================================================================
+const elLectura = document.getElementById('lecturaMando');
+setInterval(() => {
+  if (modoDron) {
+    // Arriba en la pantalla es negativo: "arriba" tiene que subir/acelerar
+    // hacia adelante, igual que la convención que ya usa el mando de la moto
+    // (`gas = -stick.y`), para que no se sienta invertido.
+    const roll = stickRP.activo ? stickRP.x : 0;
+    const pitch = stickRP.activo ? -stickRP.y : 0;
+    // Guiñada INVERTIDA respecto del stick: `yaw_sp` es velocidad de guiñada
+    // y positiva hace crecer ψ, o sea girar a la IZQUIERDA (la nariz va de
+    // +x hacia +y). Sin este signo, empujar el stick a la izquierda giraba
+    // a la derecha — el "giro para un lado y se va para el otro".
+    const yaw = stickYaw.activo ? -stickYaw.x : 0;
+    const alt = stickYaw.activo ? -stickYaw.y : 0;
+    fetch(`/dron?roll=${roll.toFixed(3)}&pitch=${pitch.toFixed(3)}&yaw=${yaw.toFixed(3)}&alt=${alt.toFixed(3)}`).catch(() => {});
+    elLectura.textContent = (stickRP.activo || stickYaw.activo)
+      ? `roll ${roll.toFixed(2)}  pitch ${pitch.toFixed(2)}  yaw ${yaw.toFixed(2)}  alt ${alt.toFixed(2)}`
+      : '';
+    return;
+  }
+  const { giro, gas } = leerMandos();
+  fetch(`/moto?acel=${gas.toFixed(3)}&giro=${giro.toFixed(3)}`).catch(() => {});
+  // Lectura en vivo de lo que se está mandando — confirma de un vistazo que
+  // el toque se registra, sin tener que adivinar si el control "no sirve".
+  elLectura.textContent = (stick.activo || teclas.size)
+    ? `giro ${giro >= 0 ? '+' : ''}${giro.toFixed(2)}   gas ${gas >= 0 ? '+' : ''}${gas.toFixed(2)}`
+    : '';
+}, 20); // 50 Hz — el doble que antes, para que se sienta inmediato
+
+const bGrabar = document.getElementById('bGrabar');
+bGrabar.onclick = () => fetch(`/cabina?grabar=${bGrabar.classList.contains('on') ? 0 : 1}`).catch(() => {});
+document.getElementById('bGuardar').onclick = () => fetch('/cabina?guardar').catch(() => {});
+document.getElementById('bPiloto').onclick = () => fetch('/control?k=p').catch(() => {});
+const bDron = document.getElementById('bDron');
+bDron.onclick = () => {
+  modoDron = !modoDron;
+  bDron.classList.toggle('on', modoDron);
+  document.body.classList.toggle('modo-dron', modoDron);
+  ajustar(); // la pantalla grande cambió de cámara: reajustar aspecto ya
+  document.getElementById('ojoNombre').textContent =
+    modoDron ? 'cámara de la moto' : 'cámara del dron';
+  if (modoDron) {
+    // Salís de "perseguir a la moto" para que nadie más escriba
+    // roll_sp/pitch_sp/yaw_sp/alt_sp mientras volás — es la MISMA superficie,
+    // así que sólo puede mandar uno por vez.
+    fetch('/cabina?modo=0').catch(() => {});
+    fetch('/cabina?manual=1').catch(() => {});
+  } else {
+    fetch('/cabina?manual=0').catch(() => {});
+    fetch('/cabina?modo=1').catch(() => {});
+  }
+};
+document.getElementById('bSalir').onclick = () => {
+  fetch('/cabina?modo=0').catch(() => {});
+  fetch('/cabina?manual=0').catch(() => {});
+  location.href = '/';
+};
+fetch('/cabina?modo=1').catch(() => {});
+addEventListener('pagehide', () => {
+  navigator.sendBeacon?.('/cabina?modo=0');
+  navigator.sendBeacon?.('/cabina?manual=0');
+});
+
+let st = null;
+async function pedir() {
+  try { st = await (await fetch('/estado')).json(); } catch (e) {}
+  setTimeout(pedir, 40);
+}
+pedir();
+
+// ===========================================================================
+// BUCLE DE DIBUJO
+// ===========================================================================
+const tmp = new THREE.Vector3();
+let ultimoAviso = '';
+let anguloHelice = 0;
+function bucle() {
+  requestAnimationFrame(bucle);
+  if (!st) return;
+
+  const mx = st.moto.x, my = st.moto.z, mz = -st.moto.y;
+  moto.position.set(mx, my, mz);
+  // El mapeo mundo→escena (x, z, -y) es una rotación PROPIA (det = +1), así
+  // que los ángulos pasan directo: rumbo ψ → rotation.y = +ψ. Acá estaba
+  // en −ψ, o sea espejado: el modelo apuntaba al lado contrario del rumbo
+  // real salvo a 0° y 180°. Se notaba poco con la moto (cuerpo simétrico)
+  // y se volvió imposible de ignorar al colgar la cámara FPV del dron.
+  // `camMoto` más abajo ya usaba el signo correcto — las dos convenciones
+  // convivían en el mismo archivo.
+  moto.rotation.y = st.moto.rumbo;
+  cuerpoMoto.rotation.x = -st.moto.giro * 0.35;
+
+  dron.position.set(st.x, st.z, -st.y);
+  // Ejes del modelo: la nariz es +X local (donde está el LED), así que el
+  // CABECEO es giro sobre Z y el BANQUEO sobre X — estaban al revés, y con
+  // los ejes cruzados el dron "rolaba" cuando cabeceaba. Orden 'YZX' =
+  // guiñada afuera, cabeceo, banqueo adentro (el orden aeronáutico de
+  // siempre). Cabeceo positivo es nariz ABAJO (es lo que acelera hacia
+  // adelante en `Guiado`), de ahí el signo.
+  dron.rotation.set(st.roll, st.yaw, -st.pitch, 'YZX');
+  puesto.position.set(st.ox, st.oz, -st.oy);
+  anguloHelice += 0.9;
+  for (const h of helices) h.rotation.y = anguloHelice;
+
+  const dir = new THREE.Vector3(Math.cos(-st.moto.rumbo), 0, Math.sin(-st.moto.rumbo));
+  camMoto.position.set(mx - dir.x * 1.6, my + 1.9, mz - dir.z * 1.6);
+  tmp.set(mx + dir.x * 30, my + 1.2, mz + dir.z * 30);
+  camMoto.lookAt(tmp);
+  // Vibración de cámara a alta velocidad: sensación de manejar rápido.
+  const kmh = st.moto.rapidez * 3.6;
+  if (kmh > 40) {
+    const s = Math.min((kmh - 40) / 200, 1) * 0.03;
+    camMoto.position.x += (Math.random() - 0.5) * s;
+    camMoto.position.y += (Math.random() - 0.5) * s;
+  }
+
+  if (modoDron) {
+    // Piloto manual: FPV de verdad. `camDron` es hija de `dron`, así que ya
+    // gira, banquea y cabecea con el cuerpo real (el `dron.rotation.set(...)`
+    // de arriba) sin que haga falta copiar nada acá — sólo hay que dejar su
+    // rotación LOCAL fija en el offset de nariz, por si el modo anterior
+    // (persecución) la movió con `lookAt`. Antes esta cámara SEGUÍA MIRANDO
+    // A LA MOTO pasara lo que pasara con el cuerpo del dron — girar 180° no
+    // se sentía porque la vista no giraba con la cabeza, que es exactamente
+    // lo que reportó el usuario.
+    camDron.rotation.set(0, -Math.PI / 2, 0);
+  } else {
+    // Persecución: la ventanita "cómo te ve el dron" mira al objetivo a
+    // propósito (posición en MUNDO — `lookAt` ya tiene en cuenta que ahora
+    // es hija de `dron`, así que sigue apuntando bien aunque el dron gire).
+    camDron.lookAt(mx, my + 0.6, mz);
+  }
+  if (modoDron) {
+    // La FPV está DENTRO del dron y del aro del puesto (el dron vuela a
+    // centímetros de él), así que sin esconderlos la pantalla se llena de
+    // verde y de los propios brazos — que es literalmente la "vista rota"
+    // que reportó el usuario. Cámaras no se dibujan, así que apagar el
+    // grupo no apaga la FPV que cuelga de él.
+    dron.visible = false;
+    puesto.visible = false;
+    render1.render(escena, camDron);
+    dron.visible = true;
+    puesto.visible = true;
+    render2.render(escena, camMoto);
+  } else {
+    render1.render(escena, camMoto);
+    render2.render(escena, camDron);
+  }
+
+  // --- HUD ---
+  document.getElementById('vel').textContent = kmh.toFixed(0);
+  const err = st.errPuesto;
+  const claseErr = err < 6 ? 'bien' : err < 25 ? 'medio' : 'mal';
+  document.getElementById('dist').innerHTML = `<span class="${claseErr}">${err.toFixed(1)} m</span>`;
+  document.getElementById('tiro').innerHTML =
+    `<span class="${st.aTiro > .6 ? 'bien' : 'medio'}">${(st.aTiro * 100).toFixed(0)}%</span>`;
+  document.getElementById('piloto').textContent =
+    (st.manual ? 'MANUAL (vos)' : st.ia ? 'red (híbrido)' : 'clásico') +
+    (st.grabando ? ` · ● GRABANDO (${st.muestras})` : '');
+  const elReg = document.getElementById('regimen');
+  elReg.textContent = st.regimen || '';
+  elReg.className = st.regimen || '';
+  bGrabar.classList.toggle('on', st.grabando);
+  document.getElementById('ojo').classList.toggle('perdido', st.errPuesto > 25);
+  document.getElementById('ojoAviso').textContent = st.caido ? 'ESTRELLADO' : '';
+
+  // Barra de inclinación: rango ±45° mapeado a la barra completa.
+  const leanPct = 50 + Math.max(-1, Math.min(1, st.moto.giro * st.moto.rapidez / 8)) * 45;
+  document.getElementById('leanKnob').style.left = leanPct + '%';
+
+  if (st.aviso && st.aviso !== ultimoAviso) {
+    ultimoAviso = st.aviso;
+    const el = document.getElementById('aviso');
+    el.textContent = st.aviso;
+    el.classList.add('mostrar');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('mostrar'), 3500);
+  }
+
+  // --- el widget de entrenamiento, discreto ---
+  const ent = document.getElementById('entren');
+  if (st.entrenamiento) {
+    const e = st.entrenamiento;
+    const pct = e.umbral > 0 ? Math.min(100, e.mejor / e.umbral * 100) : 0;
+    ent.innerHTML = `entrenando · peldaño <b>${e.peldano}/${e.peldanos}</b> · ` +
+      `gen ${e.gen} · <b>${pct.toFixed(0)}%</b> del umbral` +
+      (e.estancado > 100 ? ` · estancado hace ${e.estancado} gens` : '');
+    ent.classList.add('hay-dato');
+    ent.classList.toggle('aprobado', pct >= 100);
+  } else {
+    ent.textContent = '';
+    ent.classList.remove('hay-dato');
+  }
+
+}
+bucle();
+</script>
+</body>
+</html>

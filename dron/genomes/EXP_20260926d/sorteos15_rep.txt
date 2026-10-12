@@ -1,0 +1,23 @@
+(midiendo el REPERTORIO genomes/EXP_20260926d/rep.adn.repertorio.bin, no un genoma suelto)
+SORTEOS — peldaño 15, 12 juegos de escenarios distintos
+piloto: genomes/EXP_20260926d/rep.adn.repertorio.bin
+umbral de aprobación: 2400.0
+
+  peor      -1030.9
+  mediana    -118.6
+  mejor      2445.5
+
+  término              peor   mediana     mejor   dispersión
+  misiones propias     -11.7    3845.2    4134.9      4146.6
+  examen de repaso   -1030.9    -118.6    2491.2      3522.1   ← ata la nota
+
+  peldaños de atrás peor recordados:
+    peldaño 12     -176.7   ← lo perdió
+    peldaño  2     2705.5
+    peldaño  1     2756.2
+    peldaño 11     2875.3
+
+  sorteo a sorteo: 1· 2· 3· 4· 5· 6· 7· 8· 9· 10· 11✓ 12·
+
+  aprueba en 1 de 12 sorteos
+  APRUEBA A VECES — con el criterio viejo, una de esas veces alcanzaba para dar el peldaño por aprobado (regla 3.20)

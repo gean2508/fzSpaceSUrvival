@@ -1,0 +1,12 @@
+[package]
+name = "dron"
+version = "0.1.0"
+edition = "2021"
+description = "Controlador de dron: red binaria IAFZ-64 por encima de un PID, entrenada por evolucion"
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+opt-level = 3
+lto = true

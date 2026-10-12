@@ -1,0 +1,1455 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dron — visor</title>
+<!--
+  ====================================================================
+   VISOR, SEGUNDA VERSIÓN — reescrito de cero (sesión de la UI)
+  ====================================================================
+
+  Lo que había: seis superficies flotando encima de la escena (#datos,
+  #banco, #ayuda, #datosBio, #tactil, #ocultar) más un panel de cerebro
+  que se comía el 42% del ancho. Los botones de la misma acción estaban
+  repartidos en tres lugares distintos (teclado, banco, táctil) y el
+  único remedio era un botón que los escondía a TODOS.
+
+  Y había un defecto real, no sólo de estética: el MODO DE COLOCACIÓN
+  (punto A / punto B / poste) quedaba armado e invisible. Si se ocultaba
+  o colapsaba el panel con el modo puesto, el siguiente toque sobre la
+  escena disparaba `/punto?cual=a`, que en `web.rs` hace
+  `m.d = Dron3::nuevo(...)`: teletransporta el dron y reinicia los lazos.
+  En medio de una entrega eso la mata. Por eso "minimizar el panel para
+  ver cómo entrega el paquete cancelaba la acción".
+
+  Las tres reglas de esta versión:
+
+  1. LA ESCENA NUNCA SE TAPA. La barra de arriba y el dock de abajo son
+     filas de un grid, no paneles flotantes: el 3D vive en la fila del
+     medio y nada se le superpone. El único overlay es el cajón, y es
+     bajo demanda.
+  2. UNA ACCIÓN, UN LUGAR. Cada cosa que se puede hacer está en
+     exactamente un botón. El teclado sigue andando como atajo, pero ya
+     no es una lista de ayuda que ocupa el ancho de la pantalla.
+  3. MIRAR NUNCA TOCA LA SIMULACIÓN. Abrir el cajón, prender el panel de
+     "nuestra red", mover la cámara, esconder el HUD: nada de eso hace un
+     solo `fetch`. Está marcado con `// VISTA` donde importa. Y el modo de
+     colocación se ve SIEMPRE en grande mientras esté armado, se desarma
+     solo después de colocar A o B, y `Esc` lo suelta.
+
+  ====================================================================
+   EL PANEL DEL CONECTOMA DE LA MOSCA SE SACÓ (misma sesión, después)
+  ====================================================================
+  Hasta acá este archivo tenía un segundo panel 3D con el subcircuito real
+  de Drosophila (FlyWire/Princeton) latiendo en vivo. Se sacó con una
+  medición en la mano, no por gusto: el experimento final —3 semillas,
+  con la fórmula híbrida de hoy y el mismo límite de sacudida que el resto
+  del proyecto, no la fórmula vieja rota que se usó la primera vez— dio que
+  NI el reflejo óptico (HS/VS) NI la brújula de rumbo (Complejo Central) le
+  ganan de forma confiable a no ponerles nada encima de nuestra propia red.
+  La diferencia contra "sin circuito" quedó adentro del ruido de semilla a
+  semilla en los dos casos. Ver CLAUDE.md para los números completos.
+
+  En su lugar hay un panel de "nuestra red" (IAFZ-64): no tiene neuronas
+  individuales que dibujar —es un kernel denso, XNOR + popcount sobre 128
+  bits, sin nodos direccionables— así que muestra lo único observable de
+  verdad: los 96 bits de sensor que entran y las 4 salidas que decide.
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --fondo:#0a0d12;  --panel:#11161f;  --borde:#222b3a;  --borde2:#2f3a4d;
+    --texto:#e2e7f0;  --tenue:#8c97ad;
+    --cian:#5ad1ff;   --verde:#6bdc8a;  --ambar:#ffcc66;  --rojo:#ff6b6b;
+    --alto-barra:46px; --alto-dock:62px;
+    --sb: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    margin:0; background:var(--fondo); color:var(--texto);
+    font:14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow:hidden;
+    display:grid; grid-template-rows:var(--alto-barra) 1fr auto;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .num { font-family:ui-monospace, "DejaVu Sans Mono", monospace;
+         font-variant-numeric:tabular-nums; }
+  .mal{color:var(--rojo)} .bien{color:var(--verde)} .ojo{color:var(--ambar)}
+  .tenue{color:var(--tenue)}
+
+  /* ---------- botones: un solo aspecto en toda la página ---------- */
+  button {
+    font:inherit; color:var(--texto); background:#1a2130;
+    border:1px solid var(--borde2); border-radius:9px;
+    padding:0 13px; height:38px; cursor:pointer; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:7px;
+    transition:background .12s, border-color .12s;
+  }
+  button:hover { background:#232c3e; }
+  button:active { background:#2b3548; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.primario { background:#1f5f43; border-color:#2f8a63; color:#e8fff3; font-weight:600; }
+  button.primario:hover { background:#25714f; }
+  button.peligro  { background:#5e2330; border-color:#8d3646; color:#ffeaee; font-weight:600; }
+  button.peligro:hover { background:#6e2a39; }
+  button.sel { background:#1d4a63; border-color:var(--cian); color:#eaf9ff; }
+  button.fantasma { background:transparent; border-color:transparent; color:var(--tenue); }
+  button.fantasma:hover { background:#1a2130; color:var(--texto); }
+
+  /* ---------- barra de arriba ---------- */
+  #barra {
+    display:flex; align-items:center; gap:12px; padding:0 10px 0 14px;
+    background:var(--panel); border-bottom:1px solid var(--borde);
+    min-width:0;
+  }
+  #estado { font-weight:600; white-space:nowrap; min-width:0;
+            overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; }
+  #reloj { color:var(--tenue); font-weight:400; }
+  /* La misión vive acá, no en un panel: es lo que el usuario mira mientras
+     el dron entrega, así que no puede estar en algo que se tape. */
+  #mision { display:none; align-items:center; gap:9px; min-width:0; flex:1; }
+  #mision.viva { display:flex; }
+  #misionQue { color:var(--ambar); white-space:nowrap; overflow:hidden;
+               text-overflow:ellipsis; font-size:13px; }
+  #tramos { display:flex; gap:3px; flex:none; }
+  #tramos i { width:16px; height:5px; border-radius:3px; background:#2b3446; display:block; }
+  #tramos i.hecho { background:var(--verde); }
+  #tramos i.actual { background:var(--ambar); }
+  #relleno { flex:1; }
+  #barra .der { display:flex; align-items:center; gap:7px; flex:none; }
+  #btPiloto { height:32px; font-size:13px; padding:0 11px; }
+  #btCajon { width:38px; padding:0; justify-content:center; font-size:17px; }
+  /* El anillo en vivo, cuando la percepción sale de una cámara real y no del
+     simulador. Verificable a simple vista sin abrir el cajón — regla 3.3: lo
+     que se afirma ("la cámara está viendo") tiene que poder mirarse. */
+  #ojoReal { display:none; align-items:center; gap:6px; height:32px;
+             padding:0 9px; border:1px solid var(--cian); border-radius:9px;
+             background:#0d2733; }
+  #ojoReal.on { display:flex; }
+  #ojoReal .etq { font-size:11px; color:var(--cian); font-weight:600; }
+  #ojoReal .anillo { display:flex; gap:2px; align-items:flex-end; height:18px; }
+  #ojoReal .anillo i { width:5px; background:var(--cian); border-radius:1px;
+                        min-height:2px; transition:height .1s; }
+  #ojoReal button { font-size:15px; padding:0 6px; height:24px;
+                     border-color:var(--borde2); }
+
+  /* ---------- la escena: fila propia del grid, nadie la tapa ---------- */
+  #escena { position:relative; overflow:hidden; display:grid;
+            grid-template-columns:1fr; background:#070a0f; }
+  #escena.partido { grid-template-columns:1fr minmax(0, 44%); }
+  .vista { position:relative; overflow:hidden; min-width:0; }
+  #vistaRed { display:none; border-left:1px solid var(--borde); background:#05070c; }
+  #escena.partido #vistaRed { display:block; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+  /* HUD: texto suelto, sin caja y sin capturar el puntero. Nunca estorba. */
+  #hud { position:absolute; left:14px; bottom:12px; pointer-events:none;
+         display:grid; grid-template-columns:auto auto; gap:1px 10px;
+         font-size:12px; text-shadow:0 1px 3px #000a; }
+  #hud .et { color:var(--tenue); }
+  #hud b { font-weight:600; }
+  body.sinHud #hud { display:none; }
+
+  /* El cartel de modo armado: grande, arriba del todo, imposible de no ver.
+     Es la cura del bug: antes el modo era invisible y el toque siguiente
+     teletransportaba el dron en medio de una entrega. */
+  #armado { position:absolute; top:12px; left:50%; transform:translateX(-50%);
+            display:none; align-items:center; gap:10px; z-index:6;
+            background:#1d4a63ee; border:1px solid var(--cian); color:#eaf9ff;
+            border-radius:999px; padding:7px 10px 7px 16px; font-size:13px;
+            box-shadow:0 6px 24px #0008; max-width:calc(100% - 24px); }
+  #armado.on { display:flex; }
+  #armado b { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #armado button { height:28px; padding:0 10px; font-size:12px;
+                   background:#0e2b3b; border-color:#2a6b8c; }
+
+  /* Aviso del servidor (guardado, grabando, etc.): transitorio, arriba. */
+  #aviso { position:absolute; top:12px; left:50%; transform:translateX(-50%);
+           background:#11161fee; border:1px solid var(--borde2); color:var(--texto);
+           border-radius:9px; padding:7px 14px; font-size:13px; display:none;
+           z-index:5; max-width:calc(100% - 24px); }
+  #aviso.on { display:block; }
+  /* Fijo, no un flash de 4s como #aviso: mientras el genoma sea incompatible
+     esto tiene que seguir ahí, no desvanecerse — es justo lo que costó una
+     sesión (el aviso de la consola no lo veía nadie, `P` pisaba en silencio
+     el arranque seguro en clásico). */
+  #avisoIncompatible { position:absolute; top:12px; left:50%; transform:translateX(-50%);
+           background:#5a1010ee; border:1px solid #ff6b6b; color:#ffdede;
+           border-radius:9px; padding:7px 14px; font-size:13px; display:none;
+           z-index:6; max-width:calc(100% - 24px); font-weight:600; }
+  #avisoIncompatible.on { display:block; }
+  /* La adaptación en vuelo vive en el cajón (nicho/mapa, estilo `.fila`) y
+     directo sobre los nodos de "nuestra red" (sinapsis) — no en un panel
+     flotante aparte: uno nuevo se superponía con el HUD en pantallas
+     angostas. Ver `#cajon` y `dibujarRed`. */
+  .vc { background:#16202c; border-radius:4px; padding:3px 4px; font-size:9.5px;
+        color:#8aa; border:1px solid #223; }
+  .vc.aqui { border-color:#9cf; color:#dff; }
+  .vc.ayuda { background:#14301c; color:#9f9; }
+  .vc.estorba { background:#301616; color:#f99; }
+  #vivoMapa { display:grid; grid-template-columns:repeat(3,1fr); gap:3px; margin-top:4px; }
+  #armado.on ~ #aviso.on { top:60px; }
+
+  /* ---------- dock de abajo: la única botonera ---------- */
+  #dock {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 12px calc(10px + var(--sb));
+    background:var(--panel); border-top:1px solid var(--borde);
+    overflow-x:auto; scrollbar-width:thin;
+  }
+  #dock::-webkit-scrollbar { height:5px; }
+  #dock::-webkit-scrollbar-thumb { background:#2b3446; border-radius:3px; }
+  .grupo { display:flex; align-items:center; gap:6px; flex:none; }
+  .grupo > span { color:var(--tenue); font-size:12px; margin-right:1px; }
+  .sep { width:1px; height:26px; background:var(--borde2); flex:none; }
+  /* Segmentado: los cuatro modos de colocación son excluyentes, y se ve. */
+  .seg { display:flex; flex:none; border:1px solid var(--borde2);
+         border-radius:9px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; height:36px; padding:0 12px;
+                background:#151b27; }
+  .seg button + button { border-left:1px solid var(--borde2); }
+  .seg button.sel { background:#1d4a63; color:#eaf9ff; }
+
+  /* ---------- cajón: lo de consulta, bajo demanda ---------- */
+  #cajon {
+    position:fixed; top:var(--alto-barra); right:0; bottom:0; width:340px;
+    max-width:88vw; background:#0e131bf7; border-left:1px solid var(--borde);
+    backdrop-filter:blur(10px); overflow-y:auto; z-index:30;
+    transform:translateX(102%); transition:transform .18s ease;
+    padding:4px 16px calc(24px + var(--sb));
+  }
+  #cajon.on { transform:none; }
+  #cajon h4 { margin:18px 0 8px; font-size:11px; letter-spacing:.11em;
+              color:var(--tenue); text-transform:uppercase; font-weight:600;
+              border-bottom:1px solid var(--borde); padding-bottom:6px; }
+  #cajon .fila { display:flex; justify-content:space-between; gap:14px;
+                 padding:3px 0; font-size:13px; }
+  #cajon .fila b { font-weight:600; }
+  #cajon .botones { display:flex; flex-wrap:wrap; gap:6px; }
+  #cajon .nota { color:var(--tenue); font-size:12px; line-height:1.5; margin-top:8px; }
+  #cajon kbd { background:#1a2130; border:1px solid var(--borde2); border-radius:4px;
+               padding:1px 6px; font:12px ui-monospace,monospace; margin-right:3px; }
+  .barrita { height:5px; background:#1b2230; border-radius:3px; margin:5px 0 2px;
+             overflow:hidden; position:relative; }
+  .barrita u { position:absolute; inset:0 auto 0 0; background:var(--cian); }
+  .barrita i { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ambar); }
+  #velo { position:fixed; inset:0; background:#0006; z-index:29; display:none; }
+  #velo.on { display:block; }
+  #listaTramos { font-size:13px; }
+  #listaTramos div { padding:3px 0 3px 10px; border-left:2px solid #2b3446; color:var(--tenue); }
+  #listaTramos div.hecho { border-color:var(--verde); }
+  #listaTramos div.actual { border-color:var(--ambar); color:var(--ambar); font-weight:600; }
+
+  /* ---------- panel "nuestra red": el grafo real de IAFZ-64 ---------- */
+  #tituloRed { position:absolute; top:10px; left:12px; font-size:11px;
+               color:var(--tenue); pointer-events:none; z-index:2; letter-spacing:.03em; }
+  #tituloRed b { color:#cfd6e6; display:block; font-size:12px; font-weight:600; margin-top:1px; }
+  /* Una sola fila flex en vez de posicionar cada etiqueta a mano en % — así
+     no hay que recalcular nada si cambia el layout del grafo. */
+  #filaEtqRed { position:absolute; top:46px; left:8px; right:8px; z-index:2;
+                display:flex; justify-content:space-between; pointer-events:none; }
+  .etqRed { font-size:9px; color:var(--tenue); letter-spacing:.05em;
+            text-transform:uppercase; line-height:1.3; }
+  #etqEntrada { text-align:left; }
+  #etqOculta, #etqEstr { text-align:center; }
+  #etqSalida { text-align:right; }
+  /* Lectura dura: cuántos bits/neuronas están prendidos ahora mismo, y las 4
+     salidas crudas. Es el complemento numérico al dibujo — "se ve increíble"
+     no reemplaza el número, lo acompaña. */
+  #hudRed { position:absolute; bottom:10px; left:12px; right:12px; z-index:2;
+            pointer-events:none; display:flex; flex-wrap:wrap; gap:3px 14px;
+            font-size:11px; color:var(--tenue); text-shadow:0 1px 3px #000c; }
+  #hudRed b { color:#dfe4ee; }
+  #hudRed .sal { color:var(--ambar); }
+
+  #fallo { position:absolute; inset:0; display:none; place-content:center;
+           text-align:center; padding:30px; color:var(--tenue); font-size:13px; }
+
+  @media (max-width: 720px) {
+    :root { --alto-barra:44px; }
+    #barra { gap:8px; padding-left:10px; }
+    #misionQue { display:none; }
+    #tramos i { width:11px; }
+    #btPiloto { font-size:12px; padding:0 9px; }
+    #escena.partido { grid-template-columns:1fr; grid-template-rows:1fr 40%; }
+    #escena.partido #vistaRed { border-left:0; border-top:1px solid var(--borde); }
+    #hud { font-size:11px; }
+    /* En 390 px el dock no entra en una fila: antes «colocar» quedaba cortado
+       contra el borde y había que adivinar que se scrolleaba. Envuelve, así
+       TODO está a la vista — que es el punto de esta versión. */
+    #dock { flex-wrap:wrap; overflow-x:visible; gap:8px; padding:8px 10px calc(8px + var(--sb)); }
+    #dock .sep { display:none; }
+    #dock button { height:36px; padding:0 11px; font-size:13px; }
+    #dock > .grupo { flex-basis:100%; }
+    .seg button { height:34px; padding:0 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== barra de arriba ===================== -->
+<header id="barra">
+  <span id="estado">conectando<span id="reloj"></span></span>
+  <div id="mision">
+    <div id="tramos"></div>
+    <span id="misionQue"></span>
+  </div>
+  <span id="relleno"></span>
+  <div class="der">
+    <div id="ojoReal" title="la percepción de obstáculos sale de una cámara real, no del simulador">
+      <span class="etq">📷 OJO</span>
+      <span class="anillo" id="ojoBarras"></span>
+      <button id="btOjoApagar" title="volver a la visión simulada">✕</button>
+    </div>
+    <button id="btPiloto" title="cambiar de piloto (P)">piloto: —</button>
+    <button id="btCajon" title="más">☰</button>
+  </div>
+</header>
+
+<!-- ===================== la escena ===================== -->
+<div id="escena">
+  <div class="vista" id="vistaDron">
+    <canvas id="lienzo"></canvas>
+    <div id="hud">
+      <span class="et">altura</span><b class="num" id="hAlt">—</b>
+      <span class="et">velocidad</span><b class="num" id="hVel">—</b>
+      <span class="et">al objetivo</span><b class="num" id="hDist">—</b>
+      <span class="et">batería</span><b class="num" id="hBat">—</b>
+    </div>
+    <div id="armado">
+      <b id="armadoTexto"></b>
+      <button id="armadoSalir">soltar (Esc)</button>
+    </div>
+    <div id="aviso"></div>
+    <div id="avisoIncompatible">⚠ genoma incompatible con los sensores de hoy — volando en CLÁSICO</div>
+    <div id="fallo">no pude cargar three.js.<br>El visor necesita internet la
+      primera vez para bajar la librería de dibujo.</div>
+  </div>
+  <!-- Reemplaza al panel del conectoma de la mosca (sacado con medición:
+       ni HS/VS ni el Complejo Central le ganan de forma confiable a no
+       ponerles nada — ver CLAUDE.md). Este SÍ es un grafo real: las dos
+       capas binarias de IAFZ-64, con el patrón de disparo de la decisión
+       actual (`iafz::activaciones`, csrc/iafz_64.c) — no una animación de
+       adorno, es el bit que el kernel dejó prendido de verdad. -->
+  <div class="vista" id="vistaRed">
+    <canvas id="lienzoRed"></canvas>
+    <div id="tituloRed">NUESTRA RED · IAFZ-64<b>96 sensores → 64+64 neuronas binarias → 4 salidas</b></div>
+    <div id="filaEtqRed">
+      <span class="etqRed" id="etqEntrada">sensores<br>+ memoria</span>
+      <span class="etqRed" id="etqOculta">capa<br>oculta</span>
+      <span class="etqRed" id="etqEstr">capa<br>estrategia</span>
+      <span class="etqRed" id="etqSalida">salida</span>
+    </div>
+    <div id="hudRed">
+      <span>sensores <b id="hdSens">—</b></span>
+      <span>oculta <b id="hdL1">—</b>/64</span>
+      <span>estrategia <b id="hdL2">—</b>/64</span>
+      <span>memoria <b id="hdMem">—</b>/32</span>
+      <!-- Sinapsis que la adaptación en vuelo modificó respecto del cerebro
+           que salió del gym — no neuronas nuevas: el kernel tiene 64+64
+           fijas, y lo que cambia al aprender son las conexiones (ver
+           `vivo.rs`). Los nodos tocados se ven directo en el grafo, en
+           dorado; esto es el total. Vacío cuando la adaptación está apagada. -->
+      <span id="hdAprendidoFila" hidden>aprendido <b id="hdAprendido">—</b></span>
+      <span class="sal">roll <b id="hdRoll">—</b></span>
+      <span class="sal">pitch <b id="hdPitch">—</b></span>
+      <span class="sal">yaw <b id="hdYaw">—</b></span>
+      <span class="sal">alt <b id="hdAlt">—</b></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== dock: la única botonera ===================== -->
+<nav id="dock">
+  <button id="btEntregar" class="primario">▶ entregar A→B</button>
+  <button id="btVolar">↻ volar de nuevo</button>
+  <div class="sep"></div>
+  <div class="grupo">
+    <span>colocar</span>
+    <div class="seg" id="modos">
+      <button class="sel" data-modo="">mirar</button>
+      <button data-modo="a">punto A</button>
+      <button data-modo="b">punto B</button>
+      <button data-modo="poste">poste</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ===================== cajón ===================== -->
+<div id="velo"></div>
+<aside id="cajon">
+  <h4>acciones</h4>
+  <div class="botones">
+    <button data-k="g">golpe de viento</button>
+    <button data-k="c">quitar postes</button>
+    <button id="btArriba">vista de arriba</button>
+    <button id="btRecentrar">recentrar cámara</button>
+    <button id="btSeguir" class="sel">seguir al dron</button>
+  </div>
+  <div class="fila tenue"><span>postes en el mundo</span><b class="num" id="nPostes">0</b></div>
+  <div class="nota">Un poste puesto ENCIMA del dron no le da tiempo de reacción
+    a nadie. Ponelo unos metros adelante en su trayectoria.</div>
+
+  <h4>decirle una tarea</h4>
+  <textarea id="txTarea" rows="3" spellcheck="false"
+    style="width:100%;box-sizing:border-box;font:12px ui-monospace,monospace;background:transparent;color:inherit;border:1px solid #8884;border-radius:6px;padding:6px"
+  >caja 6 2 a -4 5; caja -3 -4 a 8 -3; caja 2 7 a 9 4; volver</textarea>
+  <button id="btTarea" class="primario" style="margin-top:6px">▶ hacer esta tarea</button>
+  <div id="tareaMsg" class="tenue">órdenes: despegar Z · ir X Y [Z] · posar [X Y] · agarrar [kg] · soltar · caja X Y a X Y [kg] (varias: el orden lo elige el dron) · volver — arranca en el punto A. Los anillos celestes son el mapa: lo que el dron recuerda.</div>
+
+  <h4>misión</h4>
+  <div id="listaTramos" class="tenue">ninguna — tocá «entregar A→B»</div>
+
+  <h4 id="hCorridas" hidden>entrenamiento corriendo</h4>
+  <div id="corridas" hidden></div>
+
+  <h4 id="hEntrenamiento" hidden>entrenamiento de persecución</h4>
+  <div id="entrenamiento" hidden>
+    <div class="fila"><span id="enPeldano">—</span><b class="num" id="enGen">—</b></div>
+    <div class="barrita"><u id="enBarra" style="width:0"></u></div>
+    <div class="fila"><span>mejor / umbral</span><b class="num" id="enMejor">—</b></div>
+    <div class="fila"><span>falta para aprobar</span><b class="num" id="enFalta">—</b></div>
+    <div class="fila"><span>mediana</span><b class="num" id="enMediana">—</b></div>
+    <div class="fila"><span>estancado</span><b class="num" id="enEstancado">—</b></div>
+  </div>
+
+  <h4 id="hVivo" hidden>adaptación en vuelo</h4>
+  <div id="vivoInfo" hidden>
+    <div class="fila"><span>nicho</span><b id="vivoNicho">—</b></div>
+    <div class="fila"><span>midiendo</span><b id="vivoFase">—</b></div>
+    <div class="fila tenue"><span>adoptadas / descartadas / anuladas</span>
+      <b class="num" id="vivoCuentas">—</b></div>
+    <!-- Un genoma por nicho (`repertorio.rs`): aprender en uno no puede pisar
+         lo que el dron sabe en otro. Verde = ahí la red ayuda, rojo = estorba
+         y se vuela clásico. -->
+    <div id="vivoMapa"></div>
+  </div>
+
+  <h4 id="hPersecucion" hidden>persecución</h4>
+  <div id="persecucion" hidden>
+    <div class="fila"><span>régimen</span><b id="peRegimen">—</b></div>
+    <div class="fila"><span>error al puesto</span><b class="num" id="peError">—</b></div>
+    <div class="fila"><span>fracción a tiro</span><b class="num" id="peTiro">—</b></div>
+  </div>
+
+  <h4>vista</h4>
+  <div class="botones">
+    <button id="btRed">mostrar nuestra red</button>
+    <button id="btHud" class="sel">números en pantalla</button>
+    <button onclick="location.href='/cabina'">🏍 ir a la cabina</button>
+  </div>
+  <div class="nota">El cerebro de la mosca (FlyWire/Princeton) se probó acá
+    a fondo y se sacó: con la fórmula híbrida de hoy, ni el reflejo óptico
+    ni la brújula de rumbo le ganan de forma confiable a no ponerles nada
+    — medido con 3 semillas, la diferencia quedó adentro del ruido.</div>
+
+  <h4>teclado</h4>
+  <div class="nota">
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> mueven el objetivo ·
+    <kbd>Q</kbd><kbd>E</kbd> su altura<br>
+    <kbd>espacio</kbd> golpe · <kbd>P</kbd> piloto · <kbd>R</kbd> volar de nuevo ·
+    <kbd>M</kbd> entregar<br>
+    <kbd>C</kbd> quitar postes · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> modo de colocación ·
+    <kbd>Esc</kbd> soltar el modo<br>
+    <kbd>V</kbd> adaptación en vuelo (aprender mientras vuela)<br>
+    <kbd>H</kbd> esconder los números
+  </div>
+</aside>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script>
+  // Si el import map no resuelve (sin internet), el módulo de abajo nunca
+  // corre y la pantalla queda negra sin explicación. Esto avisa.
+  window.addEventListener('error', e => {
+    if (e.target && e.target.tagName === 'SCRIPT') document.getElementById('fallo').style.display = 'grid';
+  }, true);
+  setTimeout(() => {
+    if (!window.__visorVivo) document.getElementById('fallo').style.display = 'grid';
+  }, 6000);
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+window.__visorVivo = true;
+
+const $ = id => document.getElementById(id);
+
+// =====================================================================
+//  ESTADO DEL SERVIDOR
+// =====================================================================
+let st = { x:0,y:0,z:3, roll:0,pitch:0,yaw:0, vx:0,vy:0,vz:0, ox:0,oy:0,oz:3,
+           caido:false, ia:true, golpes:0, bateria:1, t:0, sensRed:'', salRed:[0,0,0,0],
+           extremo:false, recup:0, apoyado:false, mision:[], tramo:0,
+           misionEstado:'', postes:[], px:0,py:0,pz:3, entrenamiento:null,
+           modoMoto:false, regimen:'', aviso:'' };
+let vivo = false;
+
+// Todo cambio de simulación pasa por acá. Un solo lugar que hable con el
+// servidor hace fácil verificar la regla 3 de la cabecera: si una función de
+// VISTA no llama a `mandar`, no puede tocar la simulación.
+function mandar(url) { return fetch(url).catch(() => {}); }
+
+// =====================================================================
+//  ESCENA DEL DRON
+// =====================================================================
+const vistaDron = $('vistaDron'), vistaRed = $('vistaRed');
+const lienzo = $('lienzo');
+const escena = new THREE.Scene();
+escena.background = new THREE.Color(0x070a0f);
+// La niebla arrancaba a 35 m y con el fondo casi negro el piso se perdía en
+// seguida: la escena parecía vacía y costaba ubicar al dron respecto del suelo.
+escena.fog = new THREE.Fog(0x070a0f, 60, 165);
+
+const camara = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
+const render = new THREE.WebGLRenderer({ canvas: lienzo, antialias:true });
+render.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+const controles = new OrbitControls(camara, lienzo);
+controles.enableDamping = true;
+controles.dampingFactor = 0.1;
+controles.minDistance = 1.5;
+controles.maxDistance = 90;
+controles.maxPolarAngle = Math.PI * 0.495;  // no meter la cámara bajo el piso
+controles.target.set(0, 3, 0);
+camara.position.set(-11, 7, 9);
+controles.update();
+
+escena.add(new THREE.HemisphereLight(0x9db4ff, 0x141a26, 1.15));
+const sol = new THREE.DirectionalLight(0xffffff, 1.35);
+sol.position.set(8, 16, 6); escena.add(sol);
+escena.add(new THREE.GridHelper(140, 70, 0x4a5c80, 0x243049));
+
+// --- el dron -----------------------------------------------------------
+const dron = new THREE.Group();
+dron.add(new THREE.Mesh(
+  new THREE.BoxGeometry(0.42, 0.12, 0.42),
+  new THREE.MeshStandardMaterial({ color:0x2f3948, metalness:0.4, roughness:0.5 })));
+const helices = [];
+for (const [dx, dz, col] of [[0.34,0.34,0xff5a5a],[-0.34,0.34,0xff5a5a],
+                             [0.34,-0.34,0x5ad1ff],[-0.34,-0.34,0x5ad1ff]]) {
+  const brazo = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.04,0.06),
+    new THREE.MeshStandardMaterial({ color:0x232b38 }));
+  brazo.position.set(dx/2, 0, dz/2);
+  brazo.rotation.y = Math.atan2(dz, dx);
+  dron.add(brazo);
+  const h = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.012,20),
+    new THREE.MeshStandardMaterial({ color:col, transparent:true, opacity:0.55 }));
+  h.position.set(dx, 0.07, dz);
+  dron.add(h); helices.push(h);
+}
+const nariz = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.22, 12),
+  new THREE.MeshStandardMaterial({ color:0xffcc66 }));
+nariz.rotation.z = -Math.PI/2; nariz.position.set(0.3, 0, 0);
+dron.add(nariz);
+escena.add(dron);
+
+const sombra = new THREE.Mesh(new THREE.CircleGeometry(0.35, 20),
+  new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.35 }));
+sombra.rotation.x = -Math.PI/2; sombra.position.y = 0.01;
+escena.add(sombra);
+
+// --- objetivo (B) y partida (A) ---------------------------------------
+const objetivo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 10, 32),
+  new THREE.MeshStandardMaterial({ color:0x6bdc8a, emissive:0x1d5c33 }));
+objetivo.rotation.x = Math.PI/2;
+escena.add(objetivo);
+const varaObj = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,1,6),
+  new THREE.MeshStandardMaterial({ color:0x6bdc8a, transparent:true, opacity:0.35 }));
+escena.add(varaObj);
+const partida = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.045, 10, 32),
+  new THREE.MeshStandardMaterial({ color:0x7aa2ff, emissive:0x1d3466 }));
+partida.rotation.x = Math.PI/2;
+escena.add(partida);
+
+// --- la misión de entrega ---------------------------------------------
+// Regla 3.3 de la biblia: lo que el gym entrena tiene que poder MIRARSE acá.
+// Cada tramo es un aro; los de posada son un disco en el piso (la plataforma).
+const COLOR_PENDIENTE = 0x3f4a63, COLOR_ACTUAL = 0xffcc55, COLOR_HECHO = 0x2f7a4a;
+const tramos = [];
+function sincronizarMision(lista, actual) {
+  while (tramos.length < lista.length) {
+    const g = new THREE.Group();
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.045, 8, 24),
+      new THREE.MeshStandardMaterial({ color:COLOR_PENDIENTE }));
+    aro.rotation.x = Math.PI/2;
+    const plato = new THREE.Mesh(new THREE.CircleGeometry(1.2, 28),
+      new THREE.MeshStandardMaterial({ color:COLOR_PENDIENTE, transparent:true, opacity:0.55 }));
+    plato.rotation.x = -Math.PI/2;
+    const vara = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,1,6),
+      new THREE.MeshStandardMaterial({ color:COLOR_PENDIENTE, transparent:true, opacity:0.4 }));
+    g.add(aro); g.add(plato); g.add(vara);
+    g.userData = { aro, plato, vara };
+    escena.add(g);
+    tramos.push(g);
+  }
+  tramos.forEach((g, i) => {
+    const p = lista[i];
+    g.visible = !!p;
+    if (!p) return;
+    const { aro, plato, vara } = g.userData;
+    const col = i < actual ? COLOR_HECHO : (i === actual ? COLOR_ACTUAL : COLOR_PENDIENTE);
+    for (const m of [aro, plato, vara]) m.material.color.setHex(col);
+    aro.visible = !p.posar;
+    plato.visible = !!p.posar;
+    vara.visible = !p.posar && p.z > 0.2;
+    aro.position.set(p.x, p.z, -p.y);
+    plato.position.set(p.x, 0.02, -p.y);
+    plato.scale.setScalar(p.r / 1.2);
+    vara.position.set(p.x, p.z/2, -p.y);
+    vara.scale.y = Math.max(0.02, p.z);
+  });
+}
+
+// --- postes: los MISMOS obstáculos del gym (rozarlos tumba) ------------
+const matPoste = new THREE.MeshStandardMaterial({ color:0xd2694a, emissive:0x3a1509 });
+const postes = [];
+function sincronizarPostes(lista) {
+  while (postes.length < lista.length) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 16), matPoste);
+    escena.add(m);
+    postes.push(m);
+  }
+  postes.forEach((m, i) => {
+    const o = lista[i];
+    m.visible = !!o;
+    if (!o) return;
+    m.position.set(o.x, o.h/2, -o.y);
+    m.scale.set(o.r, o.h, o.r);
+  });
+}
+
+// --- el MAPA: lo que el dron recuerda haber visto (`plan::Mapa`) ---------
+// Anillos celestes en el piso, del radio que el dron cree que tiene cada
+// poste, en el lugar donde cree que está. Si un anillo no coincide con su
+// poste, eso es el error del mapa, a la vista.
+const matMapa = new THREE.MeshBasicMaterial({ color:0x5fd0ff, transparent:true, opacity:0.7, side:THREE.DoubleSide });
+const anillosMapa = [];
+function sincronizarMapa(lista) {
+  while (anillosMapa.length < lista.length) {
+    const a = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 32), matMapa);
+    a.rotation.x = -Math.PI/2;
+    escena.add(a);
+    anillosMapa.push(a);
+  }
+  anillosMapa.forEach((a, i) => {
+    const o = lista[i];
+    a.visible = !!o;
+    if (!o) return;
+    a.position.set(o.x, 0.03, -o.y);
+    a.scale.set(o.r, o.r, 1);
+  });
+}
+
+// Plano invisible al ras del piso: sólo existe para convertir un toque en
+// coordenadas del mundo.
+const piso = new THREE.Mesh(new THREE.PlaneGeometry(280, 280),
+  new THREE.MeshBasicMaterial({ visible:false }));
+piso.rotation.x = -Math.PI/2;
+escena.add(piso);
+
+// --- estela ------------------------------------------------------------
+const MAX = 400;
+const puntosEstela = new Float32Array(MAX*3);
+const geoEstela = new THREE.BufferGeometry();
+geoEstela.setAttribute('position', new THREE.BufferAttribute(puntosEstela, 3));
+geoEstela.setDrawRange(0, 0);
+escena.add(new THREE.Line(geoEstela,
+  new THREE.LineBasicMaterial({ color:0x5ad1ff, transparent:true, opacity:0.5 })));
+let nEstela = 0;
+
+// =====================================================================
+//  MODO DE COLOCACIÓN — la cura del bug que mataba las entregas
+// =====================================================================
+// Antes el modo vivía sólo como clase CSS en un panel que se podía esconder,
+// así que quedaba armado e INVISIBLE. `web.rs` reacciona a `/punto?cual=a`
+// reconstruyendo el dron (`Dron3::nuevo`), o sea que un toque distraído en
+// medio de una entrega la cancelaba sin que nada lo explicara.
+//
+// Ahora: (1) mientras está armado hay un cartel grande arriba de la escena,
+// (2) A y B se desarman SOLOS después de colocar —son destructivos y de una
+// sola vez—, (3) `Esc` y el botón «soltar» lo sueltan, (4) el dock refleja
+// el modo con un segmentado, no con un botón perdido.
+const TEXTO_MODO = {
+  a: 'colocando PARTIDA (A) — el dron reaparece donde toques',
+  b: 'colocando OBJETIVO (B) — tocá el piso',
+  poste: 'tirando POSTES — cada toque pone uno (seguí tocando)',
+};
+let modo = '';
+function armar(nuevo) {                      // VISTA + arma, no manda nada
+  modo = nuevo || '';
+  document.querySelectorAll('#modos button').forEach(
+    b => b.classList.toggle('sel', (b.dataset.modo || '') === modo));
+  $('armado').classList.toggle('on', !!modo);
+  if (modo) $('armadoTexto').textContent = TEXTO_MODO[modo];
+}
+document.querySelectorAll('#modos button').forEach(
+  b => b.addEventListener('click', () => { armar(b.dataset.modo); b.blur(); }));
+$('armadoSalir').addEventListener('click', () => armar(''));
+
+// Con OrbitControls un 'click' plano no alcanza: en el celular el navegador
+// puede no sintetizarlo tras un arrastre, y en escritorio dispara igual
+// después de orbitar (pondría un poste sin querer al soltar). Se mide la
+// distancia real entre pointerdown y pointerup.
+const rayo = new THREE.Raycaster();
+const puntero = new THREE.Vector2();
+let bajadaX = 0, bajadaY = 0;
+lienzo.addEventListener('pointerdown', ev => { bajadaX = ev.clientX; bajadaY = ev.clientY; });
+lienzo.addEventListener('pointerup', ev => {
+  if (!modo) return;
+  if (Math.hypot(ev.clientX - bajadaX, ev.clientY - bajadaY) > 6) return; // fue cámara
+  const r = lienzo.getBoundingClientRect();
+  puntero.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+  puntero.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  rayo.setFromCamera(puntero, camara);
+  const golpe = rayo.intersectObject(piso)[0];
+  if (!golpe) return;
+  // De coordenadas de Three a las del mundo: three.x = x, three.z = -y.
+  const x = golpe.point.x.toFixed(2), y = (-golpe.point.z).toFixed(2);
+  if (modo === 'poste') {
+    mandar(`/poste?x=${x}&y=${y}&r=0.6&h=6`);
+  } else {
+    const z = modo === 'b' ? (st.oz ?? 3) : (st.pz ?? 3);
+    mandar(`/punto?cual=${modo}&x=${x}&y=${y}&z=${z}`);
+    armar('');   // A y B se sueltan solos: son destructivos y de una sola vez
+  }
+});
+
+// =====================================================================
+//  DOCK Y BARRA — lo único que toca la simulación
+// =====================================================================
+// La entrega es un TOGGLE en el servidor (`/control?k=m`). Antes el botón
+// decía siempre lo mismo, así que apretarlo dos veces cancelaba sin avisar.
+// Ahora la etiqueta dice qué va a pasar, y hay una ventana corta anti-rebote
+// para que un doble toque en el celular no arme y cancele en el mismo gesto.
+let ultimaEntrega = 0;
+$('btEntregar').addEventListener('click', ev => {
+  const ahora = performance.now();
+  if (ahora - ultimaEntrega < 600) return;
+  ultimaEntrega = ahora;
+  mandar('/control?k=m');
+  ev.currentTarget.blur();
+});
+$('btVolar').addEventListener('click', ev => { mandar('/control?k=r'); ev.currentTarget.blur(); });
+// Una tarea DICHA (`mision::tarea_desde_texto`): el servidor contesta «ok» o
+// el error de la orden que no entendió.
+$('btTarea').addEventListener('click', async ev => {
+  ev.currentTarget.blur();
+  try {
+    const r = await fetch('/tarea?t=' + encodeURIComponent($('txTarea').value));
+    const t = await r.text();
+    $('tareaMsg').textContent = t === 'ok' ? 'en curso — mirá la barra de tramos' : t;
+  } catch (e) { $('tareaMsg').textContent = 'no hubo respuesta del visor'; }
+});
+$('btPiloto').addEventListener('click', ev => { mandar('/control?k=p'); ev.currentTarget.blur(); });
+$('btOjoApagar').addEventListener('click', ev => { mandar('/ojo?on=0'); ev.currentTarget.blur(); });
+for (const b of document.querySelectorAll('#cajon button[data-k]'))
+  b.addEventListener('click', () => { mandar('/control?k=' + b.dataset.k); b.blur(); });
+
+// --- cajón (VISTA pura: ni un fetch) ----------------------------------
+function cajon(abrir) {
+  const on = abrir ?? !$('cajon').classList.contains('on');
+  $('cajon').classList.toggle('on', on);
+  $('velo').classList.toggle('on', on);
+}
+$('btCajon').addEventListener('click', () => { cajon(); $('btCajon').blur(); });
+$('velo').addEventListener('click', () => cajon(false));
+
+// --- cámara (VISTA pura) ----------------------------------------------
+let seguir = true;
+$('btSeguir').addEventListener('click', ev => {
+  seguir = !seguir;
+  ev.currentTarget.classList.toggle('sel', seguir);
+  ev.currentTarget.textContent = seguir ? 'seguir al dron' : 'cámara fija';
+  ev.currentTarget.blur();
+});
+function encuadrar(dir) {
+  const centro = new THREE.Vector3(st.x, st.z, -st.y);
+  const d = dir || camara.position.clone().sub(controles.target).normalize();
+  if (d.lengthSq() < 1e-6) d.set(0, 0.4, 1).normalize();
+  camara.position.copy(centro).addScaledVector(d, 14);
+  controles.target.copy(centro);
+  controles.update();
+}
+$('btRecentrar').addEventListener('click', ev => { encuadrar(); ev.currentTarget.blur(); });
+// Vista cenital: es la que sirve para colocar A, B y postes con precisión.
+$('btArriba').addEventListener('click', ev => {
+  encuadrar(new THREE.Vector3(0.001, 1, 0.001).normalize());
+  ev.currentTarget.blur();
+});
+
+// --- HUD y panel de "nuestra red" (VISTA pura, se recuerdan) ----------
+function recordar(k, v) { try { localStorage.setItem(k, v ? '1' : '0'); } catch(e) {} }
+function recordado(k, pordefecto) {
+  try { const v = localStorage.getItem(k); return v === null ? pordefecto : v === '1'; }
+  catch(e) { return pordefecto; }
+}
+let hudOn = recordado('visor_hud', true);
+function aplicarHud() {
+  document.body.classList.toggle('sinHud', !hudOn);
+  $('btHud').classList.toggle('sel', hudOn);
+}
+$('btHud').addEventListener('click', ev => {
+  hudOn = !hudOn; aplicarHud(); recordar('visor_hud', hudOn); ev.currentTarget.blur();
+});
+aplicarHud();
+
+// El panel "nuestra red" SÍ tiene una escena 3D propia (el grafo, más abajo
+// en el archivo) — pero como es sólo geometría fija más color/escala por
+// instancia (nada que bajar de red, nada que tarde), no hace falta
+// diferir el montaje: `dibujarRed()` monta la primera vez que corre.
+let redOn = false;
+function aplicarRed() {
+  $('escena').classList.toggle('partido', redOn);
+  $('btRed').classList.toggle('sel', redOn);
+  $('btRed').textContent = redOn ? 'ocultar nuestra red' : 'mostrar nuestra red';
+  ajustarTamano();
+  if (redOn) ajustarTamanoRed();
+}
+$('btRed').addEventListener('click', ev => {
+  redOn = !redOn; aplicarRed(); recordar('visor_red', redOn);
+  ev.currentTarget.blur();
+});
+if (recordado('visor_red', false)) { redOn = true; }
+
+// --- teclado ----------------------------------------------------------
+const TECLAS = { w:'w', a:'a', s:'s', d:'d', q:'q', e:'e', r:'r', p:'p', c:'c', m:'m', v:'v', ' ':'g' };
+const MODOS_TECLA = { '1':'', '2':'a', '3':'b', '4':'poste' };
+addEventListener('keydown', ev => {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  // Escribiendo una tarea, las teclas son texto, no atajos.
+  if (ev.target && (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT')) return;
+  const k = ev.key.toLowerCase();
+  if (ev.key === 'Escape') { armar(''); cajon(false); return; }
+  if (k === 'h') { hudOn = !hudOn; aplicarHud(); recordar('visor_hud', hudOn); return; }
+  if (ev.key in MODOS_TECLA) { ev.preventDefault(); armar(MODOS_TECLA[ev.key]); return; }
+  const c = TECLAS[k];
+  if (!c) return;
+  ev.preventDefault();   // el espacio, sin esto, scrollea y re-activa botones
+  mandar('/control?k=' + c);
+});
+
+// =====================================================================
+//  NUESTRA RED — el grafo real de IAFZ-64, en vivo.
+//
+//  Arquitectura exacta (csrc/iafz_64.h, no inventada): 96 bits de sensor +
+//  32 de memoria recurrente → 64 neuronas binarias (capa "oculta") → 64
+//  neuronas binarias (capa "estrategia") → 4 salidas + 32 memoria nueva.
+//  Cada neurona dispara por XNOR+popcount (`THINK_128`): no tiene un peso
+//  por conexión en el sentido clásico, tiene un patrón de 128 bits
+//  "esperados" y un umbral de coincidencias. El cableado hidden→strategy
+//  es DENSO por construcción —cada neurona de estrategia lee las 64 de la
+//  oculta enteras—, así que dibujar las 4096 conexiones posibles sería
+//  ruido visual sin información. Lo que se dibuja en cambio son las
+//  conexiones que están LLEVANDO SEÑAL ahora mismo: entre pares de
+//  neuronas que están las dos disparando en esta decisión
+//  (`iafz::activaciones`, csrc/iafz_64.c — no es un cómputo nuevo, es lo
+//  que el kernel ya calculaba y tiraba). Es real y es dinámico: cambia
+//  literalmente en cada decisión, no es una animación de relleno.
+const lienzoRed = $('lienzoRed');
+const escR = new THREE.Scene();
+escR.background = new THREE.Color(0x05070c);
+const camR = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+const rendR = new THREE.WebGLRenderer({ canvas: lienzoRed, antialias: true });
+rendR.setPixelRatio(Math.min(devicePixelRatio, 2));
+const redGrupo = new THREE.Group();
+escR.add(redGrupo);
+const controlesR = new OrbitControls(camR, lienzoRed);
+controlesR.enableDamping = true;
+controlesR.dampingFactor = 0.1;
+controlesR.minDistance = 3;
+controlesR.maxDistance = 40;
+controlesR.autoRotate = true;
+controlesR.autoRotateSpeed = 0.7;
+controlesR.addEventListener('start', () => { controlesR.autoRotate = false; });
+vistaRed.addEventListener('dblclick', () => { controlesR.autoRotate = true; });
+camR.position.set(0, 3, 15);
+controlesR.target.set(0, 0, 0);
+
+// --- layout: posición fija de cada nodo, por capa ---------------------
+// x = profundidad (de sensores a salida); y/z = una grilla dentro de la capa,
+// centrada en (0,0) para que el grupo entero gire prolijo sobre su eje.
+function grilla(n, cols, paso) {
+  const filas = Math.ceil(n / cols);
+  const pos = [];
+  for (let i = 0; i < n; i++) {
+    const c = i % cols, f = Math.floor(i / cols);
+    pos.push([(c - (cols - 1) / 2) * paso, ((filas - 1) / 2 - f) * paso]);
+  }
+  return pos;
+}
+const N_SENS = 96, N_MEM = 32, N_L1 = 64, N_L2 = 64, N_SAL = 4;
+const X_SENS = -5.6, X_MEM = -4.0, X_L1 = -1.6, X_L2 = 1.6, X_SAL = 5.6;
+const posSens = grilla(N_SENS, 6, 0.42).map(([y, z]) => [X_SENS, y, z]);
+const posMem  = grilla(N_MEM, 2, 0.42).map(([y, z]) => [X_MEM, y, z]);
+const posL1   = grilla(N_L1, 8, 0.62).map(([y, z]) => [X_L1, y, z]);
+const posL2   = grilla(N_L2, 8, 0.62).map(([y, z]) => [X_L2, y, z]);
+const posSal  = grilla(N_SAL, 1, 1.6).map(([y, z]) => [X_SAL, y, z]);
+const TODAS_POS = [...posSens, ...posMem, ...posL1, ...posL2, ...posSal];
+const N_TOTAL = TODAS_POS.length; // 96+32+64+64+4 = 260
+// Índice de arranque de cada capa dentro del array combinado — para no
+// repetir esta cuenta en todos lados.
+const OFF_SENS = 0, OFF_MEM = N_SENS, OFF_L1 = OFF_MEM + N_MEM,
+      OFF_L2 = OFF_L1 + N_L1, OFF_SAL = OFF_L2 + N_L2;
+
+const COLOR_SENS = new THREE.Color(0x5ad1ff);
+const COLOR_MEM  = new THREE.Color(0xa98bff);
+const COLOR_L1   = new THREE.Color(0x6bdc8a);
+const COLOR_L2   = new THREE.Color(0xffcc66);
+const COLOR_SAL  = new THREE.Color(0xff6b6b);
+// Neurona tocada por la adaptación en vuelo (`vivo.rs`): NO cambia de color,
+// cambia de TONALIDAD dentro del color de su propia capa — más clara y más
+// saturada cuantos más de sus 128 bits de pesos cambiaron respecto del
+// cerebro que salió del gym (ver `pintarCapa`, más abajo). NO son neuronas
+// nuevas —el kernel tiene 64+64 fijas, y es lo que lo hace caber en un chip
+// barato— es la misma neurona con otras conexiones. Por eso va directo en el
+// grafo, no en un panel aparte: es lo que la red ES ahora, no un dato aparte.
+
+const mallaRed = new THREE.InstancedMesh(
+  new THREE.SphereGeometry(1, 10, 8),
+  new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 }),
+  N_TOTAL);
+mallaRed.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+redGrupo.add(mallaRed);
+const tmpRed = new THREE.Object3D(), colorRed = new THREE.Color();
+for (let i = 0; i < N_TOTAL; i++) {
+  const [x, y, z] = TODAS_POS[i];
+  tmpRed.position.set(x, y, z);
+  tmpRed.scale.setScalar(0.05);
+  tmpRed.updateMatrix();
+  mallaRed.setMatrixAt(i, tmpRed.matrix);
+  const base = i < OFF_MEM ? COLOR_SENS : i < OFF_L1 ? COLOR_MEM
+             : i < OFF_L2 ? COLOR_L1 : i < OFF_SAL ? COLOR_L2 : COLOR_SAL;
+  mallaRed.setColorAt(i, base.clone().multiplyScalar(0.35));
+}
+mallaRed.instanceMatrix.needsUpdate = true;
+if (mallaRed.instanceColor) mallaRed.instanceColor.needsUpdate = true;
+
+// --- conexiones dinámicas oculta↔estrategia: sólo las que disparan ---
+// Buffer de tamaño fijo (peor caso: las 64 oculta × 64 estrategia
+// disparando a la vez), con `setDrawRange` para dibujar sólo lo que hay
+// esta decisión — evita reasignar geometría cada cuadro.
+// Hay CUATRO haces de conexiones, no uno: entrada→oculta, oculta→estrategia,
+// estrategia→salidas y estrategia→memoria (la realimentación). Hasta la
+// auditoría se dibujaba sólo el segundo, y por eso el grafo parecía decir que
+// los sensores no entran a la red y que la estrategia no sale a ningún lado —
+// las dos cosas son falsas en `csrc/iafz_64.c`. Dibujar de menos es tan
+// engañoso como dibujar de más (regla 3.18).
+const MAX_ARISTAS = N_L1 * N_L2 + (N_SENS + N_MEM) * N_L1 + N_L2 * (N_SAL + N_MEM);
+const posArista = new Float32Array(MAX_ARISTAS * 2 * 3);
+const colArista = new Float32Array(MAX_ARISTAS * 2 * 3);
+const geoArista = new THREE.BufferGeometry();
+geoArista.setAttribute('position', new THREE.BufferAttribute(posArista, 3));
+geoArista.setAttribute('color', new THREE.BufferAttribute(colArista, 3));
+geoArista.setDrawRange(0, 0);
+const lineasRed = new THREE.LineSegments(geoArista, new THREE.LineBasicMaterial({
+  color: 0xffcc66, vertexColors: true, transparent: true, opacity: 0.7,
+  blending: THREE.AdditiveBlending, depthWrite: false }));
+redGrupo.add(lineasRed);
+
+// USO por nodo: EMA de cuánto se activa cada neurona A LO LARGO DEL TIEMPO,
+// no en este tick sólo (esa activación ya es binaria: prendida o no). Sirve
+// para diferenciar, entre las que están prendidas AHORA, cuáles vienen
+// disparando seguido (brilla como antes, al máximo) de cuáles casi nunca
+// (se apaga hasta un piso tenue) — que es la pista para depurar neuronas
+// muertas o subutilizadas.
+const usoNodo = new Float32Array(N_TOTAL);
+const USO_DECAY = 0.93; // vida media ~10 decisiones
+const USO_PISO = 0.12;  // una arista activa ahora nunca queda invisible
+
+let redMontada = false;
+function montarRed() {
+  if (redMontada) return;
+  redMontada = true;
+  ajustarTamanoRed();
+  controlesR.update();
+  rendR.render(escR, camR);
+}
+
+function bitsDe(s, n) {
+  // 'st.l1Red' etc. llegan como texto "0101...": true/false por posición.
+  const a = new Array(n).fill(false);
+  if (!s) return a;
+  for (let i = 0; i < Math.min(n, s.length); i++) a[i] = s[i] === '1';
+  return a;
+}
+
+function dibujarRed() {
+  const sens = bitsDe(st.sensRed, N_SENS);
+  const mem = bitsDe(st.memRed, N_MEM);
+  const l1 = bitsDe(st.l1Red, N_L1);
+  const l2 = bitsDe(st.l2Red, N_L2);
+  const sal = st.salRed || [0, 0, 0, 0];
+
+  // Tamaño y brillo por activación — apagado es un puntito, prendido crece
+  // y se enciende. Mismo lenguaje visual para las cinco capas.
+  // `cambios`: cuántos bits de pesos tocó la adaptación en vuelo en CADA
+  // neurona de esta capa (sólo aplica a oculta/estrategia).
+  //
+  // Antes una neurona tocada saltaba a otro color (dorado) — y eso, mezclado
+  // con el prendido/apagado normal, se leía como puro parpadeo: dos lenguajes
+  // visuales compitiendo. Ahora es UNO solo: el matiz (H) de la capa nunca
+  // cambia —sigue siendo "esto es oculta" / "esto es estrategia"—, y lo que
+  // se mueve dentro de ESE mismo color son luminosidad y saturación, más
+  // clara y más viva cuanto más aprendió esa neurona. Prendido/apagado sigue
+  // siendo brillo (multiplicador), así que las dos señales —¿disparó ahora?
+  // ¿aprendió algo?— se leen juntas sin confundirse: un verde oscuro apagado
+  // que aprendió mucho se ve distinto de uno que no aprendió nada, y se
+  // distingue igual de un verde CLARO prendido.
+  const hslCapa = { h: 0, s: 0, l: 0 };
+  const pintarCapa = (bits, offset, colorBase, escalaExtra, cambios) => {
+    colorBase.getHSL(hslCapa);
+    for (let i = 0; i < bits.length; i++) {
+      const on = bits[i];
+      const c = cambios ? Math.min(1, (cambios[i] || 0) / 8) : 0;
+      const [x, y, z] = TODAS_POS[offset + i];
+      tmpRed.position.set(x, y, z);
+      tmpRed.scale.setScalar((on ? (0.14 + (escalaExtra || 0)) : 0.05) + c * 0.09);
+      tmpRed.updateMatrix();
+      mallaRed.setMatrixAt(offset + i, tmpRed.matrix);
+      if (c > 0) {
+        // Más saturado y más claro cuanto más cambió — mismo matiz, otra
+        // tonalidad, como pedías: "si era verde, verde claro, verde oscuro".
+        colorRed.setHSL(hslCapa.h, Math.min(1, hslCapa.s + c * 0.4),
+          Math.min(0.88, hslCapa.l + c * 0.32));
+        colorRed.multiplyScalar(on ? 1.5 : 0.55);
+      } else {
+        colorRed.copy(colorBase).multiplyScalar(on ? 1.5 : 0.32);
+      }
+      mallaRed.setColorAt(offset + i, colorRed);
+    }
+  };
+  // `st.sinapsis`: 128 números (64 oculta + 64 estrategia), cuántos bits de
+  // pesos cambió cada neurona — ver `repertorio::sinapsis_cambiadas`. Vacío
+  // cuando la adaptación en vuelo está apagada, y ahí `cambios` queda
+  // `undefined` y `pintarCapa` no colorea nada de más (regla 3.18).
+  const sinapsis = st.sinapsis || [];
+  let aprendido = 0;
+  for (const n of sinapsis) aprendido += n | 0;
+  $('hdAprendidoFila').hidden = aprendido === 0;
+  if (aprendido) $('hdAprendido').textContent = aprendido + ' bits';
+  pintarCapa(sens, OFF_SENS, COLOR_SENS);
+  pintarCapa(mem, OFF_MEM, COLOR_MEM);
+  pintarCapa(l1, OFF_L1, COLOR_L1, 0, sinapsis.slice(0, N_L1));
+  pintarCapa(l2, OFF_L2, COLOR_L2, 0, sinapsis.slice(N_L1, N_L1 + N_L2));
+  // Las salidas no son binarias: tamaño y color por magnitud/signo real,
+  // no sólo "prendido/apagado" — softsign SÓLO para el tamaño del punto,
+  // igual que antes se usaba sólo para el ancho de la barra.
+  for (let i = 0; i < 4; i++) {
+    const v = sal[i], sat = v / (1 + Math.abs(v));
+    const [x, y, z] = TODAS_POS[OFF_SAL + i];
+    tmpRed.position.set(x, y, z);
+    tmpRed.scale.setScalar(0.10 + Math.abs(sat) * 0.24);
+    tmpRed.updateMatrix();
+    mallaRed.setMatrixAt(OFF_SAL + i, tmpRed.matrix);
+    colorRed.copy(COLOR_SAL).multiplyScalar(0.5 + Math.abs(sat) * 1.2);
+    mallaRed.setColorAt(OFF_SAL + i, colorRed);
+  }
+  mallaRed.instanceMatrix.needsUpdate = true;
+  if (mallaRed.instanceColor) mallaRed.instanceColor.needsUpdate = true;
+
+  // Aristas: sólo entre pares que están LOS DOS prendidos en esta decisión.
+  // El cableado real es denso en los cuatro haces (cada neurona lee la capa
+  // anterior entera), así que esto no es "todas las conexiones que existen" —
+  // es "por dónde está pasando señal ahora", que es lo que vale la pena mirar.
+  const activasL1 = [], activasL2 = [], activasEnt = [], activasMem = [];
+  for (let i = 0; i < N_L1; i++) if (l1[i]) activasL1.push(i);
+  for (let i = 0; i < N_L2; i++) if (l2[i]) activasL2.push(i);
+  for (let i = 0; i < N_SENS; i++) if (sens[i]) activasEnt.push(OFF_SENS + i);
+  for (let i = 0; i < N_MEM; i++) if (mem[i]) activasMem.push(OFF_MEM + i);
+
+  // Actualizar el uso: decae todo, y las que están prendidas AHORA suben.
+  for (let i = 0; i < N_TOTAL; i++) usoNodo[i] *= USO_DECAY;
+  for (const i of activasEnt) usoNodo[i] = Math.min(1, usoNodo[i] + (1 - USO_DECAY));
+  for (const i of activasMem) usoNodo[i] = Math.min(1, usoNodo[i] + (1 - USO_DECAY));
+  for (const i of activasL1) usoNodo[OFF_L1 + i] = Math.min(1, usoNodo[OFF_L1 + i] + (1 - USO_DECAY));
+  for (const i of activasL2) usoNodo[OFF_L2 + i] = Math.min(1, usoNodo[OFF_L2 + i] + (1 - USO_DECAY));
+
+  let n = 0;
+  const arista = (a, b) => {
+    if (n >= MAX_ARISTAS) return;
+    const [x0, y0, z0] = TODAS_POS[a], [x1, y1, z1] = TODAS_POS[b];
+    const k = n * 6;
+    posArista[k] = x0; posArista[k+1] = y0; posArista[k+2] = z0;
+    posArista[k+3] = x1; posArista[k+4] = y1; posArista[k+5] = z1;
+    // Brillo = uso promedio de las dos puntas, con un piso para que "activa
+    // ahora pero poco usada" siga visible en vez de desaparecer.
+    const brillo = USO_PISO + (1 - USO_PISO) * (usoNodo[a] + usoNodo[b]) / 2;
+    colArista[k] = colArista[k+1] = colArista[k+2] = brillo;
+    colArista[k+3] = colArista[k+4] = colArista[k+5] = brillo;
+    n++;
+  };
+
+  // 1) entrada (sensores + memoria) → oculta. Es el haz más gordo: ~48 bits de
+  //    sensor por ~30 neuronas prendidas llena la pantalla de líneas y no deja
+  //    ver nada. Se dibuja UNA DE CADA `salto` para que el haz se lea como haz,
+  //    y el número honesto (cuántos bits entran) está abajo en la lectura dura.
+  const entradas = [...activasEnt, ...activasMem];
+  const salto = Math.max(1, Math.ceil(entradas.length * activasL1.length / 900));
+  let c = 0;
+  for (const e of entradas)
+    for (const i of activasL1)
+      if ((c++ % salto) === 0) arista(e, OFF_L1 + i);
+
+  // 2) oculta → estrategia (el único haz que se dibujaba antes).
+  for (const i of activasL1)
+    for (const j of activasL2) arista(OFF_L1 + i, OFF_L2 + j);
+
+  // 3) estrategia → las 4 salidas, y 4) estrategia → memoria nueva (la
+  //    realimentación que vuelve al contexto del próximo tick).
+  for (const j of activasL2) {
+    for (let o = 0; o < N_SAL; o++) arista(OFF_L2 + j, OFF_SAL + o);
+    for (const m of activasMem) arista(OFF_L2 + j, m);
+  }
+
+  geoArista.setDrawRange(0, n * 2);
+  geoArista.attributes.position.needsUpdate = true;
+  geoArista.attributes.color.needsUpdate = true;
+
+  // Lectura dura, al pie: la que no depende de saber leer el dibujo.
+  poner('hdSens', sens.filter(Boolean).length + '/96', 'num');
+  poner('hdL1', l1.filter(Boolean).length, 'num');
+  poner('hdL2', l2.filter(Boolean).length, 'num');
+  poner('hdMem', mem.filter(Boolean).length, 'num');
+  poner('hdRoll', sal[0].toFixed(2), 'num');
+  poner('hdPitch', sal[1].toFixed(2), 'num');
+  poner('hdYaw', sal[2].toFixed(2), 'num');
+  poner('hdAlt', sal[3].toFixed(2), 'num');
+
+  if (!redMontada) montarRed();
+  controlesR.update();
+  rendR.render(escR, camR);
+}
+
+function ajustarTamanoRed() {
+  const w = vistaRed.clientWidth, h = vistaRed.clientHeight;
+  if (w === 0 || h === 0) return;
+  camR.aspect = w / h; camR.updateProjectionMatrix();
+  rendR.setSize(w, h, false);
+  // El grafo tiene que entrar ENTERO sea cual sea el ancho del panel — un
+  // panel angosto (celular, o el cajón tapando la mitad) recorta la salida
+  // si la distancia de cámara queda fija. Radio a cubrir: el semiancho real
+  // del layout (sensores a salida) más el alto de la grilla más ancha.
+  const semiancho = Math.abs(X_SAL) + 0.4;
+  const semialto = 8 * 0.62 / 2 + 0.4; // fila más ancha: L1/L2, 8 columnas
+  const t = Math.tan(camR.fov * Math.PI / 360);
+  const d = Math.max(semialto / t, semiancho / (t * Math.max(0.35, camR.aspect))) * 1.15;
+  controlesR.maxDistance = d * 2.2;
+  if (controlesR.autoRotate) {
+    camR.position.set(0, semialto * 0.3, d);
+    controlesR.update();
+  }
+}
+
+// =====================================================================
+//  SONDEO DE ESTADO
+// =====================================================================
+async function pedir() {
+  try {
+    st = await (await fetch('/estado')).json();
+    vivo = true;
+  } catch(e) { vivo = false; }
+  setTimeout(pedir, 25);   // 40 Hz: la física va a 200, esto es sólo la vista
+}
+pedir();
+
+// ---- entrenamientos que corren en OTRO proceso -----------------------
+// Sondeo aparte del de arriba: esto lee archivos de log en el servidor, así
+// que va cada 3 s y no a 40 Hz. El entrenador NO publica nada — el visor lee
+// el log que el proceso ya escribe (ver progreso.rs).
+async function pedirCorridas() {
+  let cs = [];
+  try { cs = await (await fetch('/entrenamientos')).json(); } catch(e) {}
+  const hay = Array.isArray(cs) && cs.length > 0;
+  $('hCorridas').hidden = !hay; $('corridas').hidden = !hay;
+  if (hay) {
+    $('corridas').innerHTML = cs.map(c => {
+      const pct = c.generaciones > 0
+        ? Math.max(0, Math.min(100, c.gen / c.generaciones * 100)) : 0;
+      // "hace N s" es la prueba de que esto está VIVO y no es una foto vieja.
+      const frio = c.hace > 120;
+      const meta = (c.necesita === null || c.necesita === undefined)
+        ? '—' : c.necesita.toFixed(0);
+      const mejor = (c.mejor === null || c.mejor === undefined)
+        ? '—' : c.mejor.toFixed(1);
+      const llega = c.mejor !== null && c.necesita !== null && c.mejor >= c.necesita;
+      return '<div style="margin-bottom:12px">'
+        + '<div class="fila"><span><b>' + c.etiqueta + '</b>'
+        + (c.repertorio ? ' <span class="tenue">· repertorio</span>' : '')
+        + (c.semilla ? ' <span class="tenue">· semilla ' + c.semilla + '</span>' : '')
+        + '</span><b class="num">gen ' + c.gen + ' / ' + c.generaciones + '</b></div>'
+        + '<div class="barrita"><u style="width:' + pct.toFixed(1) + '%"></u></div>'
+        + '<div class="fila"><span>peldaño</span><b class="num">'
+        + c.peldano + '/' + c.peldanos + ' · ' + (c.nombre || '—') + '</b></div>'
+        + '<div class="fila"><span>mejor / necesita</span><b class="num '
+        + (llega ? 'bien' : 'ojo') + '">' + mejor + ' / ' + meta + '</b></div>'
+        + '<div class="fila"><span>cruzó el umbral y no confirmó</span>'
+        + '<b class="num ' + (c.rifas > 20 ? 'mal' : '') + '">' + c.rifas + ' veces</b></div>'
+        + '<div class="fila"><span>trabado</span><b class="num '
+        + (c.trabadoHace > 200 ? 'mal' : c.trabadoHace > 0 ? 'ojo' : '') + '">'
+        + (c.trabadoHace > 0 ? c.trabadoHace + ' gen' : 'no') + '</b></div>'
+        + '<div class="fila tenue"><span>último renglón del log</span>'
+        + '<b class="num' + (frio ? ' mal' : '') + '">hace ' + c.hace + ' s</b></div>'
+        + '</div>';
+    }).join('')
+    + '<div class="nota">«mejor» es de UNA generación y rebota fuerte '
+    + '(medido: 1074.5 y −44.9 con diez generaciones de diferencia). El número '
+    + 'que no rebota es cuántas veces cruzó el umbral sin confirmar: eso es '
+    + 'cruzar por sorteo, no saber hacerlo (regla 3.20).</div>';
+  }
+  setTimeout(pedirCorridas, 3000);
+}
+pedirCorridas();
+
+// =====================================================================
+//  TAMAÑOS
+// =====================================================================
+function ajustarTamano() {
+  const w = vistaDron.clientWidth, h = vistaDron.clientHeight;
+  if (w > 0 && h > 0) {
+    camara.aspect = w / h; camara.updateProjectionMatrix();
+    render.setSize(w, h, false);
+  }
+  if (redOn) ajustarTamanoRed();
+}
+addEventListener('resize', ajustarTamano);
+new ResizeObserver(ajustarTamano).observe($('escena'));
+ajustarTamano();
+if (redOn) aplicarRed();
+
+// =====================================================================
+//  PINTAR LOS TEXTOS
+// =====================================================================
+const QUE_TRAMO = p => p.posar ? 'posarse' : 'ir al punto';
+let avisoHasta = 0, avisoUltimo = '';
+
+// Escribir en el DOM sólo cuando el texto CAMBIÓ. Sin esto, repintar a 12 Hz
+// reconstruye la barra entera todo el tiempo — y el visor viejo lo hacía a 60,
+// dentro del bucle de dibujo, compitiendo con el render por el mismo hilo.
+const cache = new Map();
+function poner(id, html, clase) {
+  const k = JSON.stringify([html, clase]);   // inambiguo y sin bytes de control
+  if (cache.get(id) === k) return;
+  cache.set(id, k);
+  const el = $(id);
+  el.innerHTML = html;
+  if (clase !== undefined) el.className = clase;
+}
+
+function pintar() {
+  // --- barra: estado del vuelo ---
+  const reloj = t => ' <span class="tenue">' + t + '</span>';
+  if (!vivo) {
+    poner('estado', '<span class="mal">sin conexión con el servidor</span>');
+  } else if (st.caido) {
+    poner('estado', '<span class="mal">SE ESTRELLÓ</span>' + reloj('reaparece solo'));
+  } else if (st.apoyado) {
+    poner('estado', '<span class="bien">POSADO</span>' + reloj(st.t.toFixed(1) + ' s'));
+  } else if (st.extremo) {
+    poner('estado', '<span class="ojo">ACTITUD EXTREMA</span>'
+      + reloj('queda ' + Math.round((1 - Math.min(1, st.recup)) * 100) + '% de ventana'));
+  } else if (st.manual) {
+    poner('estado', '<span class="ojo">PILOTO MANUAL</span>' + reloj(st.t.toFixed(1) + ' s'));
+  } else {
+    poner('estado', '<span class="bien">en vuelo</span>' + reloj(st.t.toFixed(1) + ' s'));
+  }
+
+  // --- barra: piloto ---
+  poner('btPiloto', 'piloto: ' + (st.ia ? 'RED' : 'clásico'), st.ia ? 'ojo' : 'bien');
+
+  // --- barra: OJO REAL (percepción desde una cámara física, no simulada) ---
+  // Verificable a simple vista, sin abrir el cajón — regla 3.3: lo que se
+  // afirma ("la cámara está mandando") tiene que poder mirarse en el visor,
+  // no sólo confiarse por consola.
+  const ojoOn = st.ojoManda && st.ojoVivo;
+  $('ojoReal').classList.toggle('on', !!ojoOn);
+  if (ojoOn && Array.isArray(st.ojo)) {
+    const cont = $('ojoBarras');
+    if (cont.children.length !== st.ojo.length) {
+      cont.innerHTML = st.ojo.map(() => '<i></i>').join('');
+    }
+    st.ojo.forEach((v, i) => {
+      cont.children[i].style.height = Math.max(2, Math.round(v * 18)) + 'px';
+    });
+  }
+
+  // --- barra: misión, con un segmento por tramo ---
+  const lista = st.mision || [];
+  const cont = $('mision');
+  cont.classList.toggle('viva', lista.length > 0);
+  if (lista.length) {
+    const i = Math.min(st.tramo || 0, lista.length - 1);
+    const seg = $('tramos');
+    if (seg.childElementCount !== lista.length) {
+      seg.innerHTML = '';
+      for (let k = 0; k < lista.length; k++) seg.appendChild(document.createElement('i'));
+    }
+    [...seg.children].forEach((el, k) => {
+      el.className = k < i ? 'hecho' : (k === i ? 'actual' : '');
+    });
+    const p = lista[i];
+    const que = p.posar ? 'posarse'
+      : (st.apoyado || p.z > st.z + 0.5) ? 'despegar' : 'ir al punto';
+    $('misionQue').textContent = 'tramo ' + (i+1) + '/' + lista.length + ' · ' + que;
+  }
+
+  // --- dock: el botón de entrega dice lo que VA A HACER ---
+  // El servidor trata `/control?k=m` como interruptor. Con una etiqueta fija,
+  // el segundo toque cancelaba sin avisar; con ésta, cancelar es una decisión.
+  if (lista.length) poner('btEntregar', '■ cancelar entrega', 'peligro');
+  else              poner('btEntregar', '▶ entregar A→B', 'primario');
+
+  // --- HUD ---
+  const dist = Math.hypot(st.ox-st.x, st.oy-st.y, st.oz-st.z);
+  $('hAlt').textContent = st.z.toFixed(2) + ' m';
+  $('hVel').textContent = Math.hypot(st.vx, st.vy, st.vz).toFixed(2) + ' m/s';
+  $('hDist').textContent = dist.toFixed(2) + ' m';
+  $('hBat').textContent = (st.bateria*100).toFixed(0) + '%';
+  $('hBat').className = 'num' + (st.bateria < 0.2 ? ' mal' : '');
+
+  // --- aviso del servidor, transitorio ---
+  if (st.aviso && st.aviso !== avisoUltimo) { avisoUltimo = st.aviso; avisoHasta = performance.now() + 4000; }
+  const av = $('aviso');
+  const mostrar = st.aviso && performance.now() < avisoHasta;
+  av.classList.toggle('on', !!mostrar);
+  if (mostrar) av.textContent = st.aviso;
+
+  // Banner FIJO, no un flash: se queda mientras dure la incompatibilidad.
+  $('avisoIncompatible').classList.toggle('on', st.compatible === false);
+
+  // --- cajón: sólo si está abierto, para no gastar en cada cuadro ---
+  if (!$('cajon').classList.contains('on')) return;
+  $('nPostes').textContent = (st.postes || []).length;
+
+  // --- adaptación en vuelo (`vivo.rs` + `repertorio.rs`) ---
+  // El resto —qué sinapsis cambió— se ve directo sobre los nodos de "nuestra
+  // red" en `dibujarRed`, no acá: es lo que la red ES, no un dato aparte.
+  const vivoOn = !!(st.vivo && st.vivo.length);
+  $('hVivo').hidden = !vivoOn; $('vivoInfo').hidden = !vivoOn;
+  if (vivoOn) {
+    $('vivoNicho').textContent = st.nicho || '—';
+    // `vivo` llega como "[nicho] fase · adoptadas N · descartadas N ·
+    // anuladas N · veredicto". El nicho ya se muestra aparte.
+    const partes = st.vivo.replace(/^\[[^\]]*\]\s*/, '').split(' · ');
+    $('vivoFase').textContent = partes[0] || '—';
+    $('vivoCuentas').textContent = partes.slice(1).join(' · ');
+    $('vivoMapa').innerHTML = (st.repertorio || '').split(' · ').map(c => {
+      const aqui = st.nicho && c.startsWith(st.nicho + ':');
+      const cls = 'vc' + (aqui ? ' aqui' : '')
+        + (c.includes('red↑') ? ' ayuda' : c.includes('CLASICO') ? ' estorba' : '');
+      const [nom, resto] = c.split(':');
+      return `<div class="${cls}">${nom}<br><b>${resto || ''}</b></div>`;
+    }).join('');
+  }
+
+  const lt = $('listaTramos');
+  if (lista.length) {
+    const i = Math.min(st.tramo || 0, lista.length - 1);
+    lt.className = '';
+    lt.innerHTML = lista.map((p, k) =>
+      '<div class="' + (k < i ? 'hecho' : k === i ? 'actual' : '') + '">'
+      + (k+1) + '. ' + QUE_TRAMO(p) + ' en ('
+      + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ', ' + p.z.toFixed(1) + ')</div>').join('');
+  } else {
+    lt.className = 'tenue';
+    lt.textContent = st.misionEstado || 'ninguna — tocá «entregar A→B»';
+  }
+
+  // El de PERSECUCIÓN llega como objeto y el visor viejo nunca lo mostró.
+  const en = st.entrenamiento;
+  $('hEntrenamiento').hidden = !en; $('entrenamiento').hidden = !en;
+  if (en) {
+    $('enPeldano').textContent = en.nombre;
+    $('enGen').textContent = en.gen + ' / ' + en.generaciones;
+    // La barra mide GENERACIONES, no aptitud. Una barra de aptitud desde cero
+    // no dice nada: el piso de este proyecto es el piloto clásico (regla 3.15),
+    // así que el mejor y el umbral difieren en el 0.1% y la barra saldría
+    // siempre llena. Lo que falta para aprobar va como número, que sí se lee.
+    $('enBarra').style.width =
+      Math.max(0, Math.min(100, en.gen / Math.max(1, en.generaciones) * 100)) + '%';
+    $('enMejor').textContent = en.mejor.toFixed(1) + ' / ' + en.umbral.toFixed(1);
+    $('enMejor').className = 'num ' + (en.mejor >= en.umbral ? 'bien' : 'ojo');
+    const falta = en.umbral - en.mejor;
+    $('enFalta').textContent = falta <= 0 ? 'aprobado'
+      : falta.toFixed(1) + '  (' + (falta / Math.max(1, en.umbral) * 100).toFixed(2) + '%)';
+    $('enFalta').className = 'num ' + (falta <= 0 ? 'bien' : 'ojo');
+    $('enMediana').textContent = en.mediana.toFixed(1);
+    $('enEstancado').textContent = en.estancado + ' gen';
+    $('enEstancado').className = 'num ' + (en.estancado > 200 ? 'mal' : '');
+  }
+
+  const per = st.modoMoto;
+  $('hPersecucion').hidden = !per; $('persecucion').hidden = !per;
+  if (per) {
+    $('peRegimen').textContent = st.regimen || '—';
+    $('peError').textContent = st.errPuesto.toFixed(2) + ' m';
+    $('peTiro').textContent = (st.aTiro * 100).toFixed(0) + '%';
+  }
+}
+
+// =====================================================================
+//  BUCLE
+// =====================================================================
+function bucle() {
+  requestAnimationFrame(bucle);
+
+  // Rust usa z arriba; Three usa y arriba. La conversión va en un solo lugar.
+  const px = st.x, py = st.z, pz = -st.y;
+  dron.position.set(px, py, pz);
+  dron.rotation.set(st.pitch, st.yaw, st.roll, 'YXZ');
+
+  sombra.position.set(px, 0.01, pz);
+  const s = 1 - Math.min(py, 20)/26;
+  sombra.scale.setScalar(Math.max(0.25, s));
+  sombra.material.opacity = 0.38 * Math.max(0.1, s);
+
+  objetivo.position.set(st.ox, st.oz, -st.oy);
+  varaObj.position.set(st.ox, st.oz/2, -st.oy);
+  varaObj.scale.y = Math.max(0.02, st.oz);
+  if (st.px !== undefined) partida.position.set(st.px, st.pz, -st.py);
+
+  const lista = st.mision || [];
+  sincronizarMision(lista, st.tramo || 0);
+  // Con misión en curso el aro verde sobra: el tramo actual ya está en amarillo
+  // y dos marcadores en el mismo punto confunden.
+  objetivo.visible = varaObj.visible = lista.length === 0;
+  if (st.postes) sincronizarPostes(st.postes);
+  sincronizarMapa(st.mapa || []);
+
+  const giro = st.caido ? 0.02 : 0.9;
+  for (const h of helices) h.rotation.y += giro;
+
+  if (!st.caido && nEstela < MAX) {
+    puntosEstela[nEstela*3] = px; puntosEstela[nEstela*3+1] = py; puntosEstela[nEstela*3+2] = pz;
+    nEstela++; geoEstela.setDrawRange(0, nEstela);
+    geoEstela.attributes.position.needsUpdate = true;
+  }
+  if (st.t < 0.3) { nEstela = 0; geoEstela.setDrawRange(0,0); }
+
+  // El TARGET sigue al dron; la posición de la cámara la decide el usuario.
+  // Con «cámara fija» ni eso: se puede mirar la entrega desde un punto quieto.
+  if (seguir) controles.target.lerp(new THREE.Vector3(px, py, pz), 0.06);
+  controles.update();
+  render.render(escena, camara);
+
+  // El grafo de "nuestra red" sí va a 60 Hz (no a los 12 Hz del resto de los
+  // textos): con menos que eso el giro de cámara y el prendido/apagado de
+  // neuronas se ven a los saltos en vez de fluidos.
+  if (redOn) dibujarRed();
+}
+bucle();
+
+// Los textos se repintan a 12 Hz, aparte del bucle de dibujo. A 60 Hz el
+// trabajo de DOM competía con el render por el mismo hilo, y ningún número de
+// éstos cambia lo bastante rápido como para que se note la diferencia.
+setInterval(pintar, 80);
+pintar();
+</script>
+</body>
+</html>

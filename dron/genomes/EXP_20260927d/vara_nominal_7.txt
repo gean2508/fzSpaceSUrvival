@@ -1,0 +1,23 @@
+(midiendo la VARA HONESTA — guiado clásico, red apagada)
+SORTEOS — peldaño 7, 24 juegos de escenarios distintos
+piloto: guiado clásico (la vara)
+umbral de aprobación: 900.0
+
+  peor        947.4
+  mediana     947.4
+  mejor       947.4
+
+  término              peor   mediana     mejor   dispersión
+  misiones propias    1228.0    1358.0    1418.8       190.8
+  examen de repaso     947.4     947.4     947.4         0.0   ← ata la nota
+
+  peldaños de atrás peor recordados:
+    peldaño  2     1006.6
+    peldaño  1     1021.1
+    peldaño  3     1149.3
+    peldaño  4     1209.8
+
+  sorteo a sorteo: 1✓ 2✓ 3✓ 4✓ 5✓ 6✓ 7✓ 8✓ 9✓ 10✓ 11✓ 12✓ 13✓ 14✓ 15✓ 16✓ 17✓ 18✓ 19✓ 20✓ 21✓ 22✓ 23✓ 24✓
+
+  aprueba en 24 de 24 sorteos
+  lo sabe hacer: aprueba con cualquier escenario
